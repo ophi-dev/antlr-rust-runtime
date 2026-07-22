@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+  "active_revision_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/revisions/testsymbolissues-testcaseinsensitivecharscollision-1c64211182-r1/manifest.json",
+      "closure_sha256": "3c96acb86b24e293d64120fdee4985c1aaae8332b20385c6966dcbadab27afdc"
+    }
+  ]
+}

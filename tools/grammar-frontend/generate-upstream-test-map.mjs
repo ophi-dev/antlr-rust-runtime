@@ -46,6 +46,9 @@ import {
     SCOPE_PARSING_BASE_COMMIT,
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
+    SYMBOL_ISSUES_BASE_COMMIT,
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+    SYMBOL_ISSUES_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_ASSIGNMENT_BASE_COMMIT,
     TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
@@ -597,6 +600,82 @@ const GRAPH_NODES_RED_LOGICAL_IDS = new Set([
     "testgraphnodes-test-aax-aay-c0f9b80842",
     "testgraphnodes-test-aaxc-aayd-a73533f64d",
     "testgraphnodes-test-aaubv-abwdx-7953c9b489",
+]);
+const SYMBOL_ISSUES_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::";
+const SYMBOL_ISSUES_RED_CASES = new Map([
+    [
+        "testsymbolissues-testa-2e644f226d",
+        "expected 10 ordered diagnostics, but semantic analysis stopped after 5 duplicate-action and option diagnostics",
+    ],
+    [
+        "testsymbolissues-testb-9ccf14c21c",
+        "the first diagnostic was G4S031 instead of the expected label/rule conflict G4S038",
+    ],
+    [
+        "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+        "expected 4 G4S068 case-folded character-collision warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testcharscollision-2c32d921bf",
+        "expected 5 G4S068 character-collision warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testduplicatedcommands-e809cd0730",
+        "the complete lexer .interp differed in literal alias metadata at serialized words 2 and 128",
+    ],
+    [
+        "testsymbolissues-teste-cd9e1fc41d",
+        "emitted 2 duplicate-token warnings instead of Java's single G4S019 warning",
+    ],
+    [
+        "testsymbolissues-testemptylexermodedetection-1e410b0d53",
+        "G4S026 pointed at byte 26 instead of the mode name at byte 31",
+    ],
+    [
+        "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
+        "emitted 1 invalid caseInsensitive value warning instead of 2",
+    ],
+    [
+        "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+        "the complete lexer .interp differed in literal alias metadata at serialized words 2, 246, and 248",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
+        "emitted 10 label-type conflicts instead of Java's 5 context-scoped conflicts",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
+        "the accepted labeled left-recursive grammar failed with G4S041",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+        "emitted 1 left-recursive label conflict instead of Java's 2 rule-scoped conflicts",
+    ],
+    [
+        "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+        "expected 2 G4S070 mixed-case range warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+        "expected 1 G4S070 mixed-case range warning under caseInsensitive, but emitted none",
+    ],
+    [
+        "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+        "both true and false variants expected G4S067 redundant caseInsensitive rule-option warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+        "emitted 5 reserved-name diagnostics instead of 4 and incorrectly rejected DEFAULT_MODE",
+    ],
+    [
+        "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
+        "the first command-argument diagnostic was G4S053 instead of reserved-channel G4S021",
+    ],
+    [
+        "testsymbolissues-testunreachabletokens-43df5f5f59",
+        "expected 9 G4S069 unreachable-token warnings, but emitted none",
+    ],
 ]);
 const CHAR_SUPPORT_PORTS = new Map([
     [
@@ -1175,6 +1254,9 @@ function completedPhaseBRow(
                                           "left-recursion-tool-issues"
                                         ? `direct Rust left-recursion diagnostics and accepted serialization match ` +
                                           `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "symbol-issues"
+                                          ? `direct Rust symbol diagnostics, token metadata, and serialization match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                                         : completed.kind === "graph-nodes"
                                           ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
                                             `for ${cases[0].suite}.${cases[0].name}`
@@ -1692,6 +1774,71 @@ async function loadCompletedPhaseBPorts() {
             "expected 36 completed TestGraphNodes ports with all recorded red cases",
         );
     }
+    const symbolIssuesPattern =
+        /case!\(\s*(\w+),\s*"(testsymbolissues-[^"]+)"/gu;
+    const remainingSymbolIssuesRedIds = new Set(
+        SYMBOL_ISSUES_RED_CASES.keys(),
+    );
+    let symbolIssuesCount = 0;
+    for (const match of source.matchAll(symbolIssuesPattern)) {
+        const [, testName, logicalId] = match;
+        if (logicalId.endsWith("-variant-2")) {
+            const baseLogicalId = logicalId.slice(
+                0,
+                -"-variant-2".length,
+            );
+            const base = ports.get(baseLogicalId);
+            if (base === undefined) {
+                throw new Error(
+                    `${logicalId} appeared before its base symbol issue port`,
+                );
+            }
+            base.fixturePaths = [
+                ...base.fixturePaths,
+                ...await fixturePaths(logicalId),
+            ].sort();
+            base.rustTest =
+                "grammar::atn::interp_test::tests::upstream_symbol_issues::" +
+                "redundant_case_insensitive_lexer_rule_option";
+            base.testCommand =
+                `${SYMBOL_ISSUES_TEST_PREFIX}` +
+                "redundant_case_insensitive_lexer_rule_option";
+            base.greenResult = "2 passed; 0 failed";
+            symbolIssuesCount += 1;
+            continue;
+        }
+        const redFingerprint = SYMBOL_ISSUES_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingSymbolIssuesRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_symbol_issues::" +
+                `${testName}::matches_java`,
+            kind: "symbol-issues",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: SYMBOL_ISSUES_BASE_COMMIT,
+            testCommit: SYMBOL_ISSUES_TEST_COMMIT,
+            implementationCommit: ported
+                ? SYMBOL_ISSUES_IMPLEMENTATION_COMMIT
+                : SYMBOL_ISSUES_BASE_COMMIT,
+            testCommand:
+                `${SYMBOL_ISSUES_TEST_PREFIX}${testName}::matches_java -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        symbolIssuesCount += 1;
+    }
+    if (
+        symbolIssuesCount !== 27 ||
+        remainingSymbolIssuesRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 27 completed TestSymbolIssues ports with all recorded red cases",
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -1752,8 +1899,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 255) {
-        throw new Error(`expected 255 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 281) {
+        throw new Error(`expected 281 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+  "revision_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testincompatiblecommands@170e1aa93dfe",
+      "java-antlr:testsymbolissues-testincompatiblecommands@170e1aa93dfe"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testIncompatibleCommands",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
+  },
+  "closure_sha256": "295030db182addac78fce973a750e11b79c0980dc3f95951937a4ff9fe9948bc",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testincompatiblecommands@170e1aa93dfe",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testincompatiblecommands@170e1aa93dfe",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.g4",
+      "sha256": "50536fc01ac7ea53d7a41b446d7891204f78cbe3de94a2a1201d1edbd471fb6c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.interp",
+      "sha256": "7d5358a3f7299f7d9e5650ea03d6543c510f8e17febfac41e5371411f9aae318"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.tokens",
+      "sha256": "a275d6705ce29cc89326babb852db3693b829fd08f39a5d6e71e5e5290facc44"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/diagnostics.json",
+      "sha256": "7cc66bd649c0321dd6f360d4ffa7843da302146c15c92d33186e0c015cc47311"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/fixture.json",
+      "sha256": "345d10365335f7ddeef4f46284a46d16b48365481be0d1679cdfcf01530337a4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stderr",
+      "sha256": "d5c91decc5e139b866bbdda5608554b21a75abaa11140f3f2fd0b7e1a51b0243"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "reachability": "the symbol semantics implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 101,
+    "fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2, 246, and 248"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java -- --exact",
+    "commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testincompatiblecommands-43fa4a3fd8/revisions/testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1/oracle-results/declared-sources.json",
+      "sha256": "680c26769cba9442fd05a230209042039c9a2b91f62e1e85c77f694e34dc222b"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testincompatiblecommands-43fa4a3fd8/revisions/testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1/matrix-results/results.json",
+      "sha256": "b7e4c761209ea17f1421da297f1911007b3c7326a223cbd2cd658570b7c9dd56"
+    }
+  ]
+}

@@ -55,6 +55,10 @@ import {
     SCOPE_PARSING_BASE_COMMIT,
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
+    SYMBOL_ISSUES_BASE_COMMIT,
+    SYMBOL_ISSUES_BASE_PARENT_COMMIT,
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+    SYMBOL_ISSUES_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_ASSIGNMENT_BASE_COMMIT,
     TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
@@ -179,6 +183,12 @@ const LOOKAHEAD_TREE_TEST_END =
 const GRAPH_NODES_TEST_PATH = "src/prediction.rs";
 const GRAPH_NODES_TEST_MARKER =
     "    mod upstream_graph_nodes {";
+const SYMBOL_ISSUES_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const SYMBOL_ISSUES_TEST_START =
+    "    mod upstream_symbol_issues {";
+const SYMBOL_ISSUES_TEST_END =
+    "\n    mod upstream_token_position_options {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -1242,6 +1252,53 @@ const graphNodesLockedSections = [
         sha256: digest(checkedInGraphNodesTests),
     },
 ];
+const checkedInSymbolIssuesTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, SYMBOL_ISSUES_TEST_PATH), "utf8"),
+    SYMBOL_ISSUES_TEST_START,
+    SYMBOL_ISSUES_TEST_END,
+);
+const recordedSymbolIssuesTests = gitShowOptional(
+    repoRoot,
+    SYMBOL_ISSUES_TEST_COMMIT,
+    SYMBOL_ISSUES_TEST_PATH,
+);
+const implementedSymbolIssuesTests = gitShowOptional(
+    repoRoot,
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+    SYMBOL_ISSUES_TEST_PATH,
+);
+if (
+    recordedSymbolIssuesTests === null ||
+    sectionBetweenMarkers(
+        recordedSymbolIssuesTests,
+        SYMBOL_ISSUES_TEST_START,
+        SYMBOL_ISSUES_TEST_END,
+    ) !== checkedInSymbolIssuesTests
+) {
+    throw new Error(
+        "checked-in symbol issue ports differ from their test commit",
+    );
+}
+if (
+    implementedSymbolIssuesTests === null ||
+    sectionBetweenMarkers(
+        implementedSymbolIssuesTests,
+        SYMBOL_ISSUES_TEST_START,
+        SYMBOL_ISSUES_TEST_END,
+    ) !== checkedInSymbolIssuesTests
+) {
+    throw new Error(
+        "symbol issue implementation changed the locked test ports",
+    );
+}
+const symbolIssuesLockedSections = [
+    {
+        path: SYMBOL_ISSUES_TEST_PATH,
+        marker: SYMBOL_ISSUES_TEST_START,
+        end_marker: SYMBOL_ISSUES_TEST_END,
+        sha256: digest(checkedInSymbolIssuesTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1386,6 +1443,9 @@ for (const row of completedRows) {
     const phaseBGraphNodes = row.logical_id.startsWith(
         "testgraphnodes-",
     );
+    const phaseBSymbolIssues = row.logical_id.startsWith(
+        "testsymbolissues-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1405,7 +1465,8 @@ for (const row of completedRows) {
         !phaseBTokenAssignment &&
         !phaseBLeftRecursion &&
         !phaseBLookaheadTree &&
-        !phaseBGraphNodes
+        !phaseBGraphNodes &&
+        !phaseBSymbolIssues
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1632,19 +1693,35 @@ for (const row of completedRows) {
                                                   ? "the case-specific DOT assertion passed against prediction-context merging already present at the batch base"
                                                   : "the recursive parent-merge implementation commit is directly based on the locked red DOT assertions",
                                           }
-                                      : phaseBLookaheadTree
-                                        ? {
-                                              lockedSections:
-                                                  lookaheadTreeLockedSections,
-                                              scaffoldCommit:
-                                                  LOOKAHEAD_TREE_FIXTURE_COMMIT,
-                                              testParent:
-                                                  LOOKAHEAD_TREE_FIXTURE_COMMIT,
-                                              implementationParent:
-                                                  LOOKAHEAD_TREE_TEST_COMMIT,
-                                              reachability:
-                                                  "the lookahead tree implementation commit is directly based on the locked red forced-alternative tests",
-                                          }
+                                        : phaseBSymbolIssues
+                                          ? {
+                                                lockedSections:
+                                                    symbolIssuesLockedSections,
+                                                scaffoldCommit:
+                                                    SYMBOL_ISSUES_BASE_COMMIT,
+                                                testParent:
+                                                    SYMBOL_ISSUES_BASE_COMMIT,
+                                                implementationParent:
+                                                    coveredExisting
+                                                        ? SYMBOL_ISSUES_BASE_PARENT_COMMIT
+                                                        : SYMBOL_ISSUES_TEST_COMMIT,
+                                                reachability: coveredExisting
+                                                    ? "the case-specific symbol assertion passed against the direct compiler implementation already present at the batch base"
+                                                    : "the symbol semantics implementation commit is directly based on the locked red parity tests",
+                                            }
+                                        : phaseBLookaheadTree
+                                          ? {
+                                                lockedSections:
+                                                    lookaheadTreeLockedSections,
+                                                scaffoldCommit:
+                                                    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+                                                testParent:
+                                                    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+                                                implementationParent:
+                                                    LOOKAHEAD_TREE_TEST_COMMIT,
+                                                reachability:
+                                                    "the lookahead tree implementation commit is directly based on the locked red forced-alternative tests",
+                                            }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1808,15 +1885,24 @@ for (const row of completedRows) {
                                                   java_compatibility_verdict:
                                                       "exact Java 4.13.2 TestGraphNodes DOT graph equality",
                                               }
-                                          : phaseBLookaheadTree
-                                            ? {
-                                                  primary:
-                                                      "the complete direct Rust lexer and parser .interp plus every forced-alternative parse tree match the immutable Java 4.13.2 oracles",
-                                                  alternate:
-                                                      "the pinned antlr-ng TestLookaheadTrees case uses the same grammar, decision, input index, and expected parse trees",
-                                                  java_compatibility_verdict:
-                                                      "exact Java 4.13.2 recognizer metadata, serialized ATN, and forced-alternative parse-tree equality",
-                                              }
+                                            : phaseBSymbolIssues
+                                              ? {
+                                                    primary:
+                                                        "the direct Rust compiler matches the immutable Java 4.13.2 diagnostics and complete .interp and .tokens fixtures",
+                                                    alternate:
+                                                        "the pinned antlr-ng TestSymbolIssues case exercises the same symbol, command, and lexer-range behavior",
+                                                    java_compatibility_verdict:
+                                                        "exact Java 4.13.2 diagnostic ordering and positions, token metadata, and serialized ATN equality",
+                                                }
+                                            : phaseBLookaheadTree
+                                              ? {
+                                                    primary:
+                                                        "the complete direct Rust lexer and parser .interp plus every forced-alternative parse tree match the immutable Java 4.13.2 oracles",
+                                                    alternate:
+                                                        "the pinned antlr-ng TestLookaheadTrees case uses the same grammar, decision, input index, and expected parse trees",
+                                                    java_compatibility_verdict:
+                                                        "exact Java 4.13.2 recognizer metadata, serialized ATN, and forced-alternative parse-tree equality",
+                                                }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1870,6 +1956,7 @@ for (const row of completedRows) {
             (phaseBTokenPosition && !coveredExisting) ||
             (phaseBLeftRecursion && !coveredExisting) ||
             (phaseBGraphNodes && !coveredExisting) ||
+            (phaseBSymbolIssues && !coveredExisting) ||
             phaseBLookaheadTree
             ? row.demonstrated_red
             : undefined,

@@ -52,6 +52,10 @@ import {
     SCOPE_PARSING_BASE_COMMIT,
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
+    SYMBOL_ISSUES_BASE_COMMIT,
+    SYMBOL_ISSUES_BASE_PARENT_COMMIT,
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+    SYMBOL_ISSUES_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_ASSIGNMENT_BASE_COMMIT,
     TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
@@ -340,6 +344,9 @@ for (const [logicalId, record] of records) {
         const graphNodes = logicalId.startsWith(
             "testgraphnodes-",
         );
+        const symbolIssues = logicalId.startsWith(
+            "testsymbolissues-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -509,6 +516,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             GRAPH_NODES_BASE_PARENT_COMMIT,
                     `${logicalId} GraphNodes covered-existing ancestry differs`,
+                );
+            } else if (symbolIssues) {
+                expect(
+                    manifest.commits.scaffold ===
+                            SYMBOL_ISSUES_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            SYMBOL_ISSUES_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            SYMBOL_ISSUES_BASE_COMMIT,
+                    `${logicalId} symbol issues covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            SYMBOL_ISSUES_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            SYMBOL_ISSUES_BASE_PARENT_COMMIT,
+                    `${logicalId} symbol issues covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -783,6 +807,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             GRAPH_NODES_TEST_COMMIT,
                     `${logicalId} GraphNodes recorded ancestry differs`,
+                );
+            } else if (symbolIssues) {
+                expect(
+                    manifest.commits.scaffold ===
+                            SYMBOL_ISSUES_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            SYMBOL_ISSUES_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+                    `${logicalId} symbol issues evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            SYMBOL_ISSUES_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            SYMBOL_ISSUES_TEST_COMMIT,
+                    `${logicalId} symbol issues recorded ancestry differs`,
                 );
             } else if (lookaheadTree) {
                 expect(
@@ -1286,6 +1327,38 @@ if (graphNodesImplementationParent !== null) {
         graphNodesImplementationParent.trim() ===
             GRAPH_NODES_TEST_COMMIT,
         "GraphNodes implementation commit is not based on its locked tests",
+    );
+}
+const symbolIssuesBaseParent = gitOptional([
+    "rev-parse",
+    `${SYMBOL_ISSUES_BASE_COMMIT}^`,
+]);
+if (symbolIssuesBaseParent !== null) {
+    expect(
+        symbolIssuesBaseParent.trim() ===
+            SYMBOL_ISSUES_BASE_PARENT_COMMIT,
+        "symbol issues base commit has an unexpected parent",
+    );
+}
+const symbolIssuesTestParent = gitOptional([
+    "rev-parse",
+    `${SYMBOL_ISSUES_TEST_COMMIT}^`,
+]);
+if (symbolIssuesTestParent !== null) {
+    expect(
+        symbolIssuesTestParent.trim() === SYMBOL_ISSUES_BASE_COMMIT,
+        "symbol issues test commit is not based on its recorded base",
+    );
+}
+const symbolIssuesImplementationParent = gitOptional([
+    "rev-parse",
+    `${SYMBOL_ISSUES_IMPLEMENTATION_COMMIT}^`,
+]);
+if (symbolIssuesImplementationParent !== null) {
+    expect(
+        symbolIssuesImplementationParent.trim() ===
+            SYMBOL_ISSUES_TEST_COMMIT,
+        "symbol issues implementation commit is not based on its locked tests",
     );
 }
 

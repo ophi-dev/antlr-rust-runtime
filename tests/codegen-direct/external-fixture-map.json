@@ -697,7 +697,7 @@
           "tdd_owner": "upstream:testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
           "rust_test": "grammar::compiler::tests::implicit_token_warning_precedes_unknown_channel_error",
           "upstream_active_revision_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1",
-          "transitive_closure_sha256": "c668ea703313f832e465b505d9f2b8e6262c2c21b17e9f1bf8e7f79497542a0b"
+          "transitive_closure_sha256": "929a9bfbc313217283ffacaa41c7b651a6c49d5e05f64f98f423214142100ff7"
         }
       ]
     },

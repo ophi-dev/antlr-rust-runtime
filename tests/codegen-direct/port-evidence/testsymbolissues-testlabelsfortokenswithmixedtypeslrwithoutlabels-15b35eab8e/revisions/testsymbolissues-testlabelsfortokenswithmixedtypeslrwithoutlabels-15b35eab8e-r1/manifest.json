@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+  "revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels@df1c18bf34e3",
+      "java-antlr:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels@df1c18bf34e3"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/L.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithoutLabels",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
+  },
+  "closure_sha256": "ef8dea7bf142c74886458493de5ddb402d5ff6aac083cc515b55caeccaa905ef",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels@df1c18bf34e3",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels@df1c18bf34e3",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/L.g4",
+      "sha256": "f462b1f36049528f8c9f794ae70c1ab4d0485bb1eb3ac916087f7bebc02abd95"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.interp",
+      "sha256": "aec8035d080b1aef63f04fcdca05c6675b7277caa69e8c26764d89ea16a290a4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.tokens",
+      "sha256": "672b188af493dcb576bc21dd272c7ce95aa0a51c99a349871606b79f65356ae3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/diagnostics.json",
+      "sha256": "e048bf7936458bbf254cae37cbcbc5c15a691d8e36c998217e5ea6d6d401230b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/fixture.json",
+      "sha256": "f7e1e0bb04f73c5492a00b54b72f8fe4e4b6fcd6920634c7adf73854233e63ba"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stderr",
+      "sha256": "0a593ca3fda511e213a6623f36e2dc763c7bf0dadd0845d9b35d11cfe975b779"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "reachability": "the symbol semantics implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 101,
+    "fingerprint": "emitted 1 left-recursive label conflict instead of Java's 2 rule-scoped conflicts"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java -- --exact",
+    "commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/revisions/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1/oracle-results/declared-sources.json",
+      "sha256": "c6b490f34c1a5021e57bb6236d78202391c29eab56a53933d702043782ce6575"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/revisions/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1/matrix-results/results.json",
+      "sha256": "a969d866fddad4c7497dabad1a41ce7fe0fe6318a96eac58d3944545aede4b23"
+    }
+  ]
+}

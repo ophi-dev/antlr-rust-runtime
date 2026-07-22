@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+  "active_revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/revisions/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1/manifest.json",
+      "closure_sha256": "ef8dea7bf142c74886458493de5ddb402d5ff6aac083cc515b55caeccaa905ef"
+    }
+  ]
+}

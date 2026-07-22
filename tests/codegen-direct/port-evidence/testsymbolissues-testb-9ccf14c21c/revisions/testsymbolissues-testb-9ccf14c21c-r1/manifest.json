@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testb-9ccf14c21c",
+  "revision_id": "testsymbolissues-testb-9ccf14c21c-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testsymbolissues-testb-9ccf14c21c",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testb@b099bdcaddd2",
+      "java-antlr:testsymbolissues-testb@b099bdcaddd2"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/B.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testB",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
+  },
+  "closure_sha256": "4a0a37c17fb0c047349761b8f554b8b8c18b12b52d1719efb3d0e93439a00e3a",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testb@b099bdcaddd2",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testb@b099bdcaddd2",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/B.g4",
+      "sha256": "221628523067eadba0373df47115683d4c16ea6103b55b601bffdd57ef120af0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/diagnostics.json",
+      "sha256": "25bd611091dac37e4d4f0c853513ba9efb930da2d098c3f68e50bf8fbbf8121e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/fixture.json",
+      "sha256": "f6fc74f84fa04dd00b7d6cffe3aaf299c2e932a89e6b96add4bced6fc7939616"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stderr",
+      "sha256": "2584ce3f6a46b4acab2b4b68232e986dee420cb929defc99a81e3b6fb10dbca2"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "reachability": "the symbol semantics implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 101,
+    "fingerprint": "the first diagnostic was G4S031 instead of the expected label/rule conflict G4S038"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java -- --exact",
+    "commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testb-9ccf14c21c/revisions/testsymbolissues-testb-9ccf14c21c-r1/oracle-results/declared-sources.json",
+      "sha256": "eb6393de4aeecc233da49e4523224c93b8b8b1ff546c12599a9890d5bf0075b0"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testb-9ccf14c21c/revisions/testsymbolissues-testb-9ccf14c21c-r1/matrix-results/results.json",
+      "sha256": "47158ab262bad1acb4d378b12266613a8c361fad2b16e429e3c40e34946817f0"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+  "active_revision_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/revisions/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47-r1/manifest.json",
+      "closure_sha256": "497a820d46e0d427822c66960cce871a0307c6338b1ba26ccfea6c6bd94dc0ff"
+    }
+  ]
+}

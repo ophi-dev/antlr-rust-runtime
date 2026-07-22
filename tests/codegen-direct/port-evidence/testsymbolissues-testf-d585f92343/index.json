@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testf-d585f92343",
+  "active_revision_id": "testsymbolissues-testf-d585f92343-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testf-d585f92343-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testf-d585f92343/revisions/testsymbolissues-testf-d585f92343-r1/manifest.json",
+      "closure_sha256": "56f2325fb8495cf3691da93da9bf897d62cbb499a1bf4d2eb4d9d7a417dba3f6"
+    }
+  ]
+}

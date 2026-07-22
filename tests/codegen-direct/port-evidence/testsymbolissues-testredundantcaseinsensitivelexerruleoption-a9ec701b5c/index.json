@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+  "active_revision_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/revisions/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-r1/manifest.json",
+      "closure_sha256": "0dccf9e239bc577daa936b91765495822e63a66383b2a29c70030023591dba85"
+    }
+  ]
+}

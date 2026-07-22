@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+  "active_revision_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testincompatiblecommands-43fa4a3fd8/revisions/testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1/manifest.json",
+      "closure_sha256": "295030db182addac78fce973a750e11b79c0980dc3f95951937a4ff9fe9948bc"
+    }
+  ]
+}

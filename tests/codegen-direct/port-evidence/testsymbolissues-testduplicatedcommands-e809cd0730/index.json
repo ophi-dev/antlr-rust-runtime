@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
+  "active_revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testduplicatedcommands-e809cd0730/revisions/testsymbolissues-testduplicatedcommands-e809cd0730-r1/manifest.json",
+      "closure_sha256": "09049c2f81a18b88108291ab46b58d79db5e8e5a6228a60fb707fa928f25fdd7"
+    }
+  ]
+}

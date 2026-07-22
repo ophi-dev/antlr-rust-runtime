@@ -27282,8 +27282,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testa-2e644f226d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::a::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27304,8 +27304,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testA behavior",
+      "expected_red_failure_fingerprint": "expected 10 ordered diagnostics, but semantic analysis stopped after 5 duplicate-action and option diagnostics",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testA",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::a::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 10 ordered diagnostics, but semantic analysis stopped after 5 duplicate-action and option diagnostics"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::a::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testa-2e644f226d",
         "source_case_ids": [
@@ -27313,14 +27325,25 @@
           "java-antlr:testsymbolissues-testa@5bb4ef36fc98"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/A.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testa-2e644f226d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::a::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testA behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testA",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "44ed8946018c49c0b0fd475992e9b8385d522bc1335991d0d1fde1a60ff746c6",
-      "evidence_path": null
+      "closure_sha256": "7dcb90c5602443429d1b2b808b910050aeeb084efe92211c8a4f7b5a3dd424b8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testa-2e644f226d"
     },
     {
       "logical_id": "testsymbolissues-testb-9ccf14c21c",
@@ -27332,8 +27355,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testb-9ccf14c21c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27354,8 +27377,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testB behavior",
+      "expected_red_failure_fingerprint": "the first diagnostic was G4S031 instead of the expected label/rule conflict G4S038",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testB",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the first diagnostic was G4S031 instead of the expected label/rule conflict G4S038"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testb-9ccf14c21c",
         "source_case_ids": [
@@ -27363,14 +27398,25 @@
           "java-antlr:testsymbolissues-testb@b099bdcaddd2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/B.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testb-9ccf14c21c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::b::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testB behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testB",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "9b24f0940364170c7333e54697e08db30b3fa38a040047c37c005dd20f9e5115",
-      "evidence_path": null
+      "closure_sha256": "4a0a37c17fb0c047349761b8f554b8b8c18b12b52d1719efb3d0e93439a00e3a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testb-9ccf14c21c"
     },
     {
       "logical_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
@@ -27382,8 +27428,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_chars_collision::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27404,8 +27450,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testCaseInsensitiveCharsCollision behavior",
+      "expected_red_failure_fingerprint": "expected 4 G4S068 case-folded character-collision warnings, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveCharsCollision",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_chars_collision::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 4 G4S068 case-folded character-collision warnings, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_chars_collision::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
         "source_case_ids": [
@@ -27413,14 +27471,27 @@
           "java-antlr:testsymbolissues-testcaseinsensitivecharscollision@ef5c3572af03"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_chars_collision::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testCaseInsensitiveCharsCollision behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveCharsCollision",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "afed71fe892f83b1e932687957702c36c0102b5adb247271936a2cb0a3c2fa5d",
-      "evidence_path": null
+      "closure_sha256": "3c96acb86b24e293d64120fdee4985c1aaae8332b20385c6966dcbadab27afdc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivecharscollision-1c64211182"
     },
     {
       "logical_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
@@ -27432,8 +27503,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27454,8 +27526,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testCaseInsensitiveOptionInParseRule behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveOptionInParseRule",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
         "source_case_ids": [
@@ -27463,14 +27548,30 @@
           "java-antlr:testsymbolissues-testcaseinsensitiveoptioninparserule@c8857ab0ede8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testCaseInsensitiveOptionInParseRule behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveOptionInParseRule",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "544cfbe014125d0d7324907ae22fa460506d7ba0c2c8a4aadb52f547cebd89f2",
-      "evidence_path": null
+      "closure_sha256": "ac6039f7cf07a1ddf40f988976d7e0a0d05a00967bbbd6664406a051feaf3b0f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149"
     },
     {
       "logical_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
@@ -27482,8 +27583,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27504,8 +27606,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testCaseInsensitiveWithUnicodeRanges behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveWithUnicodeRanges",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
         "source_case_ids": [
@@ -27513,14 +27628,27 @@
           "java-antlr:testsymbolissues-testcaseinsensitivewithunicoderanges@b1b40abb5488"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testCaseInsensitiveWithUnicodeRanges behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveWithUnicodeRanges",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5641b769cb1702428e1296c64601e77c7295475b02e007eb479729c224a30848",
-      "evidence_path": null
+      "closure_sha256": "c100e74bc7e1cdd3c47d0e4957544aced46926417588712dec560d97af4526c8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea"
     },
     {
       "logical_id": "testsymbolissues-testcharscollision-2c32d921bf",
@@ -27532,8 +27660,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testcharscollision-2c32d921bf-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::chars_collision::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27554,8 +27682,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testCharsCollision behavior",
+      "expected_red_failure_fingerprint": "expected 5 G4S068 character-collision warnings, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCharsCollision",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::chars_collision::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 5 G4S068 character-collision warnings, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::chars_collision::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testcharscollision-2c32d921bf",
         "source_case_ids": [
@@ -27563,14 +27703,27 @@
           "java-antlr:testsymbolissues-testcharscollision@045726616d10"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testcharscollision-2c32d921bf",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::chars_collision::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testCharsCollision behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCharsCollision",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "8c320452b5ab00e52cebc14b3c1804db87991848df0007ce4b94520e1a4b786e",
-      "evidence_path": null
+      "closure_sha256": "51ac6f82afa39fb2a68093ab6fdac54ec5191277c400e6b12abc93108f533080",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcharscollision-2c32d921bf"
     },
     {
       "logical_id": "testsymbolissues-testd-8d77089073",
@@ -27582,8 +27735,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testd-8d77089073-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::d::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27604,8 +27758,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testD behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testD",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::d::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::d::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testd-8d77089073",
         "source_case_ids": [
@@ -27613,14 +27780,26 @@
           "java-antlr:testsymbolissues-testd@328fe613ed05"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/D.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testd-8d77089073",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::d::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testD behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testD",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "98e21b0239cfa0feb7d1620c2bf6ff0964ecfb0bc2f00ab4e88ac60f3455e811",
-      "evidence_path": null
+      "closure_sha256": "8cc547f03afac19d243e0029ba38a959d5a834d54f979b88d0afac52c0434529",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testd-8d77089073"
     },
     {
       "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
@@ -27632,8 +27811,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27654,8 +27833,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testDuplicatedCommands behavior",
+      "expected_red_failure_fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2 and 128",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testDuplicatedCommands",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2 and 128"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
         "source_case_ids": [
@@ -27663,14 +27854,27 @@
           "java-antlr:testsymbolissues-testduplicatedcommands@046d302e1d7f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testDuplicatedCommands behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testDuplicatedCommands",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "db8e806eb76474dd1147b7ee81be8b0d80a748a48e116749717454551e262447",
-      "evidence_path": null
+      "closure_sha256": "09049c2f81a18b88108291ab46b58d79db5e8e5a6228a60fb707fa928f25fdd7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testduplicatedcommands-e809cd0730"
     },
     {
       "logical_id": "testsymbolissues-teste-cd9e1fc41d",
@@ -27682,8 +27886,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-teste-cd9e1fc41d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::e::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27704,8 +27908,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testE behavior",
+      "expected_red_failure_fingerprint": "emitted 2 duplicate-token warnings instead of Java's single G4S019 warning",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testE",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::e::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "emitted 2 duplicate-token warnings instead of Java's single G4S019 warning"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::e::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-teste-cd9e1fc41d",
         "source_case_ids": [
@@ -27713,14 +27929,27 @@
           "java-antlr:testsymbolissues-teste@360c53061200"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/E.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/E.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/E.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-teste-cd9e1fc41d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::e::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testE behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testE",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "e94d862768af8dc3b7590ea7ae19282efeaf9e82f498398b756a69c72002bc6e",
-      "evidence_path": null
+      "closure_sha256": "3da40e786ffc385413d3e6a2e88bf1bb0b7d3ee9dd20efd94cc07938a7bdf80d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-teste-cd9e1fc41d"
     },
     {
       "logical_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53",
@@ -27732,8 +27961,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_mode_detection::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27754,8 +27983,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testEmptyLexerModeDetection behavior",
+      "expected_red_failure_fingerprint": "G4S026 pointed at byte 26 instead of the mode name at byte 31",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testEmptyLexerModeDetection",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_mode_detection::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4S026 pointed at byte 26 instead of the mode name at byte 31"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_mode_detection::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53",
         "source_case_ids": [
@@ -27763,14 +28004,25 @@
           "java-antlr:testsymbolissues-testemptylexermodedetection@cf7f31a10af6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testemptylexermodedetection-1e410b0d53",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_mode_detection::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testEmptyLexerModeDetection behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testEmptyLexerModeDetection",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "341f6cfa71968a7f8e2ba94c877d8ea1b497b96a906395daf72c40015a0e18bf",
-      "evidence_path": null
+      "closure_sha256": "87b59da362e60131f2975931c255c6d09b0ab1b2acb2a0367c637766eaa7bb9c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testemptylexermodedetection-1e410b0d53"
     },
     {
       "logical_id": "testsymbolissues-testemptylexerruledetection-f95b017788",
@@ -27782,8 +28034,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testemptylexerruledetection-f95b017788-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_rule_detection::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27804,8 +28057,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testEmptyLexerRuleDetection behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testEmptyLexerRuleDetection",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_rule_detection::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_rule_detection::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testemptylexerruledetection-f95b017788",
         "source_case_ids": [
@@ -27813,14 +28079,28 @@
           "java-antlr:testsymbolissues-testemptylexerruledetection@bebef0e36245"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::empty_lexer_rule_detection::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testEmptyLexerRuleDetection behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testEmptyLexerRuleDetection",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d02dac7437e9e2f9aa9f9c641d438348c87537df5bc7c2445b3249c728576d83",
-      "evidence_path": null
+      "closure_sha256": "7ec1dc1933ee4b4c7b16df09a39104bcb8705cca091b24217fe0538891f42558",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testemptylexerruledetection-f95b017788"
     },
     {
       "logical_id": "testsymbolissues-testf-d585f92343",
@@ -27832,8 +28112,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testf-d585f92343-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::f::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27854,8 +28135,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testF behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testF",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::f::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::f::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testf-d585f92343",
         "source_case_ids": [
@@ -27863,14 +28157,26 @@
           "java-antlr:testsymbolissues-testf@7844a00980a3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/F.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testf-d585f92343",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::f::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testF behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testF",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "ed5ec5c2311eb7d7c33cea8adb18d4b6c1ab00333cfe8cbd8598ccca960d47ea",
-      "evidence_path": null
+      "closure_sha256": "56f2325fb8495cf3691da93da9bf897d62cbb499a1bf4d2eb4d9d7a417dba3f6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testf-d585f92343"
     },
     {
       "logical_id": "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
@@ -27882,8 +28188,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::illegal_case_insensitive_option_value::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27904,8 +28210,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testIllegalCaseInsensitiveOptionValue behavior",
+      "expected_red_failure_fingerprint": "emitted 1 invalid caseInsensitive value warning instead of 2",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testIllegalCaseInsensitiveOptionValue",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::illegal_case_insensitive_option_value::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "emitted 1 invalid caseInsensitive value warning instead of 2"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::illegal_case_insensitive_option_value::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
         "source_case_ids": [
@@ -27913,14 +28231,27 @@
           "java-antlr:testsymbolissues-testillegalcaseinsensitiveoptionvalue@b68a1601ddcf"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::illegal_case_insensitive_option_value::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testIllegalCaseInsensitiveOptionValue behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testIllegalCaseInsensitiveOptionValue",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "610efe363147ea7eb43730c2f502b09e387cfec6375b94756bbc4fd78c5076ac",
-      "evidence_path": null
+      "closure_sha256": "f7cd481106d60afb52f78b70ee402c5c765d9118910d6de37985f9af54439441",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c"
     },
     {
       "logical_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
@@ -27932,8 +28263,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27954,8 +28285,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testIncompatibleCommands behavior",
+      "expected_red_failure_fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2, 246, and 248",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testIncompatibleCommands",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2, 246, and 248"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
         "source_case_ids": [
@@ -27963,14 +28306,27 @@
           "java-antlr:testsymbolissues-testincompatiblecommands@170e1aa93dfe"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::incompatible_commands::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testIncompatibleCommands behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testIncompatibleCommands",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "3dda5f2c1a42f948a3d73d2c96b7cb22579dcaaafa59448e804ee53c4601e48b",
-      "evidence_path": null
+      "closure_sha256": "295030db182addac78fce973a750e11b79c0980dc3f95951937a4ff9fe9948bc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testincompatiblecommands-43fa4a3fd8"
     },
     {
       "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
@@ -27982,8 +28338,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28004,8 +28360,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypes behavior",
+      "expected_red_failure_fingerprint": "emitted 10 label-type conflicts instead of Java's 5 context-scoped conflicts",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypes",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "emitted 10 label-type conflicts instead of Java's 5 context-scoped conflicts"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
         "source_case_ids": [
@@ -28013,14 +28381,27 @@
           "java-antlr:testsymbolissues-testlabelsfortokenswithmixedtypes@a68e1e1b8ce4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/LLexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/LLexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypes behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypes",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "0e7faafded982798a486ebb6e558c4dbbbe74aeb3394430ea99306a50ca8954a",
-      "evidence_path": null
+      "closure_sha256": "d8f8211684f205130b89a833baadf86deb295a5d87e98f1e06bbd1264374a77a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc"
     },
     {
       "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
@@ -28032,8 +28413,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_with_labels::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28054,8 +28435,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithLabels behavior",
+      "expected_red_failure_fingerprint": "the accepted labeled left-recursive grammar failed with G4S041",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithLabels",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_with_labels::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the accepted labeled left-recursive grammar failed with G4S041"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_with_labels::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
         "source_case_ids": [
@@ -28063,14 +28456,28 @@
           "java-antlr:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels@739eb1610e35"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/LLexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/LLexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_with_labels::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithLabels behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithLabels",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "a141c75cbc4f0512345d145b14d5d8c389595a7c975e79d5fd41294d033b7012",
-      "evidence_path": null
+      "closure_sha256": "464893ad12d88f7b27d30f45e4c15f5dd5eb4d6894791b9bb24b4703a64c4fd1",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629"
     },
     {
       "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
@@ -28082,8 +28489,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28104,8 +28511,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithoutLabels behavior",
+      "expected_red_failure_fingerprint": "emitted 1 left-recursive label conflict instead of Java's 2 rule-scoped conflicts",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithoutLabels",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "emitted 1 left-recursive label conflict instead of Java's 2 rule-scoped conflicts"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
         "source_case_ids": [
@@ -28113,14 +28532,27 @@
           "java-antlr:testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels@df1c18bf34e3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/LLexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::labels_for_tokens_with_mixed_types_lr_without_labels::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithoutLabels behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testLabelsForTokensWithMixedTypesLRWithoutLabels",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "2fa74779ed7b6920a8feda4e04b405207ab472b918be2f78cb5bdbf56cc9e307",
-      "evidence_path": null
+      "closure_sha256": "ef8dea7bf142c74886458493de5ddb402d5ff6aac083cc515b55caeccaa905ef",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e"
     },
     {
       "logical_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
@@ -28132,8 +28564,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28154,8 +28586,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testNotImpliedCharacters behavior",
+      "expected_red_failure_fingerprint": "expected 2 G4S070 mixed-case range warnings, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testNotImpliedCharacters",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 2 G4S070 mixed-case range warnings, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
         "source_case_ids": [
@@ -28163,14 +28607,27 @@
           "java-antlr:testsymbolissues-testnotimpliedcharacters@1621fd0c1242"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/Test.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/Test.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/Test.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testNotImpliedCharacters behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testNotImpliedCharacters",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "ba05c7db2e264b6adc48aeccf5126a0f6a0461a59c784b4ee7315650aec74873",
-      "evidence_path": null
+      "closure_sha256": "a739bfbc557b4246593af36ee2785fb9f14cae51817d34facb6b7b03d903c9ab",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testnotimpliedcharacters-4c3481ae89"
     },
     {
       "logical_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
@@ -28182,8 +28639,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters_with_case_insensitive_option::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28204,8 +28661,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testNotImpliedCharactersWithCaseInsensitiveOption behavior",
+      "expected_red_failure_fingerprint": "expected 1 G4S070 mixed-case range warning under caseInsensitive, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testNotImpliedCharactersWithCaseInsensitiveOption",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters_with_case_insensitive_option::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 1 G4S070 mixed-case range warning under caseInsensitive, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters_with_case_insensitive_option::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
         "source_case_ids": [
@@ -28213,14 +28682,27 @@
           "java-antlr:testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption@9be3bd39aec0"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/Test.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/Test.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/Test.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::not_implied_characters_with_case_insensitive_option::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testNotImpliedCharactersWithCaseInsensitiveOption behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testNotImpliedCharactersWithCaseInsensitiveOption",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "c52fa229ab605979535713baabdf79474d26edca40404e3cf4e45c5b4895b405",
-      "evidence_path": null
+      "closure_sha256": "497a820d46e0d427822c66960cce871a0307c6338b1ba26ccfea6c6bd94dc0ff",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47"
     },
     {
       "logical_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
@@ -28232,8 +28714,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::redundant_case_insensitive_lexer_rule_option",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28254,8 +28736,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testRedundantCaseInsensitiveLexerRuleOption behavior",
+      "expected_red_failure_fingerprint": "both true and false variants expected G4S067 redundant caseInsensitive rule-option warnings, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testRedundantCaseInsensitiveLexerRuleOption",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::redundant_case_insensitive_lexer_rule_option",
+        "exit_code": 101,
+        "fingerprint": "both true and false variants expected G4S067 redundant caseInsensitive rule-option warnings, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::redundant_case_insensitive_lexer_rule_option",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
         "source_case_ids": [
@@ -28263,14 +28757,36 @@
           "java-antlr:testsymbolissues-testredundantcaseinsensitivelexerruleoption@fb0a258ad769"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::redundant_case_insensitive_lexer_rule_option",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testRedundantCaseInsensitiveLexerRuleOption behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testRedundantCaseInsensitiveLexerRuleOption",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "1b499317dc9dcc77e2261449301350ece08e75d795cbdaa690cc115a31401c8c",
-      "evidence_path": null
+      "closure_sha256": "0dccf9e239bc577daa936b91765495822e63a66383b2a29c70030023591dba85",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c"
     },
     {
       "logical_id": "testsymbolissues-teststringliteralredefs-9b1f541902",
@@ -28282,8 +28798,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-teststringliteralredefs-9b1f541902-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::string_literal_redefinitions::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28304,8 +28821,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testStringLiteralRedefs behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testStringLiteralRedefs",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::string_literal_redefinitions::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::string_literal_redefinitions::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-teststringliteralredefs-9b1f541902",
         "source_case_ids": [
@@ -28313,14 +28843,27 @@
           "java-antlr:testsymbolissues-teststringliteralredefs@44b84246ea9a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/L.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/L.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-teststringliteralredefs-9b1f541902",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::string_literal_redefinitions::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testStringLiteralRedefs behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testStringLiteralRedefs",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "a962c6686aeb8d8ba205319eb292a6181b4da5c057c5b50986943a16d70ce91a",
-      "evidence_path": null
+      "closure_sha256": "8e75cd19acdf72b7de8870407b96f3133707ab162ea9d46fb12cbb0dcccd5613",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-teststringliteralredefs-9b1f541902"
     },
     {
       "logical_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
@@ -28332,8 +28875,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::declaration_conflicts_with_reserved_names::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28354,8 +28897,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testTokensModesChannelsDeclarationConflictsWithReserved behavior",
+      "expected_red_failure_fingerprint": "emitted 5 reserved-name diagnostics instead of 4 and incorrectly rejected DEFAULT_MODE",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testTokensModesChannelsDeclarationConflictsWithReserved",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::declaration_conflicts_with_reserved_names::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "emitted 5 reserved-name diagnostics instead of 4 and incorrectly rejected DEFAULT_MODE"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::declaration_conflicts_with_reserved_names::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
         "source_case_ids": [
@@ -28363,14 +28918,25 @@
           "java-antlr:testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved@bdee6556d360"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::declaration_conflicts_with_reserved_names::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testTokensModesChannelsDeclarationConflictsWithReserved behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testTokensModesChannelsDeclarationConflictsWithReserved",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "6e9788128dc5e40b1a361ee0aa13f06d20186b47a89ea35b2e2e48114bfcafe3",
-      "evidence_path": null
+      "closure_sha256": "72140cb16cb99e0d5173f28c104634d4dbfcff8774b708c6710851a3db9a8e39",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796"
     },
     {
       "logical_id": "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
@@ -28382,8 +28948,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::command_arguments_conflict_with_reserved_names::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28404,8 +28970,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testTokensModesChannelsUsingConflictsWithReserved behavior",
+      "expected_red_failure_fingerprint": "the first command-argument diagnostic was G4S053 instead of reserved-channel G4S021",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testTokensModesChannelsUsingConflictsWithReserved",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::command_arguments_conflict_with_reserved_names::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the first command-argument diagnostic was G4S053 instead of reserved-channel G4S021"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::command_arguments_conflict_with_reserved_names::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
         "source_case_ids": [
@@ -28413,14 +28991,25 @@
           "java-antlr:testsymbolissues-testtokensmodeschannelsusingconflictswithreserved@133046082bf2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::command_arguments_conflict_with_reserved_names::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testTokensModesChannelsUsingConflictsWithReserved behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testTokensModesChannelsUsingConflictsWithReserved",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "777be3fa5a0d94b60c5c8abd64a422cf1b4d5e816cd8f9ea11a6c1af4314da93",
-      "evidence_path": null
+      "closure_sha256": "e41217b1ee84968b52629d5359e30ab04e90b65e7b486d9e7831de0e6bec8da6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227"
     },
     {
       "logical_id": "testsymbolissues-testundefinedlabel-d2fa215436",
@@ -28432,8 +29021,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testundefinedlabel-d2fa215436-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::undefined_label_regression::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28454,8 +29044,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testUndefinedLabel behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testUndefinedLabel",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::undefined_label_regression::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::undefined_label_regression::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testundefinedlabel-d2fa215436",
         "source_case_ids": [
@@ -28463,14 +29066,28 @@
           "java-antlr:testsymbolissues-testundefinedlabel@1b7801aeea65"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/Test.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/TestLexer.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/TestLexer.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testundefinedlabel-d2fa215436",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::undefined_label_regression::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testUndefinedLabel behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testUndefinedLabel",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "0dc069744525f53d6badcadf0bcbcba3025bd1066aee1c4111703c70fef2c61c",
-      "evidence_path": null
+      "closure_sha256": "0cb05a1089277750dffe2952c892c002284b4d8cf97e4412c2e7a23c504e1ecb",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testundefinedlabel-d2fa215436"
     },
     {
       "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
@@ -28482,8 +29099,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testunreachabletokens-43df5f5f59-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28504,8 +29121,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testUnreachableTokens behavior",
+      "expected_red_failure_fingerprint": "expected 9 G4S069 unreachable-token warnings, but emitted none",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testUnreachableTokens",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "expected 9 G4S069 unreachable-token warnings, but emitted none"
+      },
+      "primary_implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
         "source_case_ids": [
@@ -28513,14 +29142,27 @@
           "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.interp",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.tokens",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testUnreachableTokens behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testUnreachableTokens",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
       },
-      "closure_sha256": "c147c7d6dd0c065386ffe2edd7a8b6f4e8d769fa23db3f8b2571369265df2248",
-      "evidence_path": null
+      "closure_sha256": "6767a49e45707a4cb3ef57213b9863000f77cb3d2e09464b8f22e5079ff37889",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testunreachabletokens-43df5f5f59"
     },
     {
       "logical_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
@@ -28534,8 +29176,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::wrong_id_for_type_channel_mode_command::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28556,8 +29199,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestSymbolIssues.testWrongIdForTypeChannelModeCommand behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testWrongIdForTypeChannelModeCommand",
+      "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::wrong_id_for_type_channel_mode_command::matches_java -- --exact",
+        "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::wrong_id_for_type_channel_mode_command::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
         "source_case_ids": [
@@ -28576,14 +29232,26 @@
             "rust_test": "grammar::compiler::tests::implicit_token_warning_precedes_unknown_channel_error"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/L.g4",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/diagnostics.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/fixture.json",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::wrong_id_for_type_channel_mode_command::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestSymbolIssues.testWrongIdForTypeChannelModeCommand behavior"
+        "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testWrongIdForTypeChannelModeCommand",
+        "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+        "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c668ea703313f832e465b505d9f2b8e6262c2c21b17e9f1bf8e7f79497542a0b",
-      "evidence_path": null
+      "closure_sha256": "929a9bfbc313217283ffacaa41c7b651a6c49d5e05f64f98f423214142100ff7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3"
     },
     {
       "logical_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",

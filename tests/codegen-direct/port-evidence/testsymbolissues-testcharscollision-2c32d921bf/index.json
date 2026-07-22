@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testcharscollision-2c32d921bf",
+  "active_revision_id": "testsymbolissues-testcharscollision-2c32d921bf-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testcharscollision-2c32d921bf-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcharscollision-2c32d921bf/revisions/testsymbolissues-testcharscollision-2c32d921bf-r1/manifest.json",
+      "closure_sha256": "51ac6f82afa39fb2a68093ab6fdac54ec5191277c400e6b12abc93108f533080"
+    }
+  ]
+}

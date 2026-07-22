@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
+  "active_revision_id": "testsymbolissues-testunreachabletokens-43df5f5f59-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testunreachabletokens-43df5f5f59-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testunreachabletokens-43df5f5f59/revisions/testsymbolissues-testunreachabletokens-43df5f5f59-r1/manifest.json",
+      "closure_sha256": "6767a49e45707a4cb3ef57213b9863000f77cb3d2e09464b8f22e5079ff37889"
+    }
+  ]
+}

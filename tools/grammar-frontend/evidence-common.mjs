@@ -139,6 +139,14 @@ export const GRAPH_NODES_TEST_COMMIT =
     "4f0e4c7d36a126a7e1d852c61628fa4be33d622c";
 export const GRAPH_NODES_IMPLEMENTATION_COMMIT =
     "0d2729880d113dc8b61222e9bb38f6a41ba44d6a";
+export const SYMBOL_ISSUES_BASE_PARENT_COMMIT =
+    GRAPH_NODES_IMPLEMENTATION_COMMIT;
+export const SYMBOL_ISSUES_BASE_COMMIT =
+    "58ef65074571091ad69b72a2f36a7718a9caa951";
+export const SYMBOL_ISSUES_TEST_COMMIT =
+    "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b";
+export const SYMBOL_ISSUES_IMPLEMENTATION_COMMIT =
+    "8ddba8f5bd603b78e8eea0497cea9c4fe1328208";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
