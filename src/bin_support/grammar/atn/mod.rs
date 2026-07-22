@@ -8,5 +8,6 @@ mod lexer;
 mod optimize;
 mod parser;
 
+pub(crate) use build::{FinalizedAtnGraph, FinalizedTransitionKind};
 pub(crate) use lexer::{CompiledLexer, compile_lexer};
 pub(crate) use parser::{CompiledParser, compile_parser};

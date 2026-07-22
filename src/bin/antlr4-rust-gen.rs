@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::env;
 use std::fmt::Write as _;
@@ -11,8 +12,19 @@ use antlr4_runtime::atn::parser_atn::{
     ParserAtn, ParserAtnState, ParserTokenSetKind, ParserTransition, ParserTransitionData,
 };
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
-use antlr4_runtime::atn::{AtnStateKind, LexerAction, LexerTransition};
+use antlr4_runtime::atn::{AtnStateKind, LexerAction, LexerAtn, LexerTransition};
 use antlr4_runtime::token::TOKEN_EOF;
+use grammar::atn::{CompiledLexer, CompiledParser, FinalizedAtnGraph, FinalizedTransitionKind};
+use grammar::frontend::SourceSpan;
+use grammar::loader::LoadOptions;
+use grammar::model::{
+    Alternative, AlternativeId, AttributeSymbol, Block, Element, ElementKind, LabelKind,
+    LeftRecursiveAlternativeKind, ModelNodeId, Rule, SemanticGrammar, Terminal,
+};
+use grammar::provenance::{Origin, ProvenanceIndex};
+use grammar::source::SourceSet;
+use petgraph::algo::has_path_connecting;
+use petgraph::graph::DiGraph;
 
 #[path = "../bin_support/embedded.rs"]
 mod embedded;
@@ -59,117 +71,204 @@ pub use self::__antlr4_rust_generated::*;
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args_iter = env::args().skip(1);
-    while let Some(arg) = args_iter.next() {
-        match arg.as_str() {
-            "--lexer" | "--parser" | "--lexer-name" | "--parser-name" | "--grammar"
-            | "--out-dir" | "--sem-patterns" | "--actions" | "--sem-unknown" | "--option-hook" => {
-                let _ = args_iter.next();
-            }
-            "--help" | "-h" => {
-                let mut stdout = io::stdout().lock();
-                writeln!(stdout, "{}", usage())?;
-                return Ok(());
-            }
-            _ => {}
+    let Some(args) = Args::parse()? else {
+        let mut stdout = io::stdout().lock();
+        writeln!(stdout, "{}", usage())?;
+        return Ok(());
+    };
+    let compilation = grammar::compiler::compile(LoadOptions {
+        roots: args.roots.clone(),
+        library_directories: args.library_directories.clone(),
+    })
+    .map_err(|error| render_compilation_error(&error, &args.roots))?;
+    emit_compilation_warnings(&compilation)?;
+
+    let mut grammar_options = Vec::new();
+    let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
+    let mut rendered_modules = BTreeMap::<PathBuf, String>::new();
+    let mut emitted_lexers = BTreeSet::new();
+    let mut emitted_parsers = BTreeSet::new();
+
+    for root in &compilation.roots {
+        if let Some(grammar) = root.lexer
+            && emitted_lexers.insert(grammar)
+        {
+            let compiled = compilation
+                .lexer(grammar)
+                .expect("compiled root lexer artifact exists");
+            let source = compilation
+                .sources
+                .get(compiled.semantic.unit.source)
+                .expect("compiled lexer source exists")
+                .text();
+            let data = CodegenData::from_lexer(compiled, &compilation.sources);
+            grammar_options.extend(collect_structural_grammar_options(
+                &data,
+                &args.option_hooks,
+            )?);
+            let manifest_source = (!args.embedded_actions).then_some(source);
+            let entries = collect_lexer_semantics(
+                &data,
+                manifest_source,
+                args.allow_unsupported_lexer_actions,
+                args.sem_unknown,
+                &args.sem_patterns,
+            )?;
+            enforce_sem_unknown(args.sem_unknown, &entries)?;
+            enforce_require_full_semantics(args.require_full_semantics, &entries)?;
+            let grammar_name = compiled.semantic.recognizer.name.clone();
+            let module = render_lexer(
+                &grammar_name,
+                &data,
+                Some(source),
+                args.allow_unsupported_lexer_actions,
+                args.sem_unknown,
+                &args.sem_patterns,
+                args.embedded_actions,
+            )?;
+            insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
+            manifest_grammars.push(("lexer", grammar_name, entries));
+        }
+
+        if let Some(grammar) = root.parser
+            && emitted_parsers.insert(grammar)
+        {
+            let compiled = compilation
+                .parser(grammar)
+                .expect("compiled root parser artifact exists");
+            let source = compilation
+                .sources
+                .get(compiled.semantic.unit.source)
+                .expect("compiled parser source exists")
+                .text();
+            let data = CodegenData::from_parser(compiled, &compilation.sources);
+            grammar_options.extend(collect_structural_grammar_options(
+                &data,
+                &args.option_hooks,
+            )?);
+            let manifest_source = (!args.embedded_actions).then_some(source);
+            let entries = collect_parser_semantics(
+                &data,
+                manifest_source,
+                args.sem_unknown,
+                &args.sem_patterns,
+            )?;
+            enforce_sem_unknown(args.sem_unknown, &entries)?;
+            enforce_require_full_semantics(args.require_full_semantics, &entries)?;
+            let grammar_name = compiled.semantic.recognizer.name.clone();
+            let module = render_parser_with_options(
+                &grammar_name,
+                &data,
+                Some(source),
+                ParserRenderOptions {
+                    require_generated_parser: args.require_generated_parser,
+                    embedded: args.embedded_actions,
+                    sem_unknown: args.sem_unknown,
+                    patterns: Some(&args.sem_patterns),
+                },
+            )?;
+            insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
+            manifest_grammars.push(("parser", grammar_name, entries));
         }
     }
 
-    let args = Args::parse()?;
-    fs::create_dir_all(&args.out_dir)?;
-    let grammar_source = args
-        .grammar
-        .as_deref()
-        .map(fs::read_to_string)
-        .transpose()?;
-    let grammar_options = grammar_source
-        .as_deref()
-        .map(|source| collect_grammar_options(source, &args.option_hooks))
-        .transpose()?
-        .unwrap_or_default();
+    deduplicate_grammar_options(&mut grammar_options);
     emit_grammar_option_warnings(&grammar_options)?;
     enforce_require_full_options(args.require_full_semantics, &grammar_options)?;
-    let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
+    let manifest =
+        render_semantics_manifest(args.sem_unknown, &grammar_options, &manifest_grammars);
 
-    if let Some(lexer) = args.lexer {
-        let data = InterpData::parse(&fs::read_to_string(&lexer)?)?;
-        let grammar_name = args
-            .lexer_name
-            .clone()
-            .unwrap_or_else(|| grammar_name_from_path(&lexer));
-        // Embedded mode compiles bodies verbatim; the template-recognition
-        // manifest walk does not apply to rendered Rust sources.
-        let manifest_source = if args.embedded_actions {
-            None
-        } else {
-            grammar_source.as_deref()
-        };
-        let entries = collect_lexer_semantics(
-            &data,
-            manifest_source,
-            args.allow_unsupported_lexer_actions,
-            args.sem_unknown,
-            &args.sem_patterns,
-        )?;
-        enforce_sem_unknown(args.sem_unknown, &entries)?;
-        enforce_require_full_semantics(args.require_full_semantics, &entries)?;
-        let module = render_lexer(
-            &grammar_name,
-            &data,
-            grammar_source.as_deref(),
-            args.allow_unsupported_lexer_actions,
-            args.sem_unknown,
-            &args.sem_patterns,
-            args.embedded_actions,
-        )?;
-        fs::write(
-            args.out_dir
-                .join(format!("{}.rs", module_name(&grammar_name))),
-            module,
-        )?;
-        manifest_grammars.push(("lexer", grammar_name, entries));
+    fs::create_dir_all(&args.out_dir)?;
+    for (path, module) in rendered_modules {
+        fs::write(args.out_dir.join(path), module)?;
     }
+    fs::write(args.out_dir.join("semantics.json"), manifest)?;
+    Ok(())
+}
 
-    if let Some(parser) = args.parser {
-        let data = InterpData::parse(&fs::read_to_string(&parser)?)?;
-        let grammar_name = args
-            .parser_name
-            .clone()
-            .unwrap_or_else(|| grammar_name_from_path(&parser));
-        let manifest_source = if args.embedded_actions {
-            None
-        } else {
-            grammar_source.as_deref()
-        };
-        let entries =
-            collect_parser_semantics(&data, manifest_source, args.sem_unknown, &args.sem_patterns)?;
-        enforce_sem_unknown(args.sem_unknown, &entries)?;
-        enforce_require_full_semantics(args.require_full_semantics, &entries)?;
-        let module = render_parser_with_options(
-            &grammar_name,
-            &data,
-            grammar_source.as_deref(),
-            ParserRenderOptions {
-                require_generated_parser: args.require_generated_parser,
-                embedded: args.embedded_actions,
-                sem_unknown: args.sem_unknown,
-                patterns: Some(&args.sem_patterns),
-            },
-        )?;
-        fs::write(
-            args.out_dir
-                .join(format!("{}.rs", module_name(&grammar_name))),
-            module,
-        )?;
-        manifest_grammars.push(("parser", grammar_name, entries));
+fn insert_rendered_module(
+    modules: &mut BTreeMap<PathBuf, String>,
+    grammar_name: &str,
+    module: String,
+) -> io::Result<()> {
+    let path = PathBuf::from(format!("{}.rs", module_name(grammar_name)));
+    match modules.entry(path.clone()) {
+        Entry::Vacant(entry) => {
+            entry.insert(module);
+            Ok(())
+        }
+        Entry::Occupied(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "generated module collision for grammar {grammar_name}: {}",
+                path.display()
+            ),
+        )),
     }
+}
 
-    write_semantics_manifest(
-        &args.out_dir,
-        args.sem_unknown,
-        &grammar_options,
-        &manifest_grammars,
-    )?;
+fn deduplicate_grammar_options(options: &mut Vec<GrammarOptionEntry>) {
+    options.sort_by(|left, right| {
+        (&left.key, &left.value, left.line, left.column).cmp(&(
+            &right.key,
+            &right.value,
+            right.line,
+            right.column,
+        ))
+    });
+    options.dedup_by(|left, right| {
+        left.key == right.key
+            && left.value == right.value
+            && left.line == right.line
+            && left.column == right.column
+    });
+}
+
+fn render_compilation_error(
+    error: &grammar::diagnostic::CompilationError,
+    roots: &[PathBuf],
+) -> io::Error {
+    let fallback = roots
+        .first()
+        .map_or_else(|| Path::new("<grammar>"), PathBuf::as_path);
+    let mut message = String::new();
+    for diagnostic in error.diagnostics() {
+        let severity = match diagnostic.severity {
+            grammar::diagnostic::Severity::Warning => "warning",
+            grammar::diagnostic::Severity::Error => "error",
+        };
+        let _ = writeln!(
+            message,
+            "{severity}[{}]: {}:{}",
+            diagnostic.code,
+            fallback.display(),
+            diagnostic.message
+        );
+    }
+    io::Error::new(io::ErrorKind::InvalidInput, message)
+}
+
+fn emit_compilation_warnings(compilation: &grammar::compiler::Compilation) -> io::Result<()> {
+    let mut stderr = io::stderr().lock();
+    for diagnostic in compilation
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == grammar::diagnostic::Severity::Warning)
+    {
+        let source = compilation.sources.get(diagnostic.primary.source);
+        let path = source.map_or_else(
+            || "<grammar>".to_owned(),
+            |source| source.logical_path().display().to_string(),
+        );
+        let position = source
+            .and_then(|source| source.line_column(diagnostic.primary.bytes.start))
+            .map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
+        writeln!(
+            stderr,
+            "warning[{}]: {path}{position}: {}",
+            diagnostic.code, diagnostic.message
+        )?;
+    }
     Ok(())
 }
 
@@ -968,7 +1067,249 @@ const fn predicate_template_disposition(
 }
 
 fn collect_lexer_semantics(
-    data: &InterpData,
+    data: &CodegenData<'_>,
+    grammar_source: Option<&str>,
+    allow_unsupported_lexer_actions: bool,
+    policy: SemUnknownPolicy,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<SemanticsEntry>> {
+    if data.semantic.is_none() {
+        return collect_lexer_semantics_legacy(
+            data,
+            grammar_source,
+            allow_unsupported_lexer_actions,
+            policy,
+            patterns,
+        );
+    }
+
+    let actions = structural_lexer_action_templates(data, patterns)?;
+    reject_unsupported_lexer_action_templates(
+        &actions
+            .iter()
+            .map(|(_, template)| template.clone())
+            .collect::<Vec<_>>(),
+        allow_unsupported_lexer_actions,
+    )?;
+    let predicates = structural_predicate_templates(data, SemanticsKind::LexerPredicate, patterns)?;
+    let mut entries = Vec::new();
+    for action in structural_actions(data)? {
+        let coordinate = (
+            i32::try_from(action.rule_index).expect("rule index exceeds i32"),
+            i32::try_from(action.action_index).expect("action index exceeds i32"),
+        );
+        let template = actions
+            .iter()
+            .find(|(covered, _)| *covered == coordinate)
+            .map(|(_, template)| template);
+        let (line, column) = structural_line_column(data, &action.span);
+        entries.push(SemanticsEntry {
+            kind: SemanticsKind::LexerAction,
+            rule_index: Some(action.rule_index),
+            rule_name: data.rule_names.get(action.rule_index).cloned(),
+            index: Some(action.action_index),
+            atn_state: None,
+            line: Some(line),
+            column: Some(column),
+            body: Some(one_line_action_body(&action.body)),
+            disposition: patterns
+                .coordinate_disposition(
+                    SemanticsKind::LexerAction,
+                    data.rule_names.get(action.rule_index).map(String::as_str),
+                    Some(action.action_index),
+                    None,
+                )
+                .unwrap_or_else(|| match template {
+                    Some(ActionTemplate::Hook(_)) => SemanticsDisposition::Hooked,
+                    Some(ActionTemplate::LexerPopMode) => SemanticsDisposition::Translated,
+                    Some(ActionTemplate::UnsupportedLexerAction { .. }) | None => {
+                        policy.unknown_action_disposition()
+                    }
+                }),
+            template: matches!(template, Some(ActionTemplate::LexerPopMode))
+                .then(|| format!("{:?}", template.expect("matched template"))),
+        });
+    }
+    for predicate in structural_predicates(data)? {
+        let coordinate = (predicate.rule_index, predicate.predicate_index);
+        let template = predicates
+            .iter()
+            .find(|(covered, _)| *covered == coordinate)
+            .map(|(_, template)| template);
+        let (line, column) = structural_line_column(data, &predicate.span);
+        entries.push(SemanticsEntry {
+            kind: SemanticsKind::LexerPredicate,
+            rule_index: Some(predicate.rule_index),
+            rule_name: data.rule_names.get(predicate.rule_index).cloned(),
+            index: Some(predicate.predicate_index),
+            atn_state: None,
+            line: Some(line),
+            column: Some(column),
+            body: Some(one_line_action_body(&predicate.body)),
+            disposition: patterns
+                .coordinate_disposition(
+                    SemanticsKind::LexerPredicate,
+                    data.rule_names
+                        .get(predicate.rule_index)
+                        .map(String::as_str),
+                    Some(predicate.predicate_index),
+                    None,
+                )
+                .unwrap_or_else(|| predicate_template_disposition(template, policy)),
+            template: template.map(|template| format!("{template:?}")),
+        });
+    }
+    Ok(entries)
+}
+
+fn collect_parser_semantics(
+    data: &CodegenData<'_>,
+    grammar_source: Option<&str>,
+    policy: SemUnknownPolicy,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<SemanticsEntry>> {
+    if data.semantic.is_none() {
+        return collect_parser_semantics_legacy(data, grammar_source, policy, patterns);
+    }
+
+    let predicates =
+        structural_predicate_templates(data, SemanticsKind::ParserPredicate, patterns)?;
+    let mut entries = Vec::new();
+    for predicate in structural_predicates(data)? {
+        let coordinate = (predicate.rule_index, predicate.predicate_index);
+        let template = predicates
+            .iter()
+            .find(|(covered, _)| *covered == coordinate)
+            .map(|(_, template)| template);
+        let (line, column) = structural_line_column(data, &predicate.span);
+        entries.push(SemanticsEntry {
+            kind: SemanticsKind::ParserPredicate,
+            rule_index: Some(predicate.rule_index),
+            rule_name: data.rule_names.get(predicate.rule_index).cloned(),
+            index: Some(predicate.predicate_index),
+            atn_state: None,
+            line: Some(line),
+            column: Some(column),
+            body: Some(one_line_action_body(&predicate.body)),
+            disposition: patterns
+                .coordinate_disposition(
+                    SemanticsKind::ParserPredicate,
+                    data.rule_names
+                        .get(predicate.rule_index)
+                        .map(String::as_str),
+                    Some(predicate.predicate_index),
+                    None,
+                )
+                .unwrap_or_else(|| predicate_template_disposition(template, policy)),
+            template: template.map(|template| format!("{template:?}")),
+        });
+    }
+    for action in structural_actions(data)? {
+        let (line, column) = structural_line_column(data, &action.span);
+        entries.push(SemanticsEntry {
+            kind: SemanticsKind::ParserAction,
+            rule_index: Some(action.rule_index),
+            rule_name: data.rule_names.get(action.rule_index).cloned(),
+            index: None,
+            atn_state: Some(action.state),
+            line: action.authored.then_some(line),
+            column: action.authored.then_some(column),
+            body: action.authored.then(|| one_line_action_body(&action.body)),
+            disposition: patterns
+                .coordinate_disposition(
+                    SemanticsKind::ParserAction,
+                    data.rule_names.get(action.rule_index).map(String::as_str),
+                    None,
+                    Some(action.state),
+                )
+                .unwrap_or_else(|| {
+                    if !action.authored || action.body.trim().is_empty() {
+                        SemanticsDisposition::Synthetic
+                    } else {
+                        policy.unknown_action_disposition()
+                    }
+                }),
+            template: None,
+        });
+    }
+    entries.sort_by_key(|entry| {
+        (
+            entry.rule_index,
+            matches!(entry.kind, SemanticsKind::ParserAction),
+            entry.index,
+            entry.atn_state,
+        )
+    });
+    Ok(entries)
+}
+
+fn structural_lexer_action_templates(
+    data: &CodegenData<'_>,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
+    structural_actions(data)?
+        .into_iter()
+        .map(|action| {
+            let rule_name = data
+                .rule_names
+                .get(action.rule_index)
+                .map_or("<unknown>", String::as_str);
+            let template = match parse_lexer_action_block_template(&action.body) {
+                Some(template) => template,
+                None => patterns
+                    .hook_helper_call(SemanticsKind::LexerAction, &action.body)?
+                    .map_or_else(
+                        || ActionTemplate::UnsupportedLexerAction {
+                            rule_name: rule_name.to_owned(),
+                            body: one_line_action_body(&action.body),
+                        },
+                        ActionTemplate::Hook,
+                    ),
+            };
+            Ok((
+                (
+                    i32::try_from(action.rule_index).expect("rule index exceeds i32"),
+                    i32::try_from(action.action_index).expect("action index exceeds i32"),
+                ),
+                template,
+            ))
+        })
+        .collect()
+}
+
+fn structural_predicate_templates(
+    data: &CodegenData<'_>,
+    kind: SemanticsKind,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
+    let mut templates = Vec::new();
+    for predicate in structural_predicates(data)? {
+        let coordinate = (predicate.rule_index, predicate.predicate_index);
+        let rule_name = data
+            .rule_names
+            .get(predicate.rule_index)
+            .map(String::as_str);
+        let template = match patterns.coordinate_predicate_template(
+            kind,
+            rule_name,
+            Some(predicate.predicate_index),
+        ) {
+            Some(template) => template,
+            None => parse_predicate_template_with_patterns_kind(&predicate.body, patterns, kind)?,
+        };
+        if let Some(template) = template {
+            let template = match predicate.fail {
+                Some(message) => predicate_template_with_fail_message(template, message),
+                None => template,
+            };
+            templates.push((coordinate, template));
+        }
+    }
+    Ok(templates)
+}
+
+fn collect_lexer_semantics_legacy(
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     allow_unsupported_lexer_actions: bool,
     policy: SemUnknownPolicy,
@@ -1066,8 +1407,8 @@ fn collect_lexer_semantics(
 
 /// Inventories every predicate coordinate and action-transition state in a
 /// parser `.interp`, mirroring `render_parser_with_options` pairing.
-fn collect_parser_semantics(
-    data: &InterpData,
+fn collect_parser_semantics_legacy(
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     policy: SemUnknownPolicy,
     patterns: &SemPatternFile,
@@ -1288,6 +1629,42 @@ fn line_column(source: &str, offset: usize) -> (usize, usize) {
         .rfind('\n')
         .map_or(offset, |newline| offset - newline - 1);
     (line, column)
+}
+
+fn collect_structural_grammar_options(
+    data: &CodegenData<'_>,
+    option_hooks: &BTreeSet<String>,
+) -> io::Result<Vec<GrammarOptionEntry>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    Ok(semantic
+        .unit
+        .options
+        .iter()
+        .map(|option| {
+            let (line, column) = structural_line_column(data, &option.name.span);
+            let key = option.name.value.clone();
+            let value = option.value.value.clone();
+            let assignment = format!("{key}={value}");
+            let disposition = match key.as_str() {
+                "tokenVocab" | "caseInsensitive" => GrammarOptionDisposition::Metadata,
+                "language" => GrammarOptionDisposition::ToolHandled,
+                _ if option_hooks.contains(&assignment) => GrammarOptionDisposition::Hooked,
+                _ => GrammarOptionDisposition::Unsupported,
+            };
+            GrammarOptionEntry {
+                key,
+                value,
+                line,
+                column,
+                disposition,
+            }
+        })
+        .collect())
 }
 
 /// Inventories top-level `options { ... }` assignments from grammar source.
@@ -1856,11 +2233,8 @@ fn parse_coordinate_kind(value: &str) -> io::Result<SemanticsKind> {
 
 #[derive(Debug)]
 struct Args {
-    lexer: Option<PathBuf>,
-    parser: Option<PathBuf>,
-    lexer_name: Option<String>,
-    parser_name: Option<String>,
-    grammar: Option<PathBuf>,
+    roots: Vec<PathBuf>,
+    library_directories: Vec<PathBuf>,
     out_dir: PathBuf,
     require_generated_parser: bool,
     allow_unsupported_lexer_actions: bool,
@@ -1875,19 +2249,9 @@ struct Args {
 }
 
 impl Args {
-    /// Parses the small generator CLI surface without pulling in a command-line
-    /// dependency.
-    ///
-    /// This binary is intended to stay easy to vendor into build pipelines, so
-    /// the parser deliberately accepts only the flags the runtime target needs
-    /// today: lexer/parser `.interp` inputs, optional grammar names, and an
-    /// output directory.
-    fn parse() -> Result<Self, String> {
-        let mut lexer = None;
-        let mut parser = None;
-        let mut lexer_name = None;
-        let mut parser_name = None;
-        let mut grammar = None;
+    fn parse() -> Result<Option<Self>, String> {
+        let mut roots = Vec::new();
+        let mut library_directories = Vec::new();
         let mut out_dir = None;
         let mut require_generated_parser = false;
         let mut allow_unsupported_lexer_actions = false;
@@ -1896,15 +2260,19 @@ impl Args {
         let mut sem_patterns = SemPatternFile::default();
         let mut require_full_semantics = false;
         let mut option_hooks = BTreeSet::new();
+        let mut positional_only = false;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
+            if positional_only {
+                roots.push(PathBuf::from(arg));
+                continue;
+            }
             match arg.as_str() {
-                "--lexer" => lexer = Some(PathBuf::from(next_arg(&mut iter, "--lexer")?)),
-                "--parser" => parser = Some(PathBuf::from(next_arg(&mut iter, "--parser")?)),
-                "--lexer-name" => lexer_name = Some(next_arg(&mut iter, "--lexer-name")?),
-                "--parser-name" => parser_name = Some(next_arg(&mut iter, "--parser-name")?),
-                "--grammar" => grammar = Some(PathBuf::from(next_arg(&mut iter, "--grammar")?)),
+                "--" => positional_only = true,
+                "-I" | "--lib" => {
+                    library_directories.push(PathBuf::from(next_arg(&mut iter, &arg)?));
+                }
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--require-generated-parser" => require_generated_parser = true,
                 "--allow-unsupported-lexer-actions" => allow_unsupported_lexer_actions = true,
@@ -1934,24 +2302,27 @@ impl Args {
                     sem_unknown =
                         SemUnknownPolicy::parse_flag(&next_arg(&mut iter, "--sem-unknown")?)?;
                 }
-                "--help" | "-h" => return Err(usage()),
-                other => return Err(format!("unknown argument {other}\n\n{}", usage())),
+                "--help" | "-h" => return Ok(None),
+                other if other.starts_with("-I") && other.len() > 2 => {
+                    library_directories.push(PathBuf::from(&other[2..]));
+                }
+                other if other.starts_with('-') => {
+                    return Err(format!("unknown argument {other}\n\n{}", usage()));
+                }
+                root => roots.push(PathBuf::from(root)),
             }
         }
 
-        if lexer.is_none() && parser.is_none() {
+        if roots.is_empty() {
             return Err(format!(
-                "at least one of --lexer or --parser is required\n\n{}",
+                "at least one grammar root is required\n\n{}",
                 usage()
             ));
         }
 
-        Ok(Self {
-            lexer,
-            parser,
-            lexer_name,
-            parser_name,
-            grammar,
+        Ok(Some(Self {
+            roots,
+            library_directories,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
             require_generated_parser,
             allow_unsupported_lexer_actions,
@@ -1960,7 +2331,7 @@ impl Args {
             require_full_semantics,
             option_hooks,
             embedded_actions,
-        })
+        }))
     }
 }
 
@@ -1971,14 +2342,10 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 
 fn usage() -> String {
     "\
-Usage: antlr4-rust-gen [OPTIONS]
+Usage: antlr4-rust-gen [OPTIONS] ROOT.g4...
 
 Options:
-  --lexer Lexer.interp             Read lexer metadata from Lexer.interp
-  --parser Parser.interp           Read parser metadata from Parser.interp
-  --lexer-name NAME                Override the lexer grammar name
-  --parser-name NAME               Override the parser grammar name
-  --grammar Grammar.g4             Read the source grammar for semantic metadata
+  -I, --lib DIR                    Add an import/token-vocabulary lookup directory
   --out-dir DIR                    Write generated Rust files to DIR
   --actions embedded|templates     Select real embedded actions or template metadata
   --require-generated-parser       Require parser source for parser generation
@@ -1994,16 +2361,89 @@ Options:
 }
 
 #[derive(Clone, Debug, Default)]
-struct InterpData {
+struct CodegenData<'a> {
     literal_names: Vec<Option<String>>,
     symbolic_names: Vec<Option<String>>,
     rule_names: Vec<String>,
     channel_names: Vec<String>,
     mode_names: Vec<String>,
     atn: Vec<i32>,
+    lexer_atn: Option<LexerAtn>,
+    parser_atn: Option<ParserAtn>,
+    lexer_dfa_words: Vec<u32>,
+    semantic: Option<&'a SemanticGrammar>,
+    graph: Option<&'a FinalizedAtnGraph>,
+    provenance: Option<&'a ProvenanceIndex>,
+    sources: Option<&'a SourceSet>,
 }
 
-impl InterpData {
+impl<'a> CodegenData<'a> {
+    fn from_lexer(compiled: &'a CompiledLexer, sources: &'a SourceSet) -> Self {
+        let recognizer = &compiled.semantic.recognizer;
+        Self {
+            literal_names: recognizer.literal_names.clone(),
+            symbolic_names: recognizer.symbolic_names.clone(),
+            rule_names: recognizer.rule_names.clone(),
+            channel_names: recognizer
+                .channel_names
+                .iter()
+                .map(|name| name.clone().unwrap_or_default())
+                .collect(),
+            mode_names: recognizer.mode_names.clone(),
+            atn: compiled.runtime_artifact.atn_words.clone(),
+            lexer_atn: Some(compiled.atn.clone()),
+            parser_atn: None,
+            lexer_dfa_words: compiled.runtime_artifact.dfa_words.clone(),
+            semantic: Some(&compiled.semantic),
+            graph: Some(&compiled.graph),
+            provenance: Some(&compiled.provenance),
+            sources: Some(sources),
+        }
+    }
+
+    fn from_parser(compiled: &'a CompiledParser, sources: &'a SourceSet) -> Self {
+        let recognizer = &compiled.semantic.recognizer;
+        Self {
+            literal_names: recognizer.literal_names.clone(),
+            symbolic_names: recognizer.symbolic_names.clone(),
+            rule_names: recognizer.rule_names.clone(),
+            channel_names: recognizer
+                .channel_names
+                .iter()
+                .map(|name| name.clone().unwrap_or_default())
+                .collect(),
+            mode_names: recognizer.mode_names.clone(),
+            atn: Vec::new(),
+            lexer_atn: None,
+            parser_atn: Some(compiled.packed.clone()),
+            lexer_dfa_words: Vec::new(),
+            semantic: Some(&compiled.semantic),
+            graph: Some(&compiled.graph),
+            provenance: Some(&compiled.provenance),
+            sources: Some(sources),
+        }
+    }
+
+    fn lexer_atn(&self) -> io::Result<Cow<'_, LexerAtn>> {
+        if let Some(atn) = &self.lexer_atn {
+            return Ok(Cow::Borrowed(atn));
+        }
+        AtnDeserializer::new(&SerializedAtn::from_i32(&self.atn))
+            .deserialize()
+            .map(Cow::Owned)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
+
+    fn parser_atn(&self) -> io::Result<Cow<'_, ParserAtn>> {
+        if let Some(atn) = &self.parser_atn {
+            return Ok(Cow::Borrowed(atn));
+        }
+        AtnDeserializer::new(&SerializedAtn::from_i32(&self.atn))
+            .deserialize_parser()
+            .map(Cow::Owned)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
+
     /// Parses ANTLR `.interp` files emitted next to generated grammars.
     ///
     /// The `.interp` format is line-oriented metadata followed by one serialized
@@ -2103,6 +2543,452 @@ fn parse_atn_values(value: &str) -> Result<Vec<i32>, io::Error> {
         .collect()
 }
 
+#[derive(Clone, Copy, Debug)]
+struct StructuralElement<'a> {
+    rule_index: usize,
+    rule: &'a Rule,
+    top_level_alternative: &'a Alternative,
+    alternative: &'a Alternative,
+    element: &'a Element,
+}
+
+#[derive(Clone, Debug)]
+struct StructuralAction {
+    rule_index: usize,
+    action_index: usize,
+    state: usize,
+    body: String,
+    span: SourceSpan,
+    alternative: AlternativeId,
+    authored: bool,
+}
+
+#[derive(Clone, Debug)]
+struct StructuralPredicate {
+    rule_index: usize,
+    predicate_index: usize,
+    body: String,
+    fail: Option<String>,
+    span: SourceSpan,
+    alternative: AlternativeId,
+}
+
+#[derive(Clone, Debug)]
+struct StructuralRuleCall {
+    caller_rule_index: usize,
+    target_rule_index: usize,
+    state: usize,
+    arguments: Option<String>,
+    alternative: AlternativeId,
+}
+
+fn structural_elements<'model>(
+    data: &CodegenData<'model>,
+) -> io::Result<Vec<StructuralElement<'model>>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    let mut elements = Vec::new();
+    for (rule_index, rule) in semantic.unit.rules.iter().enumerate() {
+        for alternative in &rule.block.alternatives {
+            collect_structural_elements(rule_index, rule, alternative, alternative, &mut elements);
+        }
+    }
+    Ok(elements)
+}
+
+fn collect_structural_elements<'a>(
+    rule_index: usize,
+    rule: &'a Rule,
+    top_level_alternative: &'a Alternative,
+    alternative: &'a Alternative,
+    elements: &mut Vec<StructuralElement<'a>>,
+) {
+    for element in &alternative.elements {
+        elements.push(StructuralElement {
+            rule_index,
+            rule,
+            top_level_alternative,
+            alternative,
+            element,
+        });
+        if let ElementKind::Block(block) = &element.kind {
+            for nested in &block.alternatives {
+                collect_structural_elements(
+                    rule_index,
+                    rule,
+                    top_level_alternative,
+                    nested,
+                    elements,
+                );
+            }
+        }
+    }
+}
+
+fn structural_actions(data: &CodegenData<'_>) -> io::Result<Vec<StructuralAction>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    let graph = data.graph.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "finalized ATN graph is unavailable",
+        )
+    })?;
+    let provenance = data
+        .provenance
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "provenance is unavailable"))?;
+    let mut actions = Vec::new();
+    for item in structural_elements(data)? {
+        let ElementKind::Action { id, body } = &item.element.kind else {
+            continue;
+        };
+        let binding = semantic
+            .bindings
+            .actions
+            .get(&id)
+            .expect("semantic action binding exists");
+        let authored = provenance
+            .origins(ModelNodeId::Element(item.element.id))
+            .iter()
+            .any(|origin| matches!(origin, Origin::Authored { .. }));
+        for transition in graph.transitions_for_model(ModelNodeId::Element(item.element.id)) {
+            let FinalizedTransitionKind::Action { rule_index, .. } = transition.kind else {
+                continue;
+            };
+            actions.push(StructuralAction {
+                rule_index,
+                action_index: binding.index,
+                state: transition.source,
+                body: body.clone(),
+                span: item.element.span.clone(),
+                alternative: item.alternative.id,
+                authored,
+            });
+        }
+    }
+    actions.sort_by_key(|action| (action.state, action.rule_index, action.action_index));
+    actions.dedup_by_key(|action| action.state);
+    Ok(actions)
+}
+
+fn structural_predicates(data: &CodegenData<'_>) -> io::Result<Vec<StructuralPredicate>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    let graph = data.graph.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "finalized ATN graph is unavailable",
+        )
+    })?;
+    let mut predicates = Vec::new();
+    for item in structural_elements(data)? {
+        let ElementKind::Predicate { id, body, fail, .. } = &item.element.kind else {
+            continue;
+        };
+        let binding = semantic
+            .bindings
+            .predicates
+            .get(&id)
+            .expect("semantic predicate binding exists");
+        for transition in graph.transitions_for_model(ModelNodeId::Element(item.element.id)) {
+            let FinalizedTransitionKind::Predicate {
+                rule_index,
+                predicate_index,
+                ..
+            } = transition.kind
+            else {
+                continue;
+            };
+            debug_assert_eq!(binding.index, predicate_index);
+            predicates.push(StructuralPredicate {
+                rule_index,
+                predicate_index,
+                body: body.clone(),
+                fail: fail.clone(),
+                span: item.element.span.clone(),
+                alternative: item.alternative.id,
+            });
+        }
+    }
+    predicates.sort_by_key(|predicate| (predicate.rule_index, predicate.predicate_index));
+    predicates.dedup_by_key(|predicate| (predicate.rule_index, predicate.predicate_index));
+    Ok(predicates)
+}
+
+fn structural_rule_calls(data: &CodegenData<'_>) -> io::Result<Vec<StructuralRuleCall>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    let graph = data.graph.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "finalized ATN graph is unavailable",
+        )
+    })?;
+    let mut calls = Vec::new();
+    for item in structural_elements(data)? {
+        let ElementKind::RuleCall(call) = &item.element.kind else {
+            continue;
+        };
+        let binding = semantic
+            .bindings
+            .rule_calls
+            .get(&item.element.id)
+            .expect("semantic rule-call binding exists");
+        for transition in graph.transitions_for_model(ModelNodeId::Element(item.element.id)) {
+            let FinalizedTransitionKind::Rule { rule_index, .. } = transition.kind else {
+                continue;
+            };
+            debug_assert_eq!(
+                semantic.recognizer.rule_numbers[&binding.target],
+                rule_index
+            );
+            calls.push(StructuralRuleCall {
+                caller_rule_index: item.rule_index,
+                target_rule_index: rule_index,
+                state: transition.source,
+                arguments: call.arguments.clone(),
+                alternative: item.alternative.id,
+            });
+        }
+    }
+    calls.sort_by_key(|call| (call.state, call.target_rule_index));
+    calls.dedup_by_key(|call| call.state);
+    Ok(calls)
+}
+
+fn structural_line_column(data: &CodegenData<'_>, span: &SourceSpan) -> (usize, usize) {
+    data.sources
+        .and_then(|sources| sources.get(span.source))
+        .and_then(|source| source.line_column(span.bytes.start))
+        .unwrap_or((0, 0))
+}
+
+fn structural_embedded_model(data: &CodegenData<'_>) -> io::Result<embedded::EmbeddedModel> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    let mut rules = data
+        .rule_names
+        .iter()
+        .map(|name| embedded::RuleModel {
+            name: name.clone(),
+            ..embedded::RuleModel::default()
+        })
+        .collect::<Vec<_>>();
+
+    for rule in &semantic.unit.rules {
+        let Some(&rule_index) = semantic.recognizer.rule_numbers.get(&rule.id) else {
+            continue;
+        };
+        let attributes = semantic
+            .bindings
+            .attributes
+            .get(&rule.id)
+            .cloned()
+            .unwrap_or_default();
+        let attrs = attributes
+            .arguments
+            .iter()
+            .chain(&attributes.returns)
+            .chain(&attributes.locals)
+            .map(structural_attr_decl)
+            .collect();
+        let init_body = rule
+            .actions
+            .iter()
+            .find(|action| action.name == "init")
+            .map(|action| action.body.clone());
+        let after_body = rule
+            .actions
+            .iter()
+            .find(|action| action.name == "after")
+            .map(|action| action.body.clone());
+        rules[rule_index] = embedded::RuleModel {
+            name: rule.name.clone(),
+            attrs,
+            local_names: attributes
+                .locals
+                .iter()
+                .map(|attribute| attribute.name.clone())
+                .collect(),
+            arg_names: attributes
+                .arguments
+                .iter()
+                .map(|attribute| attribute.name.clone())
+                .collect(),
+            init_body,
+            after_body,
+            body_span: (
+                usize::try_from(rule.block.span.bytes.start).expect("source offset exceeds usize"),
+                usize::try_from(rule.block.span.bytes.end).expect("source offset exceeds usize"),
+            ),
+            alts: structural_rule_alternatives(rule),
+        };
+    }
+
+    Ok(embedded::EmbeddedModel {
+        rules,
+        parser_members: embedded::MembersModel::default(),
+    })
+}
+
+fn structural_attr_decl(attribute: &AttributeSymbol) -> embedded::AttrDecl {
+    embedded::AttrDecl {
+        name: attribute.name.clone(),
+        ty: embedded::map_attr_type(&attribute.ty),
+    }
+}
+
+fn structural_rule_alternatives(rule: &Rule) -> Vec<embedded::AltModel> {
+    let Some(left_recursion) = &rule.left_recursion else {
+        return rule
+            .block
+            .alternatives
+            .iter()
+            .map(|alternative| structural_alt_model(alternative, None))
+            .collect();
+    };
+
+    left_recursion
+        .original_to_rewritten
+        .iter()
+        .filter_map(|(original, rewritten)| {
+            let alternative = find_alternative(&rule.block, *rewritten)?;
+            let leading_target = left_recursion
+                .alternative_kinds
+                .get(original)
+                .is_some_and(|kind| {
+                    matches!(
+                        kind,
+                        LeftRecursiveAlternativeKind::Binary | LeftRecursiveAlternativeKind::Suffix
+                    )
+                })
+                .then(|| rule.name.clone());
+            Some(structural_alt_model(alternative, leading_target))
+        })
+        .collect()
+}
+
+fn find_alternative(block: &Block, id: AlternativeId) -> Option<&Alternative> {
+    for alternative in &block.alternatives {
+        if alternative.id == id {
+            return Some(alternative);
+        }
+        for element in &alternative.elements {
+            if let ElementKind::Block(nested) = &element.kind
+                && let Some(found) = find_alternative(nested, id)
+            {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn structural_alt_model(
+    alternative: &Alternative,
+    leading_target: Option<String>,
+) -> embedded::AltModel {
+    let mut refs = Vec::new();
+    collect_structural_context_refs(&alternative.elements, &mut refs);
+    embedded::AltModel {
+        label: alternative.label.as_ref().map(|label| label.value.clone()),
+        span: (
+            usize::try_from(alternative.span.bytes.start).expect("source offset exceeds usize"),
+            usize::try_from(alternative.span.bytes.end).expect("source offset exceeds usize"),
+        ),
+        refs,
+        leading_target: leading_target.or_else(|| {
+            alternative
+                .elements
+                .first()
+                .and_then(structural_leading_target)
+        }),
+    }
+}
+
+fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded::ElementRef>) {
+    for element in elements {
+        let label = element.label.as_ref().map(|label| label.name.clone());
+        let is_list = element
+            .label
+            .as_ref()
+            .is_some_and(|label| label.kind == LabelKind::List);
+        match &element.kind {
+            ElementKind::RuleCall(call) => refs.push(embedded::ElementRef {
+                label,
+                target: call.name.clone(),
+                is_block: false,
+                is_list,
+            }),
+            ElementKind::Terminal(Terminal::Token(name)) => {
+                refs.push(embedded::ElementRef {
+                    label,
+                    target: name.clone(),
+                    is_block: false,
+                    is_list,
+                });
+            }
+            ElementKind::Block(block) => {
+                if label.is_some() {
+                    refs.push(embedded::ElementRef {
+                        label,
+                        target: String::new(),
+                        is_block: true,
+                        is_list,
+                    });
+                }
+                for alternative in &block.alternatives {
+                    collect_structural_context_refs(&alternative.elements, refs);
+                }
+            }
+            ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. }
+                if label.is_some() =>
+            {
+                refs.push(embedded::ElementRef {
+                    label,
+                    target: String::new(),
+                    is_block: true,
+                    is_list,
+                });
+            }
+            ElementKind::Terminal(_)
+            | ElementKind::Range(..)
+            | ElementKind::Set { .. }
+            | ElementKind::Action { .. }
+            | ElementKind::Predicate { .. }
+            | ElementKind::Epsilon => {}
+        }
+    }
+}
+
+fn structural_leading_target(element: &Element) -> Option<String> {
+    match &element.kind {
+        ElementKind::RuleCall(call) => Some(call.name.clone()),
+        ElementKind::Terminal(Terminal::Token(name)) => Some(name.clone()),
+        _ => None,
+    }
+}
+
 /// Sets the rendered template for a lexer predicate coordinate, replacing any
 /// existing (translated) entry so a per-coordinate override wins over a
 /// built-in translation, or appending a new entry for an uncovered coordinate.
@@ -2127,7 +3013,7 @@ fn set_lexer_predicate_template(
 #[allow(clippy::too_many_arguments)]
 fn render_lexer(
     grammar_name: &str,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     allow_unsupported_lexer_actions: bool,
     sem_unknown: SemUnknownPolicy,
@@ -2571,12 +3457,19 @@ fn lexer_actions_require_semantic_hooks(
 ///
 /// An empty stream makes the generated lexer fall back to compiling the DFA
 /// from its ATN at first use, so generation never fails on this step.
-fn compiled_lexer_dfa_words(data: &InterpData) -> String {
+fn compiled_lexer_dfa_words(data: &CodegenData<'_>) -> String {
+    if !data.lexer_dfa_words.is_empty() {
+        return data
+            .lexer_dfa_words
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+    }
     if data.atn.is_empty() {
         return String::new();
     }
-    let serialized = SerializedAtn::from_i32(&data.atn);
-    let Ok(atn) = AtnDeserializer::new(&serialized).deserialize() else {
+    let Ok(atn) = data.lexer_atn() else {
         return String::new();
     };
     let words = CompiledLexerDfa::compile(&atn).serialize();
@@ -2859,16 +3752,14 @@ const fn generated_predicate_coordinate_sets<'a>(
 /// method can keep using the interpreter fallback until more ATN shapes are
 /// covered.
 fn parser_generated_rules(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     enabled_rules: &[bool],
     rule_args: &[(usize, usize, RuleArgTemplate)],
     action_states: ActionStateSets<'_>,
     predicate_coordinates: PredicateCoordinateSets<'_>,
     require_generated_callees: bool,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let atn = data.parser_atn()?;
     let decision_by_state = decision_by_state(&atn);
     let context = GeneratedParserCompileContext {
         atn: &atn,
@@ -2996,33 +3887,47 @@ fn generated_rule_callers_reaching(
     rules: &[Option<GeneratedParserRule>],
     target_rules: &BTreeSet<usize>,
 ) -> BTreeSet<usize> {
-    let mut reaching = target_rules.clone();
-    loop {
-        let mut changed = false;
-        for rule in rules.iter().flatten() {
-            if reaching.contains(&rule.rule_index)
-                || !generated_steps_call_any_rule(&rule.steps, &reaching)
-            {
-                continue;
+    let mut graph = DiGraph::new();
+    let nodes = (0..rules.len())
+        .map(|rule_index| graph.add_node(rule_index))
+        .collect::<Vec<_>>();
+    for rule in rules.iter().flatten() {
+        let mut callees = BTreeSet::new();
+        collect_generated_step_callees(&rule.steps, &mut callees);
+        for callee in callees {
+            if let Some(target) = nodes.get(callee) {
+                graph.add_edge(nodes[rule.rule_index], *target, ());
             }
-            changed |= reaching.insert(rule.rule_index);
-        }
-        if !changed {
-            return reaching;
         }
     }
+    graph_nodes_reaching(&graph, target_rules)
 }
 
 fn parser_rule_callers_reaching(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     target_rules: &BTreeSet<usize>,
 ) -> io::Result<BTreeSet<usize>> {
     if target_rules.is_empty() {
         return Ok(BTreeSet::new());
     }
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if let Some(semantic) = data.semantic {
+        let mut graph = DiGraph::new();
+        let nodes = (0..data.rule_names.len())
+            .map(|rule_index| graph.add_node(rule_index))
+            .collect::<Vec<_>>();
+        for (caller, callees) in &semantic.call_graph {
+            let caller = semantic.recognizer.rule_numbers[caller];
+            for callee in callees {
+                graph.add_edge(
+                    nodes[caller],
+                    nodes[semantic.recognizer.rule_numbers[callee]],
+                    (),
+                );
+            }
+        }
+        return Ok(graph_nodes_reaching(&graph, target_rules));
+    }
+    let atn = data.parser_atn()?;
     Ok(atn_rule_callers_reaching(
         &atn,
         target_rules,
@@ -3062,27 +3967,47 @@ fn atn_rule_callers_reaching(
     }
 }
 
-fn generated_steps_call_any_rule(
-    steps: &[GeneratedParserStep],
-    rule_indices: &BTreeSet<usize>,
-) -> bool {
-    steps.iter().any(|step| match step {
-        GeneratedParserStep::CallRule { rule_index, .. } => rule_indices.contains(rule_index),
-        GeneratedParserStep::Decision { alts, .. } => alts
-            .iter()
-            .any(|alt| generated_steps_call_any_rule(alt, rule_indices)),
-        GeneratedParserStep::StarLoop { body, .. }
-        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
-            generated_steps_call_any_rule(body, rule_indices)
+fn collect_generated_step_callees(steps: &[GeneratedParserStep], callees: &mut BTreeSet<usize>) {
+    for step in steps {
+        match step {
+            GeneratedParserStep::CallRule { rule_index, .. } => {
+                callees.insert(*rule_index);
+            }
+            GeneratedParserStep::Decision { alts, .. } => {
+                for alternative in alts {
+                    collect_generated_step_callees(alternative, callees);
+                }
+            }
+            GeneratedParserStep::StarLoop { body, .. }
+            | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+                collect_generated_step_callees(body, callees);
+            }
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. } => {}
         }
-        GeneratedParserStep::MatchToken { .. }
-        | GeneratedParserStep::MatchSet { .. }
-        | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard { .. }
-        | GeneratedParserStep::Precedence(_)
-        | GeneratedParserStep::Predicate { .. }
-        | GeneratedParserStep::Action { .. } => false,
-    })
+    }
+}
+
+fn graph_nodes_reaching(graph: &DiGraph<usize, ()>, targets: &BTreeSet<usize>) -> BTreeSet<usize> {
+    let target_nodes = graph
+        .node_indices()
+        .filter(|node| targets.contains(&graph[*node]))
+        .collect::<Vec<_>>();
+    graph
+        .node_indices()
+        .filter(|source| {
+            target_nodes
+                .iter()
+                .any(|target| has_path_connecting(graph, *source, *target, None))
+        })
+        .map(|node| graph[node])
+        .chain(targets.iter().copied())
+        .collect()
 }
 
 fn generated_atn_preferred_chain_is_expensive(
@@ -3296,7 +4221,7 @@ fn generated_step_is_nullable(step: &GeneratedParserStep) -> bool {
 
 fn require_all_parser_rules_generated(
     rules: &[Option<GeneratedParserRule>],
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<()> {
     let missing = rules
         .iter()
@@ -3324,7 +4249,7 @@ fn require_all_parser_rules_generated(
 fn require_portable_local_rules_generated(
     rules: &[Option<GeneratedParserRule>],
     required: &BTreeSet<usize>,
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<()> {
     let missing = required
         .iter()
@@ -6214,7 +7139,7 @@ fn render_parser_parse_rule_fallback(
 #[cfg(test)]
 fn render_parser(
     grammar_name: &str,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
 ) -> io::Result<String> {
     render_parser_with_options(
@@ -6379,7 +7304,7 @@ fn parse_portable_bool_predicate(body: &str) -> Option<(&str, bool)> {
 }
 
 fn build_portable_local_data(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
     patterns: &SemPatternFile,
 ) -> io::Result<PortableLocalData> {
@@ -6500,10 +7425,8 @@ struct DecisionAltLook {
 /// other decision through `adaptivePredict`, the only place DFA states are
 /// learned and full-context diagnostics fire. `dumpDFA` and diagnostic
 /// output therefore only match Java when the generated routing agrees.
-fn tool_decision_analysis(data: &InterpData) -> io::Result<ToolDecisionAnalysis> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn tool_decision_analysis(data: &CodegenData<'_>) -> io::Result<ToolDecisionAnalysis> {
+    let atn = data.parser_atn()?;
     let mut analysis = ToolDecisionAnalysis::default();
     for (decision, state_number) in atn.decision_to_state().iter().enumerate() {
         let Some(state) = atn.state(state_number) else {
@@ -6671,7 +7594,7 @@ impl DecisionLookWalk<'_> {
 /// Builds the embedded translation of every action, predicate, `@init` and
 /// `@after` body in the rendered grammar, plus the members model.
 fn build_embedded_parser_data(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
     type_name: &str,
     grammar_name: &str,
@@ -6864,12 +7787,47 @@ fn build_embedded_parser_data(
     Ok(out)
 }
 
+fn build_structural_parser_surface(
+    data: &CodegenData<'_>,
+    grammar_name: &str,
+) -> io::Result<EmbeddedParserData> {
+    let model = structural_embedded_model(data)?;
+    let mut out = EmbeddedParserData {
+        rule_has_attrs: model
+            .rules
+            .iter()
+            .map(embedded::RuleModel::has_attrs)
+            .collect(),
+        ..EmbeddedParserData::default()
+    };
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        let struct_name = embedded::attrs_struct_name(rule_index);
+        let mut fields = String::new();
+        for attr in &rule.attrs {
+            let _ = writeln!(
+                fields,
+                "    pub {}: {},",
+                embedded::escape_keyword(&attr.name),
+                attr.ty
+            );
+        }
+        let _ = writeln!(
+            out.attrs_structs,
+            "#[derive(Clone, Debug, Default)]\n#[allow(non_snake_case, dead_code)]\npub struct {struct_name} {{\n{fields}}}\n"
+        );
+    }
+    out.module_items.push_str(EMBEDDED_INPUT_FACADE);
+    out.module_items
+        .push_str(&render_embedded_context_types(grammar_name, data, &model));
+    Ok(out)
+}
+
 /// Scans `rule[expr]` call sites in the rendered grammar and pairs each with
 /// its ATN rule-transition source state (source order per callee rule, the
 /// same correlation as `parser_rule_args`). Supports integer literals and
 /// single identifiers (translated to the caller's `__attrs` field).
 fn embedded_rule_call_args(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
     model: &embedded::EmbeddedModel,
 ) -> io::Result<BTreeMap<usize, String>> {
@@ -6918,9 +7876,7 @@ fn embedded_rule_call_args(
     let _ = model;
     calls.sort_by_key(|(start, _, _)| *start);
 
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let atn = data.parser_atn()?;
     let mut rule_transitions = Vec::new();
     for state in atn.states() {
         for transition in state.transitions() {
@@ -6959,7 +7915,7 @@ fn embedded_rule_call_args(
 ///   chain Java's `RuleContext.toString` renders (`[13 6]`).
 fn render_embedded_context_types(
     grammar_name: &str,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     model: &embedded::EmbeddedModel,
 ) -> String {
     let mut out = String::new();
@@ -7423,7 +8379,7 @@ impl __GeneratedTokenView {
 /// Collects `assume-*`-overridden action states that should become explicit
 /// empty `run_action` arms instead of falling through to user hooks.
 fn collect_noop_action_states(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     patterns: &SemPatternFile,
 ) -> io::Result<BTreeSet<usize>> {
     let mut noop_action_states = BTreeSet::new();
@@ -7500,7 +8456,7 @@ fn embedded_render_slots(
 
 fn render_parser_with_options(
     grammar_name: &str,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     options: ParserRenderOptions<'_>,
 ) -> io::Result<String> {
@@ -7508,12 +8464,8 @@ fn render_parser_with_options(
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
     let metadata = render_parser_metadata(grammar_name, data);
-    let parser_atn_data = render_u32_slice(
-        AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-            .deserialize_parser()
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
-            .packed_words(),
-    );
+    let parser_atn = data.parser_atn()?;
+    let parser_atn_data = render_u32_slice(parser_atn.packed_words());
     let token_constants = render_token_constants(data);
     let rule_constants = render_rule_constants(data);
     // Embedded mode: the grammar carries real Rust action/predicate bodies
@@ -7532,6 +8484,11 @@ fn render_parser_with_options(
             &type_name,
             grammar_name,
         )?)
+    } else {
+        None
+    };
+    let structural_surface = if !options.embedded && data.semantic.is_some() {
+        Some(build_structural_parser_surface(data, grammar_name)?)
     } else {
         None
     };
@@ -7733,11 +8690,11 @@ fn render_parser_with_options(
         embedded_struct_fields,
         embedded_field_inits,
         embedded_impl_items,
-    ) = embedded_render_slots(embedded_data.as_ref());
+    ) = embedded_render_slots(embedded_data.as_ref().or(structural_surface.as_ref()));
     let generated_header = GENERATED_MODULE_HEADER;
     let generated_footer = GENERATED_MODULE_FOOTER;
 
-    let embedded_imports = if options.embedded {
+    let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
         "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _}};\n"
     } else {
         ""
@@ -8192,7 +9149,7 @@ fn translate_embedded_lexer_body(body: &str, position_expr: &str) -> io::Result<
 /// Pairs verbatim lexer action bodies with serialized custom-action
 /// coordinates, mirroring `lexer_action_templates`'s source walk.
 fn embedded_lexer_actions(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
 ) -> io::Result<Vec<((i32, i32), String)>> {
     let coordinates = lexer_custom_actions(data)?;
@@ -8227,7 +9184,7 @@ fn embedded_lexer_actions(
 /// Pairs verbatim lexer predicate bodies with serialized predicate
 /// coordinates, mirroring `lexer_predicate_templates`'s source walk.
 fn embedded_lexer_predicates(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
 ) -> io::Result<Vec<((usize, usize), String)>> {
     let coordinates = lexer_predicate_transitions(data)?;
@@ -8312,7 +9269,7 @@ fn render_embedded_lexer_predicate_method(predicates: &[((usize, usize), String)
 /// Pairs supported lexer target-template actions with serialized custom-action
 /// coordinates from the lexer ATN.
 fn lexer_action_templates(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: &str,
     allow_unsupported_only: bool,
     patterns: &SemPatternFile,
@@ -8505,7 +9462,7 @@ fn rust_block_comment_text(value: &str) -> String {
 /// Pairs supported lexer semantic predicates with serialized predicate
 /// coordinates from the lexer ATN.
 fn lexer_predicate_templates(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: &str,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
@@ -8574,7 +9531,7 @@ fn lexer_predicate_templates(
 /// `error` override lowers to no template and is surfaced by
 /// `enforce_sem_unknown` at codegen instead.)
 fn parser_predicate_templates_from_overrides(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
     let mut mapped = Vec::new();
@@ -8591,7 +9548,7 @@ fn parser_predicate_templates_from_overrides(
 }
 
 fn parser_predicate_templates(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: &str,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
@@ -8726,7 +9683,7 @@ fn action_slot_state_offset(states_len: usize, slot_len: usize) -> io::Result<us
 /// left-recursion rewriting serializes primary alternatives before operator
 /// alternatives, so a global source-order offset is not stable.
 fn assign_states_to_parser_action_slots(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     source: &str,
     slots: Vec<ParserActionSourceSlot>,
 ) -> io::Result<Vec<(usize, ParserActionSourceSlot)>> {
@@ -8735,7 +9692,7 @@ fn assign_states_to_parser_action_slots(
 }
 
 fn assign_states_to_parser_action_slots_with_model(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     model: &embedded::EmbeddedModel,
     slots: Vec<ParserActionSourceSlot>,
 ) -> io::Result<Vec<(usize, ParserActionSourceSlot)>> {
@@ -9400,10 +10357,8 @@ fn parse_parser_token_argument(argument: &str) -> Option<String> {
 }
 
 /// Reads the lexer ATN to locate serialized custom action coordinates.
-fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn lexer_custom_actions(data: &CodegenData<'_>) -> io::Result<Vec<(i32, i32)>> {
+    let atn = data.lexer_atn()?;
     Ok(atn
         .lexer_actions()
         .iter()
@@ -9418,10 +10373,8 @@ fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
 }
 
 /// Reads the lexer ATN to locate semantic predicate coordinates.
-fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usize)>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn lexer_predicate_transitions(data: &CodegenData<'_>) -> io::Result<Vec<(usize, usize)>> {
+    let atn = data.lexer_atn()?;
     let mut predicates = Vec::new();
     for state in atn.states() {
         for transition in &state.transitions {
@@ -9439,10 +10392,8 @@ fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usiz
 }
 
 /// Reads the packed parser ATN to locate semantic predicate coordinates.
-fn parser_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usize)>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn parser_predicate_transitions(data: &CodegenData<'_>) -> io::Result<Vec<(usize, usize)>> {
+    let atn = data.parser_atn()?;
     let mut predicates = Vec::new();
     for state in atn.states() {
         for transition in state.transitions() {
@@ -9460,10 +10411,8 @@ fn parser_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usi
 }
 
 /// Reads the parser ATN to locate action-transition source states.
-fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn parser_action_states(data: &CodegenData<'_>) -> io::Result<Vec<usize>> {
+    let atn = data.parser_atn()?;
     let mut states = Vec::new();
     for state in atn.states() {
         if state
@@ -9478,10 +10427,8 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
 }
 
 /// Reads the parser ATN action transitions keyed by source state.
-fn parser_action_state_rules(data: &InterpData) -> io::Result<BTreeMap<usize, usize>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn parser_action_state_rules(data: &CodegenData<'_>) -> io::Result<BTreeMap<usize, usize>> {
+    let atn = data.parser_atn()?;
     let mut states = BTreeMap::new();
     for state in atn.states() {
         for transition in state.transitions() {
@@ -9547,7 +10494,7 @@ fn authored_parser_action_blocks_per_rule(
 /// rule entry (a low state number) *before* the author's alternative actions —
 /// the earlier positional "first N are authored" heuristic was not.
 fn synthetic_parser_action_states(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
 ) -> io::Result<BTreeSet<usize>> {
     let Some(grammar_source) = grammar_source else {
@@ -9597,7 +10544,7 @@ fn synthetic_parser_action_states(
 }
 
 fn empty_parser_action_states(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
 ) -> io::Result<BTreeSet<usize>> {
     let Some(grammar_source) = grammar_source else {
@@ -9622,16 +10569,14 @@ fn empty_parser_action_states(
 /// to same-rule ATN transitions lets the generated parser expose local
 /// predicate values without depending on ANTLR's Java code generator.
 fn parser_rule_args(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: &str,
 ) -> io::Result<Vec<(usize, usize, RuleArgTemplate)>> {
     let calls = literal_rule_arg_calls(data, grammar_source);
     if calls.is_empty() {
         return Ok(Vec::new());
     }
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let atn = data.parser_atn()?;
     let mut rule_transitions = Vec::new();
     for state in atn.states() {
         for transition in state.transitions() {
@@ -9659,7 +10604,7 @@ fn parser_rule_args(
 /// Extracts calls like `a[2]` and `a[<VarRef("i")>]` while ignoring rule
 /// declarations and target templates whose bracket contents are unsupported.
 fn literal_rule_arg_calls(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: &str,
 ) -> Vec<(usize, RuleArgTemplate)> {
     let rule_indices = data
@@ -9882,7 +10827,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 /// still routes to the hook.
 fn parser_action_assume_overridden(
     patterns: &SemPatternFile,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     action_state_rules: &BTreeMap<usize, usize>,
     state: usize,
 ) -> bool {
@@ -9914,10 +10859,15 @@ fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<u
     )
 }
 
-fn likely_parser_entry_rule_indices(data: &InterpData) -> io::Result<Vec<usize>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize_parser()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+fn likely_parser_entry_rule_indices(data: &CodegenData<'_>) -> io::Result<Vec<usize>> {
+    if let Some(semantic) = data.semantic {
+        return Ok(semantic
+            .entry_rules
+            .iter()
+            .map(|rule| semantic.recognizer.rule_numbers[rule])
+            .collect());
+    }
+    let atn = data.parser_atn()?;
     Ok(likely_parser_entry_rule_indices_from_atn(
         &atn,
         data.rule_names.len(),
@@ -10010,19 +10960,19 @@ fn render_parser_rustdoc(
 }
 
 /// Renders static grammar metadata shared by generated lexers and parsers.
-fn render_metadata(grammar_name: &str, data: &InterpData) -> String {
+fn render_metadata(grammar_name: &str, data: &CodegenData<'_>) -> String {
     render_metadata_with_atn(grammar_name, data, &data.atn)
 }
 
 /// Parser modules carry the versioned packed ATN separately, so retaining the
 /// legacy serialized integer stream in metadata would duplicate the artifact.
-fn render_parser_metadata(grammar_name: &str, data: &InterpData) -> String {
+fn render_parser_metadata(grammar_name: &str, data: &CodegenData<'_>) -> String {
     render_metadata_with_atn(grammar_name, data, &[])
 }
 
 fn render_metadata_with_atn(
     grammar_name: &str,
-    data: &InterpData,
+    data: &CodegenData<'_>,
     serialized_atn: &[i32],
 ) -> String {
     format!(
@@ -10040,7 +10990,7 @@ fn render_metadata_with_atn(
 
 /// Renders token constants from symbolic token names while avoiding duplicate
 /// Rust identifiers after sanitization.
-fn render_token_constants(data: &InterpData) -> String {
+fn render_token_constants(data: &CodegenData<'_>) -> String {
     let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
     let mut seen = BTreeSet::new();
     for (index, name) in data.symbolic_names.iter().enumerate() {
@@ -10056,7 +11006,7 @@ fn render_token_constants(data: &InterpData) -> String {
 }
 
 /// Renders rule-index constants from grammar rule names.
-fn render_rule_constants(data: &InterpData) -> String {
+fn render_rule_constants(data: &CodegenData<'_>) -> String {
     let mut out = String::new();
     for (index, name) in data.rule_names.iter().enumerate() {
         writeln!(
@@ -10149,7 +11099,7 @@ fn render_i32_match_patterns(values: &[(i32, i32)]) -> String {
 #[allow(dead_code)]
 fn render_parser_predicate_constant(
     predicates: &[((usize, usize), PredicateTemplate)],
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<String> {
     let predicates = render_parser_predicate_array(predicates, data)?;
     Ok(format!(
@@ -10159,7 +11109,7 @@ fn render_parser_predicate_constant(
 
 fn render_parser_semantics_function(
     predicates: &[((usize, usize), PredicateTemplate)],
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<String> {
     let predicate_builders = render_parser_semir_predicate_builders(predicates, data)?;
     Ok(format!(
@@ -10178,7 +11128,7 @@ fn render_parser_semantics_function(
 }
 
 fn lexer_typed_hook_mappings(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     patterns: &SemPatternFile,
     actions: &[((i32, i32), ActionTemplate)],
@@ -10397,7 +11347,7 @@ where
 }
 
 fn parser_typed_hook_mappings(
-    data: &InterpData,
+    data: &CodegenData<'_>,
     grammar_source: Option<&str>,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<TypedHookMapping>> {
@@ -10623,7 +11573,7 @@ where
 
 fn render_parser_semir_predicate_builders(
     predicates: &[((usize, usize), PredicateTemplate)],
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<String> {
     let mut out = String::new();
     for ((rule_index, pred_index), predicate) in predicates {
@@ -10647,7 +11597,7 @@ fn render_parser_semir_predicate_builders(
 #[allow(clippy::too_many_lines)]
 fn render_parser_semir_predicate_expr(
     predicate: &PredicateTemplate,
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<String> {
     match predicate {
         // A `<fail=...>` wrapper is transparent to evaluation; lower its inner.
@@ -10726,7 +11676,7 @@ fn render_local_arg_semir_cmp(op: &str, value: i64) -> String {
 #[allow(dead_code)]
 fn render_parser_predicate_array(
     predicates: &[((usize, usize), PredicateTemplate)],
-    data: &InterpData,
+    data: &CodegenData<'_>,
 ) -> io::Result<String> {
     let mut items = Vec::new();
     for ((rule_index, pred_index), predicate) in predicates {
@@ -10919,7 +11869,7 @@ pub fn parse_with_parser<L: TokenSource, R>(
     )
 }
 
-fn token_type_for_name(data: &InterpData, token_name: &str) -> Option<usize> {
+fn token_type_for_name(data: &CodegenData<'_>, token_name: &str) -> Option<usize> {
     data.symbolic_names
         .iter()
         .position(|name| name.as_deref() == Some(token_name))
@@ -10962,7 +11912,7 @@ mod tests {
 
     #[test]
     fn parses_interp_sections() {
-        let data = InterpData::parse(
+        let data = CodegenData::parse(
             r#"token literal names:
 null
 'x'
@@ -11015,14 +11965,14 @@ atn:
 
     #[test]
     fn renders_parser_rustdoc_with_entry_rule_methods() {
-        let data = InterpData {
+        let data = CodegenData {
             rule_names: vec![
                 "sourceFile".to_owned(),
                 "declaration".to_owned(),
                 "script".to_owned(),
                 "try".to_owned(),
             ],
-            ..InterpData::default()
+            ..CodegenData::default()
         };
         let entry_rule_indices = vec![0, 2];
 
@@ -12037,9 +12987,9 @@ atn:
 
     #[test]
     fn parses_boolean_literal_rule_arguments() {
-        let data = InterpData {
+        let data = CodegenData {
             rule_names: vec!["s".to_owned(), "flag".to_owned()],
-            ..InterpData::default()
+            ..CodegenData::default()
         };
 
         assert_eq!(
@@ -12056,9 +13006,9 @@ atn:
 
     #[test]
     fn boolean_literal_rule_arguments_ignore_comments_literals_and_actions() {
-        let data = InterpData {
+        let data = CodegenData {
             rule_names: vec!["s".to_owned(), "flag".to_owned()],
-            ..InterpData::default()
+            ..CodegenData::default()
         };
 
         assert_eq!(
@@ -12569,14 +13519,14 @@ s : ;
             Some(test_rule(2, Vec::new())),
             Some(test_rule(3, Vec::new())),
         ];
-        let data = InterpData {
+        let data = CodegenData {
             rule_names: vec![
                 "firstEntry".to_owned(),
                 "child".to_owned(),
                 "secondEntry".to_owned(),
                 "recursive".to_owned(),
             ],
-            ..InterpData::default()
+            ..CodegenData::default()
         };
         let error = require_portable_local_rules_generated(&rules, &required, &data)
             .expect_err("interpreted callers cannot bypass generated local state");
@@ -14662,8 +15612,8 @@ ID: [a-z]+ { customJava(); };
         finish_atn(atn)
     }
 
-    fn minimal_parser_data() -> InterpData {
-        InterpData {
+    fn minimal_parser_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned())],
             rule_names: vec!["s".to_owned()],
@@ -14684,13 +15634,14 @@ ID: [a-z]+ { customJava(); };
                 0, 1, 1, 0, 0, 0, // epsilon
                 0, // decisions
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Parser `.interp` fixture whose ATN carries one parser action transition:
     /// `s : { ... } A ;`.
-    fn action_parser_data() -> InterpData {
-        InterpData {
+    fn action_parser_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned())],
             rule_names: vec!["s".to_owned()],
@@ -14715,13 +15666,14 @@ ID: [a-z]+ { customJava(); };
                 2, 3, 1, 0, 0, 0, // epsilon
                 0, // decisions
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Parser `.interp` fixture with an authored action in rule `s`, then one
     /// synthetic and two authored action states in left-recursive rule `expr`.
-    fn multi_rule_action_parser_data() -> InterpData {
-        InterpData {
+    fn multi_rule_action_parser_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned()), Some("'+'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned()), Some("PLUS".to_owned())],
             rule_names: vec!["s".to_owned(), "expr".to_owned()],
@@ -14756,13 +15708,14 @@ ID: [a-z]+ { customJava(); };
                 7, 8, 5, 1, 0, 0, // atom A
                 0, // decisions
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Parser `.interp` fixture whose ATN carries one semantic-predicate
     /// transition at coordinate `(rule 0, pred 0)`: `s : {…}? A ;`.
-    fn predicate_parser_data() -> InterpData {
-        InterpData {
+    fn predicate_parser_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned())],
             rule_names: vec!["s".to_owned()],
@@ -14787,13 +15740,14 @@ ID: [a-z]+ { customJava(); };
                 2, 3, 1, 0, 0, 0, // epsilon
                 0, // decisions
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Lexer `.interp` fixture with one semantic-predicate transition at
     /// coordinate `(rule 0, pred 0)`.
-    fn predicate_lexer_data() -> InterpData {
-        InterpData {
+    fn predicate_lexer_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned())],
             rule_names: vec!["A".to_owned()],
@@ -14823,14 +15777,15 @@ ID: [a-z]+ { customJava(); };
                 0, // mode start decision
                 0, // lexer actions
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Lexer `.interp` fixture for:
     /// `A : 'a' { customJava(); }; B : 'b' { customJava(); };`.
     #[rustfmt::skip]
-    fn custom_action_lexer_data() -> InterpData {
-        InterpData {
+    fn custom_action_lexer_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned()), Some("'b'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned()), Some("B".to_owned())],
             rule_names: vec!["A".to_owned(), "B".to_owned()],
@@ -14843,13 +15798,14 @@ ID: [a-z]+ { customJava(); };
                 0, 7, 2, 1, 0, 0, 0, 8, 9, 5, 98, 0, 0, 9, 10, 6, 1, 1, 0, 10, 4, 1, 0, 0,
                 0, 1, 0, 2, 1, 0, 0, 1, 1, 1,
             ],
+            ..CodegenData::default()
         }
     }
 
     /// Parser `.interp` fixture for
     /// `s locals [boolean seen=false] : {$seen=true;} {$seen}? A ;`.
-    fn portable_bool_parser_data() -> InterpData {
-        InterpData {
+    fn portable_bool_parser_data() -> CodegenData<'static> {
+        CodegenData {
             literal_names: vec![None, Some("'a'".to_owned())],
             symbolic_names: vec![None, Some("A".to_owned())],
             rule_names: vec!["s".to_owned()],
@@ -14874,6 +15830,7 @@ ID: [a-z]+ { customJava(); };
                 2, 3, 5, 1, 0, 0, // atom A
                 0, // decisions
             ],
+            ..CodegenData::default()
         }
     }
 

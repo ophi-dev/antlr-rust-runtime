@@ -162,7 +162,7 @@ pub(crate) enum ActionSite {
 /// Maps a grammar attribute type (possibly Java-flavored, possibly already
 /// Rust from the rendered templates) onto the Rust type the generated attrs
 /// struct uses.
-fn map_attr_type(raw: &str) -> String {
+pub(crate) fn map_attr_type(raw: &str) -> String {
     match raw.trim() {
         "int" => "i32".to_owned(),
         "boolean" => "bool".to_owned(),

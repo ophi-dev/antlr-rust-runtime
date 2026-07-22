@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use antlr4_runtime::atn::AtnStateKind;
 
@@ -85,6 +85,7 @@ pub(crate) struct BuildGraph {
     pub(crate) decisions: Vec<BuildStateId>,
     pub(crate) rule_starts: Vec<BuildStateId>,
     pub(crate) rule_stops: Vec<BuildStateId>,
+    pub(crate) model_transitions: BTreeMap<ModelNodeId, Vec<BuildTransitionId>>,
 }
 
 impl BuildGraph {
@@ -96,6 +97,7 @@ impl BuildGraph {
             decisions: Vec::new(),
             rule_starts: Vec::new(),
             rule_stops: Vec::new(),
+            model_transitions: BTreeMap::new(),
         }
     }
 
@@ -187,7 +189,20 @@ impl BuildGraph {
     ) -> BuildTransitionId {
         let mut origins = provenance.origins(owner).to_vec();
         origins.push(Origin::Synthetic { reason, owner });
-        self.add_transition(spec, origins, provenance)
+        let transition = self.add_transition(spec, origins, provenance);
+        self.record_model_transition(owner, transition);
+        transition
+    }
+
+    pub(crate) fn record_model_transition(
+        &mut self,
+        owner: ModelNodeId,
+        transition: BuildTransitionId,
+    ) {
+        let transitions = self.model_transitions.entry(owner).or_default();
+        if !transitions.contains(&transition) {
+            transitions.push(transition);
+        }
     }
 
     pub(crate) fn state(&self, id: BuildStateId) -> &BuildState {
@@ -220,6 +235,26 @@ impl BuildGraph {
             let compact = state_map.len();
             state_map.insert(state.id, compact);
         }
+        let surviving_transitions = self
+            .transitions
+            .iter()
+            .filter(|transition| {
+                state_map.contains_key(&transition.source)
+                    && state_map.contains_key(&transition.target)
+            })
+            .map(|transition| transition.id)
+            .collect::<BTreeSet<_>>();
+        let model_transitions = self
+            .model_transitions
+            .into_iter()
+            .filter_map(|(model, transitions)| {
+                let transitions = transitions
+                    .into_iter()
+                    .filter(|transition| surviving_transitions.contains(transition))
+                    .collect::<Vec<_>>();
+                (!transitions.is_empty()).then_some((model, transitions))
+            })
+            .collect();
 
         let states = self
             .states
@@ -285,6 +320,7 @@ impl BuildGraph {
                 .map(|state| state_map[&state])
                 .collect(),
             state_map,
+            model_transitions,
         }
     }
 }
@@ -346,6 +382,24 @@ pub(crate) struct FinalizedAtnGraph {
     pub(crate) rule_starts: Vec<usize>,
     pub(crate) rule_stops: Vec<usize>,
     pub(crate) state_map: BTreeMap<BuildStateId, usize>,
+    pub(crate) model_transitions: BTreeMap<ModelNodeId, Vec<BuildTransitionId>>,
+}
+
+impl FinalizedAtnGraph {
+    pub(crate) fn transitions_for_model(
+        &self,
+        model: ModelNodeId,
+    ) -> impl Iterator<Item = &FinalizedTransition> {
+        self.model_transitions
+            .get(&model)
+            .into_iter()
+            .flatten()
+            .filter_map(|id| {
+                self.transitions
+                    .iter()
+                    .find(|transition| transition.original == *id)
+            })
+    }
 }
 
 #[derive(Clone, Debug)]
