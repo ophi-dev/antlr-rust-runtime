@@ -263,10 +263,7 @@ fn combined_root_emits_standard_typed_contexts_and_listener() {
         !parser.contains("antlr4_runtime::{{"),
         "generated imports must not contain redundant nested braces\n{parser}"
     );
-    assert_generated_modules_compile(
-        temp.path(),
-        &["shapes_lexer.rs", "shapes_parser.rs"],
-    );
+    assert_generated_modules_compile(temp.path(), &["shapes_lexer.rs", "shapes_parser.rs"]);
 }
 
 #[test]

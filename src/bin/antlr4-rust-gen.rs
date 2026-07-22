@@ -1247,7 +1247,7 @@ fn structural_lexer_action_templates(
     data: &CodegenData<'_>,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
-    structural_actions(data)?
+    let mut templates = structural_actions(data)?
         .into_iter()
         .map(|action| {
             let rule_name = data
@@ -1274,7 +1274,10 @@ fn structural_lexer_action_templates(
                 template,
             ))
         })
-        .collect()
+        .collect::<io::Result<Vec<_>>>()?;
+    templates.sort_by_key(|(coordinate, _)| *coordinate);
+    templates.dedup_by_key(|(coordinate, _)| *coordinate);
+    Ok(templates)
 }
 
 fn structural_predicate_templates(
@@ -2779,7 +2782,10 @@ fn structural_line_column(data: &CodegenData<'_>, span: &SourceSpan) -> (usize, 
         .unwrap_or((0, 0))
 }
 
-fn structural_embedded_model(data: &CodegenData<'_>) -> io::Result<embedded::EmbeddedModel> {
+fn structural_embedded_model(
+    data: &CodegenData<'_>,
+    include_members: bool,
+) -> io::Result<embedded::EmbeddedModel> {
     let semantic = data.semantic.ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
@@ -2845,9 +2851,23 @@ fn structural_embedded_model(data: &CodegenData<'_>) -> io::Result<embedded::Emb
         };
     }
 
+    let mut parser_members = embedded::MembersModel::default();
+    if include_members {
+        for action in &semantic.unit.actions {
+            if action.name == "members"
+                && action
+                    .scope
+                    .as_deref()
+                    .is_none_or(|scope| scope == "parser")
+            {
+                embedded::classify_members(&action.body, &mut parser_members)?;
+            }
+        }
+    }
+
     Ok(embedded::EmbeddedModel {
         rules,
-        parser_members: embedded::MembersModel::default(),
+        parser_members,
     })
 }
 
@@ -3026,27 +3046,50 @@ fn render_lexer(
     // Embedded mode: lexer action/predicate bodies are verbatim Rust from the
     // rendered grammar; translate the recognizer surface textually and skip
     // the template machinery entirely.
-    let template_grammar_source = if embedded { None } else { grammar_source };
     let embedded_lexer_actions = if embedded {
-        grammar_source.map_or_else(
-            || Ok(Vec::new()),
-            |source| embedded_lexer_actions(data, source),
-        )?
+        if data.semantic.is_some() {
+            structural_embedded_lexer_actions(data)?
+        } else {
+            grammar_source.map_or_else(
+                || Ok(Vec::new()),
+                |source| embedded_lexer_actions(data, source),
+            )?
+        }
     } else {
         Vec::new()
     };
     let embedded_lexer_predicates = if embedded {
-        grammar_source.map_or_else(
-            || Ok(Vec::new()),
-            |source| embedded_lexer_predicates(data, source),
-        )?
+        if data.semantic.is_some() {
+            structural_embedded_lexer_predicates(data)?
+        } else {
+            grammar_source.map_or_else(
+                || Ok(Vec::new()),
+                |source| embedded_lexer_predicates(data, source),
+            )?
+        }
     } else {
         Vec::new()
     };
-    let mut actions = template_grammar_source.map_or_else(
-        || Ok(Vec::new()),
-        |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions, patterns),
-    )?;
+    let mut actions = if embedded {
+        Vec::new()
+    } else if data.semantic.is_some() {
+        let actions = structural_lexer_action_templates(data, patterns)?;
+        reject_unsupported_lexer_action_templates(
+            &actions
+                .iter()
+                .map(|(_, template)| template.clone())
+                .collect::<Vec<_>>(),
+            allow_unsupported_lexer_actions,
+        )?;
+        actions
+    } else {
+        grammar_source.map_or_else(
+            || Ok(Vec::new()),
+            |source| {
+                lexer_action_templates(data, source, allow_unsupported_lexer_actions, patterns)
+            },
+        )?
+    };
     // Any per-coordinate override replaces a translated action. Hook overrides
     // fall through to the semantic hook object; assume-* overrides are no-ops.
     actions.retain(|((rule_index, action_index), _)| {
@@ -3062,10 +3105,16 @@ fn render_lexer(
             )
             .is_none()
     });
-    let mut predicates = template_grammar_source.map_or_else(
-        || Ok(Vec::new()),
-        |source| lexer_predicate_templates(data, source, patterns),
-    )?;
+    let mut predicates = if embedded {
+        Vec::new()
+    } else if data.semantic.is_some() {
+        structural_predicate_templates(data, SemanticsKind::LexerPredicate, patterns)?
+    } else {
+        grammar_source.map_or_else(
+            || Ok(Vec::new()),
+            |source| lexer_predicate_templates(data, source, patterns),
+        )?
+    };
     // Apply per-coordinate overrides to every lexer predicate transition. Hook
     // coordinates are represented explicitly so generated dispatch can fall
     // through to the caller-owned semantic hook object.
@@ -7303,6 +7352,97 @@ fn parse_portable_bool_predicate(body: &str) -> Option<(&str, bool)> {
     .then_some((name, negated))
 }
 
+fn build_structural_portable_local_data(
+    data: &CodegenData<'_>,
+    patterns: &SemPatternFile,
+) -> io::Result<PortableLocalData> {
+    let model = structural_embedded_model(data, false)?;
+    let mut out = PortableLocalData {
+        declarations: vec![Vec::new(); data.rule_names.len()],
+        ..PortableLocalData::default()
+    };
+    let mut local_names = Vec::with_capacity(data.rule_names.len());
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        let mut names = BTreeMap::new();
+        for attr in rule.attrs.iter().filter(|attr| attr.ty == "bool") {
+            let initial = if rule.local_names.contains(&attr.name) {
+                "false"
+            } else if rule.arg_names.first() == Some(&attr.name) {
+                "__precedence != 0"
+            } else {
+                continue;
+            };
+            let local = portable_local_name(&attr.name);
+            out.declarations[rule_index].push(format!("let mut {local} = {initial};"));
+            names.insert(attr.name.clone(), local);
+        }
+        local_names.push(names);
+    }
+
+    for action in structural_actions(data)? {
+        let Some((name, value)) = parse_portable_bool_assignment(&action.body) else {
+            continue;
+        };
+        let Some(local) = local_names
+            .get(action.rule_index)
+            .and_then(|names| names.get(name))
+        else {
+            continue;
+        };
+        if patterns
+            .coordinate_disposition(
+                SemanticsKind::ParserAction,
+                data.rule_names.get(action.rule_index).map(String::as_str),
+                None,
+                Some(action.state),
+            )
+            .is_some()
+        {
+            continue;
+        }
+        out.inline_actions
+            .insert(action.state, format!("{local} = {value};"));
+        out.required_generated_rules.insert(action.rule_index);
+    }
+
+    for predicate in structural_predicates(data)? {
+        let Some((name, negated)) = parse_portable_bool_predicate(&predicate.body) else {
+            continue;
+        };
+        let Some(local) = local_names
+            .get(predicate.rule_index)
+            .and_then(|names| names.get(name))
+        else {
+            continue;
+        };
+        if patterns
+            .coordinate_disposition(
+                SemanticsKind::ParserPredicate,
+                data.rule_names
+                    .get(predicate.rule_index)
+                    .map(String::as_str),
+                Some(predicate.predicate_index),
+                None,
+            )
+            .is_some()
+        {
+            continue;
+        }
+        let expression = if negated {
+            format!("!{local}")
+        } else {
+            local.clone()
+        };
+        out.predicates.insert(
+            (predicate.rule_index, predicate.predicate_index),
+            (expression, predicate.fail),
+        );
+        out.required_generated_rules.insert(predicate.rule_index);
+    }
+
+    Ok(out)
+}
+
 fn build_portable_local_data(
     data: &CodegenData<'_>,
     source: &str,
@@ -7599,7 +7739,12 @@ fn build_embedded_parser_data(
     type_name: &str,
     grammar_name: &str,
 ) -> io::Result<EmbeddedParserData> {
-    let model = embedded::parse_embedded_model(source, &data.rule_names)?;
+    let structural = data.semantic.is_some();
+    let model = if structural {
+        structural_embedded_model(data, true)?
+    } else {
+        embedded::parse_embedded_model(source, &data.rule_names)?
+    };
     let token_types: BTreeMap<String, i32> = data
         .symbolic_names
         .iter()
@@ -7627,58 +7772,102 @@ fn build_embedded_parser_data(
         ..EmbeddedParserData::default()
     };
 
-    // Mid-rule embedded actions: pair every action block with its ATN action
-    // state using the same per-rule authored-block slot walk as the manifest.
-    let slots = parser_action_source_block_slots(source, &data.rule_names);
-    for (state, slot) in assign_states_to_parser_action_slots_with_model(data, &model, slots)? {
-        if slot.body.trim().is_empty() {
-            out.inline_actions.insert(state, String::new());
-            continue;
+    if structural {
+        for action in structural_actions(data)? {
+            if action.body.trim().is_empty() {
+                out.inline_actions.insert(action.state, String::new());
+                continue;
+            }
+            let ctx = embedded::TranslationCtx {
+                model: &model,
+                rule_index: action.rule_index,
+                body_offset: Some(
+                    usize::try_from(action.span.bytes.start).expect("source offset exceeds usize"),
+                ),
+                site: embedded::ActionSite::Body,
+                token_types: &token_types,
+            };
+            let translated = embedded::translate_body(&action.body, &ctx)?;
+            out.inline_actions
+                .insert(action.state, finish_body(&action.body, &translated));
         }
-        let ctx = embedded::TranslationCtx {
-            model: &model,
-            rule_index: slot.rule_index,
-            body_offset: Some(slot.source_offset),
-            site: embedded::ActionSite::Body,
-            token_types: &token_types,
-        };
-        let translated = embedded::translate_body(&slot.body, &ctx)?;
-        out.inline_actions
-            .insert(state, finish_body(&slot.body, &translated));
+    } else {
+        // Mid-rule embedded actions: pair every action block with its ATN action
+        // state using the same per-rule authored-block slot walk as the manifest.
+        let slots = parser_action_source_block_slots(source, &data.rule_names);
+        for (state, slot) in assign_states_to_parser_action_slots_with_model(data, &model, slots)? {
+            if slot.body.trim().is_empty() {
+                out.inline_actions.insert(state, String::new());
+                continue;
+            }
+            let ctx = embedded::TranslationCtx {
+                model: &model,
+                rule_index: slot.rule_index,
+                body_offset: Some(slot.source_offset),
+                site: embedded::ActionSite::Body,
+                token_types: &token_types,
+            };
+            let translated = embedded::translate_body(&slot.body, &ctx)?;
+            out.inline_actions
+                .insert(state, finish_body(&slot.body, &translated));
+        }
     }
 
-    // Predicates: same source walk/coordinate pairing as non-embedded mode.
-    let coordinates = parser_predicate_transitions(data)?;
-    let mut predicate_index = 0;
-    let mut pred_offset = 0;
-    while let Some(block) = next_predicate_action_block(source, pred_offset) {
-        pred_offset = block.after_brace;
-        if !predicate_block_included(source, block.open_brace, &data.rule_names) {
-            continue;
-        }
-        let Some(&(rule_index, pred_index)) = coordinates.get(predicate_index) else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "embedded predicate {{{}}}? has no parser ATN predicate transition",
-                    block.body
+    if structural {
+        for predicate in structural_predicates(data)? {
+            let ctx = embedded::TranslationCtx {
+                model: &model,
+                rule_index: predicate.rule_index,
+                body_offset: Some(
+                    usize::try_from(predicate.span.bytes.start)
+                        .expect("source offset exceeds usize"),
                 ),
-            ));
-        };
-        predicate_index += 1;
-        let ctx = embedded::TranslationCtx {
-            model: &model,
-            rule_index,
-            body_offset: Some(block.open_brace),
-            site: embedded::ActionSite::Body,
-            token_types: &token_types,
-        };
-        let translated = embedded::translate_body(block.body.trim(), &ctx)?;
-        let message = predicate_fail_message(source, block.after_brace);
-        out.predicates.insert(
-            (rule_index, pred_index),
-            (finish_body(block.body, &translated), message),
-        );
+                site: embedded::ActionSite::Body,
+                token_types: &token_types,
+            };
+            let translated = embedded::translate_body(predicate.body.trim(), &ctx)?;
+            out.predicates.insert(
+                (predicate.rule_index, predicate.predicate_index),
+                (
+                    finish_body(&predicate.body, &translated),
+                    predicate.fail.clone(),
+                ),
+            );
+        }
+    } else {
+        // Predicates: same source walk/coordinate pairing as non-embedded mode.
+        let coordinates = parser_predicate_transitions(data)?;
+        let mut predicate_index = 0;
+        let mut pred_offset = 0;
+        while let Some(block) = next_predicate_action_block(source, pred_offset) {
+            pred_offset = block.after_brace;
+            if !predicate_block_included(source, block.open_brace, &data.rule_names) {
+                continue;
+            }
+            let Some(&(rule_index, pred_index)) = coordinates.get(predicate_index) else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "embedded predicate {{{}}}? has no parser ATN predicate transition",
+                        block.body
+                    ),
+                ));
+            };
+            predicate_index += 1;
+            let ctx = embedded::TranslationCtx {
+                model: &model,
+                rule_index,
+                body_offset: Some(block.open_brace),
+                site: embedded::ActionSite::Body,
+                token_types: &token_types,
+            };
+            let translated = embedded::translate_body(block.body.trim(), &ctx)?;
+            let message = predicate_fail_message(source, block.after_brace);
+            out.predicates.insert(
+                (rule_index, pred_index),
+                (finish_body(block.body, &translated), message),
+            );
+        }
     }
 
     // @init / @after bodies from the rule headers.
@@ -7758,7 +7947,11 @@ fn build_embedded_parser_data(
 
     // Rule-call argument expressions, correlated to rule transitions the
     // same way parser_rule_args does (source order per callee rule).
-    out.call_args = embedded_rule_call_args(data, source, &model)?;
+    out.call_args = if structural {
+        structural_embedded_rule_call_args(data)?
+    } else {
+        embedded_rule_call_args(data, source, &model)?
+    };
     out.rule_arg0 = model
         .rules
         .iter()
@@ -7791,7 +7984,7 @@ fn build_structural_parser_surface(
     data: &CodegenData<'_>,
     grammar_name: &str,
 ) -> io::Result<EmbeddedParserData> {
-    let model = structural_embedded_model(data)?;
+    let model = structural_embedded_model(data, false)?;
     let mut out = EmbeddedParserData {
         rule_has_attrs: model
             .rules
@@ -7826,6 +8019,18 @@ fn build_structural_parser_surface(
 /// its ATN rule-transition source state (source order per callee rule, the
 /// same correlation as `parser_rule_args`). Supports integer literals and
 /// single identifiers (translated to the caller's `__attrs` field).
+fn structural_embedded_rule_call_args(
+    data: &CodegenData<'_>,
+) -> io::Result<BTreeMap<usize, String>> {
+    Ok(structural_rule_calls(data)?
+        .into_iter()
+        .filter_map(|call| {
+            let expression = embedded_rule_call_expression(call.arguments.as_deref()?)?;
+            Some((call.state, expression))
+        })
+        .collect())
+}
+
 fn embedded_rule_call_args(
     data: &CodegenData<'_>,
     source: &str,
@@ -7853,21 +8058,7 @@ fn embedded_rule_call_args(
                 continue;
             }
             let value = source[value_start..value_stop].trim();
-            let expression = if value.parse::<i64>().is_ok() {
-                Some(value.to_owned())
-            } else if value
-                .chars()
-                .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-                && value
-                    .chars()
-                    .next()
-                    .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
-            {
-                // A bare identifier is a caller attribute (arg/local/return).
-                Some(format!("__attrs.{}", embedded::escape_keyword(value)))
-            } else {
-                None
-            };
+            let expression = embedded_rule_call_expression(value);
             if let Some(expression) = expression {
                 calls.push((start, rule_index, expression));
             }
@@ -7898,6 +8089,25 @@ fn embedded_rule_call_args(
         }
     }
     Ok(args)
+}
+
+fn embedded_rule_call_expression(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.parse::<i64>().is_ok() {
+        Some(value.to_owned())
+    } else if value
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        && value
+            .chars()
+            .next()
+            .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
+    {
+        // A bare identifier is a caller attribute (arg/local/return).
+        Some(format!("__attrs.{}", embedded::escape_keyword(value)))
+    } else {
+        None
+    }
 }
 
 /// Generates the typed context views, listener trait, and walker for the
@@ -8493,15 +8703,16 @@ fn render_parser_with_options(
         None
     };
     let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
-    let template_grammar_source = if options.embedded {
-        None
+    let mut portable_local_data = if options.embedded {
+        PortableLocalData::default()
+    } else if data.semantic.is_some() {
+        build_structural_portable_local_data(data, patterns)?
     } else {
         grammar_source
+            .map(|source| build_portable_local_data(data, source, patterns))
+            .transpose()?
+            .unwrap_or_default()
     };
-    let mut portable_local_data = template_grammar_source
-        .map(|source| build_portable_local_data(data, source, patterns))
-        .transpose()?
-        .unwrap_or_default();
     portable_local_data.required_generated_rules =
         parser_rule_callers_reaching(data, &portable_local_data.required_generated_rules)?;
     // A per-coordinate `assume-*` override is a documented no-op fallback; it
@@ -8521,16 +8732,27 @@ fn render_parser_with_options(
     // provenance for the manifest but should not disable generated parsing or
     // fall through to runtime hooks under strict semantic policies.
     noop_action_states.extend(empty_parser_action_states(data, grammar_source)?);
-    let predicates = template_grammar_source.map_or_else(
-        // Without grammar source, per-coordinate `--sem-patterns` overrides still
-        // resolve by ATN coordinate, so honor them here too — otherwise a
-        // documented `.interp`-only override the manifest reports as active would
-        // have no runtime effect.
-        || parser_predicate_templates_from_overrides(data, patterns),
-        |grammar| parser_predicate_templates(data, grammar, patterns),
-    )?;
-    let rule_args = template_grammar_source
-        .map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
+    let predicates = if options.embedded {
+        Vec::new()
+    } else if data.semantic.is_some() {
+        structural_predicate_templates(data, SemanticsKind::ParserPredicate, patterns)?
+    } else {
+        grammar_source.map_or_else(
+            // Without grammar source, per-coordinate `--sem-patterns` overrides still
+            // resolve by ATN coordinate, so honor them here too — otherwise a
+            // documented `.interp`-only override the manifest reports as active would
+            // have no runtime effect.
+            || parser_predicate_templates_from_overrides(data, patterns),
+            |grammar| parser_predicate_templates(data, grammar, patterns),
+        )?
+    };
+    let rule_args = if options.embedded {
+        Vec::new()
+    } else if data.semantic.is_some() {
+        structural_parser_rule_args(data)?
+    } else {
+        grammar_source.map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?
+    };
     let inline_action_statements = embedded_data.as_ref().map_or_else(
         || portable_local_data.inline_actions.clone(),
         |embedded| embedded.inline_actions.clone(),
@@ -8558,14 +8780,16 @@ fn render_parser_with_options(
     // Under a non-default unknown-coordinate policy every predicate transition
     // must reach the interpreter (which applies the policy), so the coordinate
     // inventory is read from the ATN even without grammar source.
-    let predicate_coordinates =
-        if grammar_source.is_some() || options.sem_unknown != SemUnknownPolicy::AssumeTrue {
-            parser_predicate_transitions(data)?
-        } else {
-            Vec::new()
-        }
-        .into_iter()
-        .collect::<BTreeSet<_>>();
+    let predicate_coordinates = if data.semantic.is_some()
+        || grammar_source.is_some()
+        || options.sem_unknown != SemUnknownPolicy::AssumeTrue
+    {
+        parser_predicate_transitions(data)?
+    } else {
+        Vec::new()
+    }
+    .into_iter()
+    .collect::<BTreeSet<_>>();
     let mut generated_predicate_coordinates = if options.embedded {
         predicate_coordinates.clone()
     } else {
@@ -8579,7 +8803,11 @@ fn render_parser_with_options(
     generated_predicate_coordinates.extend(portable_local_data.predicates.keys().copied());
     let has_action_dispatch = !action_states.is_empty();
     let has_predicate_dispatch = !predicates.is_empty();
-    let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
+    let track_alt_numbers = if data.semantic.is_some() {
+        uses_structural_alt_number_contexts(data)
+    } else {
+        grammar_source.is_some_and(uses_alt_number_contexts)
+    };
     let generated_rule_enabled = vec![true; data.rule_names.len()];
     let generated_rules = parser_generated_rules(
         data,
@@ -8695,7 +8923,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _}};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _};\n"
     } else {
         ""
     };
@@ -9144,6 +9372,40 @@ fn translate_embedded_lexer_body(body: &str, position_expr: &str) -> io::Result<
         ));
     }
     Ok(out)
+}
+
+fn structural_embedded_lexer_actions(
+    data: &CodegenData<'_>,
+) -> io::Result<Vec<((i32, i32), String)>> {
+    let mut actions = structural_actions(data)?
+        .into_iter()
+        .map(|action| {
+            Ok((
+                (
+                    i32::try_from(action.rule_index).expect("rule index exceeds i32"),
+                    i32::try_from(action.action_index).expect("action index exceeds i32"),
+                ),
+                translate_embedded_lexer_body(&action.body, "action.position()")?,
+            ))
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    actions.sort_by_key(|(coordinate, _)| *coordinate);
+    actions.dedup_by_key(|(coordinate, _)| *coordinate);
+    Ok(actions)
+}
+
+fn structural_embedded_lexer_predicates(
+    data: &CodegenData<'_>,
+) -> io::Result<Vec<((usize, usize), String)>> {
+    structural_predicates(data)?
+        .into_iter()
+        .map(|predicate| {
+            Ok((
+                (predicate.rule_index, predicate.predicate_index),
+                translate_embedded_lexer_body(&predicate.body, "predicate.position()")?,
+            ))
+        })
+        .collect()
 }
 
 /// Pairs verbatim lexer action bodies with serialized custom-action
@@ -10024,6 +10286,27 @@ fn uses_alt_number_contexts(source: &str) -> bool {
     source.contains("<TreeNodeWithAltNumField") || source.contains("contextSuperClass")
 }
 
+fn uses_structural_alt_number_contexts(data: &CodegenData<'_>) -> bool {
+    let Some(semantic) = data.semantic else {
+        return false;
+    };
+    semantic.unit.options.iter().any(|option| {
+        option.name.value == "contextSuperClass"
+            || option.value.value.contains("TreeNodeWithAltNumField")
+    }) || semantic
+        .unit
+        .actions
+        .iter()
+        .chain(
+            semantic
+                .unit
+                .rules
+                .iter()
+                .flat_map(|rule| rule.actions.iter()),
+        )
+        .any(|action| action.body.contains("TreeNodeWithAltNumField"))
+}
+
 /// Reads the rule name at the *start* of a rule header, i.e. the first
 /// identifier after skipping leading `@name {...}` clauses, comments, and
 /// `<...>` templates, and an optional `fragment` keyword. Stops before rule
@@ -10497,6 +10780,23 @@ fn synthetic_parser_action_states(
     data: &CodegenData<'_>,
     grammar_source: Option<&str>,
 ) -> io::Result<BTreeSet<usize>> {
+    if data.semantic.is_some() {
+        let actions = structural_actions(data)?;
+        let represented = actions
+            .iter()
+            .map(|action| action.state)
+            .collect::<BTreeSet<_>>();
+        let mut synthetic = actions
+            .into_iter()
+            .filter_map(|action| (!action.authored).then_some(action.state))
+            .collect::<BTreeSet<_>>();
+        synthetic.extend(
+            parser_action_states(data)?
+                .into_iter()
+                .filter(|state| !represented.contains(state)),
+        );
+        return Ok(synthetic);
+    }
     let Some(grammar_source) = grammar_source else {
         // Without grammar source we cannot correlate; treat nothing as synthetic
         // so the manifest-only path keeps its existing (conservative) behavior.
@@ -10547,6 +10847,14 @@ fn empty_parser_action_states(
     data: &CodegenData<'_>,
     grammar_source: Option<&str>,
 ) -> io::Result<BTreeSet<usize>> {
+    if data.semantic.is_some() {
+        return Ok(structural_actions(data)?
+            .into_iter()
+            .filter_map(|action| {
+                (action.authored && action.body.trim().is_empty()).then_some(action.state)
+            })
+            .collect());
+    }
     let Some(grammar_source) = grammar_source else {
         return Ok(BTreeSet::new());
     };
@@ -10558,6 +10866,18 @@ fn empty_parser_action_states(
     .into_iter()
     .filter_map(|(state, slot)| slot.body.trim().is_empty().then_some(state))
     .collect())
+}
+
+fn structural_parser_rule_args(
+    data: &CodegenData<'_>,
+) -> io::Result<Vec<(usize, usize, RuleArgTemplate)>> {
+    Ok(structural_rule_calls(data)?
+        .into_iter()
+        .filter_map(|call| {
+            let template = parse_rule_arg_template(call.arguments.as_deref()?)?;
+            Some((call.state, call.target_rule_index, template))
+        })
+        .collect())
 }
 
 /// Pairs supported rule-call arguments from grammar source with the ATN
@@ -10650,18 +10970,7 @@ fn literal_rule_arg_calls(
             break;
         };
         let value = grammar_source[value_start..value_stop].trim();
-        let template = value.parse::<i64>().map_or_else(
-            |_| {
-                if matches!(value, "true" | "false") {
-                    Some(RuleArgTemplate::Literal(i64::from(value == "true")))
-                } else if value == r#"<VarRef("i")>"# {
-                    Some(RuleArgTemplate::InheritLocal)
-                } else {
-                    None
-                }
-            },
-            |value| Some(RuleArgTemplate::Literal(value)),
-        );
+        let template = parse_rule_arg_template(value);
         if let Some(template) = template {
             calls.push((start, rule_index, template));
         }
@@ -10672,6 +10981,22 @@ fn literal_rule_arg_calls(
         .into_iter()
         .map(|(_, rule_index, value)| (rule_index, value))
         .collect()
+}
+
+fn parse_rule_arg_template(value: &str) -> Option<RuleArgTemplate> {
+    let value = value.trim();
+    value.parse::<i64>().map_or_else(
+        |_| {
+            if matches!(value, "true" | "false") {
+                Some(RuleArgTemplate::Literal(i64::from(value == "true")))
+            } else if value == r#"<VarRef("i")>"# {
+                Some(RuleArgTemplate::InheritLocal)
+            } else {
+                None
+            }
+        },
+        |value| Some(RuleArgTemplate::Literal(value)),
+    )
 }
 
 /// Emits the generated lexer action dispatcher for grammar-specific custom
@@ -11133,9 +11458,6 @@ fn lexer_typed_hook_mappings(
     patterns: &SemPatternFile,
     actions: &[((i32, i32), ActionTemplate)],
 ) -> io::Result<Vec<LexerTypedHookMapping>> {
-    let Some(grammar_source) = grammar_source else {
-        return Ok(Vec::new());
-    };
     let mut mappings = actions
         .iter()
         .filter_map(|((rule_index, action_index), template)| {
@@ -11152,28 +11474,46 @@ fn lexer_typed_hook_mappings(
         })
         .collect::<Vec<_>>();
 
-    let coordinates = lexer_predicate_transitions(data)?;
-    let mut predicate_index = 0;
-    let mut offset = 0;
-    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
-        offset = block.after_brace;
-        if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
-            continue;
+    if data.semantic.is_some() {
+        for predicate in structural_predicates(data)? {
+            if let Some(call) =
+                patterns.hook_helper_call(SemanticsKind::LexerPredicate, &predicate.body)?
+            {
+                mappings.push(LexerTypedHookMapping {
+                    rule_index: predicate.rule_index,
+                    coordinate_index: predicate.predicate_index,
+                    kind: LexerTypedHookKind::Predicate,
+                    method_name: rust_function_name(&call.name),
+                    call,
+                });
+            }
         }
-        let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
+    } else if let Some(grammar_source) = grammar_source {
+        let coordinates = lexer_predicate_transitions(data)?;
+        let mut predicate_index = 0;
+        let mut offset = 0;
+        while let Some(block) = next_predicate_action_block(grammar_source, offset) {
+            offset = block.after_brace;
+            if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
+                continue;
+            }
+            let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
+                predicate_index += 1;
+                continue;
+            };
+            if let Some(call) =
+                patterns.hook_helper_call(SemanticsKind::LexerPredicate, block.body)?
+            {
+                mappings.push(LexerTypedHookMapping {
+                    rule_index,
+                    coordinate_index: pred_index,
+                    kind: LexerTypedHookKind::Predicate,
+                    method_name: rust_function_name(&call.name),
+                    call,
+                });
+            }
             predicate_index += 1;
-            continue;
-        };
-        if let Some(call) = patterns.hook_helper_call(SemanticsKind::LexerPredicate, block.body)? {
-            mappings.push(LexerTypedHookMapping {
-                rule_index,
-                coordinate_index: pred_index,
-                kind: LexerTypedHookKind::Predicate,
-                method_name: rust_function_name(&call.name),
-                call,
-            });
         }
-        predicate_index += 1;
     }
 
     let predicate_names = mappings
@@ -11351,52 +11691,80 @@ fn parser_typed_hook_mappings(
     grammar_source: Option<&str>,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<TypedHookMapping>> {
-    let Some(grammar_source) = grammar_source else {
-        return Ok(Vec::new());
-    };
-    let coordinates = parser_predicate_transitions(data)?;
     let mut mappings = Vec::new();
-    let mut offset = 0;
-    let mut predicate_index = 0;
-    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
-        offset = block.after_brace;
-        // Skip predicate blocks belonging to a different rule set (e.g. a
-        // lexer-rule predicate in a combined grammar), so the typed-hook mapping
-        // does not consume a parser coordinate for a non-parser block and wire
-        // the adapter to the wrong method. Matches `parser_predicate_templates`.
-        if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
-            continue;
+    if data.semantic.is_some() {
+        for predicate in structural_predicates(data)? {
+            push_typed_hook_mapping(
+                data,
+                patterns,
+                predicate.rule_index,
+                predicate.predicate_index,
+                &predicate.body,
+                &mut mappings,
+            )?;
         }
-        let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
-            predicate_index += 1;
-            continue;
-        };
-        let helper_call = parse_semantic_helper_call(block.body, SemanticsKind::ParserPredicate);
-        let forced_hook = patterns
-            .coordinate_predicate_template(
-                SemanticsKind::ParserPredicate,
-                data.rule_names.get(rule_index).map(String::as_str),
-                Some(pred_index),
-            )
-            .is_some_and(|template| matches!(template, Some(PredicateTemplate::Hook)));
-        let parsed = parse_predicate_template_with_patterns(block.body, patterns)?;
-        if let Some(call) = helper_call
-            && (forced_hook || parsed.is_none() || matches!(parsed, Some(PredicateTemplate::Hook)))
-        {
-            let method_name = typed_hook_predicate_method_name(&call.name);
-            mappings.push(TypedHookMapping {
+    } else if let Some(grammar_source) = grammar_source {
+        let coordinates = parser_predicate_transitions(data)?;
+        let mut offset = 0;
+        let mut predicate_index = 0;
+        while let Some(block) = next_predicate_action_block(grammar_source, offset) {
+            offset = block.after_brace;
+            // Skip predicate blocks belonging to a different rule set (e.g. a
+            // lexer-rule predicate in a combined grammar), so the typed-hook mapping
+            // does not consume a parser coordinate for a non-parser block and wire
+            // the adapter to the wrong method. Matches `parser_predicate_templates`.
+            if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
+                continue;
+            }
+            let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
+                predicate_index += 1;
+                continue;
+            };
+            push_typed_hook_mapping(
+                data,
+                patterns,
                 rule_index,
                 pred_index,
-                method_name,
-                call,
-            });
+                block.body,
+                &mut mappings,
+            )?;
+            predicate_index += 1;
         }
-        predicate_index += 1;
     }
     mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.pred_index));
     mappings.dedup();
     validate_typed_hook_signatures(&mappings)?;
     Ok(mappings)
+}
+
+fn push_typed_hook_mapping(
+    data: &CodegenData<'_>,
+    patterns: &SemPatternFile,
+    rule_index: usize,
+    pred_index: usize,
+    body: &str,
+    mappings: &mut Vec<TypedHookMapping>,
+) -> io::Result<()> {
+    let helper_call = parse_semantic_helper_call(body, SemanticsKind::ParserPredicate);
+    let forced_hook = patterns
+        .coordinate_predicate_template(
+            SemanticsKind::ParserPredicate,
+            data.rule_names.get(rule_index).map(String::as_str),
+            Some(pred_index),
+        )
+        .is_some_and(|template| matches!(template, Some(PredicateTemplate::Hook)));
+    let parsed = parse_predicate_template_with_patterns(body, patterns)?;
+    if let Some(call) = helper_call
+        && (forced_hook || parsed.is_none() || matches!(parsed, Some(PredicateTemplate::Hook)))
+    {
+        mappings.push(TypedHookMapping {
+            rule_index,
+            pred_index,
+            method_name: typed_hook_predicate_method_name(&call.name),
+            call,
+        });
+    }
+    Ok(())
 }
 
 /// Reserved name of the fixed action-hook method emitted on the typed-hook

@@ -862,7 +862,7 @@ fn parse_members_blocks(source: &str, markers: &[&str]) -> io::Result<MembersMod
 
 /// Splits a members body into field declarations, impl items, and module
 /// items.
-fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
+pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
     let mut offset = 0;
     let mut pending_attrs = String::new();
     while offset < body.len() {
