@@ -18,6 +18,42 @@ fixtures in `src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
 ANTLR layout — carries `#[rustfmt::skip]`; leave those attributes in place rather
 than letting fmt explode the block to one element per line.
 
+## Snapshot tests (insta)
+
+Prefer `insta` snapshots over hand-written assertions whenever a test pins a
+*value* rather than a *property*: multi-field struct/enum equality, the contents
+of a collection, a formatted diagnostic or error message, generated-code
+strings, and token/tree/ATN/DFA dumps. The "assert `.len()` then spot-check a few
+fields" pattern is the clearest win — snapshot the whole structure and the count
+is implied. Snapshots are more observable regression targets and subsume negative
+`!contains(...)` guards by showing the full output. Keep explicit `assert!` for
+genuine properties a snapshot would weaken — boolean predicates
+(`assert!(x.is_empty())`), bounds (`dur < LIMIT`), round-trip/algebraic
+invariants (`decode(encode(x)) == x`), ordering checks — and layer a snapshot
+alongside them when both the value and the invariant matter.
+
+House style is named external snapshots stored under a sibling `snapshots/` dir —
+`insta::assert_debug_snapshot!("descriptive_snake_name", value)`, or
+`assert_snapshot!(...)` for a `String`/`Display` value; use inline (`@"..."`)
+only for small, stable values. Project specifics:
+
+- **Every test module (or bare `#[test]` fn) that calls an insta macro needs
+  `#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.`**
+  — `.clippy.toml` bans `.unwrap()` and the macros unwrap internally, so CI
+  clippy fails without it (see `src/bin_support/grammar/semantics.rs`).
+- **insta is `default-features = false`**: only `assert_snapshot!`,
+  `assert_debug_snapshot!`, and `assert_compact_debug_snapshot!` are available.
+  The YAML/JSON/redaction macros need serde, which the runtime does not use.
+- **Determinism**: never snapshot `HashMap`/`HashSet` iteration order — the
+  runtime's `PredictionFxHasher` maps (`prediction.rs`, `dfa.rs`) are unordered;
+  collect into a `Vec` and sort by a stable key first. `BTreeMap`/`BTreeSet`
+  (used throughout the generator) are already ordered and safe. `TokenView`'s
+  `Debug` omits `byte_span`, so snapshot the explicit tuple when that field is
+  the point of the test.
+- **Workflow**: `cargo insta test` records pending `.snap.new`/`.pending-snap`;
+  review each, then `cargo insta accept` (do not pass `--all-features` — it is
+  rejected). `cargo-insta` 1.48+ is available.
+
 ## Source layout
 
 - `src/lib.rs` — public exports
