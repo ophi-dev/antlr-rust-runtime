@@ -10,6 +10,8 @@ const NONE: u32 = u32::MAX;
 const FLAG_MATCHED_CHILD: u8 = 1 << 0;
 const FLAG_START_PRESENT: u8 = 1 << 1;
 const FLAG_STOP_PRESENT: u8 = 1 << 2;
+const VISITOR_STACK_RED_ZONE: usize = 1024 * 1024;
+const VISITOR_STACK_SIZE: usize = 4 * 1024 * 1024;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1325,15 +1327,17 @@ pub trait ParseTreeVisitor {
     }
 
     fn visit_children(&mut self, node: RuleNodeView<'_>) -> Self::Result {
-        let mut result = self.default_result();
-        for child in node.children() {
-            if !self.should_visit_next_child(node, &result) {
-                break;
+        stacker::maybe_grow(VISITOR_STACK_RED_ZONE, VISITOR_STACK_SIZE, || {
+            let mut result = self.default_result();
+            for child in node.children() {
+                if !self.should_visit_next_child(node, &result) {
+                    break;
+                }
+                let child_result = self.visit(child);
+                result = self.aggregate_result(result, child_result);
             }
-            let child_result = self.visit(child);
-            result = self.aggregate_result(result, child_result);
-        }
-        result
+            result
+        })
     }
 
     fn visit_terminal(&mut self, _node: TerminalNodeView<'_>) -> Self::Result {
@@ -1744,6 +1748,36 @@ mod tests {
         };
         assert_eq!(one.visit(parsed.tree()), 1);
         assert_eq!(one.visited, 1);
+    }
+
+    #[test]
+    fn visitor_grows_the_stack_for_deep_rule_trees() {
+        const DEPTH: usize = 20_000;
+
+        let tokens = TokenStore::new(None, "");
+        let mut storage = ParseTreeStorage::new();
+        let mut child = storage.finish_rule(ParserRuleContext::new(DEPTH, -1));
+        for rule_index in (0..DEPTH).rev() {
+            let mut parent = ParserRuleContext::new(rule_index, -1);
+            storage.add_child(&mut parent, child);
+            child = storage.finish_rule(parent);
+        }
+        let parsed = ParsedFile::new(tokens, storage, child);
+
+        struct Visitor;
+        impl ParseTreeVisitor for Visitor {
+            type Result = usize;
+
+            fn default_result(&mut self) -> Self::Result {
+                0
+            }
+
+            fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
+                self.visit_children(node) + 1
+            }
+        }
+
+        assert_eq!(Visitor.visit(parsed.tree()), DEPTH + 1);
     }
 
     #[test]

@@ -15,6 +15,7 @@ expression: "model.rules[1].alts"
                     "left",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -28,6 +29,9 @@ expression: "model.rules[1].alts"
             ElementRef {
                 label: None,
                 target: "STAR",
+                token_types: [
+                    2,
+                ],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -43,6 +47,7 @@ expression: "model.rules[1].alts"
                     "right",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -84,6 +89,7 @@ expression: "model.rules[1].alts"
                     "left",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -97,6 +103,9 @@ expression: "model.rules[1].alts"
             ElementRef {
                 label: None,
                 target: "PLUS",
+                token_types: [
+                    3,
+                ],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -112,6 +121,7 @@ expression: "model.rules[1].alts"
                     "right",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {
@@ -151,6 +161,9 @@ expression: "model.rules[1].alts"
             ElementRef {
                 label: None,
                 target: "INT",
+                token_types: [
+                    1,
+                ],
                 is_block: false,
                 is_list: false,
                 cardinality: ChildCardinality {

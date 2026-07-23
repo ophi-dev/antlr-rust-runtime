@@ -384,6 +384,11 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
         "pub fn right(&self) -> Result<ExpressionContext<'a>, MissingChildError>",
         "pub fn star_token(&self) -> Option<TerminalNode<'a>>",
         "pub fn int_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn literal(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn choice(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn other(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "__token_children_matching(self.__node",
         "track_context_alt_numbers: true",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
@@ -538,6 +543,13 @@ mod typed_tree_tests {
                 .all(|rule| rule.alt_number() == 0),
             "typed dispatch metadata must not become display-visible alt numbers"
         );
+        let start = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<StartContext>()
+            .expect("typed start context");
+        assert_eq!(start.eof_token().expect("required EOF").to_string(), "<EOF>");
 
         assert_eq!(Eval.visit(parsed.tree()).expect("evaluation succeeds"), 6);
 
@@ -568,7 +580,9 @@ mod typed_tree_tests {
         );
 
         let start = parsed.tree().as_rule().expect("start rule");
-        let expression = start.child_rule(1).expect("top-level expression");
+        let expression = start
+            .child_rule(RULE_EXPRESSION)
+            .expect("top-level expression");
         let add = expression
             .downcast_ref::<AddLabelContext>()
             .expect("top-level expression is addition");
@@ -579,7 +593,7 @@ mod typed_tree_tests {
         assert_eq!(
             add.left().expect("left expression").rule_node().node().id(),
             expression
-                .child_rules(1)
+                .child_rules(RULE_EXPRESSION)
                 .next()
                 .expect("left expression")
                 .node()
@@ -588,11 +602,28 @@ mod typed_tree_tests {
         assert!(expression.downcast_ref::<MultiplyLabelContext>().is_none());
 
         let right = expression
-            .child_rules(1)
+            .child_rules(RULE_EXPRESSION)
             .nth(1)
             .expect("right expression");
         assert!(right.downcast_ref::<MultiplyLabelContext>().is_some());
         assert!(right.downcast_ref::<AddLabelContext>().is_none());
+
+        let lexer = CalculatorLexer::new(InputStream::new("+*1"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser
+            .labeled_tokens()
+            .expect("labeled token input should parse");
+        let parsed = parser.into_parsed_file(root);
+        let labeled = parsed
+            .tree()
+            .as_rule()
+            .expect("labeledTokens rule")
+            .downcast_ref::<LabeledTokensContext>()
+            .expect("typed labeledTokens context");
+        assert_eq!(labeled.literal().expect("literal label").to_string(), "+");
+        assert_eq!(labeled.choice().expect("set label").to_string(), "*");
+        assert_eq!(labeled.other().expect("not-set label").to_string(), "1");
     }
 }
 "#,

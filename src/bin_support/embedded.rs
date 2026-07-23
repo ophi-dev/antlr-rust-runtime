@@ -64,9 +64,10 @@ impl ChildCardinality {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ElementRef {
     pub(crate) label: Option<String>,
-    /// Referenced rule or token name; empty for a labeled `(...)` block,
-    /// `~set`, or string literal.
+    /// Referenced rule or token spelling; empty for token sets and wildcards.
     pub(crate) target: String,
+    /// Token types matched by this element. Empty for rule references.
+    pub(crate) token_types: Vec<i32>,
     pub(crate) is_block: bool,
     /// `label+=ref` list label.
     pub(crate) is_list: bool,
@@ -484,6 +485,7 @@ fn translate_reference(
         let element = ElementRef {
             label: None,
             target: name.to_owned(),
+            token_types: Vec::new(),
             is_block: false,
             is_list: false,
             cardinality: ChildCardinality::ONE,
@@ -496,6 +498,7 @@ fn translate_reference(
         let element = ElementRef {
             label: None,
             target: name.to_owned(),
+            token_types: vec![ctx.token_types[name]],
             is_block: false,
             is_list: false,
             cardinality: ChildCardinality::ONE,
@@ -832,6 +835,7 @@ mod tests {
                 ElementRef {
                     label: Some("left".to_owned()),
                     target: "e".to_owned(),
+                    token_types: Vec::new(),
                     is_block: false,
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
@@ -840,6 +844,7 @@ mod tests {
                 ElementRef {
                     label: Some("right".to_owned()),
                     target: "e".to_owned(),
+                    token_types: Vec::new(),
                     is_block: false,
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
@@ -928,6 +933,7 @@ mod tests {
                 ElementRef {
                     label: Some("args".to_owned()),
                     target: "e".to_owned(),
+                    token_types: Vec::new(),
                     is_block: false,
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },
@@ -936,6 +942,7 @@ mod tests {
                 ElementRef {
                     label: Some("ids".to_owned()),
                     target: "ID".to_owned(),
+                    token_types: vec![1],
                     is_block: false,
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },

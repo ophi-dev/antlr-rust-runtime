@@ -17,7 +17,8 @@ use grammar::frontend::SourceSpan;
 use grammar::loader::LoadOptions;
 use grammar::model::{
     Alternative, AlternativeId, AttributeSymbol, Block, Element, ElementKind, LabelKind,
-    LeftRecursiveAlternativeKind, ModelNodeId, Quantifier, Rule, SemanticGrammar, Terminal,
+    LeftRecursiveAlternativeKind, ModelNodeId, Quantifier, Rule, SemanticGrammar, SetElement,
+    Terminal, Vocabulary,
 };
 use grammar::provenance::{Origin, ProvenanceIndex};
 use grammar::source::SourceSet;
@@ -2304,7 +2305,7 @@ fn structural_embedded_model(
                 .collect(),
             init_body,
             after_body,
-            alts: structural_rule_alternatives(rule),
+            alts: structural_rule_alternatives(rule, &semantic.recognizer.vocabulary),
         };
     }
 
@@ -2335,13 +2336,13 @@ fn structural_attr_decl(attribute: &AttributeSymbol) -> embedded::AttrDecl {
     }
 }
 
-fn structural_rule_alternatives(rule: &Rule) -> Vec<embedded::AltModel> {
+fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<embedded::AltModel> {
     let Some(left_recursion) = &rule.left_recursion else {
         return rule
             .block
             .alternatives
             .iter()
-            .map(|alternative| structural_alt_model(alternative, None))
+            .map(|alternative| structural_alt_model(alternative, None, vocabulary))
             .collect();
     };
 
@@ -2368,6 +2369,7 @@ fn structural_rule_alternatives(rule: &Rule) -> Vec<embedded::AltModel> {
                         label: removed.map(|removed| removed.label.name.clone()),
                         target: removed
                             .map_or_else(|| rule.name.clone(), |removed| removed.target.clone()),
+                        token_types: Vec::new(),
                         is_block: false,
                         is_list: removed
                             .is_some_and(|removed| removed.label.kind == LabelKind::List),
@@ -2375,7 +2377,7 @@ fn structural_rule_alternatives(rule: &Rule) -> Vec<embedded::AltModel> {
                         stable_accessor: true,
                     }
                 });
-            Some(structural_alt_model(alternative, leading_ref))
+            Some(structural_alt_model(alternative, leading_ref, vocabulary))
         })
         .collect()
 }
@@ -2399,11 +2401,12 @@ fn find_alternative(block: &Block, id: AlternativeId) -> Option<&Alternative> {
 fn structural_alt_model(
     alternative: &Alternative,
     removed_leading_ref: Option<embedded::ElementRef>,
+    vocabulary: &Vocabulary,
 ) -> embedded::AltModel {
     let leading_target = removed_leading_ref
         .as_ref()
         .map(|element| element.target.clone());
-    let mut children = structural_context_children(&alternative.elements);
+    let mut children = structural_context_children(&alternative.elements, vocabulary);
     if let Some(leading) = &removed_leading_ref {
         add_child_cardinality(
             &mut children,
@@ -2412,7 +2415,7 @@ fn structural_alt_model(
         );
     }
     let mut refs = removed_leading_ref.into_iter().collect();
-    collect_structural_context_refs(&alternative.elements, &mut refs, true);
+    collect_structural_context_refs(&alternative.elements, &mut refs, true, vocabulary);
     embedded::AltModel {
         label: alternative.label.as_ref().map(|label| label.value.clone()),
         span: (
@@ -2434,12 +2437,14 @@ fn collect_structural_context_refs(
     elements: &[Element],
     refs: &mut Vec<embedded::ElementRef>,
     stable_accessor: bool,
+    vocabulary: &Vocabulary,
 ) {
     collect_structural_context_refs_with_cardinality(
         elements,
         refs,
         stable_accessor,
         embedded::ChildCardinality::ONE,
+        vocabulary,
     );
 }
 
@@ -2448,6 +2453,7 @@ fn collect_structural_context_refs_with_cardinality(
     refs: &mut Vec<embedded::ElementRef>,
     stable_accessor: bool,
     enclosing_cardinality: embedded::ChildCardinality,
+    vocabulary: &Vocabulary,
 ) {
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
@@ -2463,15 +2469,17 @@ fn collect_structural_context_refs_with_cardinality(
             ElementKind::RuleCall(call) => refs.push(embedded::ElementRef {
                 label,
                 target: call.name.clone(),
+                token_types: Vec::new(),
                 is_block: false,
                 is_list,
                 cardinality,
                 stable_accessor,
             }),
-            ElementKind::Terminal(Terminal::Token(name)) => {
+            ElementKind::Terminal(terminal) => {
                 refs.push(embedded::ElementRef {
                     label,
-                    target: name.clone(),
+                    target: structural_terminal_target(terminal),
+                    token_types: structural_terminal_token_types(terminal, vocabulary),
                     is_block: false,
                     is_list,
                     cardinality,
@@ -2479,10 +2487,24 @@ fn collect_structural_context_refs_with_cardinality(
                 });
             }
             ElementKind::Block(block) => {
+                let token_types = structural_block_token_types(block, vocabulary);
+                if !token_types.is_empty() {
+                    refs.push(embedded::ElementRef {
+                        label,
+                        target: String::new(),
+                        token_types,
+                        is_block: true,
+                        is_list,
+                        cardinality,
+                        stable_accessor,
+                    });
+                    continue;
+                }
                 if label.is_some() {
                     refs.push(embedded::ElementRef {
                         label,
                         target: String::new(),
+                        token_types: Vec::new(),
                         is_block: true,
                         is_list,
                         cardinality,
@@ -2496,24 +2518,31 @@ fn collect_structural_context_refs_with_cardinality(
                         refs,
                         nested_stable,
                         cardinality,
+                        vocabulary,
                     );
                 }
             }
-            ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. }
-                if label.is_some() =>
-            {
+            ElementKind::Set { inverted, elements } => {
                 refs.push(embedded::ElementRef {
                     label,
                     target: String::new(),
+                    token_types: structural_set_token_types(*inverted, elements, vocabulary),
                     is_block: true,
                     is_list,
                     cardinality,
-                    stable_accessor: false,
+                    stable_accessor,
                 });
             }
-            ElementKind::Terminal(_)
-            | ElementKind::Range(..)
-            | ElementKind::Set { .. }
+            ElementKind::Range(..) if label.is_some() => refs.push(embedded::ElementRef {
+                label,
+                target: String::new(),
+                token_types: Vec::new(),
+                is_block: false,
+                is_list,
+                cardinality,
+                stable_accessor: false,
+            }),
+            ElementKind::Range(..)
             | ElementKind::Action { .. }
             | ElementKind::Predicate { .. }
             | ElementKind::Epsilon => {}
@@ -2521,8 +2550,99 @@ fn collect_structural_context_refs_with_cardinality(
     }
 }
 
+fn structural_terminal_target(terminal: &Terminal) -> String {
+    match terminal {
+        Terminal::Token(name) | Terminal::Literal(name) | Terminal::LexerCharSet(name) => {
+            name.clone()
+        }
+        Terminal::Eof => "EOF".to_owned(),
+        Terminal::Wildcard => String::new(),
+    }
+}
+
+fn structural_terminal_token_types(terminal: &Terminal, vocabulary: &Vocabulary) -> Vec<i32> {
+    let token_type = match terminal {
+        Terminal::Token(name) => vocabulary.by_name.get(name).copied(),
+        Terminal::Literal(literal) => vocabulary.by_literal.get(literal).copied(),
+        Terminal::Eof => Some(TOKEN_EOF),
+        Terminal::LexerCharSet(_) | Terminal::Wildcard => None,
+    };
+    token_type.into_iter().collect()
+}
+
+fn structural_set_token_types(
+    inverted: bool,
+    elements: &[SetElement],
+    vocabulary: &Vocabulary,
+) -> Vec<i32> {
+    let members = elements
+        .iter()
+        .filter_map(|element| match element {
+            SetElement::Terminal { value, .. } => {
+                structural_terminal_token_types(value, vocabulary)
+                    .into_iter()
+                    .next()
+            }
+            SetElement::Range { .. } => None,
+        })
+        .collect::<BTreeSet<_>>();
+    if inverted {
+        (1..=vocabulary.max_token_type())
+            .filter(|token_type| !members.contains(token_type))
+            .collect()
+    } else {
+        members.into_iter().collect()
+    }
+}
+
+fn structural_element_token_types(element: &Element, vocabulary: &Vocabulary) -> Vec<i32> {
+    match &element.kind {
+        ElementKind::Terminal(terminal) => {
+            if matches!(terminal, Terminal::Wildcard) {
+                (1..=vocabulary.max_token_type()).collect()
+            } else {
+                structural_terminal_token_types(terminal, vocabulary)
+            }
+        }
+        ElementKind::Set { inverted, elements } => {
+            structural_set_token_types(*inverted, elements, vocabulary)
+        }
+        ElementKind::Block(block) => structural_block_token_types(block, vocabulary),
+        ElementKind::RuleCall(_)
+        | ElementKind::Range(..)
+        | ElementKind::Action { .. }
+        | ElementKind::Predicate { .. }
+        | ElementKind::Epsilon => Vec::new(),
+    }
+}
+
+fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i32> {
+    let mut token_types = BTreeSet::new();
+    for alternative in &block.alternatives {
+        let mut elements = alternative.elements.iter().filter(|element| {
+            !matches!(
+                element.kind,
+                ElementKind::Action { .. } | ElementKind::Predicate { .. } | ElementKind::Epsilon
+            )
+        });
+        let Some(element) = elements.next() else {
+            return Vec::new();
+        };
+        if elements.next().is_some() || element.quantifier != Quantifier::One {
+            return Vec::new();
+        }
+        let alternative_types = structural_element_token_types(element, vocabulary);
+        if alternative_types.is_empty() {
+            return Vec::new();
+        }
+        token_types.extend(alternative_types);
+    }
+    token_types.into_iter().collect()
+}
+
 fn structural_context_children(
     elements: &[Element],
+    vocabulary: &Vocabulary,
 ) -> BTreeMap<String, embedded::ChildCardinality> {
     let mut children = BTreeMap::new();
     for element in elements {
@@ -2533,7 +2653,10 @@ fn structural_context_children(
             ElementKind::Terminal(Terminal::Token(name)) => {
                 BTreeMap::from([(name.clone(), embedded::ChildCardinality::ONE)])
             }
-            ElementKind::Block(block) => structural_block_children(block),
+            ElementKind::Terminal(Terminal::Eof) => {
+                BTreeMap::from([("EOF".to_owned(), embedded::ChildCardinality::ONE)])
+            }
+            ElementKind::Block(block) => structural_block_children(block, vocabulary),
             ElementKind::Terminal(_)
             | ElementKind::Range(..)
             | ElementKind::Set { .. }
@@ -2551,12 +2674,15 @@ fn structural_context_children(
     children
 }
 
-fn structural_block_children(block: &Block) -> BTreeMap<String, embedded::ChildCardinality> {
+fn structural_block_children(
+    block: &Block,
+    vocabulary: &Vocabulary,
+) -> BTreeMap<String, embedded::ChildCardinality> {
     choice_child_cardinalities(
         block
             .alternatives
             .iter()
-            .map(|alternative| structural_context_children(&alternative.elements)),
+            .map(|alternative| structural_context_children(&alternative.elements, vocabulary)),
     )
 }
 
@@ -7562,8 +7688,8 @@ impl ContextSurfaceNames {
 /// always use a `Label`/`_label` suffix so their generated surfaces cannot be
 /// confused with rule surfaces.
 fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames {
-    let mut used_context_types = BTreeSet::new();
-    let mut used_listener_methods = BTreeSet::new();
+    let mut used_context_types = BTreeSet::from(["StoredTreeContext".to_owned()]);
+    let mut used_listener_methods = BTreeSet::from(["every_rule".to_owned()]);
     let mut used_visitor_methods = BTreeSet::from([
         "children".to_owned(),
         "error_node".to_owned(),
@@ -7874,6 +8000,7 @@ fn context_child_cardinalities(
 struct ContextLabelAccessor {
     source_name: String,
     target: String,
+    token_types: Vec<i32>,
     cardinality: embedded::ChildCardinality,
     selector: ContextLabelSelector,
 }
@@ -7915,10 +8042,10 @@ fn context_label_accessor(
         .filter(|element| element.label.as_deref() == Some(label.as_str()))
         .collect::<Vec<_>>();
     let first = declarations.first()?;
-    if first.target.is_empty()
+    if (first.target.is_empty() && first.token_types.is_empty())
         || declarations.iter().any(|element| {
             !element.stable_accessor
-                || element.target != first.target
+                || !same_context_ref_target(element, first)
                 || element.is_list != first.is_list
         })
     {
@@ -7926,6 +8053,7 @@ fn context_label_accessor(
     }
 
     let target = first.target.clone();
+    let token_types = first.token_types.clone();
     let is_list = first.is_list;
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
@@ -7937,11 +8065,13 @@ fn context_label_accessor(
             .filter(|(_, element)| element.label.as_deref() == Some(label.as_str()))
             .collect::<Vec<_>>();
         if matching.is_empty() {
-            let target_cardinality = alternative
-                .children
-                .get(&target)
-                .copied()
-                .unwrap_or(embedded::ChildCardinality::ZERO);
+            let target_cardinality = sum_child_cardinalities(
+                alternative
+                    .refs
+                    .iter()
+                    .filter(|element| context_ref_can_match_target(element, first))
+                    .map(|element| element.cardinality),
+            );
             if target_cardinality.max != Some(0) {
                 return None;
             }
@@ -7950,7 +8080,7 @@ fn context_label_accessor(
         }
 
         let alternative_selector =
-            context_label_selector(alternative, &matching, &label, &target, is_list)?;
+            context_label_selector(alternative, &matching, &label, first, is_list)?;
         if selector.is_some_and(|existing| existing != alternative_selector) {
             return None;
         }
@@ -7972,6 +8102,7 @@ fn context_label_accessor(
     Some(ContextLabelAccessor {
         source_name: label,
         target,
+        token_types,
         cardinality,
         selector: selector?,
     })
@@ -7981,14 +8112,14 @@ fn context_label_selector(
     alternative: &embedded::AltModel,
     matching: &[(usize, &embedded::ElementRef)],
     label: &str,
-    target: &str,
+    target: &embedded::ElementRef,
     is_list: bool,
 ) -> Option<ContextLabelSelector> {
     let first_position = matching[0].0;
     let start = exact_target_cardinality(&alternative.refs[..first_position], target)?;
     if is_list {
         let has_unlabeled_target = alternative.refs[first_position..].iter().any(|element| {
-            element.target == target
+            context_ref_can_match_target(element, target)
                 && element.cardinality.max != Some(0)
                 && element.label.as_deref() != Some(label)
         });
@@ -8003,17 +8134,52 @@ fn context_label_selector(
     }
     let has_following_target = alternative.refs[first_position + 1..]
         .iter()
-        .any(|following| following.target == target && following.cardinality.max != Some(0));
+        .any(|following| {
+            context_ref_can_match_target(following, target) && following.cardinality.max != Some(0)
+        });
     (!has_following_target).then_some(ContextLabelSelector::LastAfter(start))
 }
 
-fn exact_target_cardinality(refs: &[embedded::ElementRef], target: &str) -> Option<usize> {
-    refs.iter()
-        .filter(|element| element.target == target)
-        .try_fold(0_usize, |total, element| {
-            let exact = element.cardinality.max?;
-            (element.cardinality.min == exact).then(|| total.saturating_add(exact))
-        })
+fn same_context_ref_target(left: &embedded::ElementRef, right: &embedded::ElementRef) -> bool {
+    if left.token_types.is_empty() && right.token_types.is_empty() {
+        left.target == right.target
+    } else {
+        left.token_types == right.token_types
+    }
+}
+
+fn context_ref_can_match_target(
+    element: &embedded::ElementRef,
+    target: &embedded::ElementRef,
+) -> bool {
+    if element.token_types.is_empty() || target.token_types.is_empty() {
+        return same_context_ref_target(element, target);
+    }
+    element
+        .token_types
+        .iter()
+        .any(|token_type| target.token_types.contains(token_type))
+}
+
+fn exact_target_cardinality(
+    refs: &[embedded::ElementRef],
+    target: &embedded::ElementRef,
+) -> Option<usize> {
+    refs.iter().try_fold(0_usize, |total, element| {
+        if !context_ref_can_match_target(element, target) {
+            return Some(total);
+        }
+        if !element.token_types.is_empty()
+            && !element
+                .token_types
+                .iter()
+                .all(|token_type| target.token_types.contains(token_type))
+        {
+            return None;
+        }
+        let exact = element.cardinality.max?;
+        (element.cardinality.min == exact).then(|| total.saturating_add(exact))
+    })
 }
 
 fn sum_child_cardinalities(
@@ -8101,13 +8267,23 @@ fn render_token_label_accessor(
     out: &mut String,
     method: &str,
     view_name: &str,
-    token_type: i32,
     label: &ContextLabelAccessor,
 ) {
+    let token_types = label
+        .token_types
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let children = if let [token_type] = label.token_types.as_slice() {
+        format!("__token_children(self.__node, {token_type})")
+    } else {
+        format!("__token_children_matching(self.__node, &[{token_types}])")
+    };
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type})\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
+            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        {children}\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
         );
         return;
     }
@@ -8119,13 +8295,13 @@ fn render_token_label_accessor(
     if label.cardinality.is_required_single() {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        __token_children(self.__node, {token_type})\n            {lookup}\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+            "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
             label.source_name
         );
     } else {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
+            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
         );
     }
 }
@@ -8222,10 +8398,11 @@ fn render_context_child_accessors(
             &format!("{stem}_label"),
             &mut used_methods,
         );
-        if let Some(child_index) = model
-            .rules
-            .iter()
-            .position(|child| child.name == label.target)
+        if label.token_types.is_empty()
+            && let Some(child_index) = model
+                .rules
+                .iter()
+                .position(|child| child.name == label.target)
         {
             let child_view = &context_names.rules[child_index].context_type;
             render_rule_label_accessor(
@@ -8238,13 +8415,10 @@ fn render_context_child_accessors(
             );
             continue;
         }
-        let Some((_, token_type)) = token_accessors
-            .iter()
-            .find(|(token_name, _)| token_name == &label.target)
-        else {
+        if label.token_types.is_empty() {
             continue;
-        };
-        render_token_label_accessor(&mut out, &method, view_name, *token_type, label);
+        }
+        render_token_label_accessor(&mut out, &method, view_name, label);
     }
     out
 }
@@ -8274,15 +8448,17 @@ fn render_embedded_context_types(
     let visitor_trait = format!("{surface_name}Visitor");
     let visitable_trait = format!("{surface_name}Visitable");
     let tree_walker = format!("{surface_name}TreeWalker");
-    let token_accessors: Vec<(String, i32)> = data
-        .symbolic_names
-        .iter()
-        .enumerate()
-        .filter_map(|(token_type, name)| {
-            let name = name.as_ref()?;
-            i32::try_from(token_type).ok().map(|ty| (name.clone(), ty))
-        })
-        .collect();
+    let token_accessors = std::iter::once(("EOF".to_owned(), TOKEN_EOF))
+        .chain(
+            data.symbolic_names
+                .iter()
+                .enumerate()
+                .filter_map(|(token_type, name)| {
+                    let name = name.as_ref()?;
+                    i32::try_from(token_type).ok().map(|ty| (name.clone(), ty))
+                }),
+        )
+        .collect::<Vec<_>>();
 
     if options.generate_visitor {
         let _ = writeln!(
@@ -8405,6 +8581,25 @@ fn __token_children<'a>(
             antlr4_runtime::NodeKind::Rule => None,
         }?;
         (terminal.symbol().token_type() == token_type).then_some(terminal)
+    })
+}
+
+#[allow(dead_code)]
+fn __token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = match child.kind() {
+            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+            antlr4_runtime::NodeKind::Error => {
+                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
+            }
+            antlr4_runtime::NodeKind::Rule => None,
+        }?;
+        token_types
+            .contains(&terminal.symbol().token_type())
+            .then_some(terminal)
     })
 }
 
@@ -12905,11 +13100,22 @@ mod tests {
         let data = parser_fixture_data("context-name-collision/T.g4");
         let model =
             structural_embedded_model(&data, false).expect("structural model should resolve");
+        let names = context_surface_names(&model);
 
-        insta::assert_debug_snapshot!(
-            "context_surface_name_collision",
-            context_surface_names(&model)
-        );
+        let every_rule = model
+            .rules
+            .iter()
+            .position(|rule| rule.name == "everyRule")
+            .expect("everyRule fixture rule");
+        assert_ne!(names.rules[every_rule].listener_method, "every_rule");
+        let stored_tree = model
+            .rules
+            .iter()
+            .position(|rule| rule.name == "storedTree")
+            .expect("storedTree fixture rule");
+        assert_ne!(names.rules[stored_tree].context_type, "StoredTreeContext");
+
+        insta::assert_debug_snapshot!("context_surface_name_collision", names);
     }
 
     #[test]

@@ -681,6 +681,25 @@ fn __token_children<'a>(
 }
 
 #[allow(dead_code)]
+fn __token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = match child.kind() {
+            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+            antlr4_runtime::NodeKind::Error => {
+                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
+            }
+            antlr4_runtime::NodeKind::Rule => None,
+        }?;
+        token_types
+            .contains(&terminal.symbol().token_type())
+            .then_some(terminal)
+    })
+}
+
+#[allow(dead_code)]
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -828,6 +847,12 @@ impl<'a, State> GrammarSpecContext<'a, State> {
             .next()
             .map(|node| RulesContext::__from_child_node(node, &self.__invocation_states))
             .ok_or_else(|| MissingChildError::new("GrammarSpecContext", "rules"))
+    }
+    pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, -1)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("GrammarSpecContext", "EOF"))
     }
 }
 

@@ -1,6 +1,6 @@
 ---
 source: src/bin/antlr4-rust-gen.rs
-expression: context_surface_names(&model)
+expression: names
 ---
 ContextSurfaceNames {
     rules: [
@@ -13,6 +13,16 @@ ContextSurfaceNames {
             context_type: "ObjectCreationExpressionContext",
             listener_method: "object_creation_expression",
             visitor_method: "object_creation_expression",
+        },
+        ContextSurfaceName {
+            context_type: "EveryRuleContext",
+            listener_method: "every_rule_rule",
+            visitor_method: "every_rule",
+        },
+        ContextSurfaceName {
+            context_type: "StoredTreeRuleContext",
+            listener_method: "stored_tree",
+            visitor_method: "stored_tree",
         },
     ],
     views: [
@@ -54,6 +64,24 @@ ContextSurfaceNames {
                 visitor_method: "object_creation_expression",
             },
             rule_index: 1,
+            alternative_label: None,
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "EveryRuleContext",
+                listener_method: "every_rule_rule",
+                visitor_method: "every_rule",
+            },
+            rule_index: 2,
+            alternative_label: None,
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "StoredTreeRuleContext",
+                listener_method: "stored_tree",
+                visitor_method: "stored_tree",
+            },
+            rule_index: 3,
             alternative_label: None,
         },
     ],

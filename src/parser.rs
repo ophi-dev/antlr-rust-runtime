@@ -1496,6 +1496,7 @@ enum ArenaRecognizedNode {
     /// public rule entry hands the tree to the caller.
     LeftRecursiveBoundary {
         rule_index: u32,
+        alt_number: u32,
     },
 }
 
@@ -1907,9 +1908,15 @@ impl RecognitionArena {
                 })
                 .then_with(|| self.compare_sequences(left_children, right_children)),
             (
-                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: left },
-                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: right },
-            ) => left.cmp(&right),
+                ArenaRecognizedNode::LeftRecursiveBoundary {
+                    rule_index: left_rule,
+                    alt_number: left_alt,
+                },
+                ArenaRecognizedNode::LeftRecursiveBoundary {
+                    rule_index: right_rule,
+                    alt_number: right_alt,
+                },
+            ) => (left_rule, left_alt).cmp(&(right_rule, right_alt)),
             (left, right) => recognition_node_kind(&left).cmp(&recognition_node_kind(&right)),
         }
     }
@@ -1930,7 +1937,10 @@ impl RecognitionArena {
         let mut reversed = NodeSeqId::EMPTY;
         while let Some(link) = self.link(sequence) {
             match self.node(link.head) {
-                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+                ArenaRecognizedNode::LeftRecursiveBoundary {
+                    rule_index,
+                    alt_number,
+                } => {
                     if !reversed.is_empty() {
                         let children = self.reverse_sequence(reversed);
                         let start_index = self.sequence_start_index(children).unwrap_or_default();
@@ -1938,7 +1948,7 @@ impl RecognitionArena {
                         let rule = self.push_node(ArenaRecognizedNode::Rule {
                             rule_index,
                             invoking_state: -1,
-                            alt_number: 0,
+                            alt_number,
                             start_index: u32::try_from(start_index)
                                 .expect("left-recursive start index fits in u32"),
                             stop_index: stop_index.map(|index| {
@@ -6947,7 +6957,7 @@ where
                 }
                 Ok(self.rule_node(context))
             }
-            ArenaRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+            ArenaRecognizedNode::LeftRecursiveBoundary { rule_index, .. } => {
                 Err(AntlrError::Unsupported(format!(
                     "unfolded left-recursive boundary for rule {rule_index}"
                 )))
@@ -8606,7 +8616,7 @@ where
                         .into_iter()
                         .map(|mut outcome| {
                             if let Some(rule_index) = boundary {
-                                let boundary = self.arena_boundary_node(rule_index);
+                                let boundary = self.arena_boundary_node(rule_index, 0);
                                 self.defer_fast_outcome_node(&mut outcome, boundary);
                             }
                             outcome
@@ -8643,7 +8653,7 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
-                                    let boundary = self.arena_boundary_node(rule_index);
+                                    let boundary = self.arena_boundary_node(rule_index, 0);
                                     self.defer_fast_outcome_node(&mut outcome, boundary);
                                 }
                                 outcome
@@ -8682,7 +8692,7 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
-                                    let boundary = self.arena_boundary_node(rule_index);
+                                    let boundary = self.arena_boundary_node(rule_index, 0);
                                     self.defer_fast_outcome_node(&mut outcome, boundary);
                                 }
                                 outcome
@@ -9607,7 +9617,8 @@ where
                             .map(|mut outcome| {
                                 prepend_decision(&mut outcome, decision);
                                 if let Some(rule_index) = left_recursive_boundary {
-                                    let boundary = self.arena_boundary_node(rule_index);
+                                    let boundary =
+                                        self.arena_boundary_node(rule_index, next_alt_number);
                                     self.arena_prepend(&mut outcome.nodes, boundary);
                                 }
                                 outcome
@@ -10067,7 +10078,7 @@ where
         .map(|mut outcome| {
             prepend_decision(&mut outcome, step.decision);
             if let Some(rule_index) = step.left_recursive_boundary {
-                let boundary = self.arena_boundary_node(rule_index);
+                let boundary = self.arena_boundary_node(rule_index, step.alt_number);
                 self.arena_prepend(&mut outcome.nodes, boundary);
             }
             if let Some(action) = action {
@@ -10463,10 +10474,11 @@ where
         })
     }
 
-    fn arena_boundary_node(&mut self, rule_index: usize) -> RecognizedNodeId {
+    fn arena_boundary_node(&mut self, rule_index: usize, alt_number: usize) -> RecognizedNodeId {
         self.recognition_arena
             .push_node(ArenaRecognizedNode::LeftRecursiveBoundary {
                 rule_index: u32::try_from(rule_index).expect("rule index fits in u32"),
+                alt_number: u32::try_from(alt_number).expect("alternative number fits in u32"),
             })
     }
 
@@ -17574,8 +17586,10 @@ mod tests {
         let first = arena.push_node(ArenaRecognizedNode::Token {
             token: TokenId::try_from(0).expect("test token ID"),
         });
-        let boundary =
-            arena.push_node(ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: 1 });
+        let boundary = arena.push_node(ArenaRecognizedNode::LeftRecursiveBoundary {
+            rule_index: 1,
+            alt_number: 3,
+        });
         let second = arena.push_node(ArenaRecognizedNode::Token {
             token: TokenId::try_from(1).expect("test token ID"),
         });
@@ -17591,6 +17605,7 @@ mod tests {
         let ArenaRecognizedNode::Rule {
             rule_index,
             invoking_state,
+            alt_number,
             start_index,
             stop_index,
             children,
@@ -17601,6 +17616,7 @@ mod tests {
         };
         assert_eq!(rule_index, 1);
         assert_eq!(invoking_state, -1);
+        assert_eq!(alt_number, 3);
         assert_eq!(start_index, 0);
         assert_eq!(stop_index, Some(0));
         assert_eq!(arena.iter(children).collect::<Vec<_>>(), [first]);

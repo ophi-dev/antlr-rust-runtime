@@ -4,6 +4,10 @@ start
     : expression EOF
     ;
 
+labeledTokens
+    : literal='+' choice=('*' | '/') other=~';'
+    ;
+
 expression
     : left = expression STAR right = expression  # Multiply
     | left = expression SLASH right = expression # Multiply
