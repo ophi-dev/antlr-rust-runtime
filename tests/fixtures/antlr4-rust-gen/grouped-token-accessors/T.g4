@@ -1,7 +1,7 @@
 grammar T;
 
 root
-    : expression operatorSequence EOF
+    : expression operatorSequence eofChoice
     ;
 
 expression
@@ -11,6 +11,10 @@ expression
 
 operatorSequence
     : ('<=' | '>=' | '==' | '!=' | '=' | '+=')+
+    ;
+
+eofChoice
+    : (LE | EOF)
     ;
 
 identifier

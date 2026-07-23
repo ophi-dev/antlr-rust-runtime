@@ -30,7 +30,7 @@ ExpressionContext
             .map(move |node| ExpressionContext::__from_child_node(node, &self.__invocation_states))
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
-        __rule_children(self.__node, 3)
+        __rule_children(self.__node, 4)
             .next()
             .map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states))
     }
@@ -111,5 +111,40 @@ OperatorSequenceContext
     }
     pub fn add_assign_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 6).map(TerminalNode::new)
+    }
+}
+
+EofChoiceContext
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+    pub fn eof_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, -1)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn le_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 1)
+            .next()
+            .map(TerminalNode::new)
     }
 }

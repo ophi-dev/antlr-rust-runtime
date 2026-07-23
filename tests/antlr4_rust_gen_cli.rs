@@ -448,6 +448,10 @@ mod grouped_token_tests {
         assert_eq!(operators.assign_tokens().count(), 1);
         assert_eq!(operators.add_assign_tokens().count(), 1);
         assert_eq!(operators.le_tokens().count(), 0);
+
+        let eof_choice = root.eof_choice().expect("EOF choice");
+        assert!(eof_choice.eof_token().is_some());
+        assert!(eof_choice.le_token().is_none());
     }
 }
 "#,

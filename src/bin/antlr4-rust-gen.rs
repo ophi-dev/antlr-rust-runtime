@@ -2677,6 +2677,9 @@ fn structural_terminal_child_target(
 }
 
 fn structural_token_child_target(token_type: i32, vocabulary: &Vocabulary) -> Option<String> {
+    if token_type == TOKEN_EOF {
+        return Some("EOF".to_owned());
+    }
     vocabulary
         .tokens
         .iter()
@@ -13063,8 +13066,15 @@ mod tests {
             .split_once("impl<State> std::fmt::Display for OperatorSequenceContext")
             .expect("operator sequence context display impl")
             .0;
+        let eof_choice_context = rendered
+            .split_once("impl<'a, State> EofChoiceContext<'a, State> {")
+            .expect("EOF choice context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for EofChoiceContext")
+            .expect("EOF choice context display impl")
+            .0;
         let context_surface = format!(
-            "ExpressionContext\n{expression_context}OperatorSequenceContext\n{sequence_context}"
+            "ExpressionContext\n{expression_context}OperatorSequenceContext\n{sequence_context}EofChoiceContext\n{eof_choice_context}"
         );
 
         insta::assert_snapshot!("typed_context_accessors_grouped_tokens", context_surface);
