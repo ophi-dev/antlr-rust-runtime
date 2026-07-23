@@ -64,8 +64,15 @@ jobs:
       # the harness, and per-case smoke crates spawned as subprocess `cargo run`
       # with their own target-dir stripes. `show-env` exports the instrumentation
       # env (RUSTC_WRAPPER + a %p-keyed LLVM_PROFILE_FILE) that every subprocess
-      # inherits, so their .profraw land in the main target/ and `report`
-      # auto-discovers the nested stripe binaries. See CLAUDE.md "Code coverage".
+      # inherits, so all their .profraw land in the main target/.
+      #
+      # `cargo llvm-cov report` builds its object list from cargo's own build
+      # metadata (the harness + generator), so it never sees the subprocess-built
+      # smoke crates under target/antlr-runtime-testsuite/cargo-target-*/. Their
+      # profile counts would then have no matching coverage map and be dropped.
+      # So capture report's own `llvm-cov export` invocation and re-run it with
+      # every stripe smoke binary appended, folding in the compiled-parser-path
+      # coverage they uniquely add. See CLAUDE.md "Code coverage".
       - name: Run ANTLR runtime testsuite with coverage
         run: |
           set -euo pipefail
@@ -73,7 +80,21 @@ jobs:
           cargo llvm-cov clean --workspace
           cargo build --locked --quiet --bin antlr4-runtime-testsuite --features codegen
           cargo run --locked --quiet --bin antlr4-runtime-testsuite --features codegen
-          cargo llvm-cov report --lcov --output-path conformance.lcov
+          # Merge the profraw into a .profdata and grab the exact `llvm-cov export`
+          # command report would run (same instr-profile, base objects, ignores).
+          export_cmd="$(cargo llvm-cov report --lcov -v 2>&1 >/dev/null \
+            | sed -n "s/^ *Running \`\(.*llvm-cov export .*\)\`\$/\1/p")"
+          if [ -z "$export_cmd" ]; then
+            echo "::error::could not capture llvm-cov export command from report -v" >&2
+            exit 1
+          fi
+          # Append each subprocess-built smoke binary as an extra object.
+          while IFS= read -r bin; do
+            export_cmd="$export_cmd -object '$bin'"
+          done < <(find target/antlr-runtime-testsuite \
+            -name 'antlr-runtime-testsuite-case' -type f)
+          eval "$export_cmd" > conformance.lcov
+          echo "conformance.lcov: $(grep -c '^SF:' conformance.lcov) files"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
