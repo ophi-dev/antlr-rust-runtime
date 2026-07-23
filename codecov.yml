@@ -1,0 +1,45 @@
+# Codecov configuration.
+# Coverage arrives as two independently flagged uploads that Codecov merges
+# into the project total:
+#   * unittests  — `cargo llvm-cov` over the workspace tests (ci.yml)
+#   * conformance — the ANTLR runtime-testsuite sweep, whose subprocess smoke
+#                   crates and the ATN-interpreting generator exercise the
+#                   runtime end-to-end (antlr-runtime-testsuite.yml)
+#
+# Coverage is source-based LLVM line/region coverage. Branch coverage is a
+# nightly-only instrumentation mode (`-Z coverage-options=branch`); this crate
+# pins stable, so line/region is the ceiling.
+
+coverage:
+  # Report coverage changes but never fail a build on them — the checks stay
+  # informational so a coverage dip cannot block an otherwise-green PR.
+  status:
+    project:
+      default:
+        target: auto
+        informational: true
+    patch:
+      default:
+        informational: true
+
+flag_management:
+  default_rules:
+    # Both flags run on every push and PR, but carryforward keeps the last
+    # known value if one job is skipped or fails to upload on a given commit.
+    carryforward: true
+  individual_flags:
+    - name: unittests
+      paths:
+        - src/
+    - name: conformance
+      paths:
+        - src/
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: false
+
+# The generated ANTLR v4 frontend parser/lexer are machine-emitted artifacts,
+# not hand-written runtime code, so they should not dilute the coverage signal.
+ignore:
+  - "src/bin_support/grammar/generated"

@@ -192,6 +192,46 @@ cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserError
 
 Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with `Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.
 
+## Code coverage
+
+CI collects LLVM source-based coverage (`cargo-llvm-cov`) and uploads it to
+Codecov as two merged flags — `unittests` (from `ci.yml`) and `conformance`
+(from `antlr-runtime-testsuite.yml`). Reproduce locally:
+
+```bash
+cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info   # unit + integration
+cargo llvm-cov --all-features --workspace --html                          # browsable report
+cargo llvm-cov --all-features --workspace                                  # terminal summary
+```
+
+Requires the `llvm-tools`/`llvm-tools-preview` component (already in
+`rust-toolchain.toml`; CI's explicit `rustup` install re-adds it because
+`--profile minimal` drops it).
+
+**Coverage is line/region only.** Branch coverage is a nightly-only
+instrumentation mode (`-Z coverage-options=branch`; `cargo llvm-cov --branch`
+is `(unstable)`), and this crate pins stable — so line/region is the ceiling.
+Codecov's primary metric is line coverage, so nothing is lost in practice.
+
+The conformance sweep needs the subprocess-aware recipe, because it spawns
+per-case smoke crates as `cargo run` with their own `CARGO_TARGET_DIR` stripes:
+
+```bash
+source <(cargo llvm-cov show-env --sh)   # exports RUSTC_WRAPPER + %p-keyed LLVM_PROFILE_FILE
+cargo llvm-cov clean --workspace
+cargo build --bin antlr4-runtime-testsuite --features codegen
+cargo run   --bin antlr4-runtime-testsuite --features codegen
+cargo llvm-cov report --lcov --output-path conformance.lcov
+```
+
+The `%p` (PID) in the profile-file pattern keeps parallel `--jobs` workers from
+clobbering each other's `.profraw`, the smoke subprocesses inherit the
+instrumentation env (the harness only *adds* `CARGO_TARGET_DIR`), and
+`report` auto-discovers the nested per-worker stripe binaries — so no manual
+`llvm-cov export --object` juggling is needed. Most conformance coverage comes
+from `antlr4-rust-gen` (codegen interprets the ATN, exercising the runtime),
+with the smoke crates adding compiled-parser-path coverage.
+
 ## Parse benchmark (vs Go / Python / tree-sitter)
 
 `tools/parse-bench/` runs ANTLR-generated Kotlin and C# parsers and reports

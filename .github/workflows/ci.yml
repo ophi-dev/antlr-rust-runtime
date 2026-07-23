@@ -10,6 +10,9 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  # Codecov's tokenless upload authenticates via an OIDC token minted by the
+  # workflow, so the job must be allowed to request one.
+  id-token: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,8 +31,13 @@ jobs:
 
       - name: Install stable Rust
         run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup toolchain install stable --profile minimal --component clippy,llvm-tools-preview --no-self-update
           rustup default stable
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Validate direct-codegen fixtures
         run: node tools/grammar-frontend/validate-interp-fixtures.mjs
@@ -37,8 +45,23 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
-      - name: Run unit tests
-        run: cargo test --locked --all-features
+      # `cargo llvm-cov` runs the same suite as `cargo test` but under LLVM
+      # source-based instrumentation, so it replaces the plain test step and
+      # emits an lcov report in one pass. Line/region coverage only — branch
+      # coverage needs the nightly-only `-Z coverage-options=branch`.
+      - name: Run unit tests with coverage
+        run: cargo llvm-cov --locked --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          flags: unittests
+          use_oidc: true
+          # Surface upload problems instead of silently passing, but do not
+          # fail the build for external Codecov availability blips.
+          fail_ci_if_error: false
+          disable_search: true
 
       - uses: ophi-dev/mehen@v1
         with:
