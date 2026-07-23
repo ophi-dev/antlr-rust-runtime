@@ -108,6 +108,60 @@ cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserError
 
 Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with `Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.
 
+## Code coverage
+
+CI collects LLVM source-based coverage (`cargo-llvm-cov`) and uploads it to
+Codecov as two merged flags — `unittests` (from `ci.yml`) and `conformance`
+(from `antlr-runtime-testsuite.yml`). One-time local install (it is a crates.io
+cargo subcommand, *not* a rustup component, so it cannot live in
+`rust-toolchain.toml` — only its `llvm-tools` dependency does, and that is
+already pinned there):
+
+```bash
+cargo install cargo-llvm-cov   # or: cargo binstall cargo-llvm-cov (prebuilt)
+```
+
+Then reproduce CI locally:
+
+```bash
+cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info   # unit + integration
+cargo llvm-cov --all-features --workspace --html                          # browsable report
+cargo llvm-cov --all-features --workspace                                  # terminal summary
+```
+
+**Coverage is line/region only.** Branch coverage is a nightly-only
+instrumentation mode (`-Z coverage-options=branch`; `cargo llvm-cov --branch`
+is `(unstable)`), and this crate pins stable — so line/region is the ceiling.
+Codecov's primary metric is line coverage, so nothing is lost in practice.
+
+The conformance sweep needs the subprocess-aware recipe, because it spawns
+per-case smoke crates as `cargo run` with their own `CARGO_TARGET_DIR` stripes:
+
+```bash
+source <(cargo llvm-cov show-env --sh)   # exports RUSTC_WRAPPER + %p-keyed LLVM_PROFILE_FILE
+cargo llvm-cov clean --workspace
+cargo build --bin antlr4-runtime-testsuite --features codegen
+cargo run   --bin antlr4-runtime-testsuite --features codegen
+# `report` sees only the harness + generator (its object list comes from cargo
+# build metadata, not a target/ scan), so fold the subprocess-built smoke
+# binaries in by hand: capture report's own `llvm-cov export` and append them.
+cargo llvm-cov report --lcov --output-path conformance.lcov
+```
+
+The `%p` (PID) in the profile-file pattern keeps parallel `--jobs` workers from
+clobbering each other's `.profraw`, and the smoke subprocesses inherit the
+instrumentation env (the harness only *adds* `CARGO_TARGET_DIR`), so every
+`.profraw` lands in the main `target/`. But `cargo llvm-cov report` builds its
+`-object` list from cargo's build metadata (the harness + `antlr4-rust-gen`),
+**not** a filesystem scan — so the nested `cargo-target-*/` smoke binaries are
+invisible to it and their profile counts get dropped. The CI job therefore
+re-runs report's captured `llvm-cov export` with each stripe binary appended
+(see `antlr-runtime-testsuite.yml`). In practice this is a small delta (~0.3%):
+most conformance coverage comes from `antlr4-rust-gen`, which parses every
+descriptor `.g4` through the runtime's own embedded ANTLR-v4 recognizer and so
+already exercises `BaseParser`, the compiled lexer DFA, and prediction; the
+smoke crates only add the sliver of compiled-recognizer paths not hit that way.
+
 ## Snapshot tests (insta)
 
 Prefer `insta` snapshots over hand-written assertions whenever a test pins a
