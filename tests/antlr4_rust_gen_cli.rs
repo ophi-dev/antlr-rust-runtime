@@ -179,15 +179,17 @@ fn help_flag_as_option_value_is_not_intercepted() {
 }
 
 #[test]
-fn version_flag_as_option_value_is_not_intercepted() {
-    let output = run_antlr4_rust_gen(&["--option-hook", "--version"]);
+fn version_flags_as_option_values_are_not_intercepted() {
+    for flag in ["--version", "-V"] {
+        let output = run_antlr4_rust_gen(&["--option-hook", flag]);
 
-    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
-    assert_eq!(utf8(&output.stdout), "");
+        assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+        assert_eq!(utf8(&output.stdout), "");
 
-    let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("--option-hook requires KEY=VALUE"));
-    assert!(stderr.contains("Usage: antlr4-rust-gen"));
+        let stderr = utf8(&output.stderr);
+        assert!(stderr.contains("--option-hook requires KEY=VALUE"));
+        assert!(stderr.contains("Usage: antlr4-rust-gen"));
+    }
 }
 
 #[test]
