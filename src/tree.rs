@@ -1753,31 +1753,40 @@ mod tests {
     #[test]
     fn visitor_grows_the_stack_for_deep_rule_trees() {
         const DEPTH: usize = 20_000;
+        const STACK_SIZE: usize = 256 * 1024;
 
-        let tokens = TokenStore::new(None, "");
-        let mut storage = ParseTreeStorage::new();
-        let mut child = storage.finish_rule(ParserRuleContext::new(DEPTH, -1));
-        for rule_index in (0..DEPTH).rev() {
-            let mut parent = ParserRuleContext::new(rule_index, -1);
-            storage.add_child(&mut parent, child);
-            child = storage.finish_rule(parent);
-        }
-        let parsed = ParsedFile::new(tokens, storage, child);
+        std::thread::Builder::new()
+            .name("visitor-stack-growth".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(|| {
+                let tokens = TokenStore::new(None, "");
+                let mut storage = ParseTreeStorage::new();
+                let mut child = storage.finish_rule(ParserRuleContext::new(DEPTH, -1));
+                for rule_index in (0..DEPTH).rev() {
+                    let mut parent = ParserRuleContext::new(rule_index, -1);
+                    storage.add_child(&mut parent, child);
+                    child = storage.finish_rule(parent);
+                }
+                let parsed = ParsedFile::new(tokens, storage, child);
 
-        struct Visitor;
-        impl ParseTreeVisitor for Visitor {
-            type Result = usize;
+                struct Visitor;
+                impl ParseTreeVisitor for Visitor {
+                    type Result = usize;
 
-            fn default_result(&mut self) -> Self::Result {
-                0
-            }
+                    fn default_result(&mut self) -> Self::Result {
+                        0
+                    }
 
-            fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
-                self.visit_children(node) + 1
-            }
-        }
+                    fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
+                        self.visit_children(node) + 1
+                    }
+                }
 
-        assert_eq!(Visitor.visit(parsed.tree()), DEPTH + 1);
+                assert_eq!(Visitor.visit(parsed.tree()), DEPTH + 1);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("visitor should not overflow its stack");
     }
 
     #[test]
