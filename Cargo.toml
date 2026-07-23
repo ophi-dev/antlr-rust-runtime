@@ -39,7 +39,7 @@ thiserror = "2"
 [dev-dependencies]
 insta = { version = "1", default-features = false }
 pretty_assertions = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [[bin]]
 name = "antlr4-rust-gen"
