@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.0...v0.15.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* restore fast Java parsing with typed contexts ([#175](https://github.com/ophi-dev/antlr-rust-runtime/issues/175)) ([865ac8f](https://github.com/ophi-dev/antlr-rust-runtime/commit/865ac8f768656f9a0308399fc8d9fbd1e277fad1))
+
 ## [0.15.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.2...v0.15.0) (2026-07-23)
 
 
