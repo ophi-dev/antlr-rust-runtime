@@ -1,6 +1,7 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 use std::cell::Cell;
 
+pub use crate::token::TokenIter;
 use crate::token::{
     DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenId, TokenSink, TokenSource, TokenSourceError,
     TokenSpec, TokenStore, TokenStoreError, TokenView,
@@ -222,11 +223,7 @@ where
     /// Iterates borrowing views of the original buffered token sequence.
     pub fn tokens(&self) -> TokenIter<'_> {
         self.note_requested_count(self.source_token_count);
-        TokenIter {
-            store: &self.store,
-            next: 0,
-            stop: self.source_token_count,
-        }
+        self.store.iter_prefix(self.source_token_count)
     }
 
     pub const fn token_count(&self) -> usize {
@@ -429,44 +426,6 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct TokenIter<'a> {
-    store: &'a TokenStore,
-    next: usize,
-    stop: usize,
-}
-
-impl<'a> Iterator for TokenIter<'a> {
-    type Item = TokenView<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.next >= self.stop {
-            return None;
-        }
-        let id = TokenId::try_from(self.next).ok()?;
-        self.next += 1;
-        self.store.view(id)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.stop - self.next;
-        (remaining, Some(remaining))
-    }
-}
-
-impl DoubleEndedIterator for TokenIter<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.next >= self.stop {
-            return None;
-        }
-        self.stop -= 1;
-        let id = TokenId::try_from(self.stop).ok()?;
-        self.store.view(id)
-    }
-}
-
-impl ExactSizeIterator for TokenIter<'_> {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,6 +615,28 @@ mod tests {
         assert_eq!(
             stream.tokens().next_back().map(|token| token.token_type()),
             Some(TOKEN_EOF)
+        );
+    }
+
+    #[test]
+    fn stream_tokens_exclude_parser_insertions_but_store_iterates_them() {
+        let mut stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::eof(1, 1, 1, 1),
+        ]));
+        stream
+            .insert(TokenSpec::explicit(2, "<missing token>"))
+            .expect("synthetic token should fit");
+
+        assert_eq!(stream.tokens().len(), 2);
+        assert_eq!(stream.token_store().iter().len(), 3);
+        assert_eq!(
+            stream
+                .token_store()
+                .iter()
+                .next_back()
+                .map(|token| token.text()),
+            Some("<missing token>")
         );
     }
 

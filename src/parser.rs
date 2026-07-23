@@ -12324,7 +12324,9 @@ mod tests {
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
+    use crate::token::{
+        DEFAULT_CHANNEL, HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError,
+    };
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
@@ -16301,6 +16303,37 @@ mod tests {
             stream.tokens().nth(1).expect("EOF token").token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn parsed_file_exposes_all_buffered_tokens() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(99)
+                .with_text(" comment")
+                .with_channel(HIDDEN_CHANNEL),
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 9, 1, 9),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("artificial parser rule should parse");
+        let parsed = parser.into_parsed_file(tree);
+
+        assert_eq!(
+            parsed
+                .tokens()
+                .iter()
+                .map(|token| (token.token_type(), token.channel(), token.text()))
+                .collect::<Vec<_>>(),
+            [
+                (99, HIDDEN_CHANNEL, " comment"),
+                (1, DEFAULT_CHANNEL, "x"),
+                (TOKEN_EOF, DEFAULT_CHANNEL, "<EOF>"),
+            ]
+        );
+        assert_eq!(parsed.tokens().into_iter().count(), 3);
     }
 
     #[test]

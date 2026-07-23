@@ -39,8 +39,8 @@ pub use prediction::{ContextId, PredictionContextStats, SemanticContext};
 pub use recognizer::{Recognizer, RecognizerData};
 pub use token::{
     DEFAULT_CHANNEL, HIDDEN_CHANNEL, INVALID_TOKEN_TYPE, MAX_TOKEN_OFFSET, TOKEN_EOF, Token,
-    TokenChannel, TokenId, TokenSink, TokenSource, TokenSpec, TokenStore, TokenStoreError,
-    TokenView,
+    TokenChannel, TokenId, TokenIter, TokenSink, TokenSource, TokenSpec, TokenStore,
+    TokenStoreError, TokenView,
 };
 pub use token_stream::CommonTokenStream;
 pub use tree::{

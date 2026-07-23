@@ -344,6 +344,23 @@ impl TokenStore {
         self.token_types.is_empty()
     }
 
+    /// Iterates borrowing views of every stored token in [`TokenId`] order.
+    pub fn iter(&self) -> TokenIter<'_> {
+        self.iter_prefix(self.len())
+    }
+
+    pub(crate) fn iter_prefix(&self, stop: usize) -> TokenIter<'_> {
+        assert!(
+            stop <= self.len(),
+            "token iterator prefix exceeds store length"
+        );
+        TokenIter {
+            store: self,
+            next: 0,
+            stop,
+        }
+    }
+
     pub(crate) fn push(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
         let raw_id = u32::try_from(self.len())
             .map_err(|_| TokenStoreError::overflow("count", self.len(), u32::MAX as usize))?;
@@ -485,6 +502,54 @@ impl TokenStore {
         source.get(start..stop)
     }
 }
+
+impl<'a> IntoIterator for &'a TokenStore {
+    type Item = TokenView<'a>;
+    type IntoIter = TokenIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// Iterator over borrowing views of a token store.
+#[derive(Debug)]
+pub struct TokenIter<'a> {
+    store: &'a TokenStore,
+    next: usize,
+    stop: usize,
+}
+
+impl<'a> Iterator for TokenIter<'a> {
+    type Item = TokenView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next >= self.stop {
+            return None;
+        }
+        let id = TokenId::try_from(self.next).ok()?;
+        self.next += 1;
+        self.store.view(id)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.stop - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl DoubleEndedIterator for TokenIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.next >= self.stop {
+            return None;
+        }
+        self.stop -= 1;
+        let id = TokenId::try_from(self.stop).ok()?;
+        self.store.view(id)
+    }
+}
+
+impl ExactSizeIterator for TokenIter<'_> {}
 
 const fn default_stop_byte(start: usize, stop: usize) -> usize {
     match stop.checked_add(1) {
@@ -833,5 +898,38 @@ mod tests {
             .push(TokenSpec::explicit(1, "x").with_span(MAX_TOKEN_OFFSET + 1, 0))
             .expect_err("overlarge offsets must fail");
         assert!(error.to_string().contains("supported limit"));
+    }
+
+    #[test]
+    fn token_store_iterates_all_records_in_id_order() {
+        let mut store = TokenStore::new(None, "iterator-test");
+        for spec in [
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::explicit(2, " comment").with_channel(HIDDEN_CHANNEL),
+            TokenSpec::eof(9, 9, 1, 9),
+        ] {
+            store.push(spec).expect("test token should fit");
+        }
+
+        let mut iter = store.iter();
+        assert_eq!(iter.len(), 3);
+        assert_eq!(iter.next().map(|token| token.text()), Some("a"));
+        assert_eq!(
+            iter.next_back().map(|token| token.token_type()),
+            Some(TOKEN_EOF)
+        );
+        assert_eq!(iter.len(), 1);
+
+        assert_eq!(
+            (&store)
+                .into_iter()
+                .map(|token| (token.token_id().index(), token.channel()))
+                .collect::<Vec<_>>(),
+            [
+                (0, DEFAULT_CHANNEL),
+                (1, HIDDEN_CHANNEL),
+                (2, DEFAULT_CHANNEL)
+            ]
+        );
     }
 }
