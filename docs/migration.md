@@ -35,7 +35,9 @@ Generated `parse()` returns `ParsedFile`, which owns the token store, flat CST,
 and root ID. Access the root through `tree()`, inspect storage metrics through
 `storage().stats()`, or resolve another ID through `node()`. Direct rule calls
 return `NodeId`; use `parser.node(id)` while the parser is alive, or consume the
-parser with `into_parsed_file(id)`.
+parser with `into_parsed_file(id)`. Iterate every retained token, including
+hidden-channel tokens and EOF, with `parsed.tokens().iter()` or
+`for token in parsed.tokens()`.
 
 Parser prediction contexts are compact and store-local. `ContextId` replaces
 the exported recursive `PredictionContext` graph; singleton records live
