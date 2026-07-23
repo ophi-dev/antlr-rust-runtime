@@ -2,7 +2,7 @@ use super::{property_ranges, simple_lowercase, simple_uppercase};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use sha2::{Digest, Sha256};
+use hmac_sha256::Hash;
 
 const JAVA_PROPERTY_ORACLE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -139,10 +139,17 @@ fn every_unicode_property_and_alias_matches_java() {
 }
 
 fn interval_digest(ranges: &[i32]) -> String {
-    let mut digest = Sha256::new();
+    let mut digest = Hash::new();
     for range in ranges.chunks_exact(2) {
         digest.update(range[0].to_be_bytes());
         digest.update(range[1].to_be_bytes());
     }
-    format!("{:x}", digest.finalize())
+    // `hmac_sha256::Hash::finalize` returns a plain `[u8; 32]`, so render it as
+    // lowercase, zero-padded, separator-free hex to match the Java oracle
+    // digests in `java-unicode-properties.tsv` (Java's `MessageDigest` output).
+    let mut hex = String::with_capacity(32 * 2);
+    for byte in digest.finalize() {
+        write!(hex, "{byte:02x}").expect("write to string");
+    }
+    hex
 }
