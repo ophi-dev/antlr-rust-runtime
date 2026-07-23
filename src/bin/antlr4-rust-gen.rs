@@ -2480,7 +2480,7 @@ fn collect_structural_context_refs_with_cardinality(
                     label,
                     target: structural_terminal_target(terminal),
                     token_types: structural_terminal_token_types(terminal, vocabulary),
-                    is_block: false,
+                    is_block: !matches!(terminal, Terminal::Token(_)),
                     is_list,
                     cardinality,
                     stable_accessor,
@@ -13154,6 +13154,27 @@ mod tests {
         assert!(!e_context.contains("pub fn s(&self"));
         assert!(!e_context.contains("pub fn INT(&self"));
         assert!(!e_context.contains("_all(&self)"));
+    }
+
+    #[test]
+    fn literal_labels_keep_terminal_action_semantics() {
+        let data = parser_fixture_data("typed-tree-walkers/Calculator.g4");
+        let model =
+            structural_embedded_model(&data, false).expect("structural model should resolve");
+        let labeled_tokens = model
+            .rules
+            .iter()
+            .find(|rule| rule.name == "labeledTokens")
+            .expect("labeledTokens rule");
+        let literal = labeled_tokens
+            .alts
+            .iter()
+            .flat_map(|alternative| &alternative.refs)
+            .find(|element| element.label.as_deref() == Some("literal"))
+            .expect("literal label");
+
+        assert!(literal.is_block);
+        assert_eq!(literal.token_types.len(), 1);
     }
 
     #[test]
