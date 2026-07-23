@@ -2669,17 +2669,43 @@ fn structural_terminal_child_target(
         Terminal::Token(name) => Some(name.clone()),
         Terminal::Literal(literal) => {
             let token_type = vocabulary.by_literal.get(literal)?;
-            vocabulary
-                .tokens
-                .iter()
-                .find(|token| token.number == *token_type)
-                .and_then(|token| token.name.as_ref())
-                .filter(|name| !name.starts_with("T__"))
-                .cloned()
+            structural_token_child_target(*token_type, vocabulary)
         }
         Terminal::Eof => Some("EOF".to_owned()),
         Terminal::LexerCharSet(_) | Terminal::Wildcard => None,
     }
+}
+
+fn structural_token_child_target(token_type: i32, vocabulary: &Vocabulary) -> Option<String> {
+    vocabulary
+        .tokens
+        .iter()
+        .filter(|token| token.number == token_type)
+        .filter_map(|token| token.name.as_ref())
+        .find(|name| !name.starts_with("T__"))
+        .cloned()
+}
+
+fn structural_set_children(
+    inverted: bool,
+    elements: &[SetElement],
+    vocabulary: &Vocabulary,
+) -> BTreeMap<String, embedded::ChildCardinality> {
+    if inverted {
+        return BTreeMap::new();
+    }
+    let token_types = structural_set_token_types(inverted, elements, vocabulary);
+    let cardinality = embedded::ChildCardinality {
+        min: usize::from(token_types.len() == 1),
+        max: Some(1),
+    };
+    token_types
+        .into_iter()
+        .filter_map(|token_type| {
+            structural_token_child_target(token_type, vocabulary)
+                .map(|target| (target, cardinality))
+        })
+        .collect()
 }
 
 fn structural_context_children(
@@ -2698,8 +2724,10 @@ fn structural_context_children(
                     .unwrap_or_default()
             }
             ElementKind::Block(block) => structural_block_children(block, vocabulary),
+            ElementKind::Set { inverted, elements } => {
+                structural_set_children(*inverted, elements, vocabulary)
+            }
             ElementKind::Range(..)
-            | ElementKind::Set { .. }
             | ElementKind::Action { .. }
             | ElementKind::Predicate { .. }
             | ElementKind::Epsilon => BTreeMap::new(),
@@ -8357,12 +8385,13 @@ fn render_context_child_accessors(
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }}\n    }}"
+        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }}\n    }}\n\n    pub fn text(&self) -> String {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.text(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.text(storage, tokens),\n        }}\n    }}"
     );
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
         "rule_node".to_owned(),
         "start".to_owned(),
+        "text".to_owned(),
     ]);
     for (child_index, child) in model
         .rules
@@ -8468,8 +8497,8 @@ fn render_context_child_accessors(
 ///
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
 ///   alternative) with cardinality-aware rule, token, and label accessors,
-///   `child_count()`, `start()`, public attribute fields, and a `FromRuleNode`
-///   impl backing `ctx.downcast_ref::<XContext>()`;
+///   `child_count()`, `start()`, `text()`, public attribute fields, and a
+///   `FromRuleNode` impl backing `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -13011,6 +13040,34 @@ mod tests {
             .expect("e context display impl")
             .0;
         insta::assert_snapshot!("typed_context_accessors_e_context", e_context);
+    }
+
+    #[test]
+    fn typed_context_accessors_include_tokens_from_grouped_sets() {
+        let rendered = render_parser(
+            "TParser",
+            &parser_fixture_data("grouped-token-accessors/T.g4"),
+        )
+        .expect("parser should render");
+        let expression_context = rendered
+            .split_once("impl<'a, State> ExpressionContext<'a, State> {")
+            .expect("expression context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for ExpressionContext")
+            .expect("expression context display impl")
+            .0;
+        let sequence_context = rendered
+            .split_once("impl<'a, State> OperatorSequenceContext<'a, State> {")
+            .expect("operator sequence context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for OperatorSequenceContext")
+            .expect("operator sequence context display impl")
+            .0;
+        let context_surface = format!(
+            "ExpressionContext\n{expression_context}OperatorSequenceContext\n{sequence_context}"
+        );
+
+        insta::assert_snapshot!("typed_context_accessors_grouped_tokens", context_surface);
     }
 
     #[test]

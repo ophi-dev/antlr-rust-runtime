@@ -17,6 +17,13 @@ expression: e_context
         };
         __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
     pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>> + '_ {
         __rule_children(self.__node, 1)
             .map(move |node| EContext::__from_child_node(node, &self.__invocation_states))
