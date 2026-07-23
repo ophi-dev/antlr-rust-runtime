@@ -2,6 +2,7 @@
 
 [![Crates.io Version](https://img.shields.io/crates/v/antlr-rust-runtime)](https://crates.io/crates/antlr-rust-runtime)
 [![ANTLR Runtime Testsuite](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml/badge.svg)](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml)
+[![codecov](https://codecov.io/github/ophi-dev/antlr-rust-runtime/graph/badge.svg?token=QzgT4jB57u)](https://codecov.io/github/ophi-dev/antlr-rust-runtime)
 
 `antlr-rust-runtime` is a pure Rust runtime and source generator for ANTLR v4
 lexers and parsers. It is a clean-room implementation written from scratch from
