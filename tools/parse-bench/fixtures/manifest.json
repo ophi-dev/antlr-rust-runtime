@@ -94,6 +94,16 @@
     },
     {
       "language": "java",
+      "path": "java/issue-174-return-expression.java",
+      "source": "repository regression benchmark for issue #174",
+      "license": "BSD-3-Clause",
+      "description": "Minimal Java method-body return expression that exposes predicate-aware interpreted-rule routing regressions.",
+      "phases": [
+        "parse"
+      ]
+    },
+    {
+      "language": "java",
       "path": "java/mojang-data-result.java",
       "source": "https://github.com/Mojang/DataFixerUpper/blob/5fc0978694e996cfe68a742b67a0d506c17de3f0/src/main/java/com/mojang/serialization/DataResult.java",
       "license": "MIT",

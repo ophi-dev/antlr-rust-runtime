@@ -25,6 +25,8 @@ DEFAULT_GRAMMARS_V4 = Path("/tmp/antlr-cleanroom/grammars-v4")
 # ANTLR 4.13.2 still generates Go imports for github.com/antlr4-go/antlr/v4,
 # whose latest published module tag is v4.13.1.
 GO_ANTLR_RUNTIME = "v4.13.1"
+DEFAULT_BENCHMARK_VARIANT = "default"
+JAVA_RUST_PREDICATE_VARIANT = "java-upstream-parser-predicates-v1"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -144,6 +146,7 @@ class Measurement:
     language: str
     fixture: str
     runtime: str
+    benchmark_variant: str
     min_ns: int
     avg_ns: int
     bytes: int
@@ -257,7 +260,7 @@ def transform_go_lexer_actions(grammar: str) -> str:
     return grammar.replace("this.", "l.")
 
 
-def transform_java(grammar_dir: Path) -> None:
+def transform_java_for_portable_target(grammar_dir: Path) -> None:
     parser = grammar_dir / "JavaParser.g4"
     text = parser.read_text()
     text = text.replace("    superClass = JavaParserBase;\n", "")
@@ -272,6 +275,31 @@ def transform_java(grammar_dir: Path) -> None:
         "recordComponent (',' recordComponent)*",
     )
     parser.write_text(text)
+
+
+def prepare_runtime_grammar(
+    spec: LanguageSpec,
+    grammars_v4: Path,
+    target: Path,
+    runtime: str,
+) -> None:
+    copy_grammar(spec, grammars_v4, target)
+    if spec.name == "csharp":
+        if runtime == "python-antlr":
+            transform_csharp_python(target)
+        elif runtime == "go-antlr":
+            transform_csharp_go(target)
+    elif spec.name == "java" and runtime != "rust-antlr":
+        # The pinned grammars-v4 revision has no Python or Go JavaParserBase.
+        # Keep their equivalent portable rewrite, but retain the untouched
+        # predicates for Rust so this benchmark covers runtime semantic routing.
+        transform_java_for_portable_target(target)
+
+
+def benchmark_variant(language: str, runtime: str, phase: str) -> str:
+    if phase == "parse" and language == "java" and runtime == "rust-antlr":
+        return JAVA_RUST_PREDICATE_VARIANT
+    return DEFAULT_BENCHMARK_VARIANT
 
 
 def generate_antlr(
@@ -1217,9 +1245,7 @@ def prepare_work(
     for spec in specs:
         if "rust-antlr" in runtimes:
             base_grammar = work_dir / "grammars" / spec.name / "base"
-            copy_grammar(spec, args.grammars_v4, base_grammar)
-            if spec.name == "java":
-                transform_java(base_grammar)
+            prepare_runtime_grammar(spec, args.grammars_v4, base_grammar, "rust-antlr")
             generate_rust_modules(
                 spec,
                 base_grammar,
@@ -1230,22 +1256,14 @@ def prepare_work(
 
         if "python-antlr" in runtimes:
             py_grammar = work_dir / "grammars" / spec.name / "python"
-            copy_grammar(spec, args.grammars_v4, py_grammar)
-            if spec.name == "csharp":
-                transform_csharp_python(py_grammar)
-            if spec.name == "java":
-                transform_java(py_grammar)
+            prepare_runtime_grammar(spec, args.grammars_v4, py_grammar, "python-antlr")
             py_lang_gen = py_gen
             generate_antlr(args.antlr_jar, spec, py_grammar, py_lang_gen, "Python3")
             prepare_python_support(spec, args.grammars_v4, py_lang_gen)
 
         if "go-antlr" in runtimes:
             go_grammar = work_dir / "grammars" / spec.name / "go"
-            copy_grammar(spec, args.grammars_v4, go_grammar)
-            if spec.name == "csharp":
-                transform_csharp_go(go_grammar)
-            if spec.name == "java":
-                transform_java(go_grammar)
+            prepare_runtime_grammar(spec, args.grammars_v4, go_grammar, "go-antlr")
             go_gen = work_dir / "generated" / spec.name / "go"
             package_name = go_package_name(spec)
             generate_antlr(args.antlr_jar, spec, go_grammar, go_gen, "Go", package_name)
@@ -1361,6 +1379,7 @@ def measure_fixture(
         language=fixture.language,
         fixture=fixture.name,
         runtime=runtime,
+        benchmark_variant=benchmark_variant(fixture.language, runtime, args.phase),
         min_ns=int(match.group("min")),
         avg_ns=int(match.group("avg")),
         bytes=fixture.abs_path.stat().st_size,

@@ -1255,6 +1255,9 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// selected rule spans after recognition, avoiding many speculative
     /// nodes that are thrown away with losing paths.
     fast_token_nodes_enabled: bool,
+    /// Whether fast recognition should retain private/public rule alternatives
+    /// in deferred tree metadata.
+    fast_track_alt_numbers: bool,
     /// Parser-owned append-only storage for speculative recognition output.
     /// Each public interpreted-rule entry clears lengths while retaining
     /// bounded backing capacities for parser reuse.
@@ -1387,6 +1390,10 @@ struct FastDeferredRuleId(u32);
 enum FastDeferredNode {
     Fragment(NodeSeqId),
     Rule(FastDeferredRuleId),
+    Alternative(u32),
+    LeftRecursiveBoundary {
+        rule_index: u32,
+    },
     Concat {
         prefix: FastDeferredNodeId,
         suffix: FastDeferredNodeId,
@@ -1596,6 +1603,18 @@ impl RecognitionArena {
         self.push_deferred_node(FastDeferredNode::Rule(rule))
     }
 
+    fn deferred_alternative(&mut self, alt_number: usize) -> FastDeferredNodeId {
+        self.push_deferred_node(FastDeferredNode::Alternative(
+            u32::try_from(alt_number).expect("alternative number fits in u32"),
+        ))
+    }
+
+    fn deferred_left_recursive_boundary(&mut self, rule_index: usize) -> FastDeferredNodeId {
+        self.push_deferred_node(FastDeferredNode::LeftRecursiveBoundary {
+            rule_index: u32::try_from(rule_index).expect("rule index fits in u32"),
+        })
+    }
+
     fn concat_deferred_nodes(
         &mut self,
         prefix: FastDeferredNodeId,
@@ -1679,6 +1698,16 @@ impl RecognitionArena {
 
     fn node(&self, id: RecognizedNodeId) -> ArenaRecognizedNode {
         self.nodes[id.0 as usize]
+    }
+
+    fn set_boundary_alt_number(&mut self, id: RecognizedNodeId, alt_number: u32) {
+        let ArenaRecognizedNode::LeftRecursiveBoundary {
+            alt_number: stored, ..
+        } = &mut self.nodes[id.0 as usize]
+        else {
+            unreachable!("deferred boundary must materialize as a boundary node");
+        };
+        *stored = alt_number;
     }
 
     fn extra(&self, id: RecognitionExtraId) -> &RecognitionExtra {
@@ -3962,7 +3991,6 @@ fn atn_has_predicate_transitions(atn: &Atn) -> bool {
 fn can_use_fast_predicate_recognizer(atn: &Atn, options: &ParserRuntimeOptions<'_>) -> bool {
     options.init_action_rules.is_empty()
         && !options.track_alt_numbers
-        && !options.track_context_alt_numbers
         && options
             .predicates
             .iter()
@@ -4073,6 +4101,18 @@ struct FastPredicateContext<'a> {
     predicates: &'a [(usize, usize, ParserPredicate)],
     semantics: Option<&'a ParserSemantics>,
     member_values: &'a BTreeMap<usize, i64>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct AltNumberTracking {
+    public: bool,
+    context: bool,
+}
+
+impl AltNumberTracking {
+    const fn any(self) -> bool {
+        self.public || self.context
+    }
 }
 
 struct FastRecognizeScratch<'a, 'b> {
@@ -4761,6 +4801,7 @@ where
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
             fast_token_nodes_enabled: true,
+            fast_track_alt_numbers: false,
             recognition_arena: RecognitionArena::default(),
             last_recognition_arena_root: NodeSeqId::EMPTY,
             last_recognition_arena_diagnostics: DiagnosticSeqId::EMPTY,
@@ -4799,6 +4840,7 @@ where
         self.fast_first_set_prefilter = true;
         self.fast_recovery_enabled = true;
         self.fast_token_nodes_enabled = self.build_parse_trees;
+        self.fast_track_alt_numbers = false;
         self.reset_recognition_arena();
     }
 
@@ -6624,7 +6666,13 @@ where
         rule_index: usize,
         precedence: i32,
     ) -> Result<ParseTree, AntlrError> {
-        self.parse_atn_rule_with_precedence_inner(atn, rule_index, precedence, None)
+        self.parse_atn_rule_with_precedence_inner(
+            atn,
+            rule_index,
+            precedence,
+            None,
+            AltNumberTracking::default(),
+        )
     }
 
     fn parse_atn_rule_with_precedence_inner(
@@ -6633,6 +6681,7 @@ where
         rule_index: usize,
         precedence: i32,
         predicate_context: Option<FastPredicateContext<'_>>,
+        alt_tracking: AltNumberTracking,
     ) -> Result<ParseTree, AntlrError> {
         let start_state = atn.rule_to_start_state().get(rule_index).ok_or_else(|| {
             AntlrError::Unsupported(format!("rule {rule_index} has no start state"))
@@ -6652,6 +6701,7 @@ where
         let caller_follow_state = self.pending_invoking_follow_state(atn);
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
+        self.fast_track_alt_numbers = alt_tracking.any();
         let top_request = FastRecognizeTopRequest {
             start_state,
             stop_state,
@@ -6663,7 +6713,7 @@ where
         self.fast_token_nodes_enabled = self.build_parse_trees;
         let needs_tree_retry = matches!(
             &first_pass,
-            Ok((outcome, _))
+            Ok((outcome, _, _))
                 if self.build_parse_trees
                     && self
                         .recognition_arena
@@ -6683,9 +6733,9 @@ where
             // boundaries also need the token-node pass; otherwise the fold has
             // no concrete left operand to wrap into ANTLR's recursive context.
             Err(_) => true,
-            Ok((outcome, _)) => !outcome.diagnostics.is_empty() || needs_tree_retry,
+            Ok((outcome, _, _)) => !outcome.diagnostics.is_empty() || needs_tree_retry,
         };
-        let (outcome, _expected) = if needs_retry {
+        let (outcome, _expected, alt_number) = if needs_retry {
             self.fast_first_set_prefilter = false;
             self.fast_recovery_enabled = false;
             let clean_retry = self.fast_recognize_top(atn, top_request, predicate_context);
@@ -6698,7 +6748,7 @@ where
                 select_better_top_outcome(first_pass, clean_retry, &self.recognition_arena)
             };
             let selected = if clean_selected.is_err()
-                || matches!(&clean_selected, Ok((outcome, _)) if !outcome.diagnostics.is_empty())
+                || matches!(&clean_selected, Ok((outcome, _, _)) if !outcome.diagnostics.is_empty())
             {
                 self.fast_recovery_enabled = true;
                 let recovery_retry = self.fast_recognize_top(atn, top_request, predicate_context);
@@ -6742,6 +6792,12 @@ where
                 0
             },
         );
+        if alt_tracking.public {
+            context.set_alt_number(alt_number);
+        }
+        if alt_tracking.context {
+            context.set_context_alt_number(alt_number);
+        }
         if let Some(token) = self.token_id_at(start_index) {
             self.set_context_start(&mut context, token);
         }
@@ -6762,7 +6818,11 @@ where
             {
                 let mut cursor = live_root;
                 while let Some(link) = self.recognition_arena.link(cursor) {
-                    let child = self.arena_recognized_node_tree(link.head, false, false)?;
+                    let child = self.arena_recognized_node_tree(
+                        link.head,
+                        alt_tracking.public,
+                        alt_tracking.context,
+                    )?;
                     self.tree.add_child(&mut context, child);
                     cursor = link.tail;
                 }
@@ -6772,6 +6832,7 @@ where
                     start_index,
                     stop_index,
                     live_root,
+                    alt_tracking,
                 )?;
             }
         }
@@ -6806,7 +6867,7 @@ where
         atn: &Atn,
         request: FastRecognizeTopRequest,
         predicate_context: Option<FastPredicateContext<'_>>,
-    ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+    ) -> Result<(FastRecognizeOutcome, ExpectedTokens, usize), ExpectedTokens> {
         let FastRecognizeTopRequest {
             start_state,
             stop_state,
@@ -6870,10 +6931,12 @@ where
         };
         match selected {
             Some(mut outcome) => {
-                if self.build_parse_trees {
-                    self.materialize_fast_outcome_nodes(&mut outcome);
-                }
-                Ok((outcome, expected))
+                let alt_number = if self.build_parse_trees || self.fast_track_alt_numbers {
+                    self.materialize_fast_outcome_nodes(&mut outcome)
+                } else {
+                    0
+                };
+                Ok((outcome, expected, alt_number))
             }
             None => Err(expected),
         }
@@ -6968,12 +7031,14 @@ where
     fn arena_recognized_node_tree_with_implicit_tokens(
         &mut self,
         node_id: RecognizedNodeId,
+        alt_tracking: AltNumberTracking,
     ) -> Result<ParseTree, AntlrError> {
         let node = self.recognition_arena.node(node_id);
         match node {
             ArenaRecognizedNode::Rule {
                 rule_index,
                 invoking_state,
+                alt_number,
                 start_index,
                 stop_index,
                 children,
@@ -6984,6 +7049,12 @@ where
                     invoking_state as isize,
                     self.recognition_arena.sequence_len(children),
                 );
+                if alt_tracking.public {
+                    context.set_alt_number(alt_number as usize);
+                }
+                if alt_tracking.context {
+                    context.set_context_alt_number(alt_number as usize);
+                }
                 if let Some(token) = self.token_id_at(start_index as usize) {
                     self.set_context_start(&mut context, token);
                 }
@@ -6998,10 +7069,13 @@ where
                     start_index as usize,
                     stop_index.map(|index| index as usize),
                     children,
+                    alt_tracking,
                 )?;
                 Ok(self.rule_node(context))
             }
-            _ => self.arena_recognized_node_tree(node_id, false, false),
+            _ => {
+                self.arena_recognized_node_tree(node_id, alt_tracking.public, alt_tracking.context)
+            }
         }
     }
 
@@ -7011,18 +7085,21 @@ where
         start_index: usize,
         stop_index: Option<usize>,
         mut children: NodeSeqId,
+        alt_tracking: AltNumberTracking,
     ) -> Result<(), AntlrError> {
         let mut cursor = Some(start_index);
         while let Some(link) = self.recognition_arena.link(children) {
             if let Some((child_start, child_stop)) = self.recognition_arena.node_span(link.head) {
                 self.add_visible_terminals_before(context, &mut cursor, child_start)?;
-                let child = self.arena_recognized_node_tree_with_implicit_tokens(link.head)?;
+                let child =
+                    self.arena_recognized_node_tree_with_implicit_tokens(link.head, alt_tracking)?;
                 self.tree.add_child(context, child);
                 if let Some(child_stop) = child_stop {
                     cursor = self.next_visible_after_token(child_stop);
                 }
             } else {
-                let child = self.arena_recognized_node_tree_with_implicit_tokens(link.head)?;
+                let child =
+                    self.arena_recognized_node_tree_with_implicit_tokens(link.head, alt_tracking)?;
                 self.tree.add_child(context, child);
             }
             children = link.tail;
@@ -7203,6 +7280,10 @@ where
                         semantics,
                         member_values: &member_values,
                     }),
+                    AltNumberTracking {
+                        public: track_alt_numbers,
+                        context: track_context_alt_numbers,
+                    },
                 )
                 .map(|tree| (tree, Vec::new()));
             if self.unknown_predicate_hits.is_empty() && self.unhandled_action_hits.is_empty() {
@@ -7924,13 +8005,37 @@ where
             .concat_deferred_nodes(fragment, outcome.deferred_nodes);
     }
 
+    fn defer_fast_outcome_alternative(
+        &mut self,
+        outcome: &mut FastRecognizeOutcome,
+        alt_number: usize,
+    ) {
+        let alternative = self.recognition_arena.deferred_alternative(alt_number);
+        outcome.deferred_nodes = self
+            .recognition_arena
+            .concat_deferred_nodes(alternative, outcome.deferred_nodes);
+    }
+
+    fn defer_fast_outcome_boundary(
+        &mut self,
+        outcome: &mut FastRecognizeOutcome,
+        rule_index: usize,
+    ) {
+        let boundary = self
+            .recognition_arena
+            .deferred_left_recursive_boundary(rule_index);
+        outcome.deferred_nodes = self
+            .recognition_arena
+            .concat_deferred_nodes(boundary, outcome.deferred_nodes);
+    }
+
     fn materialize_fast_deferred_nodes(
         &mut self,
         root: FastDeferredNodeId,
         initial_suffix: NodeSeqId,
-    ) -> NodeSeqId {
+    ) -> (NodeSeqId, usize) {
         if root.is_empty() {
-            return initial_suffix;
+            return (initial_suffix, 0);
         }
 
         enum Frame {
@@ -7939,10 +8044,17 @@ where
             FinishRule {
                 rule: FastDeferredRule,
                 parent_suffix: NodeSeqId,
+                parent_alt_number: u32,
+                parent_pending_boundary: Option<RecognizedNodeId>,
             },
         }
 
         let mut result = initial_suffix;
+        // The rope is visited suffix-first while nodes are prepended. Later
+        // alternatives arrive first, so earlier markers overwrite them; a
+        // boundary redirects those earlier markers to the wrapped context.
+        let mut alt_number = 0;
+        let mut pending_boundary = None;
         let mut pending = Vec::with_capacity(16);
         pending.push(Frame::Visit(root));
         let mut fragment_nodes = Vec::new();
@@ -7964,12 +8076,31 @@ where
                         FastDeferredNode::Rule(rule) => {
                             let rule = self.recognition_arena.deferred_rule(rule);
                             let parent_suffix = result;
+                            let parent_alt_number = alt_number;
+                            let parent_pending_boundary = pending_boundary;
                             result = rule.children;
+                            alt_number = 0;
+                            pending_boundary = None;
                             pending.push(Frame::FinishRule {
                                 rule,
                                 parent_suffix,
+                                parent_alt_number,
+                                parent_pending_boundary,
                             });
                             pending.push(Frame::Visit(rule.deferred_children));
+                        }
+                        FastDeferredNode::Alternative(selected) => {
+                            if let Some(boundary) = pending_boundary {
+                                self.recognition_arena
+                                    .set_boundary_alt_number(boundary, selected);
+                            } else {
+                                alt_number = selected;
+                            }
+                        }
+                        FastDeferredNode::LeftRecursiveBoundary { rule_index } => {
+                            let boundary = self.arena_boundary_node(rule_index as usize, 0);
+                            self.arena_prepend(&mut result, boundary);
+                            pending_boundary = Some(boundary);
                         }
                         FastDeferredNode::Concat {
                             prefix,
@@ -7984,11 +8115,13 @@ where
                 Frame::FinishRule {
                     rule,
                     parent_suffix,
+                    parent_alt_number,
+                    parent_pending_boundary,
                 } => {
                     let node = self.recognition_arena.push_node(ArenaRecognizedNode::Rule {
                         rule_index: rule.rule_index,
                         invoking_state: rule.invoking_state,
-                        alt_number: 0,
+                        alt_number,
                         start_index: rule.start_index,
                         stop_index: rule.stop_index,
                         return_values: None,
@@ -7996,15 +8129,20 @@ where
                     });
                     result = parent_suffix;
                     self.arena_prepend(&mut result, node);
+                    alt_number = parent_alt_number;
+                    pending_boundary = parent_pending_boundary;
                 }
             }
         }
-        result
+        (result, alt_number as usize)
     }
 
-    fn materialize_fast_outcome_nodes(&mut self, outcome: &mut FastRecognizeOutcome) {
+    fn materialize_fast_outcome_nodes(&mut self, outcome: &mut FastRecognizeOutcome) -> usize {
         let deferred_nodes = std::mem::take(&mut outcome.deferred_nodes);
-        outcome.nodes = self.materialize_fast_deferred_nodes(deferred_nodes, outcome.nodes);
+        let (nodes, alt_number) =
+            self.materialize_fast_deferred_nodes(deferred_nodes, outcome.nodes);
+        outcome.nodes = nodes;
+        alt_number
     }
 
     /// Walks one ordinary `*`/`+` repetition at a time so input length grows
@@ -8033,6 +8171,17 @@ where
         } else {
             None
         };
+        let (enter_alt_number, exit_alt_number) = if self.fast_track_alt_numbers {
+            let state = atn
+                .state(request.state_number)
+                .expect("repetition request state must exist");
+            (
+                next_alt_number(state, 2, shape.enter_transition_index, 0, true),
+                next_alt_number(state, 2, shape.exit_transition_index, 0, true),
+            )
+        } else {
+            (0, 0)
+        };
         let mut work = Vec::with_capacity(2);
         push_fast_repetition_work(
             &mut work,
@@ -8054,6 +8203,15 @@ where
                     if !coordinates.insert_entered(path) {
                         continue;
                     }
+                    let path_nodes = if enter_alt_number == 0 {
+                        path.deferred_nodes
+                    } else {
+                        let alternative = self
+                            .recognition_arena
+                            .deferred_alternative(enter_alt_number);
+                        self.recognition_arena
+                            .concat_deferred_nodes(path.deferred_nodes, alternative)
+                    };
                     let body_outcomes = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -8088,7 +8246,7 @@ where
                             .concat_deferred_nodes(body.deferred_nodes, body_fragment);
                         let deferred_nodes = self
                             .recognition_arena
-                            .concat_deferred_nodes(path.deferred_nodes, body_nodes);
+                            .concat_deferred_nodes(path_nodes, body_nodes);
                         let next_path = FastRepetitionPath {
                             index: body.index,
                             deferred_nodes,
@@ -8111,6 +8269,14 @@ where
                     if !coordinates.insert_exited(path) {
                         continue;
                     }
+                    let path_nodes = if exit_alt_number == 0 {
+                        path.deferred_nodes
+                    } else {
+                        let alternative =
+                            self.recognition_arena.deferred_alternative(exit_alt_number);
+                        self.recognition_arena
+                            .concat_deferred_nodes(path.deferred_nodes, alternative)
+                    };
                     let suffixes = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -8135,7 +8301,7 @@ where
                     for mut outcome in suffixes {
                         outcome.deferred_nodes = self
                             .recognition_arena
-                            .concat_deferred_nodes(path.deferred_nodes, outcome.deferred_nodes);
+                            .concat_deferred_nodes(path_nodes, outcome.deferred_nodes);
                         outcome.diagnostics = self
                             .recognition_arena
                             .concat_diagnostics(path.diagnostics, outcome.diagnostics);
@@ -8586,13 +8752,50 @@ where
                 continue;
             }
             let target = transition.target();
+            let outcomes_before_transition = outcomes.len();
+            let left_recursive_boundary = match transition_kind {
+                ParserTransitionKind::Epsilon
+                | ParserTransitionKind::Action
+                | ParserTransitionKind::Predicate
+                | ParserTransitionKind::Precedence => left_recursive_boundary(atn, state, target),
+                ParserTransitionKind::Atom
+                | ParserTransitionKind::Range
+                | ParserTransitionKind::Set
+                | ParserTransitionKind::NotSet
+                | ParserTransitionKind::Wildcard
+                | ParserTransitionKind::Rule => None,
+            };
             match transition_kind {
                 ParserTransitionKind::Epsilon | ParserTransitionKind::Action => {
                     #[cfg(feature = "perf-counters")]
                     perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                    let boundary = left_recursive_boundary(atn, state, target);
-                    outcomes.extend(
-                        self.recognize_state_fast(
+                    outcomes.extend(self.recognize_state_fast(
+                        atn,
+                        FastRecognizeRequest {
+                            state_number: target,
+                            stop_state,
+                            index,
+                            rule_start_index,
+                            decision_start_index: next_decision_start_index,
+                            precedence,
+                            depth: depth + 1,
+                            recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
+                            recovery_state: epsilon_recovery_state,
+                        },
+                        FastRecognizeScratch {
+                            predicate_context,
+                            visiting,
+                            memo,
+                            expected,
+                            native_depth: native_depth + 1,
+                        },
+                    ));
+                }
+                ParserTransitionKind::Predicate => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                    if self.fast_parser_predicate_matches(predicate_context, transition, index) {
+                        outcomes.extend(self.recognize_state_fast(
                             atn,
                             FastRecognizeRequest {
                                 state_number: target,
@@ -8612,53 +8815,7 @@ where
                                 expected,
                                 native_depth: native_depth + 1,
                             },
-                        )
-                        .into_iter()
-                        .map(|mut outcome| {
-                            if let Some(rule_index) = boundary {
-                                let boundary = self.arena_boundary_node(rule_index, 0);
-                                self.defer_fast_outcome_node(&mut outcome, boundary);
-                            }
-                            outcome
-                        }),
-                    );
-                }
-                ParserTransitionKind::Predicate => {
-                    #[cfg(feature = "perf-counters")]
-                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                    if self.fast_parser_predicate_matches(predicate_context, transition, index) {
-                        let boundary = left_recursive_boundary(atn, state, target);
-                        outcomes.extend(
-                            self.recognize_state_fast(
-                                atn,
-                                FastRecognizeRequest {
-                                    state_number: target,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index: next_decision_start_index,
-                                    precedence,
-                                    depth: depth + 1,
-                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
-                                    recovery_state: epsilon_recovery_state,
-                                },
-                                FastRecognizeScratch {
-                                    predicate_context,
-                                    visiting,
-                                    memo,
-                                    expected,
-                                    native_depth: native_depth + 1,
-                                },
-                            )
-                            .into_iter()
-                            .map(|mut outcome| {
-                                if let Some(rule_index) = boundary {
-                                    let boundary = self.arena_boundary_node(rule_index, 0);
-                                    self.defer_fast_outcome_node(&mut outcome, boundary);
-                                }
-                                outcome
-                            }),
-                        );
+                        ));
                     } else {
                         record_predicate_no_viable(expected, next_decision_start_index, index);
                     }
@@ -8666,38 +8823,27 @@ where
                 ParserTransitionKind::Precedence => {
                     let transition_precedence = packed_i32(transition.arg0());
                     if transition_precedence >= precedence {
-                        let boundary = left_recursive_boundary(atn, state, target);
-                        outcomes.extend(
-                            self.recognize_state_fast(
-                                atn,
-                                FastRecognizeRequest {
-                                    state_number: target,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index: next_decision_start_index,
-                                    precedence,
-                                    depth: depth + 1,
-                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
-                                    recovery_state: epsilon_recovery_state,
-                                },
-                                FastRecognizeScratch {
-                                    predicate_context,
-                                    visiting,
-                                    memo,
-                                    expected,
-                                    native_depth: native_depth + 1,
-                                },
-                            )
-                            .into_iter()
-                            .map(|mut outcome| {
-                                if let Some(rule_index) = boundary {
-                                    let boundary = self.arena_boundary_node(rule_index, 0);
-                                    self.defer_fast_outcome_node(&mut outcome, boundary);
-                                }
-                                outcome
-                            }),
-                        );
+                        outcomes.extend(self.recognize_state_fast(
+                            atn,
+                            FastRecognizeRequest {
+                                state_number: target,
+                                stop_state,
+                                index,
+                                rule_start_index,
+                                decision_start_index: next_decision_start_index,
+                                precedence,
+                                depth: depth + 1,
+                                recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
+                                recovery_state: epsilon_recovery_state,
+                            },
+                            FastRecognizeScratch {
+                                predicate_context,
+                                visiting,
+                                memo,
+                                expected,
+                                native_depth: native_depth + 1,
+                            },
+                        ));
                     }
                 }
                 ParserTransitionKind::Rule => {
@@ -8993,6 +9139,23 @@ where
                                 predicate_context,
                             ));
                         }
+                    }
+                }
+            }
+            let alt_number = next_alt_number(
+                state,
+                transition_count,
+                transition_index,
+                0,
+                self.fast_track_alt_numbers,
+            );
+            if alt_number != 0 || left_recursive_boundary.is_some() {
+                for outcome in &mut outcomes[outcomes_before_transition..] {
+                    if alt_number != 0 {
+                        self.defer_fast_outcome_alternative(outcome, alt_number);
+                    }
+                    if let Some(rule_index) = left_recursive_boundary {
+                        self.defer_fast_outcome_boundary(outcome, rule_index);
                     }
                 }
             }
@@ -11716,10 +11879,10 @@ fn state_is_left_recursive_rule(atn: &Atn, state: AtnState<'_>) -> bool {
 /// rules. If both passes failed, the second pass's expected-token snapshot
 /// is returned so the caller renders the same diagnostic ANTLR would.
 fn select_better_top_outcome(
-    first: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
-    second: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+    first: Result<(FastRecognizeOutcome, ExpectedTokens, usize), ExpectedTokens>,
+    second: Result<(FastRecognizeOutcome, ExpectedTokens, usize), ExpectedTokens>,
     arena: &RecognitionArena,
-) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+) -> Result<(FastRecognizeOutcome, ExpectedTokens, usize), ExpectedTokens> {
     match (first, second) {
         (Ok(first), Ok(second)) => {
             if arena.diagnostics(first.0.diagnostics).next().is_none() {
@@ -13063,6 +13226,49 @@ mod tests {
         .expect("transition");
         atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 8 })
             .expect("transition");
+        finish_atn(atn)
+    }
+
+    fn labeled_left_recursive_operator_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(4);
+        for (state, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::BlockStart),
+            (2, AtnStateKind::StarLoopEntry),
+            (3, AtnStateKind::StarBlockStart),
+            (4, AtnStateKind::Basic),
+            (5, AtnStateKind::Basic),
+            (6, AtnStateKind::Basic),
+            (7, AtnStateKind::StarLoopBack),
+            (8, AtnStateKind::LoopEnd),
+            (9, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(atn.add_state(kind, Some(0)).expect("state").index(), state);
+        }
+        atn.set_left_recursive_rule(0)
+            .expect("left-recursive rule start");
+        atn.set_precedence_rule_decision(2)
+            .expect("precedence decision");
+        atn.set_loop_back_state(8, 7).expect("loop-back state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![9])
+            .expect("rule stop states");
+        for state in [1, 2, 3] {
+            atn.add_decision_state(state).expect("decision state");
+        }
+        for (source, target) in [(0, 1), (2, 3), (2, 8), (7, 2), (8, 9)] {
+            atn.add_transition(source, ParserTransitionSpec::Epsilon { target })
+                .expect("epsilon transition");
+        }
+        for (source, target, label) in [(1, 2, 1), (1, 2, 2), (4, 6, 4), (5, 6, 3), (6, 7, 1)] {
+            atn.add_transition(source, ParserTransitionSpec::Atom { target, label })
+                .expect("token transition");
+        }
+        for (target, precedence) in [(4, 2), (5, 1)] {
+            atn.add_transition(3, ParserTransitionSpec::Precedence { target, precedence })
+                .expect("operator precedence");
+        }
         finish_atn(atn)
     }
 
@@ -15681,7 +15887,9 @@ mod tests {
                         });
                 }
 
-                let mut children = parser.materialize_fast_deferred_nodes(root, NodeSeqId::EMPTY);
+                let (mut children, alt_number) =
+                    parser.materialize_fast_deferred_nodes(root, NodeSeqId::EMPTY);
+                assert_eq!(alt_number, 0);
                 for expected_rule in (0..DEPTH).rev() {
                     let mut nodes = parser.recognition_arena.iter(children);
                     let node = nodes.next().expect("nested rule node");
@@ -15702,6 +15910,113 @@ mod tests {
             .expect("small-stack thread should start")
             .join()
             .expect("deferred rules should materialize without recursion");
+    }
+
+    #[test]
+    fn deferred_alternatives_preserve_left_recursive_contexts() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("1"),
+            TestToken::new(2).with_text("+"),
+            TestToken::new(1).with_text("2"),
+            TestToken::eof("parser-test", 3, 1, 3),
+        ]);
+        let base = parser.arena_token_node(0, false);
+        let operator = parser.arena_token_node(1, false);
+        let right = parser.arena_token_node(2, false);
+
+        let base = parser.recognition_arena.prepend(NodeSeqId::EMPTY, base);
+        let base = parser.recognition_arena.deferred_fragment(base);
+        let operator = parser.recognition_arena.prepend(NodeSeqId::EMPTY, operator);
+        let operator = parser.recognition_arena.deferred_fragment(operator);
+        let right = parser.recognition_arena.prepend(NodeSeqId::EMPTY, right);
+        let right = parser.recognition_arena.deferred_fragment(right);
+        let base_alt = parser.recognition_arena.deferred_alternative(1);
+        let boundary = parser.recognition_arena.deferred_left_recursive_boundary(0);
+        let operator_alt = parser.recognition_arena.deferred_alternative(6);
+
+        let mut deferred = FastDeferredNodeId::EMPTY;
+        for fragment in [base_alt, base, boundary, operator_alt, operator, right] {
+            deferred = parser
+                .recognition_arena
+                .concat_deferred_nodes(deferred, fragment);
+        }
+        let (nodes, root_alt_number) =
+            parser.materialize_fast_deferred_nodes(deferred, NodeSeqId::EMPTY);
+        let nodes = parser
+            .recognition_arena
+            .fold_left_recursive_boundaries(nodes);
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.set_context_alt_number(root_alt_number);
+        let mut cursor = nodes;
+        while let Some(link) = parser.recognition_arena.link(cursor) {
+            let child = parser
+                .arena_recognized_node_tree(link.head, false, true)
+                .expect("materialized child should become a public tree");
+            parser.tree.add_child(&mut root, child);
+            cursor = link.tail;
+        }
+        let tree = parser.rule_node(root);
+        let contexts = parser
+            .node(tree)
+            .descendants()
+            .filter_map(Node::as_rule)
+            .map(|rule| {
+                (
+                    rule.rule_index(),
+                    rule.alt_number(),
+                    rule.context_alt_number(),
+                    rule.text(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(
+            "deferred_alternatives_preserve_left_recursive_contexts",
+            contexts
+        );
+    }
+
+    #[test]
+    fn fast_recognizer_preserves_labeled_left_recursive_operator_context() {
+        let atn = labeled_left_recursive_operator_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("a"),
+            TestToken::new(3).with_text("+"),
+            TestToken::new(1).with_text("b"),
+            TestToken::eof("parser-test", 3, 1, 3),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    track_context_alt_numbers: true,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("labeled left-recursive addition should parse");
+        let contexts = parser
+            .node(tree)
+            .descendants()
+            .filter_map(Node::as_rule)
+            .map(|rule| {
+                let operator = rule
+                    .children()
+                    .next()
+                    .and_then(Node::as_rule)
+                    .is_some_and(|child| child.rule_index() == rule.rule_index());
+                (operator, rule.context_alt_number(), rule.text())
+            })
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(
+            "fast_recognizer_preserves_labeled_left_recursive_operator_context",
+            contexts
+        );
+        assert!(!parser.recognition_arena.deferred_nodes.is_empty());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]
@@ -16400,7 +16715,7 @@ mod tests {
     }
 
     #[test]
-    fn predicate_gated_same_lookahead_uses_viable_alternative() {
+    fn private_context_alt_tracking_keeps_fast_predicate_recognition() {
         let atn = predicate_gated_same_lookahead_atn([0, 1]);
         let mut parser = mini_parser(vec![
             TestToken::new(1).with_text("x"),
@@ -16416,12 +16731,17 @@ mod tests {
                         (0, 0, ParserPredicate::False),
                         (0, 1, ParserPredicate::True),
                     ],
+                    track_context_alt_numbers: true,
                     ..ParserRuntimeOptions::default()
                 },
             )
             .expect("the second predicate-gated alternative should match");
 
-        assert_eq!(parser.node(tree).text(), "x<EOF>");
+        let root = parser.node(tree).as_rule().expect("entry result is a rule");
+        insta::assert_debug_snapshot!(
+            "private_context_alt_tracking_keeps_fast_predicate_recognition",
+            (root.alt_number(), root.context_alt_number(), root.text())
+        );
         assert_eq!(parser.number_of_syntax_errors(), 0);
         assert_eq!(parser.fast_predicate_cache.get(&(0, 0, 0)), Some(&false));
         assert_eq!(parser.fast_predicate_cache.get(&(0, 0, 1)), Some(&true));

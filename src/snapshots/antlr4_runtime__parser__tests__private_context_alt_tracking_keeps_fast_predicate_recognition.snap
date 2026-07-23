@@ -1,0 +1,9 @@
+---
+source: src/parser.rs
+expression: "(root.alt_number(), root.context_alt_number(), root.text())"
+---
+(
+    0,
+    2,
+    "x<EOF>",
+)

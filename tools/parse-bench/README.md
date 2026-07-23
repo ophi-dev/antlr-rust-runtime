@@ -68,6 +68,19 @@ The script regenerates parsers into `target/parse-bench`, builds:
 - a Go ANTLR runner using `github.com/antlr4-go/antlr/v4`,
 - a tree-sitter runner using `tree-sitter-language-pack`.
 
+Rust generation keeps the pinned `JavaParser.g4` unchanged, including its
+`JavaParserBase` option and both semantic predicates. The generated benchmark
+parser uses the source compiler's historical `assume-true` policy for those
+target-language helpers, matching downstream generation while retaining the
+predicate metadata that controls runtime routing. Python and Go still use the
+equivalent portable rewrite because that grammars-v4 revision does not provide
+`JavaParserBase` implementations for those targets. The
+`issue-174-return-expression.java` fixture guards the resulting Java
+method-body performance path. JSON rows include a benchmark-variant tag, so
+the comparator skips only method changes such as this legacy-to-predicate
+transition and resumes Java regression checks once both reports use the same
+variant.
+
 The output table reports `min` and `avg` parse time per fixture and a relative
 ratio against `rust-antlr` for the same fixture.
 Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
