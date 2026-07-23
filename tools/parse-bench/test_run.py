@@ -267,6 +267,33 @@ class BenchmarkVariantTests(unittest.TestCase):
         self.assertIn("passed: 1 result(s)", stdout)
         self.assertEqual(stderr, "")
 
+    def test_compare_allows_only_changed_benchmark_variants(self) -> None:
+        baseline = [self.result("java", "Example.java", 100)]
+        current = [
+            self.result(
+                "java",
+                "Example.java",
+                1_000,
+                RUN.JAVA_RUST_PREDICATE_VARIANT,
+            )
+        ]
+
+        status, stdout, stderr = self.compare(baseline, current)
+
+        self.assertEqual(status, 0)
+        self.assertIn("skipped 1 result(s)", stdout)
+        self.assertIn("skipping regression comparison", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_compare_rejects_unrelated_result_sets(self) -> None:
+        baseline = [self.result("java", "Example.java", 100)]
+        current = [self.result("kotlin", "Example.kt", 100)]
+
+        status, _, stderr = self.compare(baseline, current)
+
+        self.assertEqual(status, 1)
+        self.assertIn("no matching baseline/current result pairs", stderr)
+
     def test_compare_enforces_threshold_for_matching_variants(self) -> None:
         variant = RUN.JAVA_RUST_PREDICATE_VARIANT
         baseline = [self.result("java", "Example.java", 100, variant)]

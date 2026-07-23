@@ -8753,13 +8753,49 @@ where
             }
             let target = transition.target();
             let outcomes_before_transition = outcomes.len();
+            let left_recursive_boundary = match transition_kind {
+                ParserTransitionKind::Epsilon
+                | ParserTransitionKind::Action
+                | ParserTransitionKind::Predicate
+                | ParserTransitionKind::Precedence => left_recursive_boundary(atn, state, target),
+                ParserTransitionKind::Atom
+                | ParserTransitionKind::Range
+                | ParserTransitionKind::Set
+                | ParserTransitionKind::NotSet
+                | ParserTransitionKind::Wildcard
+                | ParserTransitionKind::Rule => None,
+            };
             match transition_kind {
                 ParserTransitionKind::Epsilon | ParserTransitionKind::Action => {
                     #[cfg(feature = "perf-counters")]
                     perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                    let boundary = left_recursive_boundary(atn, state, target);
-                    outcomes.extend(
-                        self.recognize_state_fast(
+                    outcomes.extend(self.recognize_state_fast(
+                        atn,
+                        FastRecognizeRequest {
+                            state_number: target,
+                            stop_state,
+                            index,
+                            rule_start_index,
+                            decision_start_index: next_decision_start_index,
+                            precedence,
+                            depth: depth + 1,
+                            recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
+                            recovery_state: epsilon_recovery_state,
+                        },
+                        FastRecognizeScratch {
+                            predicate_context,
+                            visiting,
+                            memo,
+                            expected,
+                            native_depth: native_depth + 1,
+                        },
+                    ));
+                }
+                ParserTransitionKind::Predicate => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                    if self.fast_parser_predicate_matches(predicate_context, transition, index) {
+                        outcomes.extend(self.recognize_state_fast(
                             atn,
                             FastRecognizeRequest {
                                 state_number: target,
@@ -8779,51 +8815,7 @@ where
                                 expected,
                                 native_depth: native_depth + 1,
                             },
-                        )
-                        .into_iter()
-                        .map(|mut outcome| {
-                            if let Some(rule_index) = boundary {
-                                self.defer_fast_outcome_boundary(&mut outcome, rule_index);
-                            }
-                            outcome
-                        }),
-                    );
-                }
-                ParserTransitionKind::Predicate => {
-                    #[cfg(feature = "perf-counters")]
-                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                    if self.fast_parser_predicate_matches(predicate_context, transition, index) {
-                        let boundary = left_recursive_boundary(atn, state, target);
-                        outcomes.extend(
-                            self.recognize_state_fast(
-                                atn,
-                                FastRecognizeRequest {
-                                    state_number: target,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index: next_decision_start_index,
-                                    precedence,
-                                    depth: depth + 1,
-                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
-                                    recovery_state: epsilon_recovery_state,
-                                },
-                                FastRecognizeScratch {
-                                    predicate_context,
-                                    visiting,
-                                    memo,
-                                    expected,
-                                    native_depth: native_depth + 1,
-                                },
-                            )
-                            .into_iter()
-                            .map(|mut outcome| {
-                                if let Some(rule_index) = boundary {
-                                    self.defer_fast_outcome_boundary(&mut outcome, rule_index);
-                                }
-                                outcome
-                            }),
-                        );
+                        ));
                     } else {
                         record_predicate_no_viable(expected, next_decision_start_index, index);
                     }
@@ -8831,37 +8823,27 @@ where
                 ParserTransitionKind::Precedence => {
                     let transition_precedence = packed_i32(transition.arg0());
                     if transition_precedence >= precedence {
-                        let boundary = left_recursive_boundary(atn, state, target);
-                        outcomes.extend(
-                            self.recognize_state_fast(
-                                atn,
-                                FastRecognizeRequest {
-                                    state_number: target,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index: next_decision_start_index,
-                                    precedence,
-                                    depth: depth + 1,
-                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
-                                    recovery_state: epsilon_recovery_state,
-                                },
-                                FastRecognizeScratch {
-                                    predicate_context,
-                                    visiting,
-                                    memo,
-                                    expected,
-                                    native_depth: native_depth + 1,
-                                },
-                            )
-                            .into_iter()
-                            .map(|mut outcome| {
-                                if let Some(rule_index) = boundary {
-                                    self.defer_fast_outcome_boundary(&mut outcome, rule_index);
-                                }
-                                outcome
-                            }),
-                        );
+                        outcomes.extend(self.recognize_state_fast(
+                            atn,
+                            FastRecognizeRequest {
+                                state_number: target,
+                                stop_state,
+                                index,
+                                rule_start_index,
+                                decision_start_index: next_decision_start_index,
+                                precedence,
+                                depth: depth + 1,
+                                recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
+                                recovery_state: epsilon_recovery_state,
+                            },
+                            FastRecognizeScratch {
+                                predicate_context,
+                                visiting,
+                                memo,
+                                expected,
+                                native_depth: native_depth + 1,
+                            },
+                        ));
                     }
                 }
                 ParserTransitionKind::Rule => {
@@ -9160,12 +9142,20 @@ where
                     }
                 }
             }
-            if self.fast_track_alt_numbers {
-                let alt_number =
-                    next_alt_number(state, transition_count, transition_index, 0, true);
-                if alt_number != 0 {
-                    for outcome in &mut outcomes[outcomes_before_transition..] {
+            let alt_number = next_alt_number(
+                state,
+                transition_count,
+                transition_index,
+                0,
+                self.fast_track_alt_numbers,
+            );
+            if alt_number != 0 || left_recursive_boundary.is_some() {
+                for outcome in &mut outcomes[outcomes_before_transition..] {
+                    if alt_number != 0 {
                         self.defer_fast_outcome_alternative(outcome, alt_number);
+                    }
+                    if let Some(rule_index) = left_recursive_boundary {
+                        self.defer_fast_outcome_boundary(outcome, rule_index);
                     }
                 }
             }
@@ -13239,6 +13229,49 @@ mod tests {
         finish_atn(atn)
     }
 
+    fn labeled_left_recursive_operator_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(4);
+        for (state, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::BlockStart),
+            (2, AtnStateKind::StarLoopEntry),
+            (3, AtnStateKind::StarBlockStart),
+            (4, AtnStateKind::Basic),
+            (5, AtnStateKind::Basic),
+            (6, AtnStateKind::Basic),
+            (7, AtnStateKind::StarLoopBack),
+            (8, AtnStateKind::LoopEnd),
+            (9, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(atn.add_state(kind, Some(0)).expect("state").index(), state);
+        }
+        atn.set_left_recursive_rule(0)
+            .expect("left-recursive rule start");
+        atn.set_precedence_rule_decision(2)
+            .expect("precedence decision");
+        atn.set_loop_back_state(8, 7).expect("loop-back state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![9])
+            .expect("rule stop states");
+        for state in [1, 2, 3] {
+            atn.add_decision_state(state).expect("decision state");
+        }
+        for (source, target) in [(0, 1), (2, 3), (2, 8), (7, 2), (8, 9)] {
+            atn.add_transition(source, ParserTransitionSpec::Epsilon { target })
+                .expect("epsilon transition");
+        }
+        for (source, target, label) in [(1, 2, 1), (1, 2, 2), (4, 6, 4), (5, 6, 3), (6, 7, 1)] {
+            atn.add_transition(source, ParserTransitionSpec::Atom { target, label })
+                .expect("token transition");
+        }
+        for (target, precedence) in [(4, 2), (5, 1)] {
+            atn.add_transition(3, ParserTransitionSpec::Precedence { target, precedence })
+                .expect("operator precedence");
+        }
+        finish_atn(atn)
+    }
+
     fn parser_inside_left_recursive_callee(symbol: i32) -> BaseParser<Source> {
         let mut parser = mini_parser(vec![
             TestToken::new(symbol).with_text("lookahead"),
@@ -15942,6 +15975,48 @@ mod tests {
             "deferred_alternatives_preserve_left_recursive_contexts",
             contexts
         );
+    }
+
+    #[test]
+    fn fast_recognizer_preserves_labeled_left_recursive_operator_context() {
+        let atn = labeled_left_recursive_operator_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("a"),
+            TestToken::new(3).with_text("+"),
+            TestToken::new(1).with_text("b"),
+            TestToken::eof("parser-test", 3, 1, 3),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    track_context_alt_numbers: true,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("labeled left-recursive addition should parse");
+        let contexts = parser
+            .node(tree)
+            .descendants()
+            .filter_map(Node::as_rule)
+            .map(|rule| {
+                let operator = rule
+                    .children()
+                    .next()
+                    .and_then(Node::as_rule)
+                    .is_some_and(|child| child.rule_index() == rule.rule_index());
+                (operator, rule.context_alt_number(), rule.text())
+            })
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(
+            "fast_recognizer_preserves_labeled_left_recursive_operator_context",
+            contexts
+        );
+        assert!(!parser.recognition_arena.deferred_nodes.is_empty());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]

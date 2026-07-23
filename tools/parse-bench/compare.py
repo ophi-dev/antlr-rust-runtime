@@ -179,7 +179,7 @@ def main() -> int:
             "parse benchmark compare found no matching baseline/current "
             f"result pairs for runtime(s): {', '.join(sorted(runtimes))}"
         )
-        if args.allow_empty:
+        if args.allow_empty or variant_mismatches:
             print(f"{message}; skipping regression comparison")
         else:
             print(message, file=sys.stderr)

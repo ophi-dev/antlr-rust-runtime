@@ -1,0 +1,16 @@
+---
+source: src/parser.rs
+expression: contexts
+---
+[
+    (
+        true,
+        2,
+        "a+b",
+    ),
+    (
+        false,
+        1,
+        "a",
+    ),
+]
