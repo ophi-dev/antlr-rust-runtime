@@ -87,7 +87,7 @@ jobs:
             --no-chrome
             --dangerously-skip-permissions
           plugins: |
-            "code-review@claude-code-plugins"
+            code-review
             rust-analyzer-lsp
 
           # The trailing directive fixes a CI-only stall: the review skill fans out to
