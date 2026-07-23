@@ -25,6 +25,8 @@ DEFAULT_GRAMMARS_V4 = Path("/tmp/antlr-cleanroom/grammars-v4")
 # ANTLR 4.13.2 still generates Go imports for github.com/antlr4-go/antlr/v4,
 # whose latest published module tag is v4.13.1.
 GO_ANTLR_RUNTIME = "v4.13.1"
+DEFAULT_BENCHMARK_VARIANT = "default"
+JAVA_RUST_PREDICATE_VARIANT = "java-upstream-parser-predicates-v1"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -144,6 +146,7 @@ class Measurement:
     language: str
     fixture: str
     runtime: str
+    benchmark_variant: str
     min_ns: int
     avg_ns: int
     bytes: int
@@ -291,6 +294,12 @@ def prepare_runtime_grammar(
         # Keep their equivalent portable rewrite, but retain the untouched
         # predicates for Rust so this benchmark covers runtime semantic routing.
         transform_java_for_portable_target(target)
+
+
+def benchmark_variant(language: str, runtime: str, phase: str) -> str:
+    if phase == "parse" and language == "java" and runtime == "rust-antlr":
+        return JAVA_RUST_PREDICATE_VARIANT
+    return DEFAULT_BENCHMARK_VARIANT
 
 
 def generate_antlr(
@@ -1370,6 +1379,7 @@ def measure_fixture(
         language=fixture.language,
         fixture=fixture.name,
         runtime=runtime,
+        benchmark_variant=benchmark_variant(fixture.language, runtime, args.phase),
         min_ns=int(match.group("min")),
         avg_ns=int(match.group("avg")),
         bytes=fixture.abs_path.stat().st_size,

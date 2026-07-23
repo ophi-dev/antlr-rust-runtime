@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 
 
+DEFAULT_BENCHMARK_VARIANT = "default"
+
+
 def result_key(result: dict) -> tuple[str, str, str]:
     return (
         str(result["language"]),
@@ -26,6 +29,10 @@ def load_results(path: Path) -> dict[tuple[str, str, str], dict]:
             raise ValueError(f"duplicate benchmark result key in {path}: {key}")
         indexed[key] = result
     return indexed
+
+
+def result_variant(result: dict) -> str:
+    return str(result.get("benchmark_variant", DEFAULT_BENCHMARK_VARIANT))
 
 
 def parse_speedup_requirement(value: str) -> tuple[str, str, str, float]:
@@ -131,11 +138,20 @@ def main() -> int:
     runtimes = set(args.runtime or ["rust-antlr"])
 
     regression_failures: list[str] = []
+    variant_mismatches: list[tuple[tuple[str, str, str], str, str]] = []
+    compared = 0
     for key, head in sorted(current.items()):
         language, fixture, runtime = key
-        if runtime not in runtimes or key not in baseline:
+        base = baseline.get(key)
+        if runtime not in runtimes or base is None:
             continue
-        base_avg = float(baseline[key]["avg_ns"])
+        base_variant = result_variant(base)
+        head_variant = result_variant(head)
+        if base_variant != head_variant:
+            variant_mismatches.append((key, base_variant, head_variant))
+            continue
+        compared += 1
+        base_avg = float(base["avg_ns"])
         head_avg = float(head["avg_ns"])
         if base_avg <= 0:
             continue
@@ -148,11 +164,16 @@ def main() -> int:
             )
     speedup_failures = check_speedup_requirements(current, args.require_speedup)
 
-    compared = sum(
-        1
-        for key in current
-        if key in baseline and key[2] in runtimes
-    )
+    if variant_mismatches:
+        print(
+            "parse benchmark compare skipped "
+            f"{len(variant_mismatches)} result(s) with changed benchmark variants:"
+        )
+        for (language, fixture, runtime), base_variant, head_variant in variant_mismatches:
+            print(
+                f"  {language}/{fixture} {runtime}: "
+                f"{base_variant} -> {head_variant}"
+            )
     if compared == 0:
         message = (
             "parse benchmark compare found no matching baseline/current "

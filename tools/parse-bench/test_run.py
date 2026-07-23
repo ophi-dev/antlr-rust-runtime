@@ -1,8 +1,12 @@
+import contextlib
 import importlib.util
+import io
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 RUN_PATH = Path(__file__).with_name("run.py")
@@ -11,6 +15,13 @@ assert SPEC is not None and SPEC.loader is not None
 RUN = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = RUN
 SPEC.loader.exec_module(RUN)
+
+COMPARE_PATH = Path(__file__).with_name("compare.py")
+COMPARE_SPEC = importlib.util.spec_from_file_location("parse_bench_compare", COMPARE_PATH)
+assert COMPARE_SPEC is not None and COMPARE_SPEC.loader is not None
+COMPARE = importlib.util.module_from_spec(COMPARE_SPEC)
+sys.modules[COMPARE_SPEC.name] = COMPARE
+COMPARE_SPEC.loader.exec_module(COMPARE)
 
 
 class DumpTreeHelpersTests(unittest.TestCase):
@@ -170,6 +181,101 @@ recordComponentList
             self.assertNotIn("IsNotIdentifierAssign", parser)
             self.assertNotIn("DoLastRecordComponent", parser)
             self.assertIn("identifier '=' annotationValue", parser)
+
+
+class BenchmarkVariantTests(unittest.TestCase):
+    @staticmethod
+    def result(
+        language: str,
+        fixture: str,
+        avg_ns: int,
+        variant: str | None = None,
+    ) -> dict[str, object]:
+        result: dict[str, object] = {
+            "language": language,
+            "fixture": fixture,
+            "runtime": "rust-antlr",
+            "avg_ns": avg_ns,
+        }
+        if variant is not None:
+            result["benchmark_variant"] = variant
+        return result
+
+    def compare(
+        self,
+        baseline: list[dict[str, object]],
+        current: list[dict[str, object]],
+    ) -> tuple[int, str, str]:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            baseline_path = root / "baseline.json"
+            current_path = root / "current.json"
+            baseline_path.write_text(json.dumps({"results": baseline}))
+            current_path.write_text(json.dumps({"results": current}))
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            argv = [
+                "compare.py",
+                "--baseline",
+                str(baseline_path),
+                "--current",
+                str(current_path),
+                "--max-regression",
+                "1.15",
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stdout(stdout),
+                contextlib.redirect_stderr(stderr),
+            ):
+                status = COMPARE.main()
+        return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_java_rust_parse_results_use_predicate_grammar_variant(self) -> None:
+        self.assertEqual(
+            RUN.benchmark_variant("java", "rust-antlr", "parse"),
+            RUN.JAVA_RUST_PREDICATE_VARIANT,
+        )
+        self.assertEqual(
+            RUN.benchmark_variant("java", "rust-antlr", "lex"),
+            RUN.DEFAULT_BENCHMARK_VARIANT,
+        )
+        self.assertEqual(
+            RUN.benchmark_variant("java", "go-antlr", "parse"),
+            RUN.DEFAULT_BENCHMARK_VARIANT,
+        )
+
+    def test_compare_skips_only_changed_benchmark_variants(self) -> None:
+        baseline = [
+            self.result("java", "Example.java", 100),
+            self.result("kotlin", "Example.kt", 100),
+        ]
+        current = [
+            self.result(
+                "java",
+                "Example.java",
+                1_000,
+                RUN.JAVA_RUST_PREDICATE_VARIANT,
+            ),
+            self.result("kotlin", "Example.kt", 100),
+        ]
+
+        status, stdout, stderr = self.compare(baseline, current)
+
+        self.assertEqual(status, 0)
+        self.assertIn("skipped 1 result(s)", stdout)
+        self.assertIn("passed: 1 result(s)", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_compare_enforces_threshold_for_matching_variants(self) -> None:
+        variant = RUN.JAVA_RUST_PREDICATE_VARIANT
+        baseline = [self.result("java", "Example.java", 100, variant)]
+        current = [self.result("java", "Example.java", 1_000, variant)]
+
+        status, _, stderr = self.compare(baseline, current)
+
+        self.assertEqual(status, 1)
+        self.assertIn("10.00x", stderr)
 
 
 class RustCodegenFlagsTests(unittest.TestCase):
