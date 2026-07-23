@@ -12319,15 +12319,14 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
     use crate::atn::parser::{
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{
-        DEFAULT_CHANNEL, HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError,
-    };
+    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
@@ -12596,31 +12595,11 @@ mod tests {
 
         parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
 
-        assert_eq!(
-            *diagnostics.lock().expect("recorded diagnostics lock"),
-            [
-                RecordedDiagnostic {
-                    grammar_file_name: "Mini.g4".to_owned(),
-                    line: 1,
-                    column: 1,
-                    message: "token recognition error at: '@'".to_owned(),
-                    error: None,
-                },
-                RecordedDiagnostic {
-                    grammar_file_name: "Mini.g4".to_owned(),
-                    line: 1,
-                    column: 2,
-                    message: "missing 'x' at 'y'".to_owned(),
-                    error: None,
-                },
-                RecordedDiagnostic {
-                    grammar_file_name: "Mini.g4".to_owned(),
-                    line: 1,
-                    column: 3,
-                    message: "token recognition error at: '#'".to_owned(),
-                    error: None,
-                },
-            ]
+        // The interleaved token/parser diagnostic stream (ordering, columns, messages) is one
+        // reviewable snapshot instead of three hand-written RecordedDiagnostic literals.
+        insta::assert_debug_snapshot!(
+            "parser_dispatches_recovery_diagnostics_through_registered_listeners",
+            *diagnostics.lock().expect("recorded diagnostics lock")
         );
 
         parser.remove_error_listeners();
@@ -14469,7 +14448,7 @@ mod tests {
         let AntlrError::ParserError { message, .. } = error else {
             panic!("expected ParserError, got {error:?}");
         };
-        assert_eq!(message, "mismatched input '<EOF>' expecting {'x', 2}");
+        insta::assert_snapshot!(message, @"mismatched input '<EOF>' expecting {'x', 2}");
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.input.index(), 0, "EOF remains unconsumed");
     }
@@ -15413,25 +15392,11 @@ mod tests {
             },
         );
 
-        assert_eq!(
-            parser.generated_parser_diagnostics,
-            [
-                ParserDiagnostic {
-                    line: 1,
-                    column: 2,
-                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
-                },
-                ParserDiagnostic {
-                    line: 1,
-                    column: 0,
-                    message: "reportContextSensitivity d=0 (s), input='x'".to_owned(),
-                },
-                ParserDiagnostic {
-                    line: 1,
-                    column: 2,
-                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
-                },
-            ]
+        // The full-context/context-sensitivity diagnostic trace (order + decision + input windows)
+        // is one snapshot rather than three ParserDiagnostic literals.
+        insta::assert_debug_snapshot!(
+            "generated_prediction_diagnostics_use_adaptive_context",
+            parser.generated_parser_diagnostics
         );
     }
 
@@ -16325,17 +16290,15 @@ mod tests {
             .expect("artificial parser rule should parse");
         let parsed = parser.into_parsed_file(tree);
 
-        assert_eq!(
+        // Snapshot the full buffered stream — hidden-channel comment, default-channel token, EOF —
+        // as (type, channel, text) triples; contents make the count self-evident.
+        insta::assert_debug_snapshot!(
+            "parsed_file_exposes_all_buffered_tokens",
             parsed
                 .tokens()
                 .iter()
                 .map(|token| (token.token_type(), token.channel(), token.text()))
-                .collect::<Vec<_>>(),
-            [
-                (99, HIDDEN_CHANNEL, Some(" comment")),
-                (1, DEFAULT_CHANNEL, Some("x")),
-                (TOKEN_EOF, DEFAULT_CHANNEL, Some("<EOF>")),
-            ]
+                .collect::<Vec<_>>()
         );
         assert_eq!(parsed.tokens().into_iter().count(), 3);
     }
@@ -17653,11 +17616,19 @@ mod tests {
         else {
             panic!("first folded node should be a rule");
         };
-        assert_eq!(rule_index, 1);
-        assert_eq!(invoking_state, -1);
-        assert_eq!(alt_number, 3);
-        assert_eq!(start_index, 0);
-        assert_eq!(stop_index, Some(0));
+        // The folded rule node's scalar shape (rule/invoking-state/alt/start/stop) is one snapshot;
+        // child resolution and the sibling identity below stay explicit — a node Debug prints the
+        // children handle, not the resolved sequence they assert on.
+        insta::assert_debug_snapshot!(
+            "folds_left_recursive_boundary_into_rule_node",
+            (
+                rule_index,
+                invoking_state,
+                alt_number,
+                start_index,
+                stop_index
+            )
+        );
         assert_eq!(arena.iter(children).collect::<Vec<_>>(), [first]);
         assert_eq!(arena.node(folded_nodes[1]), arena.node(second));
 

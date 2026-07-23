@@ -1,0 +1,10 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: rendered
+---
+if !self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 1, &__ctx, __precedence) {
+    if let Some(__message) = self.base.parser_semantic_ir_predicate_failure_message(2, 1, parser_semantics()) {
+        return Err(self.base.failed_predicate_option_error(2, __message));
+    }
+    return Err(self.base.failed_predicate_error("semantic predicate"));
+}

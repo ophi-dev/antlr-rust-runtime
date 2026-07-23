@@ -1,0 +1,28 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: portable
+---
+PortableLocalData {
+    declarations: [
+        [
+            "let mut __antlr_local_seen = false;",
+        ],
+    ],
+    inline_actions: {
+        2: "__antlr_local_seen = true;",
+    },
+    predicates: {
+        (
+            0,
+            0,
+        ): (
+            "__antlr_local_seen",
+            Some(
+                "not seen",
+            ),
+        ),
+    },
+    required_generated_rules: {
+        0,
+    },
+}

@@ -1,0 +1,45 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: rendered
+---
+let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
+let __prediction = {
+    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
+    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
+    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
+    __simulator.adaptive_predict_stream_info_with_context(0, 0, self.base.input(), __prediction_context)
+        .map_err(|__error| match __error {
+            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
+            _ => self.base.no_viable_alternative_error(__decision_start),
+        })?
+};
+if self.base.report_diagnostic_errors() {
+    let __diagnostic_la = self.base.la(1);
+    let mut __diagnostic_alts = Vec::new();
+    if __diagnostic_la == 1 {
+        __diagnostic_alts.push(1);
+    }
+    if __diagnostic_la == 1 {
+        __diagnostic_alts.push(2);
+    }
+    self.base.record_generated_ambiguity_diagnostic(atn(), 1, __decision_start, __decision_start, &__diagnostic_alts);
+}
+match __prediction.alt {
+    1 => {
+        let action = self.base.parser_action_at_current(5, 1, __rule_start, __consumed_eof);
+        __antlr_local_seen = true;
+        let _ = action;
+        if !(__antlr_local_seen) {
+            return Err(self.base.failed_predicate_error("semantic predicate"));
+        }
+        let __match = self.base.match_token_recovering(1, 2, atn())?;
+        __consumed_eof |= __match.consumed_eof();
+        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+    }
+    2 => {
+        let __match = self.base.match_token_recovering(1, 3, atn())?;
+        __consumed_eof |= __match.consumed_eof();
+        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+    }
+    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
+}

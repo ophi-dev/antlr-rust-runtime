@@ -1,0 +1,22 @@
+---
+source: src/atn/parser.rs
+expression: prediction
+---
+ParserAtnPrediction {
+    alt: 2,
+    requires_full_context: true,
+    has_semantic_context: false,
+    diagnostic: Some(
+        ParserAtnPredictionDiagnostic {
+            kind: ContextSensitivity,
+            start_index: 0,
+            sll_stop_index: 0,
+            ll_stop_index: 1,
+            conflicting_alts: [
+                1,
+                2,
+            ],
+            exact: false,
+        },
+    ),
+}

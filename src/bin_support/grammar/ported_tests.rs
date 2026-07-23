@@ -1,6 +1,7 @@
 use super::frontend::{DiagnosticStage, SourceId, parse_source};
 
 #[test]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 fn frontend_tool_syntax_cases_match_upstream_outcomes() {
     let accepted = [
         ("testA/parser-no-rules", "grammar A;\n"),
@@ -108,6 +109,7 @@ fn frontend_tool_syntax_cases_match_upstream_outcomes() {
             DiagnosticStage::Lexer,
         ),
     ];
+    let mut observed = Vec::new();
     for (name, source, expected_stage) in rejected {
         let error = parse_source(SourceId::new(0), name, source)
             .expect_err("invalid grammar must not return a CST");
@@ -119,5 +121,14 @@ fn frontend_tool_syntax_cases_match_upstream_outcomes() {
             "{name}: {:?}",
             error.diagnostics()
         );
+        observed.push((name, error.diagnostics().to_vec()));
     }
+
+    // The per-case assert only checks that *some* diagnostic carries the expected stage; snapshot
+    // the full (code, stage, span, message) for every rejected case so drift in any of those
+    // upstream-matched fields is caught, not just the stage.
+    insta::assert_debug_snapshot!(
+        "frontend_tool_syntax_cases_match_upstream_outcomes",
+        observed
+    );
 }

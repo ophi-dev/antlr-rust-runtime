@@ -1,0 +1,29 @@
+---
+source: src/atn/serialized.rs
+expression: "(atn.max_token_type(), atn.rule_to_start_state().iter().collect::<Vec<_>>(),\natn.rule_to_stop_state().iter().collect::<Vec<_>>(),\natn.decision_to_state().iter().collect::<Vec<_>>(), atn.stats(),)"
+---
+(
+    9,
+    [
+        0,
+    ],
+    [
+        1,
+    ],
+    [
+        0,
+    ],
+    ParserAtnStats {
+        states: 2,
+        transitions: 1,
+        interval_sets: 0,
+        interval_ranges: 0,
+        inline_token_sets: 0,
+        dense_token_sets: 0,
+        interval_token_sets: 0,
+        token_bitset_bytes: 0,
+        decisions: 1,
+        rules: 1,
+        packed_bytes: 204,
+    },
+)

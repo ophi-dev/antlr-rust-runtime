@@ -1,0 +1,8 @@
+---
+source: src/bin_support/grammar/syntax.rs
+expression: members.body
+---
+
+static isIdentifierChar (c: string) {
+    return c.match(/^[0-9a-zA-Z_]+$/);
+}

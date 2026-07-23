@@ -1724,6 +1724,7 @@ fn dfa_state_display(state: ParserDfaStateView<'_>) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
     use crate::atn::AtnStateKind;
@@ -1935,21 +1936,9 @@ mod tests {
         let prediction = simulator
             .adaptive_predict_info_with_precedence(0, 0, [1])
             .expect("prediction");
-        assert_eq!(
-            prediction,
-            ParserAtnPrediction {
-                alt: 1,
-                requires_full_context: true,
-                has_semantic_context: false,
-                diagnostic: Some(ParserAtnPredictionDiagnostic {
-                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
-                    start_index: 0,
-                    sll_stop_index: 0,
-                    ll_stop_index: 0,
-                    conflicting_alts: vec![1, 2],
-                    exact: false,
-                }),
-            }
+        insta::assert_debug_snapshot!(
+            "adaptive_predict_marks_sll_conflict_for_full_context",
+            prediction
         );
 
         let dfa = &simulator.decision_dfas()[0];
@@ -2029,21 +2018,9 @@ mod tests {
             .adaptive_predict_stream_info_with_precedence(0, 0, &mut input)
             .expect("prediction");
 
-        assert_eq!(
-            prediction,
-            ParserAtnPrediction {
-                alt: 1,
-                requires_full_context: true,
-                has_semantic_context: false,
-                diagnostic: Some(ParserAtnPredictionDiagnostic {
-                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
-                    start_index: 0,
-                    sll_stop_index: 0,
-                    ll_stop_index: 0,
-                    conflicting_alts: vec![1, 2],
-                    exact: false,
-                }),
-            }
+        insta::assert_debug_snapshot!(
+            "adaptive_predict_stream_retries_full_context_conflict",
+            prediction
         );
         assert_eq!(input.index(), 0);
     }
@@ -2087,21 +2064,9 @@ mod tests {
             .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
             .expect("prediction");
 
-        assert_eq!(
-            prediction,
-            ParserAtnPrediction {
-                alt: 2,
-                requires_full_context: true,
-                has_semantic_context: false,
-                diagnostic: Some(ParserAtnPredictionDiagnostic {
-                    kind: ParserAtnPredictionDiagnosticKind::ContextSensitivity,
-                    start_index: 0,
-                    sll_stop_index: 0,
-                    ll_stop_index: 1,
-                    conflicting_alts: vec![1, 2],
-                    exact: false,
-                }),
-            }
+        insta::assert_debug_snapshot!(
+            "context_prediction_reports_context_sensitivity_for_dfa_conflict",
+            prediction
         );
         assert_eq!(input.index(), 0);
     }

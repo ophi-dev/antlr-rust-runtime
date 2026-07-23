@@ -1,0 +1,19 @@
+---
+source: src/recognizer.rs
+expression: "*errors.lock().expect(\"recorded errors lock\")"
+---
+[
+    RecordedError {
+        grammar_file_name: "Test.g4",
+        line: 3,
+        column: 5,
+        message: "unexpected token",
+        error: Some(
+            ParserError {
+                line: 3,
+                column: 5,
+                message: "unexpected token",
+            },
+        ),
+    },
+]

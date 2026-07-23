@@ -1,0 +1,46 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: body.steps
+---
+[
+    MatchToken {
+        token_type: 1,
+        follow_state: 2,
+    },
+    LeftRecursiveLoop {
+        state: 2,
+        decision: 0,
+        enter_alt: 1,
+        exit_alt: 2,
+        rule_index: 0,
+        entry_state: 0,
+        body: [
+            Decision {
+                state: 3,
+                decision: 1,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                fast_path: None,
+                alts: [
+                    [
+                        Precedence(
+                            2,
+                        ),
+                        MatchToken {
+                            token_type: 2,
+                            follow_state: 10,
+                        },
+                        CallRule {
+                            source_state: 10,
+                            rule_index: 0,
+                            precedence: Literal(
+                                3,
+                            ),
+                        },
+                    ],
+                ],
+            },
+        ],
+    },
+]

@@ -202,6 +202,7 @@ pub trait Recognizer {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -291,15 +292,9 @@ mod tests {
         };
         recognizer.notify_error_listeners(3, 5, "unexpected token", Some(&error));
 
-        assert_eq!(
-            *errors.lock().expect("recorded errors lock"),
-            [RecordedError {
-                grammar_file_name: "Test.g4".to_owned(),
-                line: 3,
-                column: 5,
-                message: "unexpected token".to_owned(),
-                error: Some(error),
-            }]
+        insta::assert_debug_snapshot!(
+            "recognizers_replace_the_default_console_error_listener",
+            *errors.lock().expect("recorded errors lock")
         );
     }
 

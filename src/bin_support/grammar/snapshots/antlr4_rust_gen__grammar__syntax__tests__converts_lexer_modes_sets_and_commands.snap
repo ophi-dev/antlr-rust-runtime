@@ -1,0 +1,530 @@
+---
+source: src/bin_support/grammar/syntax.rs
+expression: unit
+---
+GrammarUnit {
+    id: GrammarId(
+        0,
+    ),
+    source: SourceId(
+        3,
+    ),
+    name: "L",
+    kind: Lexer,
+    prequels: [
+        Channels {
+            declarations: 0..1,
+            span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 18..39,
+            },
+        },
+    ],
+    options: [],
+    tokens: [],
+    channels: [
+        ChannelDeclaration {
+            id: ChannelId(
+                0,
+            ),
+            name: Authored {
+                value: "COMMENTS",
+                syntax: SyntaxId(
+                    12884901901,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        3,
+                    ),
+                    bytes: 29..37,
+                },
+            },
+        },
+    ],
+    actions: [],
+    modes: [
+        Mode {
+            id: ModeId(
+                0,
+            ),
+            name: "M",
+            name_span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 155..156,
+            },
+            rules: [
+                RuleId(
+                    2,
+                ),
+            ],
+            syntax: SyntaxId(
+                12884901966,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 150..189,
+            },
+        },
+    ],
+    rules: [
+        Rule {
+            id: RuleId(
+                0,
+            ),
+            name: "TOKEN",
+            name_span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 40..45,
+            },
+            kind: Lexer,
+            fragment: false,
+            modifiers: [],
+            arguments: None,
+            returns: None,
+            locals: None,
+            throws: [],
+            options: [
+                OptionDecl {
+                    name: Authored {
+                        value: "caseInsensitive",
+                        syntax: SyntaxId(
+                            12884901911,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                3,
+                            ),
+                            bytes: 56..71,
+                        },
+                    },
+                    value: Authored {
+                        value: "true",
+                        syntax: SyntaxId(
+                            12884901913,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                3,
+                            ),
+                            bytes: 72..76,
+                        },
+                    },
+                },
+            ],
+            actions: [],
+            catches: [],
+            finally_action: None,
+            left_recursion: None,
+            block: Block {
+                alternatives: [
+                    Alternative {
+                        id: AlternativeId(
+                            0,
+                        ),
+                        elements: [
+                            Element {
+                                id: ElementId(
+                                    0,
+                                ),
+                                kind: Range(
+                                    Authored {
+                                        value: "'a'",
+                                        syntax: SyntaxId(
+                                            12884901926,
+                                        ),
+                                        span: SourceSpan {
+                                            source: SourceId(
+                                                3,
+                                            ),
+                                            bytes: 82..85,
+                                        },
+                                    },
+                                    Authored {
+                                        value: "'z'",
+                                        syntax: SyntaxId(
+                                            12884901928,
+                                        ),
+                                        span: SourceSpan {
+                                            source: SourceId(
+                                                3,
+                                            ),
+                                            bytes: 87..90,
+                                        },
+                                    },
+                                    SourceSpan {
+                                        source: SourceId(
+                                            3,
+                                        ),
+                                        bytes: 85..87,
+                                    },
+                                ),
+                                quantifier: OneOrMore {
+                                    greedy: true,
+                                },
+                                label: None,
+                                options: [],
+                                syntax: SyntaxId(
+                                    12884901923,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 82..90,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 82..91,
+                                },
+                            },
+                        ],
+                        label: None,
+                        options: [],
+                        commands: [
+                            LexerCommand {
+                                name: "channel",
+                                argument: Some(
+                                    "COMMENTS",
+                                ),
+                                argument_span: Some(
+                                    SourceSpan {
+                                        source: SourceId(
+                                            3,
+                                        ),
+                                        bytes: 103..111,
+                                    },
+                                ),
+                                syntax: SyntaxId(
+                                    12884901933,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 95..112,
+                                },
+                            },
+                            LexerCommand {
+                                name: "pushMode",
+                                argument: Some(
+                                    "M",
+                                ),
+                                argument_span: Some(
+                                    SourceSpan {
+                                        source: SourceId(
+                                            3,
+                                        ),
+                                        bytes: 123..124,
+                                    },
+                                ),
+                                syntax: SyntaxId(
+                                    12884901943,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 114..125,
+                                },
+                            },
+                        ],
+                        syntax: SyntaxId(
+                            12884901921,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                3,
+                            ),
+                            bytes: 82..125,
+                        },
+                    },
+                ],
+                options: [],
+                syntax: SyntaxId(
+                    12884901919,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        3,
+                    ),
+                    bytes: 82..125,
+                },
+            },
+            mode: None,
+            case_insensitive: Some(
+                true,
+            ),
+            syntax: SyntaxId(
+                12884901905,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 40..126,
+            },
+        },
+        Rule {
+            id: RuleId(
+                1,
+            ),
+            name: "FRAG",
+            name_span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 136..140,
+            },
+            kind: Lexer,
+            fragment: true,
+            modifiers: [],
+            arguments: None,
+            returns: None,
+            locals: None,
+            throws: [],
+            options: [],
+            actions: [],
+            catches: [],
+            finally_action: None,
+            left_recursion: None,
+            block: Block {
+                alternatives: [
+                    Alternative {
+                        id: AlternativeId(
+                            1,
+                        ),
+                        elements: [
+                            Element {
+                                id: ElementId(
+                                    1,
+                                ),
+                                kind: Terminal(
+                                    LexerCharSet(
+                                        "[a-z]",
+                                    ),
+                                ),
+                                quantifier: One,
+                                label: None,
+                                options: [],
+                                syntax: SyntaxId(
+                                    12884901962,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 143..148,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 143..148,
+                                },
+                            },
+                        ],
+                        label: None,
+                        options: [],
+                        commands: [],
+                        syntax: SyntaxId(
+                            12884901960,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                3,
+                            ),
+                            bytes: 143..148,
+                        },
+                    },
+                ],
+                options: [],
+                syntax: SyntaxId(
+                    12884901958,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        3,
+                    ),
+                    bytes: 143..148,
+                },
+            },
+            mode: None,
+            case_insensitive: None,
+            syntax: SyntaxId(
+                12884901954,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 127..149,
+            },
+        },
+        Rule {
+            id: RuleId(
+                2,
+            ),
+            name: "MORE",
+            name_span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 158..162,
+            },
+            kind: Lexer,
+            fragment: false,
+            modifiers: [],
+            arguments: None,
+            returns: None,
+            locals: None,
+            throws: [],
+            options: [],
+            actions: [],
+            catches: [],
+            finally_action: None,
+            left_recursion: None,
+            block: Block {
+                alternatives: [
+                    Alternative {
+                        id: AlternativeId(
+                            2,
+                        ),
+                        elements: [
+                            Element {
+                                id: ElementId(
+                                    2,
+                                ),
+                                kind: Set {
+                                    inverted: true,
+                                    elements: [
+                                        Terminal {
+                                            source: ElementId(
+                                                2,
+                                            ),
+                                            value: Literal(
+                                                "'x'",
+                                            ),
+                                            span: SourceSpan {
+                                                source: SourceId(
+                                                    3,
+                                                ),
+                                                bytes: 167..170,
+                                            },
+                                            options: [],
+                                        },
+                                        Terminal {
+                                            source: ElementId(
+                                                2,
+                                            ),
+                                            value: Literal(
+                                                "'y'",
+                                            ),
+                                            span: SourceSpan {
+                                                source: SourceId(
+                                                    3,
+                                                ),
+                                                bytes: 171..174,
+                                            },
+                                            options: [],
+                                        },
+                                    ],
+                                },
+                                quantifier: Optional {
+                                    greedy: false,
+                                },
+                                label: None,
+                                options: [],
+                                syntax: SyntaxId(
+                                    12884901978,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 165..175,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 165..177,
+                                },
+                            },
+                        ],
+                        label: None,
+                        options: [],
+                        commands: [
+                            LexerCommand {
+                                name: "popMode",
+                                argument: None,
+                                argument_span: None,
+                                syntax: SyntaxId(
+                                    12884901995,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        3,
+                                    ),
+                                    bytes: 181..188,
+                                },
+                            },
+                        ],
+                        syntax: SyntaxId(
+                            12884901976,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                3,
+                            ),
+                            bytes: 165..188,
+                        },
+                    },
+                ],
+                options: [],
+                syntax: SyntaxId(
+                    12884901974,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        3,
+                    ),
+                    bytes: 165..188,
+                },
+            },
+            mode: Some(
+                ModeId(
+                    0,
+                ),
+            ),
+            case_insensitive: None,
+            syntax: SyntaxId(
+                12884901971,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    3,
+                ),
+                bytes: 158..189,
+            },
+        },
+    ],
+    syntax: SyntaxId(
+        12884901888,
+    ),
+    span: SourceSpan {
+        source: SourceId(
+            3,
+        ),
+        bytes: 1..190,
+    },
+}

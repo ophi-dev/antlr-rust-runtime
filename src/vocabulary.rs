@@ -88,6 +88,7 @@ impl Vocabulary {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -138,21 +139,25 @@ mod tests {
                 vocabulary.symbolic_name(crate::token::TOKEN_EOF),
                 Some("EOF")
             );
-            for (token_type, token_name) in token_names.into_iter().enumerate() {
-                let token_type = i32::try_from(token_type).expect("test token type fits i32");
-                assert_eq!(vocabulary.display_name(token_type), token_name);
 
-                if token_name.starts_with('\'') {
-                    assert_eq!(vocabulary.literal_name(token_type), Some(token_name));
-                    assert_eq!(vocabulary.symbolic_name(token_type), None);
-                } else if token_name.starts_with(char::is_uppercase) {
-                    assert_eq!(vocabulary.literal_name(token_type), None);
-                    assert_eq!(vocabulary.symbolic_name(token_type), Some(token_name));
-                } else {
-                    assert_eq!(vocabulary.literal_name(token_type), None);
-                    assert_eq!(vocabulary.symbolic_name(token_type), None);
-                }
-            }
+            // The observed (display, literal, symbolic) classification for every token type is
+            // more legible as one snapshot than as a branchy per-token invariant recomputed in a
+            // loop: it pins the literal-vs-symbolic split for all names at once.
+            let classification = (0..token_names.len())
+                .map(|token_type| {
+                    let token_type = i32::try_from(token_type).expect("test token type fits i32");
+                    (
+                        token_type,
+                        vocabulary.display_name(token_type),
+                        vocabulary.literal_name(token_type).map(str::to_owned),
+                        vocabulary.symbolic_name(token_type).map(str::to_owned),
+                    )
+                })
+                .collect::<Vec<_>>();
+            insta::assert_debug_snapshot!(
+                "vocabulary_from_token_names_matches_java",
+                classification
+            );
         }
     }
 }
