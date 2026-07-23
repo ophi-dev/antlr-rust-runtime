@@ -1197,7 +1197,7 @@ mod tests {
                 channel: token.channel(),
                 byte_start: token.start_byte(),
                 byte_stop: token.stop_byte(),
-                text: token.text().to_owned(),
+                text: token.text_or_empty().to_owned(),
             })
             .collect::<Vec<_>>();
         assert_eq!(tokens.last().map(|token| token.token_type), Some(TOKEN_EOF));

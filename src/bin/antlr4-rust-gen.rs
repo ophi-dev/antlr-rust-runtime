@@ -8341,7 +8341,7 @@ fn render_context_child_accessors(
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text().to_owned()).unwrap_or_default() }}\n    }}"
+        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }}\n    }}"
     );
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
@@ -9038,7 +9038,7 @@ impl<L: TokenSource> __GeneratedInput<'_, L> {
             text: self
                 .0
                 .lt(offset)
-                .map(|token| token.text().to_owned())
+                .map(|token| token.text_or_empty().to_owned())
                 .unwrap_or_default(),
         }
     }

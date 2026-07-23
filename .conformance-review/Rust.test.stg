@@ -185,7 +185,7 @@ impl TListener for LeafListener {
         &mut self,
         node: &TerminalNode,
     ) -> Result\<(), std::convert::Infallible> {
-        writeln!(self.output(), "{}", node.symbol().text());
+        writeln!(self.output(), "{}", node.symbol().text_or_empty());
         Ok(())
     }
 }
@@ -224,8 +224,8 @@ impl TListener for LeafListener {
             writeln!(
                 self.output(),
                 "{} {} {}",
-                tokens[0].symbol().text(),
-                tokens[1].symbol().text(),
+                tokens[0].symbol().text_or_empty(),
+                tokens[1].symbol().text_or_empty(),
                 java_style_list(&tokens)
             );
         } else {
@@ -293,7 +293,7 @@ impl TListener for LeafListener {
             writeln!(
                 self.output(),
                 "{}",
-                ctx.int_token().expect("INT alternative").symbol().text()
+                ctx.int_token().expect("INT alternative").symbol().text_or_empty()
             );
         }
         Ok(())
@@ -327,7 +327,7 @@ impl TListener for LeafListener {
         writeln!(
             self.output(),
             "{}",
-            ctx.int_token().expect("INT alternative").symbol().text()
+            ctx.int_token().expect("INT alternative").symbol().text_or_empty()
         );
         Ok(())
     }

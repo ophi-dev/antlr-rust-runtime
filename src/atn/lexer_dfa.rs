@@ -1669,7 +1669,7 @@ mod tests {
         let token = sink.view(id).expect("emitted token should exist");
         TokenSnapshot {
             token_type: token.token_type(),
-            text: token.text().to_owned(),
+            text: token.text_or_empty().to_owned(),
             channel: token.channel(),
             start: token.start(),
             stop: token.stop(),
@@ -1687,7 +1687,7 @@ mod tests {
         let token = sink.view(id).expect("emitted token should exist");
         TokenSnapshot {
             token_type: token.token_type(),
-            text: token.text().to_owned(),
+            text: token.text_or_empty().to_owned(),
             channel: token.channel(),
             start: token.start(),
             stop: token.stop(),
@@ -2252,7 +2252,7 @@ mod tests {
         .expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "ab");
+        assert_eq!(token.text(), Some("ab"));
         assert_eq!(true_predicate_calls, 1);
 
         let mut compiled = BaseLexer::new(InputStream::new("ab"), recognizer_data());

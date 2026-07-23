@@ -547,7 +547,7 @@ impl<L: TokenSource> __GeneratedInput<'_, L> {
             text: self
                 .0
                 .lt(offset)
-                .map(|token| token.text().to_owned())
+                .map(|token| token.text_or_empty().to_owned())
                 .unwrap_or_default(),
         }
     }
@@ -826,7 +826,7 @@ impl<'a, State> GrammarSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn grammar_decl(&self) -> Result<GrammarDeclContext<'a>, MissingChildError> {
         __rule_children(self.__node, 1)
@@ -956,7 +956,7 @@ impl<'a, State> GrammarDeclContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn grammar_type(&self) -> Result<GrammarTypeContext<'a>, MissingChildError> {
         __rule_children(self.__node, 2)
@@ -1078,7 +1078,7 @@ impl<'a, State> GrammarTypeContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_token(&self) -> Option<TerminalNode<'a>> {
         __token_children(self.__node, 41)
@@ -1198,7 +1198,7 @@ impl<'a, State> PrequelConstructContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn options_spec(&self) -> Option<OptionsSpecContext<'a>> {
         __rule_children(self.__node, 4)
@@ -1327,7 +1327,7 @@ impl<'a, State> OptionsSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn option_children(&self) -> impl Iterator<Item = OptionContext<'a>> + '_ {
         __rule_children(self.__node, 5)
@@ -1450,7 +1450,7 @@ impl<'a, State> OptionContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn option_value(&self) -> Result<OptionValueContext<'a>, MissingChildError> {
         __rule_children(self.__node, 6)
@@ -1572,7 +1572,7 @@ impl<'a, State> OptionValueContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Option<ActionBlockContext<'a>> {
         __rule_children(self.__node, 14)
@@ -1698,7 +1698,7 @@ impl<'a, State> DelegateGrammarsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn delegate_grammar_children(&self) -> impl Iterator<Item = DelegateGrammarContext<'a>> + '_ {
         __rule_children(self.__node, 8)
@@ -1821,7 +1821,7 @@ impl<'a, State> DelegateGrammarContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier_children(&self) -> impl Iterator<Item = IdentifierContext<'a>> + '_ {
         __rule_children(self.__node, 65)
@@ -1934,7 +1934,7 @@ impl<'a, State> TokensSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn id_list(&self) -> Option<IdListContext<'a>> {
         __rule_children(self.__node, 11)
@@ -2055,7 +2055,7 @@ impl<'a, State> ChannelsSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn id_list(&self) -> Option<IdListContext<'a>> {
         __rule_children(self.__node, 11)
@@ -2176,7 +2176,7 @@ impl<'a, State> IdListContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier_children(&self) -> impl Iterator<Item = IdentifierContext<'a>> + '_ {
         __rule_children(self.__node, 65)
@@ -2287,7 +2287,7 @@ impl<'a, State> ActionContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_scope_name(&self) -> Option<ActionScopeNameContext<'a>> {
         __rule_children(self.__node, 13)
@@ -2419,7 +2419,7 @@ impl<'a, State> ActionScopeNameContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
         __rule_children(self.__node, 65)
@@ -2538,7 +2538,7 @@ impl<'a, State> ActionBlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
         __token_children(self.__node, 4)
@@ -2648,7 +2648,7 @@ impl<'a, State> ArgActionBlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn begin_argument_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
         __token_children(self.__node, 35)
@@ -2767,7 +2767,7 @@ impl<'a, State> ModeSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_rule_spec_children(&self) -> impl Iterator<Item = LexerRuleSpecContext<'a>> + '_ {
         __rule_children(self.__node, 33)
@@ -2893,7 +2893,7 @@ impl<'a, State> RulesContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn rule_spec_children(&self) -> impl Iterator<Item = RuleSpecContext<'a>> + '_ {
         __rule_children(self.__node, 18)
@@ -3001,7 +3001,7 @@ impl<'a, State> RuleSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn parser_rule_spec(&self) -> Option<ParserRuleSpecContext<'a>> {
         __rule_children(self.__node, 19)
@@ -3115,7 +3115,7 @@ impl<'a, State> ParserRuleSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn arg_action_block(&self) -> Option<ArgActionBlockContext<'a>> {
         __rule_children(self.__node, 15)
@@ -3278,7 +3278,7 @@ impl<'a, State> ExceptionGroupContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn exception_handler_children(&self) -> impl Iterator<Item = ExceptionHandlerContext<'a>> + '_ {
         __rule_children(self.__node, 21)
@@ -3391,7 +3391,7 @@ impl<'a, State> ExceptionHandlerContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Result<ActionBlockContext<'a>, MissingChildError> {
         __rule_children(self.__node, 14)
@@ -3513,7 +3513,7 @@ impl<'a, State> FinallyClauseContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Result<ActionBlockContext<'a>, MissingChildError> {
         __rule_children(self.__node, 14)
@@ -3629,7 +3629,7 @@ impl<'a, State> RulePrequelContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn options_spec(&self) -> Option<OptionsSpecContext<'a>> {
         __rule_children(self.__node, 4)
@@ -3743,7 +3743,7 @@ impl<'a, State> RuleReturnsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn arg_action_block(&self) -> Result<ArgActionBlockContext<'a>, MissingChildError> {
         __rule_children(self.__node, 15)
@@ -3859,7 +3859,7 @@ impl<'a, State> ThrowsSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn qualified_identifier_children(&self) -> impl Iterator<Item = QualifiedIdentifierContext<'a>> + '_ {
         __rule_children(self.__node, 66)
@@ -3976,7 +3976,7 @@ impl<'a, State> LocalsSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn arg_action_block(&self) -> Result<ArgActionBlockContext<'a>, MissingChildError> {
         __rule_children(self.__node, 15)
@@ -4092,7 +4092,7 @@ impl<'a, State> RuleActionContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Result<ActionBlockContext<'a>, MissingChildError> {
         __rule_children(self.__node, 14)
@@ -4214,7 +4214,7 @@ impl<'a, State> RuleModifiersContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn rule_modifier_children(&self) -> impl Iterator<Item = RuleModifierContext<'a>> + '_ {
         __rule_children(self.__node, 29)
@@ -4322,7 +4322,7 @@ impl<'a, State> RuleModifierContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
 }
 
@@ -4426,7 +4426,7 @@ impl<'a, State> RuleBlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn rule_alt_list(&self) -> Result<RuleAltListContext<'a>, MissingChildError> {
         __rule_children(self.__node, 31)
@@ -4536,7 +4536,7 @@ impl<'a, State> RuleAltListContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn labeled_alt_children(&self) -> impl Iterator<Item = LabeledAltContext<'a>> + '_ {
         __rule_children(self.__node, 32)
@@ -4647,7 +4647,7 @@ impl<'a, State> LabeledAltContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn alternative(&self) -> Result<AlternativeContext<'a>, MissingChildError> {
         __rule_children(self.__node, 45)
@@ -4767,7 +4767,7 @@ impl<'a, State> LexerRuleSpecContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn options_spec(&self) -> Option<OptionsSpecContext<'a>> {
         __rule_children(self.__node, 4)
@@ -4905,7 +4905,7 @@ impl<'a, State> LexerRuleBlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_alt_list(&self) -> Result<LexerAltListContext<'a>, MissingChildError> {
         __rule_children(self.__node, 35)
@@ -5015,7 +5015,7 @@ impl<'a, State> LexerAltListContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_alt_children(&self) -> impl Iterator<Item = LexerAltContext<'a>> + '_ {
         __rule_children(self.__node, 36)
@@ -5126,7 +5126,7 @@ impl<'a, State> LexerAltContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_elements(&self) -> Option<LexerElementsContext<'a>> {
         __rule_children(self.__node, 37)
@@ -5240,7 +5240,7 @@ impl<'a, State> LexerElementsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_element_children(&self) -> impl Iterator<Item = LexerElementContext<'a>> + '_ {
         __rule_children(self.__node, 38)
@@ -5348,7 +5348,7 @@ impl<'a, State> LexerElementContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Option<ActionBlockContext<'a>> {
         __rule_children(self.__node, 14)
@@ -5477,7 +5477,7 @@ impl<'a, State> LexerBlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_alt_list(&self) -> Result<LexerAltListContext<'a>, MissingChildError> {
         __rule_children(self.__node, 35)
@@ -5599,7 +5599,7 @@ impl<'a, State> LexerCommandsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_command_children(&self) -> impl Iterator<Item = LexerCommandContext<'a>> + '_ {
         __rule_children(self.__node, 41)
@@ -5716,7 +5716,7 @@ impl<'a, State> LexerCommandContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn lexer_command_name(&self) -> Result<LexerCommandNameContext<'a>, MissingChildError> {
         __rule_children(self.__node, 42)
@@ -5841,7 +5841,7 @@ impl<'a, State> LexerCommandNameContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
         __rule_children(self.__node, 65)
@@ -5955,7 +5955,7 @@ impl<'a, State> LexerCommandExprContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
         __rule_children(self.__node, 65)
@@ -6069,7 +6069,7 @@ impl<'a, State> AltListContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn alternative_children(&self) -> impl Iterator<Item = AlternativeContext<'a>> + '_ {
         __rule_children(self.__node, 45)
@@ -6180,7 +6180,7 @@ impl<'a, State> AlternativeContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn element_children(&self) -> impl Iterator<Item = ElementContext<'a>> + '_ {
         __rule_children(self.__node, 46)
@@ -6293,7 +6293,7 @@ impl<'a, State> ElementContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Option<ActionBlockContext<'a>> {
         __rule_children(self.__node, 14)
@@ -6432,7 +6432,7 @@ impl<'a, State> PredicateOptionsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn predicate_option_children(&self) -> impl Iterator<Item = PredicateOptionContext<'a>> + '_ {
         __rule_children(self.__node, 48)
@@ -6555,7 +6555,7 @@ impl<'a, State> PredicateOptionContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn action_block(&self) -> Option<ActionBlockContext<'a>> {
         __rule_children(self.__node, 14)
@@ -6689,7 +6689,7 @@ impl<'a, State> LabeledElementContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn atom(&self) -> Option<AtomContext<'a>> {
         __rule_children(self.__node, 54)
@@ -6809,7 +6809,7 @@ impl<'a, State> EbnfContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn block_suffix(&self) -> Option<BlockSuffixContext<'a>> {
         __rule_children(self.__node, 51)
@@ -6924,7 +6924,7 @@ impl<'a, State> BlockSuffixContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn ebnf_suffix(&self) -> Result<EbnfSuffixContext<'a>, MissingChildError> {
         __rule_children(self.__node, 52)
@@ -7034,7 +7034,7 @@ impl<'a, State> EbnfSuffixContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn question_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 63).map(TerminalNode::new)
@@ -7151,7 +7151,7 @@ impl<'a, State> LexerAtomContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn wildcard(&self) -> Option<WildcardContext<'a>> {
         __rule_children(self.__node, 55)
@@ -7285,7 +7285,7 @@ impl<'a, State> AtomContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn wildcard(&self) -> Option<WildcardContext<'a>> {
         __rule_children(self.__node, 55)
@@ -7409,7 +7409,7 @@ impl<'a, State> WildcardContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn element_options(&self) -> Option<ElementOptionsContext<'a>> {
         __rule_children(self.__node, 63)
@@ -7524,7 +7524,7 @@ impl<'a, State> NotSetContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn block_set(&self) -> Option<BlockSetContext<'a>> {
         __rule_children(self.__node, 57)
@@ -7644,7 +7644,7 @@ impl<'a, State> BlockSetContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn set_element_children(&self) -> impl Iterator<Item = SetElementContext<'a>> + '_ {
         __rule_children(self.__node, 58)
@@ -7767,7 +7767,7 @@ impl<'a, State> SetElementContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn character_range(&self) -> Option<CharacterRangeContext<'a>> {
         __rule_children(self.__node, 61)
@@ -7896,7 +7896,7 @@ impl<'a, State> BlockContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn options_spec(&self) -> Option<OptionsSpecContext<'a>> {
         __rule_children(self.__node, 4)
@@ -8032,7 +8032,7 @@ impl<'a, State> RulerefContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn arg_action_block(&self) -> Option<ArgActionBlockContext<'a>> {
         __rule_children(self.__node, 15)
@@ -8152,7 +8152,7 @@ impl<'a, State> CharacterRangeContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn string_literal_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 11).map(TerminalNode::new)
@@ -8265,7 +8265,7 @@ impl<'a, State> TerminalDefContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn element_options(&self) -> Option<ElementOptionsContext<'a>> {
         __rule_children(self.__node, 63)
@@ -8384,7 +8384,7 @@ impl<'a, State> ElementOptionsContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn element_option_children(&self) -> impl Iterator<Item = ElementOptionContext<'a>> + '_ {
         __rule_children(self.__node, 64)
@@ -8507,7 +8507,7 @@ impl<'a, State> ElementOptionContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
         __rule_children(self.__node, 65)
@@ -8636,7 +8636,7 @@ impl<'a, State> IdentifierContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
 }
 
@@ -8740,7 +8740,7 @@ impl<'a, State> QualifiedIdentifierContext<'a, State> {
             __GeneratedRuleContext::Stored(node) => node.start(),
             __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
         };
-        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
     }
     pub fn identifier_children(&self) -> impl Iterator<Item = IdentifierContext<'a>> + '_ {
         __rule_children(self.__node, 65)

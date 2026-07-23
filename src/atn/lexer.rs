@@ -2400,7 +2400,7 @@ mod tests {
             token_type: token.token_type(),
             start: token.start(),
             stop: token.stop(),
-            text: token.text().to_owned(),
+            text: token.text_or_empty().to_owned(),
         }
     }
 
@@ -2647,7 +2647,7 @@ mod tests {
             token_type: token.token_type(),
             start: token.start(),
             stop: token.stop(),
-            text: token.text().to_owned(),
+            text: token.text_or_empty().to_owned(),
         }
     }
 
@@ -2685,8 +2685,11 @@ mod tests {
         }
 
         fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
-            self.emitted
-                .push((token.token_type(), token.channel(), token.text().to_owned()));
+            self.emitted.push((
+                token.token_type(),
+                token.channel(),
+                token.text_or_empty().to_owned(),
+            ));
         }
     }
 
@@ -2710,7 +2713,7 @@ mod tests {
         let token = sink.view(id).expect("dynamic token should exist");
         assert_eq!(token.token_type(), 7);
         assert_eq!(token.channel(), HIDDEN_CHANNEL);
-        assert_eq!(token.text(), "count \t");
+        assert_eq!(token.text(), Some("count \t"));
         assert_eq!(lexer.la(1), '(' as i32);
         assert_eq!(hooks.accepted, [(7, HIDDEN_CHANNEL, "count \t".to_owned())]);
         assert_eq!(hooks.emitted, [(7, HIDDEN_CHANNEL, "count \t".to_owned())]);
@@ -2785,7 +2788,7 @@ mod tests {
         let dot = sink.view(dot).expect("dot token should exist");
         assert_eq!(dot.token_type(), 1);
         assert_eq!(dot.channel(), DEFAULT_CHANNEL);
-        assert_eq!(dot.text(), ".");
+        assert_eq!(dot.text(), Some("."));
         assert_eq!(dot.start(), 0);
         assert_eq!(dot.stop(), 0);
         assert_eq!(dot.byte_span(), 0..1);
@@ -2795,7 +2798,7 @@ mod tests {
             .view(identifier)
             .expect("identifier token should exist");
         assert_eq!(identifier.token_type(), 2);
-        assert_eq!(identifier.text(), "β");
+        assert_eq!(identifier.text(), Some("β"));
         assert_eq!(identifier.start(), 1);
         assert_eq!(identifier.stop(), 1);
         assert_eq!(identifier.byte_span(), 1..3);
@@ -2852,9 +2855,9 @@ mod tests {
                 .expect("EOF token should fit");
 
         let prefix = sink.view(prefix).expect("prefix token should exist");
-        assert_eq!((prefix.token_type(), prefix.text()), (1, "a"));
+        assert_eq!((prefix.token_type(), prefix.text()), (1, Some("a")));
         let suffix = sink.view(suffix).expect("suffix token should exist");
-        assert_eq!((suffix.token_type(), suffix.text()), (2, "b"));
+        assert_eq!((suffix.token_type(), suffix.text()), (2, Some("b")));
         assert_eq!(
             sink.view(eof).expect("EOF token should exist").token_type(),
             TOKEN_EOF
@@ -2894,8 +2897,11 @@ mod tests {
         }
 
         fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
-            self.events
-                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+            self.events.push(format!(
+                "emit:{}:{}",
+                token.token_type(),
+                token.text_or_empty()
+            ));
         }
     }
 
@@ -2922,7 +2928,7 @@ mod tests {
             .into_iter()
             .map(|id| {
                 let token = sink.view(id).expect("lifecycle token should exist");
-                (token.token_type(), token.text().to_owned())
+                (token.token_type(), token.text_or_empty().to_owned())
             })
             .collect();
         (tokens, hooks.events)
@@ -2985,8 +2991,11 @@ mod tests {
         }
 
         fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
-            self.events
-                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+            self.events.push(format!(
+                "emit:{}:{}",
+                token.token_type(),
+                token.text_or_empty()
+            ));
         }
     }
 
@@ -3006,7 +3015,10 @@ mod tests {
         let token = sink
             .view(id)
             .expect("combined lifecycle token should exist");
-        ((token.token_type(), token.text().to_owned()), hooks.events)
+        (
+            (token.token_type(), token.text_or_empty().to_owned()),
+            hooks.events,
+        )
     }
 
     #[test]
@@ -3086,7 +3098,7 @@ mod tests {
                     token.token_type(),
                     token.start(),
                     token.stop(),
-                    token.text().to_owned(),
+                    token.text_or_empty().to_owned(),
                 )
             })
             .collect();
@@ -3139,8 +3151,11 @@ mod tests {
         }
 
         fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
-            self.events
-                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+            self.events.push(format!(
+                "emit:{}:{}",
+                token.token_type(),
+                token.text_or_empty()
+            ));
         }
     }
 
@@ -3172,7 +3187,7 @@ mod tests {
                 let token = sink
                     .view(id)
                     .expect("overridden control-action token should exist");
-                (token.token_type(), token.text().to_owned())
+                (token.token_type(), token.text_or_empty().to_owned())
             })
             .collect();
         (tokens, hooks.events)
@@ -3267,7 +3282,7 @@ mod tests {
         let first =
             next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
                 .expect("queued prefix should fit");
-        assert_eq!(sink.view(first).expect("prefix exists").text(), ".");
+        assert_eq!(sink.view(first).expect("prefix exists").text(), Some("."));
         assert!(hooks.transient);
 
         lexer.push_mode(7);
@@ -3292,7 +3307,7 @@ mod tests {
             sink.view(after_reset)
                 .expect("post-reset prefix exists")
                 .text(),
-            ".",
+            Some("."),
             "the stale queued suffix must not survive reset"
         );
     }
@@ -3339,7 +3354,7 @@ mod tests {
         let token = sink.view(id).expect("predicate token should exist");
 
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "a");
+        assert_eq!(token.text(), Some("a"));
         assert_eq!(predicate_calls, 1);
     }
 
@@ -3484,7 +3499,7 @@ mod tests {
             .expect("nested action token should fit");
             let token = sink.view(token).expect("nested action token should exist");
             assert_eq!(token.token_type(), 1, "{strategy:?}");
-            assert_eq!(token.text(), "{/*x*/}", "{strategy:?}");
+            assert_eq!(token.text(), Some("{/*x*/}"), "{strategy:?}");
         }
     }
 
@@ -3538,7 +3553,7 @@ mod tests {
                 let token = sink.view(token).expect("token should exist");
                 if token_count == 0 {
                     assert_eq!(token.token_type(), 1, "{strategy:?}");
-                    assert_eq!(token.text(), first, "{strategy:?}");
+                    assert_eq!(token.text(), Some(first), "{strategy:?}");
                     assert_eq!(token.channel(), HIDDEN_CHANNEL, "{strategy:?}");
                 } else if token_count == 3 {
                     contexts_after_warmup = lexer.lexer_dfa_cache_shape().3;

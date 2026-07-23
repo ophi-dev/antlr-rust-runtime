@@ -397,7 +397,7 @@ where
         (start..=stop.min(self.source_token_count.saturating_sub(1)))
             .filter_map(|index| self.get(index))
             .take_while(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text())
+            .map(|token| token.text_or_empty())
             .collect()
     }
 
@@ -405,7 +405,7 @@ where
     pub fn text_all(&self) -> String {
         self.tokens()
             .filter(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text())
+            .map(|token| token.text_or_empty())
             .collect()
     }
 
@@ -635,7 +635,7 @@ mod tests {
                 .token_store()
                 .iter()
                 .next_back()
-                .map(|token| token.text()),
+                .and_then(|token| token.text()),
             Some("<missing token>")
         );
     }

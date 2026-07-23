@@ -105,7 +105,7 @@ fn main() -> ExitCode {
                     "{}\t{}\t{:?}",
                     token.token_type(),
                     token.channel(),
-                    token.text()
+                    token.text_or_empty()
                 );
             }
         }
