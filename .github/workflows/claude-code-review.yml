@@ -42,7 +42,7 @@ jobs:
 
       - name: Install stable Rust
         run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup toolchain install --profile minimal --no-self-update
           rustup default stable
 
       - name: install cargo binstall
@@ -69,6 +69,8 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
+        env:
+          CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
@@ -86,9 +88,7 @@ jobs:
             --model "claude-opus-4-8[1m]"
             --no-chrome
             --dangerously-skip-permissions
-          plugins: |
-            code-review
-            rust-analyzer-lsp
+          plugins: "code-review@claude-code-plugins"
 
           # The trailing directive fixes a CI-only stall: the review skill fans out to
           # parallel sub-agents, and on its final turn the model would emit "I'll wait
