@@ -186,7 +186,7 @@ mod tests {
         let references = tokens
             .tokens()
             .filter(|token| matches!(token.token_type(), RULE_REF | TOKEN_REF))
-            .map(|token| (token.text().to_owned(), token.token_type()))
+            .map(|token| (token.text_or_empty().to_owned(), token.token_type()))
             .collect::<Vec<_>>();
 
         assert_eq!(

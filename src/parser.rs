@@ -11681,7 +11681,8 @@ fn caller_follow_token_info_for_stream<S: TokenSource>(
         .and_then(Token::text)
         .is_some_and(is_caller_follow_boundary_text);
     let is_boundary_gap = token.as_ref().is_some_and(|token| {
-        token.channel() != visible_channel || is_caller_follow_boundary_gap_text(token.text())
+        token.channel() != visible_channel
+            || is_caller_follow_boundary_gap_text(token.text_or_empty())
     });
     (token_type, is_boundary, is_boundary_gap)
 }
@@ -16290,7 +16291,7 @@ mod tests {
         let source_index_after_parse = stream.token_source().index;
         let buffered = stream.tokens().collect::<Vec<_>>();
         assert_eq!(buffered.len(), 2);
-        assert_eq!(buffered[0].text(), "x");
+        assert_eq!(buffered[0].text(), Some("x"));
         assert_eq!(buffered[0].token_id().index(), 0);
         assert_eq!(buffered[1].token_type(), TOKEN_EOF);
         assert_eq!(stream.token_source().index, source_index_after_parse);
@@ -16298,7 +16299,10 @@ mod tests {
 
         let stream = parser.into_token_stream();
         assert_eq!(stream.token_source().index, source_index_after_parse);
-        assert_eq!(stream.tokens().next().expect("first token").text(), "x");
+        assert_eq!(
+            stream.tokens().next().expect("first token").text(),
+            Some("x")
+        );
         assert_eq!(
             stream.tokens().nth(1).expect("EOF token").token_type(),
             TOKEN_EOF
@@ -16328,9 +16332,9 @@ mod tests {
                 .map(|token| (token.token_type(), token.channel(), token.text()))
                 .collect::<Vec<_>>(),
             [
-                (99, HIDDEN_CHANNEL, " comment"),
-                (1, DEFAULT_CHANNEL, "x"),
-                (TOKEN_EOF, DEFAULT_CHANNEL, "<EOF>"),
+                (99, HIDDEN_CHANNEL, Some(" comment")),
+                (1, DEFAULT_CHANNEL, Some("x")),
+                (TOKEN_EOF, DEFAULT_CHANNEL, Some("<EOF>")),
             ]
         );
         assert_eq!(parsed.tokens().into_iter().count(), 3);
@@ -16356,7 +16360,7 @@ mod tests {
                 .first_error_token()
                 .expect("recovery should embed an error token")
                 .text(),
-            "y"
+            Some("y")
         );
     }
 
@@ -16637,7 +16641,8 @@ mod tests {
                 ctx.input_index(),
                 rule_index,
                 pred_index,
-                ctx.token_text(1).map(|token| token.text().to_owned()),
+                ctx.token_text(1)
+                    .and_then(|token| token.text().map(str::to_owned)),
             ));
             Some(true)
         }
@@ -16675,7 +16680,8 @@ mod tests {
                 ctx.input_index(),
                 rule_index,
                 pred_index,
-                ctx.token_text(1).map(|token| token.text().to_owned()),
+                ctx.token_text(1)
+                    .and_then(|token| token.text().map(str::to_owned)),
             ));
             Some(false)
         }

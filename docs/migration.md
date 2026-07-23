@@ -24,6 +24,11 @@ now append a `TokenSpec` directly to the supplied `TokenSink` and return its
 should provide `source_text()` when the complete UTF-8 input can be shared;
 otherwise token text is stored explicitly in the sparse side pool.
 
+`TokenView::text()` now returns `Option<&str>`, matching `Token::text()` for
+both concrete and generic receivers. Code that intentionally treats missing
+token text as empty can use `TokenView::text_or_empty()`; otherwise handle the
+`None` case explicitly.
+
 `CommonTokenStream` owns its `TokenStore` directly. `BaseParser` owns one
 `ParseTreeStorage`: nodes are addressed by `NodeId`, every rule child list is a
 range in one shared edge pool, and terminal/error records contain only

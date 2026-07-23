@@ -13,8 +13,13 @@ impl TypeScriptParserBase {
     where
         S: TokenSource,
     {
-        ctx.token_at(index)
-            .map(|token| (token.channel(), token.token_type(), token.text().to_owned()))
+        ctx.token_at(index).map(|token| {
+            (
+                token.channel(),
+                token.token_type(),
+                token.text_or_empty().to_owned(),
+            )
+        })
     }
 
     fn has_line_terminator_ahead<S>(ctx: &mut ParserSemCtx<'_, S>) -> bool
@@ -66,7 +71,7 @@ impl TypeScriptParserHooks for TypeScriptParserBase {
         S: TokenSource,
     {
         ctx.token_text(-1)
-            .is_some_and(|token| token.text() == expected)
+            .is_some_and(|token| token.text() == Some(expected))
     }
 
     fn n<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>, expected: &str) -> bool
@@ -74,7 +79,7 @@ impl TypeScriptParserHooks for TypeScriptParserBase {
         S: TokenSource,
     {
         ctx.token_text(1)
-            .is_some_and(|token| token.text() == expected)
+            .is_some_and(|token| token.text() == Some(expected))
     }
 
     fn not_line_terminator<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>) -> bool

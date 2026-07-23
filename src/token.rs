@@ -75,6 +75,11 @@ pub trait Token: fmt::Debug {
     /// Zero-based source column where the token starts, measured in Unicode
     /// scalar values from the start of `line`.
     fn column(&self) -> usize;
+    /// Returns the token's explicit or source-backed text.
+    ///
+    /// [`TokenView::text`] has the same return type and semantics. Use
+    /// [`TokenView::text_or_empty`] only when missing text should intentionally
+    /// be treated as an empty string.
     fn text(&self) -> Option<&str>;
     fn source_name(&self) -> &str;
 
@@ -580,11 +585,18 @@ pub struct TokenView<'a> {
 }
 
 impl<'a> TokenView<'a> {
-    /// The token's text, empty when no explicit or source-backed text exists.
+    /// Returns the token's explicit or source-backed text.
     #[must_use]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn text(&self) -> &'a str {
-        self.store.text(self.id).unwrap_or("")
+    pub fn text(&self) -> Option<&'a str> {
+        self.store.text(self.id)
+    }
+
+    /// Returns the token's text, or an empty string when no text exists.
+    #[must_use]
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn text_or_empty(&self) -> &'a str {
+        self.text().unwrap_or("")
     }
 }
 
@@ -674,7 +686,7 @@ impl fmt::Display for TokenView<'_> {
             display_token_index(self),
             display_token_boundary(self.start()),
             display_token_boundary(self.stop()),
-            display_text(self.text()),
+            display_text(self.text_or_empty()),
             self.token_type(),
             channel,
             self.line(),
@@ -685,7 +697,7 @@ impl fmt::Display for TokenView<'_> {
 
 impl AsRef<str> for TokenView<'_> {
     fn as_ref(&self) -> &str {
-        self.text()
+        self.text_or_empty()
     }
 }
 
@@ -864,7 +876,7 @@ mod tests {
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 1);
         assert_eq!(token.byte_span(), 2..4);
-        assert_eq!(token.text(), "β");
+        assert_eq!(token.text(), Some("β"));
     }
 
     #[test]
@@ -913,7 +925,7 @@ mod tests {
 
         let mut iter = store.iter();
         assert_eq!(iter.len(), 3);
-        assert_eq!(iter.next().map(|token| token.text()), Some("a"));
+        assert_eq!(iter.next().and_then(|token| token.text()), Some("a"));
         assert_eq!(
             iter.next_back().map(|token| token.token_type()),
             Some(TOKEN_EOF)
@@ -931,5 +943,30 @@ mod tests {
                 (2, DEFAULT_CHANNEL)
             ]
         );
+    }
+
+    #[test]
+    fn token_view_text_matches_token_trait_semantics() {
+        fn generic_text(token: &impl Token) -> Option<&str> {
+            token.text()
+        }
+
+        let store = one_token(TokenSpec {
+            token_type: 1,
+            channel: DEFAULT_CHANNEL,
+            start: 0,
+            stop: 0,
+            start_byte: 0,
+            stop_byte: 0,
+            line: 1,
+            column: 0,
+            text: None,
+            source_backed: false,
+        });
+        let token = store.view(TokenId(0)).expect("token");
+
+        assert_eq!(token.text(), None);
+        assert_eq!(generic_text(&token), None);
+        assert_eq!(token.text_or_empty(), "");
     }
 }

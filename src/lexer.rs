@@ -1704,7 +1704,7 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), "<EOF>");
+        assert_eq!(token.text(), Some("<EOF>"));
         assert_eq!(token.byte_span(), 2..2);
     }
 
@@ -1731,7 +1731,7 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), "<EOF>");
+        assert_eq!(token.text(), Some("<EOF>"));
         assert_eq!(token.byte_span(), 2..2);
     }
 
@@ -1758,7 +1758,7 @@ mod tests {
 
         assert_eq!(token.start(), 0);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), "β");
+        assert_eq!(token.text(), Some("β"));
         assert_eq!(token.byte_span(), 0..2);
     }
 
@@ -1783,7 +1783,7 @@ mod tests {
             .expect("unshared input should emit explicit token text");
         let token = sink.view(id).expect("emitted token should exist");
 
-        assert_eq!(token.text(), "β");
+        assert_eq!(token.text(), Some("β"));
         assert_eq!(token.byte_span(), 0..2);
     }
 
