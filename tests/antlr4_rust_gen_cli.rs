@@ -383,6 +383,82 @@ mod typed_label_tests {
 }
 
 #[test]
+fn grouped_literal_tokens_are_exposed_on_typed_contexts() {
+    let temp = temporary_directory("grouped-token-accessors");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/grouped-token-accessors/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod grouped_token_tests {
+    use super::t_lexer::TLexer;
+    use super::t_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    #[test]
+    fn reads_grouped_operators_and_context_text() {
+        let lexer = TLexer::new(InputStream::new("left<=right=+="));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = TParser::new(tokens);
+        let root = parser.root().expect("operator input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let root = parsed
+            .tree()
+            .as_rule()
+            .expect("root rule")
+            .downcast_ref::<RootContext>()
+            .expect("typed root context");
+        let expression = root.expression().expect("root expression");
+        assert_eq!(expression.text(), "left<=right");
+        assert_eq!(expression.bop().expect("operator label").to_string(), "<=");
+        assert!(expression.le_token().is_some());
+        assert!(expression.ge_token().is_none());
+        assert!(expression.equal_token().is_none());
+        assert!(expression.notequal_token().is_none());
+        assert!(expression.assign_token().is_none());
+        assert!(expression.add_assign_token().is_none());
+
+        let identifier = expression
+            .expression_children()
+            .next()
+            .expect("left expression")
+            .identifier()
+            .expect("left identifier");
+        assert_eq!(identifier.text(), "left");
+
+        let operators = root
+            .operator_sequence()
+            .expect("trailing operator sequence");
+        assert_eq!(operators.assign_tokens().count(), 1);
+        assert_eq!(operators.add_assign_tokens().count(), 1);
+        assert_eq!(operators.le_tokens().count(), 0);
+
+        let eof_choice = root.eof_choice().expect("EOF choice");
+        assert!(eof_choice.eof_token().is_some());
+        assert!(eof_choice.le_token().is_none());
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
     let temp = temporary_directory("typed-tree-walkers");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
