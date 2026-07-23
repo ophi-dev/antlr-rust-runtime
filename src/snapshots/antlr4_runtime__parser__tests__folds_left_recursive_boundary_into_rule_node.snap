@@ -1,0 +1,13 @@
+---
+source: src/parser.rs
+expression: "(rule_index, invoking_state, alt_number, start_index, stop_index)"
+---
+(
+    1,
+    -1,
+    3,
+    0,
+    Some(
+        0,
+    ),
+)

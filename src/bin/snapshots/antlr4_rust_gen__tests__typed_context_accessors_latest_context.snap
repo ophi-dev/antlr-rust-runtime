@@ -1,0 +1,30 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: latest_context
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+    pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
+        __rule_children(self.__node, 2)
+            .map(move |node| AtomContext::__from_child_node(node, &self.__invocation_states))
+    }
+    pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError> {
+        __rule_children(self.__node, 2)
+            .skip(0).last()
+            .map(|node| AtomContext::__from_child_node(node, &self.__invocation_states))
+            .ok_or_else(|| MissingChildError::new("LatestContext", "value"))
+    }
+}

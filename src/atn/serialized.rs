@@ -853,6 +853,7 @@ fn read_index(value: i32, label: &str) -> Result<usize, AntlrError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -877,12 +878,18 @@ mod tests {
         let atn = AtnDeserializer::new(&serialized)
             .deserialize_parser()
             .expect("artificial parser ATN should deserialize");
-        assert_eq!(atn.max_token_type(), 9);
-        assert_eq!(atn.states().len(), 2);
-        assert_eq!(atn.rule_to_start_state().iter().collect::<Vec<_>>(), [0]);
-        assert_eq!(atn.rule_to_stop_state().iter().collect::<Vec<_>>(), [1]);
-        assert_eq!(atn.decision_to_state().iter().collect::<Vec<_>>(), [0]);
-        assert_eq!(atn.stats().transitions, 1);
+        // One summary snapshot of the deserialized shape supersedes the six per-accessor pokes and
+        // additionally locks the full ParserAtnStats layout (states count included).
+        insta::assert_debug_snapshot!(
+            "reads_small_parser_atn",
+            (
+                atn.max_token_type(),
+                atn.rule_to_start_state().iter().collect::<Vec<_>>(),
+                atn.rule_to_stop_state().iter().collect::<Vec<_>>(),
+                atn.decision_to_state().iter().collect::<Vec<_>>(),
+                atn.stats(),
+            )
+        );
     }
 
     #[test]
@@ -891,10 +898,6 @@ mod tests {
         let error = AtnDeserializer::new(&serialized)
             .deserialize()
             .expect_err("parser input must not create a lexer graph");
-        assert!(
-            error
-                .to_string()
-                .contains("AtnDeserializer::deserialize_parser()")
-        );
+        insta::assert_snapshot!(error.to_string(), @"unsupported runtime feature: parser ATNs require AtnDeserializer::deserialize_parser()");
     }
 }

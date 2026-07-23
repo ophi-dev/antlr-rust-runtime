@@ -143,6 +143,7 @@ fn complement(ranges: &[i32]) -> IntervalSet {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -253,8 +254,26 @@ mod tests {
 
     #[test]
     fn parse_unicode_property_inverted_matches_java() {
-        let mut expected = IntervalSet::from_range(0, 66_559);
-        expected.add_range(66_640, 0x10_ffff);
-        assert_eq!(parse_escape("\\P{Deseret}", 0), property(expected, 11));
+        // The `\P` complement spans two coalesced ranges (0..=66_559, 66_640..=0x10_ffff); the
+        // whole EscapeSequenceResult::Property is clearer as one inline snapshot than as a
+        // hand-assembled `expected` set.
+        insta::assert_debug_snapshot!(parse_escape("\\P{Deseret}", 0), @"
+        Property {
+            code_points: IntervalSet {
+                ranges: [
+                    (
+                        0,
+                        66559,
+                    ),
+                    (
+                        66640,
+                        1114111,
+                    ),
+                ],
+            },
+            start: 0,
+            stop: 11,
+        }
+        ");
     }
 }

@@ -1,0 +1,600 @@
+---
+source: src/bin_support/grammar/syntax.rs
+expression: unit
+---
+GrammarUnit {
+    id: GrammarId(
+        0,
+    ),
+    source: SourceId(
+        2,
+    ),
+    name: "P",
+    kind: Parser,
+    prequels: [
+        Options {
+            declarations: 0..1,
+            span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 19..44,
+            },
+        },
+        Tokens {
+            declarations: 0..1,
+            span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 45..61,
+            },
+        },
+    ],
+    options: [
+        OptionDecl {
+            name: Authored {
+                value: "tokenVocab",
+                syntax: SyntaxId(
+                    8589934605,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        2,
+                    ),
+                    bytes: 29..39,
+                },
+            },
+            value: Authored {
+                value: "L",
+                syntax: SyntaxId(
+                    8589934607,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        2,
+                    ),
+                    bytes: 40..41,
+                },
+            },
+        },
+    ],
+    tokens: [
+        TokenDeclaration {
+            id: TokenSymbolId(
+                0,
+            ),
+            name: Authored {
+                value: "EXTRA",
+                syntax: SyntaxId(
+                    8589934617,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        2,
+                    ),
+                    bytes: 54..59,
+                },
+            },
+        },
+    ],
+    channels: [],
+    actions: [
+        NamedAction {
+            id: ActionId(
+                0,
+            ),
+            scope: Some(
+                "parser",
+            ),
+            name: "members",
+            body: " fn member() {} ",
+            body_span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 79..97,
+            },
+            syntax: SyntaxId(
+                8589934620,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 62..97,
+            },
+        },
+    ],
+    modes: [],
+    rules: [
+        Rule {
+            id: RuleId(
+                0,
+            ),
+            name: "entry",
+            name_span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 98..103,
+            },
+            kind: Parser,
+            fragment: false,
+            modifiers: [],
+            arguments: Some(
+                AttributeClause {
+                    text: "int x",
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 103..110,
+                    },
+                },
+            ),
+            returns: Some(
+                AttributeClause {
+                    text: "int y",
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 119..126,
+                    },
+                },
+            ),
+            locals: Some(
+                AttributeClause {
+                    text: "int z",
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 147..154,
+                    },
+                },
+            ),
+            throws: [
+                Authored {
+                    value: "Error",
+                    syntax: SyntaxId(
+                        8589934653,
+                    ),
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 134..139,
+                    },
+                },
+            ],
+            options: [
+                OptionDecl {
+                    name: Authored {
+                        value: "memoize",
+                        syntax: SyntaxId(
+                            8589934671,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                2,
+                            ),
+                            bytes: 165..172,
+                        },
+                    },
+                    value: Authored {
+                        value: "true",
+                        syntax: SyntaxId(
+                            8589934673,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                2,
+                            ),
+                            bytes: 173..177,
+                        },
+                    },
+                },
+            ],
+            actions: [
+                NamedAction {
+                    id: ActionId(
+                        1,
+                    ),
+                    scope: None,
+                    name: "init",
+                    body: " setup(); ",
+                    body_span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 187..199,
+                    },
+                    syntax: SyntaxId(
+                        8589934679,
+                    ),
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 181..199,
+                    },
+                },
+            ],
+            catches: [
+                ExceptionHandler {
+                    argument: "Error error",
+                    body: " recover(error); ",
+                    body_span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 315..334,
+                    },
+                    syntax: SyntaxId(
+                        8589934755,
+                    ),
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 295..334,
+                    },
+                },
+            ],
+            finally_action: Some(
+                NamedAction {
+                    id: ActionId(
+                        2,
+                    ),
+                    scope: None,
+                    name: "finally",
+                    body: " finish(); ",
+                    body_span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 343..356,
+                    },
+                    syntax: SyntaxId(
+                        8589934773,
+                    ),
+                    span: SourceSpan {
+                        source: SourceId(
+                            2,
+                        ),
+                        bytes: 335..356,
+                    },
+                },
+            ),
+            left_recursion: None,
+            block: Block {
+                alternatives: [
+                    Alternative {
+                        id: AlternativeId(
+                            0,
+                        ),
+                        elements: [
+                            Element {
+                                id: ElementId(
+                                    0,
+                                ),
+                                kind: Terminal(
+                                    Token(
+                                        "ID",
+                                    ),
+                                ),
+                                quantifier: One,
+                                label: Some(
+                                    Label {
+                                        id: LabelId(
+                                            0,
+                                        ),
+                                        name: "left",
+                                        kind: Single,
+                                        syntax: SyntaxId(
+                                            8589934693,
+                                        ),
+                                        span: SourceSpan {
+                                            source: SourceId(
+                                                2,
+                                            ),
+                                            bytes: 206..210,
+                                        },
+                                    },
+                                ),
+                                options: [
+                                    OptionDecl {
+                                        name: Authored {
+                                            value: "assoc",
+                                            syntax: SyntaxId(
+                                                8589934702,
+                                            ),
+                                            span: SourceSpan {
+                                                source: SourceId(
+                                                    2,
+                                                ),
+                                                bytes: 214..219,
+                                            },
+                                        },
+                                        value: Authored {
+                                            value: "right",
+                                            syntax: SyntaxId(
+                                                8589934704,
+                                            ),
+                                            span: SourceSpan {
+                                                source: SourceId(
+                                                    2,
+                                                ),
+                                                bytes: 220..225,
+                                            },
+                                        },
+                                    },
+                                ],
+                                syntax: SyntaxId(
+                                    8589934690,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 211..226,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 206..226,
+                                },
+                            },
+                            Element {
+                                id: ElementId(
+                                    1,
+                                ),
+                                kind: Block(
+                                    Block {
+                                        alternatives: [
+                                            Alternative {
+                                                id: AlternativeId(
+                                                    1,
+                                                ),
+                                                elements: [
+                                                    Element {
+                                                        id: ElementId(
+                                                            2,
+                                                        ),
+                                                        kind: Terminal(
+                                                            Token(
+                                                                "COMMA",
+                                                            ),
+                                                        ),
+                                                        quantifier: One,
+                                                        label: None,
+                                                        options: [],
+                                                        syntax: SyntaxId(
+                                                            8589934714,
+                                                        ),
+                                                        span: SourceSpan {
+                                                            source: SourceId(
+                                                                2,
+                                                            ),
+                                                            bytes: 228..233,
+                                                        },
+                                                        enclosing_span: SourceSpan {
+                                                            source: SourceId(
+                                                                2,
+                                                            ),
+                                                            bytes: 228..233,
+                                                        },
+                                                    },
+                                                    Element {
+                                                        id: ElementId(
+                                                            3,
+                                                        ),
+                                                        kind: RuleCall(
+                                                            RuleCall {
+                                                                name: "entry",
+                                                                arguments: Some(
+                                                                    "1",
+                                                                ),
+                                                                precedence: None,
+                                                            },
+                                                        ),
+                                                        quantifier: One,
+                                                        label: Some(
+                                                            Label {
+                                                                id: LabelId(
+                                                                    1,
+                                                                ),
+                                                                name: "values",
+                                                                kind: List,
+                                                                syntax: SyntaxId(
+                                                                    8589934721,
+                                                                ),
+                                                                span: SourceSpan {
+                                                                    source: SourceId(
+                                                                        2,
+                                                                    ),
+                                                                    bytes: 234..240,
+                                                                },
+                                                            },
+                                                        ),
+                                                        options: [],
+                                                        syntax: SyntaxId(
+                                                            8589934718,
+                                                        ),
+                                                        span: SourceSpan {
+                                                            source: SourceId(
+                                                                2,
+                                                            ),
+                                                            bytes: 242..250,
+                                                        },
+                                                        enclosing_span: SourceSpan {
+                                                            source: SourceId(
+                                                                2,
+                                                            ),
+                                                            bytes: 234..250,
+                                                        },
+                                                    },
+                                                ],
+                                                label: None,
+                                                options: [],
+                                                commands: [],
+                                                syntax: SyntaxId(
+                                                    8589934713,
+                                                ),
+                                                span: SourceSpan {
+                                                    source: SourceId(
+                                                        2,
+                                                    ),
+                                                    bytes: 228..250,
+                                                },
+                                            },
+                                        ],
+                                        options: [],
+                                        syntax: SyntaxId(
+                                            8589934710,
+                                        ),
+                                        span: SourceSpan {
+                                            source: SourceId(
+                                                2,
+                                            ),
+                                            bytes: 227..251,
+                                        },
+                                    },
+                                ),
+                                quantifier: ZeroOrMore {
+                                    greedy: true,
+                                },
+                                label: None,
+                                options: [],
+                                syntax: SyntaxId(
+                                    8589934708,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 227..251,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 227..252,
+                                },
+                            },
+                            Element {
+                                id: ElementId(
+                                    4,
+                                ),
+                                kind: Predicate {
+                                    id: PredicateId(
+                                        0,
+                                    ),
+                                    body: "ready()",
+                                    fail: Some(
+                                        "no",
+                                    ),
+                                    precedence: None,
+                                },
+                                quantifier: One,
+                                label: None,
+                                options: [],
+                                syntax: SyntaxId(
+                                    8589934734,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 253..262,
+                                },
+                                enclosing_span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 253..275,
+                                },
+                            },
+                        ],
+                        label: Some(
+                            Authored {
+                                value: "Main",
+                                syntax: SyntaxId(
+                                    8589934749,
+                                ),
+                                span: SourceSpan {
+                                    source: SourceId(
+                                        2,
+                                    ),
+                                    bytes: 278..282,
+                                },
+                            },
+                        ),
+                        options: [],
+                        commands: [],
+                        syntax: SyntaxId(
+                            8589934688,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                2,
+                            ),
+                            bytes: 206..282,
+                        },
+                    },
+                    Alternative {
+                        id: AlternativeId(
+                            2,
+                        ),
+                        elements: [],
+                        label: None,
+                        options: [],
+                        commands: [],
+                        syntax: SyntaxId(
+                            8589934751,
+                        ),
+                        span: SourceSpan {
+                            source: SourceId(
+                                2,
+                            ),
+                            bytes: 293..293,
+                        },
+                    },
+                ],
+                options: [],
+                syntax: SyntaxId(
+                    8589934686,
+                ),
+                span: SourceSpan {
+                    source: SourceId(
+                        2,
+                    ),
+                    bytes: 206..288,
+                },
+            },
+            mode: None,
+            case_insensitive: None,
+            syntax: SyntaxId(
+                8589934631,
+            ),
+            span: SourceSpan {
+                source: SourceId(
+                    2,
+                ),
+                bytes: 98..356,
+            },
+        },
+    ],
+    syntax: SyntaxId(
+        8589934592,
+    ),
+    span: SourceSpan {
+        source: SourceId(
+            2,
+        ),
+        bytes: 1..357,
+    },
+}

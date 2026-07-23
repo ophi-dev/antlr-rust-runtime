@@ -11885,14 +11885,6 @@ mod tests {
         }
     }
 
-    fn ms(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
-        GeneratedParserStep::MatchSet {
-            token_set: None,
-            intervals,
-            follow_state,
-        }
-    }
-
     fn mts(
         token_set: usize,
         intervals: Vec<(i32, i32)>,
@@ -11912,14 +11904,6 @@ mod tests {
     ) -> GeneratedParserStep {
         GeneratedParserStep::MatchNotSet {
             token_set: Some(token_set),
-            intervals,
-            follow_state,
-        }
-    }
-
-    fn mns(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
-        GeneratedParserStep::MatchNotSet {
-            token_set: None,
             intervals,
             follow_state,
         }
@@ -11992,28 +11976,11 @@ mod tests {
         let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("block decision rule should compile");
 
-        assert_eq!(
-            body.steps,
-            [GeneratedParserStep::Decision {
-                state: 1,
-                decision: 0,
-                track_alt_number: true,
-                allow_semantic_context: false,
-                force_context: false,
-                fast_path: Some(GeneratedDecisionFastPath {
-                    arms: vec![
-                        GeneratedDecisionFastArm {
-                            alt: 1,
-                            intervals: vec![(1, 1)],
-                        },
-                        GeneratedDecisionFastArm {
-                            alt: 2,
-                            intervals: vec![(2, 2)],
-                        },
-                    ],
-                }),
-                alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
-            }]
+        // The compiled decision step (fast-path arms + per-alt token matches) is one structural
+        // snapshot instead of a hand-transcribed GeneratedParserStep literal.
+        insta::assert_debug_snapshot!(
+            "compiles_block_decision_with_adaptive_prediction",
+            body.steps
         );
 
         let rendered =
@@ -12042,21 +12009,7 @@ mod tests {
         let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("star loop rule should compile");
 
-        assert_eq!(
-            body.steps,
-            [GeneratedParserStep::StarLoop {
-                state: 1,
-                decision: 0,
-                enter_alt: 1,
-                exit_alt: 2,
-                track_alt_number: true,
-                allow_semantic_context: false,
-                force_context: false,
-                plus_loop: false,
-                fast_path: None,
-                body: vec![mt(1, 4)],
-            }]
-        );
+        insta::assert_debug_snapshot!("compiles_star_loop_with_adaptive_prediction", body.steps);
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("loop {"));
@@ -12081,23 +12034,9 @@ mod tests {
         let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("plus loop rule should compile");
 
-        assert_eq!(
-            body.steps,
-            [
-                mt(1, 3),
-                GeneratedParserStep::StarLoop {
-                    state: 4,
-                    decision: 0,
-                    enter_alt: 1,
-                    exit_alt: 2,
-                    track_alt_number: false,
-                    allow_semantic_context: false,
-                    force_context: false,
-                    plus_loop: true,
-                    fast_path: None,
-                    body: vec![mt(1, 3)],
-                }
-            ]
+        insta::assert_debug_snapshot!(
+            "compiles_plus_loop_back_with_adaptive_prediction",
+            body.steps
         );
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
@@ -12116,43 +12055,11 @@ mod tests {
         let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("plus block decision rule should compile");
 
-        let body_decision = GeneratedParserStep::Decision {
-            state: 1,
-            decision: 0,
-            track_alt_number: true,
-            allow_semantic_context: false,
-            force_context: false,
-            fast_path: Some(GeneratedDecisionFastPath {
-                arms: vec![
-                    GeneratedDecisionFastArm {
-                        alt: 1,
-                        intervals: vec![(1, 1)],
-                    },
-                    GeneratedDecisionFastArm {
-                        alt: 2,
-                        intervals: vec![(2, 2)],
-                    },
-                ],
-            }),
-            alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
-        };
-        assert_eq!(
-            body.steps,
-            [
-                body_decision.clone(),
-                GeneratedParserStep::StarLoop {
-                    state: 5,
-                    decision: 1,
-                    enter_alt: 1,
-                    exit_alt: 2,
-                    track_alt_number: false,
-                    allow_semantic_context: false,
-                    force_context: false,
-                    plus_loop: true,
-                    fast_path: None,
-                    body: vec![body_decision],
-                }
-            ]
+        // The plus-block body decision is repeated inside the loop step; snapshot the whole
+        // steps vec so both the leading decision and the loop body it feeds are one target.
+        insta::assert_debug_snapshot!(
+            "compiles_plus_block_body_decision_with_adaptive_prediction",
+            body.steps
         );
     }
 
@@ -12165,37 +12072,9 @@ mod tests {
         assert!(body.left_recursive);
         assert_eq!(body.rule_index, 0);
         assert_eq!(body.entry_state, 0);
-        assert_eq!(
-            body.steps,
-            [
-                mt(1, 2),
-                GeneratedParserStep::LeftRecursiveLoop {
-                    state: 2,
-                    decision: 0,
-                    enter_alt: 1,
-                    exit_alt: 2,
-                    rule_index: 0,
-                    entry_state: 0,
-                    body: vec![GeneratedParserStep::Decision {
-                        state: 3,
-                        decision: 1,
-                        track_alt_number: false,
-                        allow_semantic_context: true,
-                        force_context: false,
-                        fast_path: None,
-                        alts: vec![vec![
-                            GeneratedParserStep::Precedence(2),
-                            mt(2, 10),
-                            GeneratedParserStep::CallRule {
-                                source_state: 10,
-                                rule_index: 0,
-                                precedence: GeneratedRuleCallPrecedence::Literal(3),
-                            },
-                        ]],
-                    }],
-                }
-            ]
-        );
+        // The left-recursive loop (precedence step, nested decision, self CallRule) is one snapshot;
+        // the left_recursive/rule_index/entry_state flags above stay as explicit invariants.
+        insta::assert_debug_snapshot!("compiles_left_recursive_parser_rule", body.steps);
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
@@ -12513,76 +12392,34 @@ mod tests {
 
     #[test]
     fn compiles_token_set_transitions() {
+        let empty_states = BTreeSet::new();
+        let empty_coords = BTreeSet::new();
+        let action_states = ActionStateSets {
+            all: &empty_states,
+            generated: &empty_states,
+            inline: &empty_states,
+        };
+        let predicate_coords = PredicateCoordinateSets {
+            all: &empty_coords,
+            generated: &empty_coords,
+        };
+        let compile = |transition| {
+            compile_generated_parser_transition(3, &[], transition, action_states, predicate_coords)
+        };
+
         let range_atn = transition_atn(|_| ParserTransitionSpec::Range {
             target: 7,
             start: 2,
             stop: 4,
         });
-        let range = only_transition(&range_atn);
-        assert_eq!(
-            compile_generated_parser_transition(
-                3,
-                &[],
-                range,
-                ActionStateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                    inline: &BTreeSet::new(),
-                },
-                PredicateCoordinateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                }
-            ),
-            Some((Some(ms(vec![(2, 4)], 7)), 7))
-        );
-
         let set_atn = transition_atn(|builder| {
             let set = builder.add_interval_set([(1, 1), (5, 6)]).expect("set");
             ParserTransitionSpec::Set { target: 8, set }
         });
-        let set_transition = only_transition(&set_atn);
-        assert_eq!(
-            compile_generated_parser_transition(
-                3,
-                &[],
-                set_transition,
-                ActionStateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                    inline: &BTreeSet::new(),
-                },
-                PredicateCoordinateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                }
-            ),
-            Some((Some(ms(vec![(1, 1), (5, 6)], 8)), 8))
-        );
-
         let not_set_atn = transition_atn(|builder| {
             let set = builder.add_interval_set([(1, 1)]).expect("set");
             ParserTransitionSpec::NotSet { target: 9, set }
         });
-        let not_set_transition = only_transition(&not_set_atn);
-        assert_eq!(
-            compile_generated_parser_transition(
-                3,
-                &[],
-                not_set_transition,
-                ActionStateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                    inline: &BTreeSet::new(),
-                },
-                PredicateCoordinateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                }
-            ),
-            Some((Some(mns(vec![(1, 1)], 9)), 9))
-        );
-
         let dense_ranges = (1..=256)
             .step_by(2)
             .map(|token| (token, token))
@@ -12593,24 +12430,17 @@ mod tests {
                 .expect("dense set");
             ParserTransitionSpec::Set { target: 8, set }
         });
-        let dense_set_transition = only_transition(&dense_set_atn);
-        assert_eq!(
-            compile_generated_parser_transition(
-                3,
-                &[],
-                dense_set_transition,
-                ActionStateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                    inline: &BTreeSet::new(),
-                },
-                PredicateCoordinateSets {
-                    all: &BTreeSet::new(),
-                    generated: &BTreeSet::new(),
-                }
-            ),
-            Some((Some(mts(0, dense_ranges, 8)), 8))
-        );
+
+        // Range, sparse set, complement, and dense (bitset) set transitions all compile through the
+        // same call; one snapshot of the four labelled outcomes replaces four ~15-line asserts.
+        let compiled = [
+            ("range", only_transition(&range_atn)),
+            ("set", only_transition(&set_atn)),
+            ("not_set", only_transition(&not_set_atn)),
+            ("dense_set", only_transition(&dense_set_atn)),
+        ]
+        .map(|(label, transition)| (label, compile(transition)));
+        insta::assert_debug_snapshot!("compiles_token_set_transitions", compiled);
     }
 
     #[test]
@@ -12891,13 +12721,9 @@ mod tests {
             },
         );
 
-        assert!(
-            rendered.contains(
-                "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 1, &__ctx, __precedence)"
-            )
-        );
-        assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
-        assert!(rendered.contains("failed_predicate_error(\"semantic predicate\")"));
+        // A single predicate step renders into `rendered`; snapshot the whole emitted fragment
+        // rather than probing for three substrings within it.
+        insta::assert_snapshot!("renders_fail_option_parser_predicate_error", rendered);
     }
 
     fn render_call_rule_step(
@@ -13172,9 +12998,10 @@ mod tests {
             .split_once("impl<State> std::fmt::Display for SContext")
             .expect("s context display impl")
             .0;
-        assert!(s_context.contains("pub fn e(&self) -> Result<EContext<'a>, MissingChildError>"));
-        assert!(!s_context.contains("pub fn s(&self"));
-        assert!(!s_context.contains("_all(&self)"));
+        // Snapshot the whole sliced impl block: the generated accessor surface is the assertion.
+        // This also subsumes the old `!contains(...)` guards — a forbidden method (self-reference,
+        // `_all`) would surface as a diff instead of needing to be enumerated by hand.
+        insta::assert_snapshot!("typed_context_accessors_s_context", s_context);
 
         let e_context = rendered
             .split_once("impl<'a, State> EContext<'a, State> {")
@@ -13183,17 +13010,7 @@ mod tests {
             .split_once("impl<State> std::fmt::Display for EContext")
             .expect("e context display impl")
             .0;
-        assert!(
-            e_context.contains("pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>>")
-        );
-        assert!(e_context.contains("pub fn int_token(&self) -> Option<TerminalNode<'a>>"));
-        assert!(e_context.contains("pub fn star_token(&self) -> Option<TerminalNode<'a>>"));
-        assert!(e_context.contains("pub fn plus_token(&self) -> Option<TerminalNode<'a>>"));
-        assert!(e_context.contains("pub fn left(&self) -> Option<EContext<'a>>"));
-        assert!(e_context.contains("pub fn right(&self) -> Option<EContext<'a>>"));
-        assert!(!e_context.contains("pub fn s(&self"));
-        assert!(!e_context.contains("pub fn INT(&self"));
-        assert!(!e_context.contains("_all(&self)"));
+        insta::assert_snapshot!("typed_context_accessors_e_context", e_context);
     }
 
     #[test]
@@ -13291,9 +13108,8 @@ mod tests {
             .split_once("impl<State> std::fmt::Display for ManyLabelContext")
             .expect("many context display impl")
             .0;
-        assert!(
-            many_context.contains("pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>>")
-        );
+        // The EBNF-list accessor (iterator over repeated `rest`) is captured whole.
+        insta::assert_snapshot!("typed_context_accessors_many_context", many_context);
 
         let latest_context = rendered
             .split_once("impl<'a, State> LatestContext<'a, State> {")
@@ -13302,11 +13118,9 @@ mod tests {
             .split_once("impl<State> std::fmt::Display for LatestContext")
             .expect("latest context display impl")
             .0;
-        assert!(
-            latest_context
-                .contains("pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError>")
-        );
-        assert!(latest_context.contains(".skip(0).last()"));
+        // The single-label accessor (`.skip(0).last()` selecting the latest occurrence) is captured
+        // whole rather than probed for two substrings.
+        insta::assert_snapshot!("typed_context_accessors_latest_context", latest_context);
     }
 
     #[test]
@@ -13732,19 +13546,13 @@ mod tests {
             },
         );
 
-        assert!(rendered.contains("if __prediction.has_semantic_context"));
-        assert!(rendered.contains(
-            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 0, &__ctx, __precedence)"
-        ));
-        assert!(rendered.contains(
-            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 1, &__ctx, __precedence)"
-        ));
-        assert!(rendered.contains("__semantic_la == 1"));
-        assert!(
-            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: __alt, ..__prediction }")
+        // One decision renders into a fresh String; snapshot the whole emitted control flow (the
+        // semantic-context gate, both predicate probes, the alt rewrite, the no-viable fallback)
+        // instead of six positive probes plus one negative guard.
+        insta::assert_snapshot!(
+            "generated_decision_filters_semantic_predicate_alts",
+            rendered
         );
-        assert!(rendered.contains("no_viable_alternative_error(__decision_start)"));
-        assert!(!rendered.contains("__sync_error = Some(__error.clone())"));
     }
 
     #[test]
@@ -13800,8 +13608,13 @@ mod tests {
             },
         );
 
-        assert!(!rendered.contains("let __semantic_alt"));
-        assert!(!rendered.contains("__semantic_la == 1 && (__antlr_local_seen)"));
+        // Snapshot the whole rendered decision so the (non-)hoisting of the portable predicate is
+        // visible in context; the explicit ordering invariant below is kept because it names the
+        // guarantee crisply — a snapshot shows the layout but does not assert the ordering.
+        insta::assert_snapshot!(
+            "generated_decision_does_not_hoist_portable_predicate_past_local_action",
+            rendered
+        );
         let assignment = rendered
             .find("__antlr_local_seen = true;")
             .expect("portable assignment is rendered in the committed alternative");
@@ -13883,14 +13696,12 @@ mod tests {
             },
         );
 
-        assert!(rendered.contains("if self.base.report_diagnostic_errors()"));
-        assert!(rendered.contains("let __diagnostic_la = self.base.la(1);"));
-        assert!(rendered.contains("if __diagnostic_la == 2"));
-        assert!(rendered.contains("__diagnostic_alts.push(1);"));
-        assert!(rendered.contains("__diagnostic_alts.push(2);"));
-        assert!(rendered.contains(
-            "record_generated_ambiguity_diagnostic(atn(), 16, __decision_start, __decision_start, &__diagnostic_alts)"
-        ));
+        // The diagnostic-reporting branch (guard, lookahead, per-alt pushes, ambiguity record) is
+        // one snapshot rather than six substring probes.
+        insta::assert_snapshot!(
+            "generated_semantic_decision_reports_filtered_ambiguity_diagnostics",
+            rendered
+        );
     }
 
     #[test]
@@ -13929,13 +13740,10 @@ mod tests {
             },
         );
 
-        assert!(rendered.contains("if __prediction.alt == 1"));
-        assert!(rendered.contains(
-            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 0, &__ctx, __precedence)"
-        ));
-        assert!(rendered.contains("__semantic_la == 3"));
-        assert!(
-            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        // The whole rendered star-loop captures the leading-predicate-to-exit-alt filtering.
+        insta::assert_snapshot!(
+            "generated_loop_filters_failed_leading_predicate_to_exit_alt",
+            rendered
         );
     }
 
@@ -13983,11 +13791,10 @@ mod tests {
             },
         );
 
-        assert!(rendered.contains("__semantic_la == 3 && (__antlr_local_seen)"));
-        assert!(!rendered.contains("parser_semantic_ir_predicate_matches"));
-        assert!(
-            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
-        );
+        // Snapshotting the whole loop captures that the portable local predicate is inlined
+        // (`&& (__antlr_local_seen)`) and, crucially, that the SemIR hook path is NOT emitted — the
+        // old `!contains("parser_semantic_ir_predicate_matches")` guard is now a visible absence.
+        insta::assert_snapshot!("generated_loop_filters_portable_local_predicate", rendered);
     }
 
     #[test]
@@ -14038,15 +13845,13 @@ mod tests {
             },
         );
 
-        assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
-        // The lookahead guard comes first so `&&` short-circuits on it before the
-        // predicate hook runs; a non-matching lookahead must not trigger a
-        // fail-loud hit for an unknown/hook predicate on a non-candidate alt.
-        assert!(rendered.contains(
-            "(__semantic_la == 2 && self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 0, &__ctx, __precedence))"
-        ));
-        assert!(
-            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        // The lookahead guard comes first so `&&` short-circuits on it before the predicate hook
+        // runs; a non-matching lookahead must not trigger a fail-loud hit for an unknown/hook
+        // predicate on a non-candidate alt. The whole rendered loop makes that guard ordering and
+        // the nested-decision candidate condition visible in one snapshot.
+        insta::assert_snapshot!(
+            "generated_loop_filters_first_nested_predicated_decision",
+            rendered
         );
     }
 
@@ -14301,49 +14106,42 @@ mod tests {
 
     #[test]
     fn parses_supported_predicate_helpers() {
-        assert_eq!(
-            parse_invoke_predicate(r#"True():Invoke_pred()"#),
-            Some(PredicateTemplate::Invoke { value: true })
-        );
-        assert_eq!(
-            parse_invoke_predicate(r#"False():Invoke_pred()"#),
-            Some(PredicateTemplate::Invoke { value: false })
-        );
-        assert_eq!(
-            parse_predicate_template(r#"ParserPropertyCall({$parser}, "Property()")"#),
-            Some(PredicateTemplate::True)
-        );
-        assert_eq!(
-            parse_predicate_template("true"),
-            Some(PredicateTemplate::True)
-        );
-        assert_eq!(
-            parse_predicate_template("0==0"),
-            Some(PredicateTemplate::True)
-        );
-        assert_eq!(
-            parse_predicate_template("0 != 0"),
-            Some(PredicateTemplate::False)
-        );
-        assert_eq!(
-            parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
-            Some(PredicateTemplate::LocalIntEquals { value: 2 })
-        );
-        assert_eq!(
-            parse_raw_local_int_less_or_equal_predicate("5 >= $_p"),
-            Some(PredicateTemplate::LocalIntLessOrEqual { value: 5 })
-        );
-        assert_eq!(
-            parse_predicate_template("this.IsRightArrow()"),
-            Some(PredicateTemplate::TokenPairAdjacent)
-        );
-        assert_eq!(
-            parse_predicate_template("this.IsLocalVariableDeclaration()"),
-            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
-                rule_name: "local_variable_type".to_owned(),
-                text: "var".to_owned(),
-            })
-        );
+        // Each supported helper input paired with the template it parses to; one snapshot pins the
+        // whole recognition table (and which specialized parser owns each form) at once.
+        let parsed = [
+            (
+                "invoke:true",
+                parse_invoke_predicate(r#"True():Invoke_pred()"#),
+            ),
+            (
+                "invoke:false",
+                parse_invoke_predicate(r#"False():Invoke_pred()"#),
+            ),
+            (
+                "parser_property_call",
+                parse_predicate_template(r#"ParserPropertyCall({$parser}, "Property()")"#),
+            ),
+            ("literal_true", parse_predicate_template("true")),
+            ("zero_eq_zero", parse_predicate_template("0==0")),
+            ("zero_ne_zero", parse_predicate_template("0 != 0")),
+            (
+                "val_equals",
+                parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
+            ),
+            (
+                "raw_local_int_le",
+                parse_raw_local_int_less_or_equal_predicate("5 >= $_p"),
+            ),
+            (
+                "is_right_arrow",
+                parse_predicate_template("this.IsRightArrow()"),
+            ),
+            (
+                "is_local_variable_declaration",
+                parse_predicate_template("this.IsLocalVariableDeclaration()"),
+            ),
+        ];
+        insta::assert_debug_snapshot!("parses_supported_predicate_helpers", parsed);
     }
 
     #[test]
@@ -14404,9 +14202,9 @@ mod tests {
                 body: "customJava();".to_owned(),
             }]
         );
-        assert_eq!(
+        insta::assert_snapshot!(
             render_lexer_action_statement(&actions[0]),
-            "/* TODO unsupported embedded lexer action in rule ID: {customJava();}; rewrite target-specific actions as portable lexer commands where possible */"
+            @"/* TODO unsupported embedded lexer action in rule ID: {customJava();}; rewrite target-specific actions as portable lexer commands where possible */"
         );
         let method = render_lexer_action_method(&[((1, 0), actions[0].clone())]);
         assert!(method.contains("TODO unsupported embedded lexer action in rule ID"));
@@ -15756,32 +15554,10 @@ dispose = "hook"
         let data = portable_bool_parser_data();
         let portable = build_structural_portable_local_data(&data, &SemPatternFile::default())
             .expect("portable local semantics should build");
-        let action_state = structural_actions(&data)
-            .expect("structural actions should resolve")
-            .into_iter()
-            .next()
-            .expect("portable fixture has one action")
-            .state;
 
-        assert_eq!(
-            portable.declarations,
-            [vec!["let mut __antlr_local_seen = false;".to_owned()]]
-        );
-        assert_eq!(portable.required_generated_rules, BTreeSet::from([0]));
-        assert_eq!(
-            portable
-                .inline_actions
-                .get(&action_state)
-                .map(String::as_str),
-            Some("__antlr_local_seen = true;")
-        );
-        assert_eq!(
-            portable
-                .predicates
-                .get(&(0, 0))
-                .map(|(condition, message)| (condition.as_str(), message.as_deref())),
-            Some(("__antlr_local_seen", Some("not seen")))
-        );
+        // declarations, required_generated_rules, inline_actions (keyed by action state), and
+        // predicates all land in one snapshot; the BTreeMap/BTreeSet backing keeps it deterministic.
+        insta::assert_debug_snapshot!("translates_portable_boolean_local_semantics", portable);
 
         let module = render_parser("SParser", &data).expect("portable grammar should render");
         assert!(module.contains("let mut __antlr_local_seen = false;"));

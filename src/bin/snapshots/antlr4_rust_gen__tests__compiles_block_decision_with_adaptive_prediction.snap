@@ -1,0 +1,51 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: body.steps
+---
+[
+    Decision {
+        state: 1,
+        decision: 0,
+        track_alt_number: true,
+        allow_semantic_context: false,
+        force_context: false,
+        fast_path: Some(
+            GeneratedDecisionFastPath {
+                arms: [
+                    GeneratedDecisionFastArm {
+                        alt: 1,
+                        intervals: [
+                            (
+                                1,
+                                1,
+                            ),
+                        ],
+                    },
+                    GeneratedDecisionFastArm {
+                        alt: 2,
+                        intervals: [
+                            (
+                                2,
+                                2,
+                            ),
+                        ],
+                    },
+                ],
+            },
+        ),
+        alts: [
+            [
+                MatchToken {
+                    token_type: 1,
+                    follow_state: 4,
+                },
+            ],
+            [
+                MatchToken {
+                    token_type: 2,
+                    follow_state: 4,
+                },
+            ],
+        ],
+    },
+]

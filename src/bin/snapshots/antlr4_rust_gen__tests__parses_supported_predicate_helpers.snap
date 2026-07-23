@@ -1,0 +1,77 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: parsed
+---
+[
+    (
+        "invoke:true",
+        Some(
+            Invoke {
+                value: true,
+            },
+        ),
+    ),
+    (
+        "invoke:false",
+        Some(
+            Invoke {
+                value: false,
+            },
+        ),
+    ),
+    (
+        "parser_property_call",
+        Some(
+            True,
+        ),
+    ),
+    (
+        "literal_true",
+        Some(
+            True,
+        ),
+    ),
+    (
+        "zero_eq_zero",
+        Some(
+            True,
+        ),
+    ),
+    (
+        "zero_ne_zero",
+        Some(
+            False,
+        ),
+    ),
+    (
+        "val_equals",
+        Some(
+            LocalIntEquals {
+                value: 2,
+            },
+        ),
+    ),
+    (
+        "raw_local_int_le",
+        Some(
+            LocalIntLessOrEqual {
+                value: 5,
+            },
+        ),
+    ),
+    (
+        "is_right_arrow",
+        Some(
+            TokenPairAdjacent,
+        ),
+    ),
+    (
+        "is_local_variable_declaration",
+        Some(
+            ContextChildRuleTextNotEquals {
+                rule_name: "local_variable_type",
+                text: "var",
+            },
+        ),
+    ),
+]

@@ -1132,6 +1132,7 @@ pub(crate) const fn cst(file: &SourceFile) -> &Cst {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
     use crate::grammar::frontend::{SourceId, parse_source};
@@ -1157,55 +1158,17 @@ finally { finish(); }
         let mut provenance = ProvenanceIndex::default();
         let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
 
-        assert_eq!(unit.kind, GrammarKind::Parser);
-        assert_eq!(unit.tokens[0].name.value, "EXTRA");
-        assert_eq!(unit.actions[0].scope.as_deref(), Some("parser"));
-        let rule = &unit.rules[0];
-        assert_eq!(
-            rule.arguments.as_ref().map(|clause| clause.text.as_str()),
-            Some("int x")
+        // The whole converted parser unit (kind, tokens, rule arg/return/locals/throws clauses,
+        // actions, catch/finally, alternative labels, element labels, quantifiers, predicate kinds)
+        // is one structural regression target — far more observable than a dozen hand-picked pokes.
+        insta::assert_debug_snapshot!("converts_parser_rules_and_nested_elements", unit);
+        // Provenance is tracked in a separate index a `unit` snapshot cannot express, so keep it as
+        // an explicit invariant.
+        assert!(
+            !provenance
+                .origins(ModelNodeId::Rule(unit.rules[0].id))
+                .is_empty()
         );
-        assert_eq!(
-            rule.returns.as_ref().map(|clause| clause.text.as_str()),
-            Some("int y")
-        );
-        assert_eq!(
-            rule.locals.as_ref().map(|clause| clause.text.as_str()),
-            Some("int z")
-        );
-        assert_eq!(rule.throws[0].value, "Error");
-        assert_eq!(rule.actions[0].name, "init");
-        assert_eq!(rule.catches[0].argument, "Error error");
-        assert_eq!(
-            rule.finally_action
-                .as_ref()
-                .map(|action| action.name.as_str()),
-            Some("finally")
-        );
-        assert_eq!(rule.block.alternatives.len(), 2);
-        let main = &rule.block.alternatives[0];
-        assert_eq!(
-            main.label.as_ref().map(|label| label.value.as_str()),
-            Some("Main")
-        );
-        assert_eq!(
-            main.elements[0]
-                .label
-                .as_ref()
-                .map(|label| label.name.as_str()),
-            Some("left")
-        );
-        assert!(matches!(
-            main.elements[1].quantifier,
-            Quantifier::ZeroOrMore { greedy: true }
-        ));
-        assert!(matches!(
-            main.elements[2].kind,
-            ElementKind::Predicate { .. }
-        ));
-        assert!(rule.block.alternatives[1].elements.is_empty());
-        assert_eq!(unit.syntax.source(), SourceId::new(2));
-        assert!(!provenance.origins(ModelNodeId::Rule(rule.id)).is_empty());
     }
 
     #[test]
@@ -1236,7 +1199,9 @@ WS : (' '|'\n') -> skip ;
             .iter()
             .find(|action| action.name == "members")
             .expect("members action");
-        assert!(members.body.contains("return c.match(/^[0-9a-zA-Z_]+$/);"));
+        // The nested-brace action body is spliced verbatim; snapshot it whole rather than probing
+        // for one substring, so any brace-matching or whitespace drift is visible.
+        insta::assert_snapshot!("nested_actions_match_upstream", members.body);
 
         let rule = unit
             .rules
@@ -1272,28 +1237,8 @@ MORE : ~('x'|'y')?? -> popMode;
         let mut provenance = ProvenanceIndex::default();
         let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
 
-        assert_eq!(unit.kind, GrammarKind::Lexer);
-        assert_eq!(unit.channels[0].name.value, "COMMENTS");
-        assert_eq!(unit.rules.len(), 3);
-        assert_eq!(unit.rules[0].case_insensitive, Some(true));
-        assert!(matches!(
-            unit.rules[0].block.alternatives[0].elements[0].kind,
-            ElementKind::Range(..)
-        ));
-        assert_eq!(
-            unit.rules[0].block.alternatives[0].commands[1].name,
-            "pushMode"
-        );
-        assert!(unit.rules[1].fragment);
-        assert_eq!(unit.modes[0].name, "M");
-        assert_eq!(unit.modes[0].rules, [unit.rules[2].id]);
-        assert!(matches!(
-            unit.rules[2].block.alternatives[0].elements[0].kind,
-            ElementKind::Set { inverted: true, .. }
-        ));
-        assert!(matches!(
-            unit.rules[2].block.alternatives[0].elements[0].quantifier,
-            Quantifier::Optional { greedy: false }
-        ));
+        // Channels, case-insensitivity, ranges/sets (with inversion), commands, fragments, modes
+        // and mode->rule wiring, and quantifiers all land in one lexer-unit snapshot.
+        insta::assert_debug_snapshot!("converts_lexer_modes_sets_and_commands", unit);
     }
 }

@@ -1637,6 +1637,7 @@ fn lexer_dfa_edge_label(symbol: i32) -> Option<String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
     use crate::char_stream::InputStream;
@@ -1702,10 +1703,12 @@ mod tests {
         let id = lexer.eof_token(&mut sink).expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
 
-        assert_eq!(token.start(), 1);
-        assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("<EOF>"));
-        assert_eq!(token.byte_span(), 2..2);
+        // byte_span is the field this test exists to pin and is absent from TokenView's Debug, so
+        // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
+        insta::assert_compact_debug_snapshot!(
+            (token.start(), token.stop(), token.text(), token.byte_span()),
+            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+        );
     }
 
     #[test]
@@ -1729,10 +1732,12 @@ mod tests {
             .expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
 
-        assert_eq!(token.start(), 1);
-        assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("<EOF>"));
-        assert_eq!(token.byte_span(), 2..2);
+        // byte_span is the field this test exists to pin and is absent from TokenView's Debug, so
+        // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
+        insta::assert_compact_debug_snapshot!(
+            (token.start(), token.stop(), token.text(), token.byte_span()),
+            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+        );
     }
 
     #[test]
@@ -1756,10 +1761,12 @@ mod tests {
             .expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
 
-        assert_eq!(token.start(), 0);
-        assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("β"));
-        assert_eq!(token.byte_span(), 0..2);
+        // byte_span is the field this test exists to pin and is absent from TokenView's Debug, so
+        // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
+        insta::assert_compact_debug_snapshot!(
+            (token.start(), token.stop(), token.text(), token.byte_span()),
+            @r#"(0, 0, Some("β"), 0..2)"#
+        );
     }
 
     #[test]
@@ -1845,11 +1852,7 @@ mod tests {
         lexer.record_semantic_error(false, 3, 7);
 
         let errors = lexer.drain_errors();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(
-            errors[0].message,
-            "unhandled lexer semantic predicate: rule=3 index=7"
-        );
+        insta::assert_compact_debug_snapshot!(errors, @r#"[TokenSourceError { line: 1, column: 0, message: "unhandled lexer semantic predicate: rule=3 index=7" }]"#);
 
         lexer.begin_token();
         lexer.record_semantic_error(false, 3, 7);

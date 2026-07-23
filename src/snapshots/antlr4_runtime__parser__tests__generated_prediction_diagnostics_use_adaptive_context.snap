@@ -1,0 +1,21 @@
+---
+source: src/parser.rs
+expression: parser.generated_parser_diagnostics
+---
+[
+    ParserDiagnostic {
+        line: 1,
+        column: 2,
+        message: "reportAttemptingFullContext d=0 (s), input='xy'",
+    },
+    ParserDiagnostic {
+        line: 1,
+        column: 0,
+        message: "reportContextSensitivity d=0 (s), input='x'",
+    },
+    ParserDiagnostic {
+        line: 1,
+        column: 2,
+        message: "reportAttemptingFullContext d=0 (s), input='xy'",
+    },
+]

@@ -1,0 +1,27 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: body.steps
+---
+[
+    MatchToken {
+        token_type: 1,
+        follow_state: 3,
+    },
+    StarLoop {
+        state: 4,
+        decision: 0,
+        enter_alt: 1,
+        exit_alt: 2,
+        track_alt_number: false,
+        allow_semantic_context: false,
+        force_context: false,
+        plus_loop: true,
+        fast_path: None,
+        body: [
+            MatchToken {
+                token_type: 1,
+                follow_state: 3,
+            },
+        ],
+    },
+]

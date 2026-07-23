@@ -1,0 +1,49 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: e_context
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+    pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>> + '_ {
+        __rule_children(self.__node, 1)
+            .map(move |node| EContext::__from_child_node(node, &self.__invocation_states))
+    }
+    pub fn int_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 1)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 2)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 3)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn left(&self) -> Option<EContext<'a>> {
+        __rule_children(self.__node, 1)
+            .nth(0)
+            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+    }
+    pub fn right(&self) -> Option<EContext<'a>> {
+        __rule_children(self.__node, 1)
+            .nth(1)
+            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+    }
+}

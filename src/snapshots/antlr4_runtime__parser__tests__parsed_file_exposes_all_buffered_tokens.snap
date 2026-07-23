@@ -1,0 +1,27 @@
+---
+source: src/parser.rs
+expression: "parsed.tokens().iter().map(|token|\n(token.token_type(), token.channel(), token.text())).collect::<Vec<_>>()"
+---
+[
+    (
+        99,
+        1,
+        Some(
+            " comment",
+        ),
+    ),
+    (
+        1,
+        0,
+        Some(
+            "x",
+        ),
+    ),
+    (
+        -1,
+        0,
+        Some(
+            "<EOF>",
+        ),
+    ),
+]
