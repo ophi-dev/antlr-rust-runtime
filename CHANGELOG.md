@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.15.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.2...v0.15.0) (2026-07-23)
+
+
+### Features
+
+* add mehen ([9567df6](https://github.com/ophi-dev/antlr-rust-runtime/commit/9567df6ee7da12c2e4340a9ad5d7e94c9c6dfbd5))
+* add typed listeners, visitors, and traversal ([#165](https://github.com/ophi-dev/antlr-rust-runtime/issues/165)) ([c240714](https://github.com/ophi-dev/antlr-rust-runtime/commit/c2407142a92ced988b7984852eb5b67e99e30d89))
+* **codegen:** make .g4 the sole production input ([#163](https://github.com/ophi-dev/antlr-rust-runtime/issues/163)) ([0a250ab](https://github.com/ophi-dev/antlr-rust-runtime/commit/0a250ab7d3eb17191890bafb20e039063fc65170))
+* implement Phase A direct .g4 grammar frontend ([#152](https://github.com/ophi-dev/antlr-rust-runtime/issues/152)) ([40a4560](https://github.com/ophi-dev/antlr-rust-runtime/commit/40a4560a499ab4984a9249b15e5de2e2f37a83f9))
+* implement Phase B direct .g4 source-to-ATN compiler ([#157](https://github.com/ophi-dev/antlr-rust-runtime/issues/157)) ([993dd48](https://github.com/ophi-dev/antlr-rust-runtime/commit/993dd48c99254e146df6c677d7938779ed91ef80))
+* make TokenStore iterable ([#166](https://github.com/ophi-dev/antlr-rust-runtime/issues/166)) ([2ee56fa](https://github.com/ophi-dev/antlr-rust-runtime/commit/2ee56fad866619d2683a75d2f04c27abc9a8799c))
+
+
+### Bug Fixes
+
+* add fetch-depth: 0 ([ddc701a](https://github.com/ophi-dev/antlr-rust-runtime/commit/ddc701a44301d9f9917274b4e45add863d373940))
+* CC plugin name ([32f2829](https://github.com/ophi-dev/antlr-rust-runtime/commit/32f2829f2ad1b0a2184f51c3fd0410bf14ebb8b4))
+* cc review action ([bd24370](https://github.com/ophi-dev/antlr-rust-runtime/commit/bd243709d84f4efb3dfa6e5cfcb0d09bf3fc08c0))
+* **parser:** force progress after repeated recovery ([#155](https://github.com/ophi-dev/antlr-rust-runtime/issues/155)) ([b785f96](https://github.com/ophi-dev/antlr-rust-runtime/commit/b785f96a1d4f35ac8da937630a8c9d936c167b3d))
+* remove Github Token ([c908162](https://github.com/ophi-dev/antlr-rust-runtime/commit/c908162dbfb52aac6a73bd2e143b3291c7325433))
+* **tokens:** align TokenView text semantics ([#167](https://github.com/ophi-dev/antlr-rust-runtime/issues/167)) ([c56a8c4](https://github.com/ophi-dev/antlr-rust-runtime/commit/c56a8c457e88276d4dcad1a686d3133c76a444e9))
+
 ## [0.14.2](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.1...v0.14.2) (2026-07-21)
 
 
