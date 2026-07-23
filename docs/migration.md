@@ -2,7 +2,9 @@
 
 `antlr-rust-runtime` is pre-1.0. Minor releases may include breaking runtime and
 generator changes. Generated lexers and parsers must use the same release of
-`antlr4-rust-gen` as the runtime.
+`antlr4-rust-gen` as the runtime. Before regenerating, run
+`antlr4-rust-gen --version` and compare the reported release with the
+`antlr-rust-runtime` dependency version.
 
 ## Recognizer Reuse Method Names
 
