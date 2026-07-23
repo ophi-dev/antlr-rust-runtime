@@ -126,6 +126,52 @@ class ClearWorkDirTests(unittest.TestCase):
             self.assertTrue(marker.exists())
 
 
+class RuntimeGrammarPreparationTests(unittest.TestCase):
+    JAVA_PARSER = """parser grammar JavaParser;
+options {
+    tokenVocab = JavaLexer;
+    superClass = JavaParserBase;
+}
+annotationFieldValue:
+    { this.IsNotIdentifierAssign() }? annotationValue
+    | identifier '=' annotationValue
+    ;
+recordComponentList
+    : recordComponent (',' recordComponent)* { this.DoLastRecordComponent() }?
+    ;
+"""
+
+    def prepare_java(self, root: Path, runtime: str) -> str:
+        grammar_source = root / "grammars-v4" / "java" / "java"
+        grammar_source.mkdir(parents=True)
+        (grammar_source / "JavaLexer.g4").write_text("lexer grammar JavaLexer;\n")
+        (grammar_source / "JavaParser.g4").write_text(self.JAVA_PARSER)
+        target = root / runtime
+        RUN.prepare_runtime_grammar(
+            RUN.LANGUAGES["java"],
+            root / "grammars-v4",
+            target,
+            runtime,
+        )
+        return (target / "JavaParser.g4").read_text()
+
+    def test_rust_java_grammar_preserves_superclass_and_predicates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parser = self.prepare_java(Path(temp), "rust-antlr")
+
+        self.assertEqual(parser, self.JAVA_PARSER)
+
+    def test_portable_java_targets_remove_unavailable_base_predicates(self) -> None:
+        for runtime in ("python-antlr", "go-antlr"):
+            with self.subTest(runtime=runtime), tempfile.TemporaryDirectory() as temp:
+                parser = self.prepare_java(Path(temp), runtime)
+
+            self.assertNotIn("superClass = JavaParserBase", parser)
+            self.assertNotIn("IsNotIdentifierAssign", parser)
+            self.assertNotIn("DoLastRecordComponent", parser)
+            self.assertIn("identifier '=' annotationValue", parser)
+
+
 class RustCodegenFlagsTests(unittest.TestCase):
     def test_combines_native_and_profile_generation(self) -> None:
         self.assertEqual(
