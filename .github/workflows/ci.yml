@@ -31,7 +31,7 @@ jobs:
 
       - name: Install stable Rust
         run: |
-          rustup toolchain install stable --profile minimal --component clippy,llvm-tools-preview --no-self-update
+          rustup toolchain install stable --profile minimal --component clippy,llvm-tools --no-self-update
           rustup default stable
 
       - name: Install cargo-llvm-cov

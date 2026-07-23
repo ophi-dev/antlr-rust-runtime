@@ -112,17 +112,22 @@ Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Sta
 
 CI collects LLVM source-based coverage (`cargo-llvm-cov`) and uploads it to
 Codecov as two merged flags — `unittests` (from `ci.yml`) and `conformance`
-(from `antlr-runtime-testsuite.yml`). Reproduce locally:
+(from `antlr-runtime-testsuite.yml`). One-time local install (it is a crates.io
+cargo subcommand, *not* a rustup component, so it cannot live in
+`rust-toolchain.toml` — only its `llvm-tools` dependency does, and that is
+already pinned there):
+
+```bash
+cargo install cargo-llvm-cov   # or: cargo binstall cargo-llvm-cov (prebuilt)
+```
+
+Then reproduce CI locally:
 
 ```bash
 cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info   # unit + integration
 cargo llvm-cov --all-features --workspace --html                          # browsable report
 cargo llvm-cov --all-features --workspace                                  # terminal summary
 ```
-
-Requires the `llvm-tools`/`llvm-tools-preview` component (already in
-`rust-toolchain.toml`; CI's explicit `rustup` install re-adds it because
-`--profile minimal` drops it).
 
 **Coverage is line/region only.** Branch coverage is a nightly-only
 instrumentation mode (`-Z coverage-options=branch`; `cargo llvm-cov --branch`
