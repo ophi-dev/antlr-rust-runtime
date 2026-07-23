@@ -388,6 +388,9 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
         "pub fn literal(&self) -> Result<TerminalNode<'a>, MissingChildError>",
         "pub fn choice(&self) -> Result<TerminalNode<'a>, MissingChildError>",
         "pub fn other(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn wildcard(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn plus_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn star_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
         "__token_children_matching(self.__node",
         "track_context_alt_numbers: true",
     ] {
@@ -608,7 +611,7 @@ mod typed_tree_tests {
         assert!(right.downcast_ref::<MultiplyLabelContext>().is_some());
         assert!(right.downcast_ref::<AddLabelContext>().is_none());
 
-        let lexer = CalculatorLexer::new(InputStream::new("+*1"));
+        let lexer = CalculatorLexer::new(InputStream::new("+*1-"));
         let tokens = CommonTokenStream::new(lexer);
         let mut parser = CalculatorParser::new(tokens);
         let root = parser
@@ -624,6 +627,42 @@ mod typed_tree_tests {
         assert_eq!(labeled.literal().expect("literal label").to_string(), "+");
         assert_eq!(labeled.choice().expect("set label").to_string(), "*");
         assert_eq!(labeled.other().expect("not-set label").to_string(), "1");
+        assert_eq!(labeled.wildcard().expect("wildcard label").to_string(), "-");
+
+        let lexer = CalculatorLexer::new(InputStream::new("+*"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser
+            .literal_tokens()
+            .expect("literal token input should parse");
+        let parsed = parser.into_parsed_file(root);
+        let literal_tokens = parsed
+            .tree()
+            .as_rule()
+            .expect("literalTokens rule")
+            .downcast_ref::<LiteralTokensContext>()
+            .expect("typed literalTokens context");
+        assert_eq!(
+            literal_tokens
+                .plus_token()
+                .expect("required literal PLUS")
+                .to_string(),
+            "+"
+        );
+        assert_eq!(
+            literal_tokens
+                .star_token()
+                .expect("required literal STAR")
+                .to_string(),
+            "*"
+        );
+        assert_eq!(
+            literal_tokens
+                .eof_token()
+                .expect("required literal EOF")
+                .to_string(),
+            "<EOF>"
+        );
     }
 }
 "#,

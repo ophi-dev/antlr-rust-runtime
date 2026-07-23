@@ -5,7 +5,11 @@ start
     ;
 
 labeledTokens
-    : literal='+' choice=('*' | '/') other=~';'
+    : literal='+' choice=('*' | '/') other=~';' wildcard=.
+    ;
+
+literalTokens
+    : '+' '*' EOF
     ;
 
 expression

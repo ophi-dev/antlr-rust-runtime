@@ -2561,6 +2561,9 @@ fn structural_terminal_target(terminal: &Terminal) -> String {
 }
 
 fn structural_terminal_token_types(terminal: &Terminal, vocabulary: &Vocabulary) -> Vec<i32> {
+    if matches!(terminal, Terminal::Wildcard) {
+        return (1..=vocabulary.max_token_type()).collect();
+    }
     let token_type = match terminal {
         Terminal::Token(name) => vocabulary.by_name.get(name).copied(),
         Terminal::Literal(literal) => vocabulary.by_literal.get(literal).copied(),
@@ -2575,17 +2578,25 @@ fn structural_set_token_types(
     elements: &[SetElement],
     vocabulary: &Vocabulary,
 ) -> Vec<i32> {
-    let members = elements
-        .iter()
-        .filter_map(|element| match element {
+    let mut members = BTreeSet::new();
+    for element in elements {
+        match element {
             SetElement::Terminal { value, .. } => {
-                structural_terminal_token_types(value, vocabulary)
-                    .into_iter()
-                    .next()
+                members.extend(structural_terminal_token_types(value, vocabulary));
             }
-            SetElement::Range { .. } => None,
-        })
-        .collect::<BTreeSet<_>>();
+            SetElement::Range { start, stop, .. } => {
+                let Some(start) = vocabulary.by_literal.get(start).copied() else {
+                    continue;
+                };
+                let Some(stop) = vocabulary.by_literal.get(stop).copied() else {
+                    continue;
+                };
+                if start <= stop {
+                    members.extend(start..=stop);
+                }
+            }
+        }
+    }
     if inverted {
         (1..=vocabulary.max_token_type())
             .filter(|token_type| !members.contains(token_type))
@@ -2597,13 +2608,7 @@ fn structural_set_token_types(
 
 fn structural_element_token_types(element: &Element, vocabulary: &Vocabulary) -> Vec<i32> {
     match &element.kind {
-        ElementKind::Terminal(terminal) => {
-            if matches!(terminal, Terminal::Wildcard) {
-                (1..=vocabulary.max_token_type()).collect()
-            } else {
-                structural_terminal_token_types(terminal, vocabulary)
-            }
-        }
+        ElementKind::Terminal(terminal) => structural_terminal_token_types(terminal, vocabulary),
         ElementKind::Set { inverted, elements } => {
             structural_set_token_types(*inverted, elements, vocabulary)
         }
@@ -2640,6 +2645,27 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
     token_types.into_iter().collect()
 }
 
+fn structural_terminal_child_target(
+    terminal: &Terminal,
+    vocabulary: &Vocabulary,
+) -> Option<String> {
+    match terminal {
+        Terminal::Token(name) => Some(name.clone()),
+        Terminal::Literal(literal) => {
+            let token_type = vocabulary.by_literal.get(literal)?;
+            vocabulary
+                .tokens
+                .iter()
+                .find(|token| token.number == *token_type)
+                .and_then(|token| token.name.as_ref())
+                .filter(|name| !name.starts_with("T__"))
+                .cloned()
+        }
+        Terminal::Eof => Some("EOF".to_owned()),
+        Terminal::LexerCharSet(_) | Terminal::Wildcard => None,
+    }
+}
+
 fn structural_context_children(
     elements: &[Element],
     vocabulary: &Vocabulary,
@@ -2650,15 +2676,13 @@ fn structural_context_children(
             ElementKind::RuleCall(call) => {
                 BTreeMap::from([(call.name.clone(), embedded::ChildCardinality::ONE)])
             }
-            ElementKind::Terminal(Terminal::Token(name)) => {
-                BTreeMap::from([(name.clone(), embedded::ChildCardinality::ONE)])
-            }
-            ElementKind::Terminal(Terminal::Eof) => {
-                BTreeMap::from([("EOF".to_owned(), embedded::ChildCardinality::ONE)])
+            ElementKind::Terminal(terminal) => {
+                structural_terminal_child_target(terminal, vocabulary)
+                    .map(|target| BTreeMap::from([(target, embedded::ChildCardinality::ONE)]))
+                    .unwrap_or_default()
             }
             ElementKind::Block(block) => structural_block_children(block, vocabulary),
-            ElementKind::Terminal(_)
-            | ElementKind::Range(..)
+            ElementKind::Range(..)
             | ElementKind::Set { .. }
             | ElementKind::Action { .. }
             | ElementKind::Predicate { .. }
@@ -13175,6 +13199,44 @@ mod tests {
 
         assert!(literal.is_block);
         assert_eq!(literal.token_types.len(), 1);
+    }
+
+    #[test]
+    fn structural_set_token_types_expand_literal_ranges() {
+        let data = parser_fixture_data("typed-tree-walkers/Calculator.g4");
+        let vocabulary = &data
+            .semantic
+            .expect("semantic grammar")
+            .recognizer
+            .vocabulary;
+        let mut literals = vocabulary
+            .by_literal
+            .iter()
+            .map(|(literal, token_type)| (literal.clone(), *token_type))
+            .collect::<Vec<_>>();
+        literals.sort_unstable_by_key(|(_, token_type)| *token_type);
+        assert!(literals.len() >= 3, "fixture needs three literal tokens");
+        let (start, start_type) = literals[0].clone();
+        let (stop, stop_type) = literals[2].clone();
+        let range = SetElement::Range {
+            source: grammar::model::ElementId::new(0),
+            start,
+            stop,
+            span: SourceSpan::empty(grammar::frontend::SourceId::new(0)),
+            options: Vec::new(),
+        };
+        let expected = (start_type..=stop_type).collect::<Vec<_>>();
+
+        assert_eq!(
+            structural_set_token_types(false, std::slice::from_ref(&range), vocabulary),
+            expected
+        );
+        assert_eq!(
+            structural_set_token_types(true, &[range], vocabulary),
+            (1..=vocabulary.max_token_type())
+                .filter(|token_type| !expected.contains(token_type))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
