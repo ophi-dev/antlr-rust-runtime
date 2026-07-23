@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.1...v0.15.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* grouped token accessors in typed contexts ([#178](https://github.com/ophi-dev/antlr-rust-runtime/issues/178)) ([f549f7c](https://github.com/ophi-dev/antlr-rust-runtime/commit/f549f7ce74774639022a347eccfb843a59aae26a))
+
 ## [0.15.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.0...v0.15.1) (2026-07-23)
 
 
