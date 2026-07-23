@@ -91,6 +91,45 @@ mod generated {
 }
 ```
 
+### Typed listeners and visitors
+
+Parser generation emits a typed `<Grammar>Listener` and
+`<Grammar>TreeWalker` by default. A listener can start a grammar-typed walk
+directly. Listener callbacks return `Result<(), E>`, where `E` defaults to
+`Infallible`, so domain errors can stop traversal without a side channel:
+
+```rust
+listener.walk(parsed.tree())?;
+```
+
+Use `--no-listener` to omit that surface. Add `--visitor` to emit a typed
+`<Grammar>Visitor`; visitors choose an associated `Result` type, define its
+initial value with `default_result()`, and drive recursion explicitly:
+
+```rust
+type Result = Result<i64, MissingChildError>;
+
+fn default_result(&mut self) -> Self::Result {
+    Ok(0)
+}
+
+fn visit_add_label(&mut self, ctx: &AddLabelContext) -> Self::Result {
+    let left = self.visit(ctx.left()?)?;
+    let right = self.visit(ctx.right()?)?;
+    Ok(left + right)
+}
+```
+
+Generated child accessors follow grammar cardinality. Required children return
+`Result<T, MissingChildError>`, optional children return `Option<T>`, and
+repeated children are lazy iterators. Rule labels keep their grammar names
+(`left()`), while token accessors use snake_case names such as `int_token()` and
+`comma_tokens()`.
+
+`--no-visitor` disables visitor generation. The generator also accepts ANTLR's
+single-dash spellings (`-listener`, `-no-listener`, `-visitor`,
+`-no-visitor`).
+
 Call the generated parser helper for the compact path:
 
 ```rust

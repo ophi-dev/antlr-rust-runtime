@@ -14,3 +14,11 @@ primary_expression_start
 object_creation_expression
     : OPEN_PARENS CLOSE_PARENS
     ;
+
+everyRule
+    : NEW
+    ;
+
+storedTree
+    : NEW
+    ;

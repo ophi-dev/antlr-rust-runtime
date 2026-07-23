@@ -11,8 +11,9 @@
 > rendered Rust action/predicate bodies verbatim after `$`-attribute
 > translation (`src/bin_support/embedded.rs` — the Rust analog of ANTLR's
 > `ActionTranslator`). The four capability axes below are now generated:
-> an output sink (`self.output()`), typed context views with positional
-> accessors and public attribute fields (`FromRuleNode` conversion),
+> an output sink (`self.output()`), typed context views with
+> cardinality-aware Rust accessors and public attribute fields
+> (`FromRuleNode` conversion),
 > typed attrs snapshots replacing the int-only `int_return` map, and
 > `@members` as real struct fields / impl items. Listener traits and a
 > typed walker bridge cover the listener suite. Validating the reference

@@ -12,6 +12,10 @@ fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
 }
 
 fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
+    assert_generated_project(temp_dir, modules, "");
+}
+
+fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
     fs::create_dir_all(&source).expect("generated-module check should be writable");
@@ -37,8 +41,11 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    fs::write(source.join("lib.rs"), declarations)
-        .expect("generated-module crate root should be writable");
+    fs::write(
+        source.join("lib.rs"),
+        format!("{declarations}\n{test_source}"),
+    )
+    .expect("generated-module crate root should be writable");
     for module in modules {
         fs::copy(temp_dir.join("generated").join(module), source.join(module))
             .expect("generated module should be copied into the check crate");
@@ -46,7 +53,11 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 
     let output = Command::new(env!("CARGO"))
         .args([
-            "check",
+            if test_source.is_empty() {
+                "check"
+            } else {
+                "test"
+            },
             "--quiet",
             "--offline",
             "--manifest-path",
@@ -60,7 +71,7 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
         .expect("cargo check should run");
     assert!(
         output.status.success(),
-        "generated modules did not compile\nstdout: {}\nstderr: {}",
+        "generated project failed\nstdout: {}\nstderr: {}",
         utf8(&output.stdout),
         utf8(&output.stderr)
     );
@@ -116,6 +127,10 @@ fn long_help_describes_source_only_cli() {
     );
     assert!(stdout.contains("  -I, --lib DIR"), "{stdout}");
     assert!(stdout.contains("  --option-hook KEY=VALUE"), "{stdout}");
+    assert!(stdout.contains("  -listener, --listener"), "{stdout}");
+    assert!(stdout.contains("  -no-listener, --no-listener"), "{stdout}");
+    assert!(stdout.contains("  -visitor, --visitor"), "{stdout}");
+    assert!(stdout.contains("  -no-visitor, --no-visitor"), "{stdout}");
     assert!(!stdout.contains("--lexer "), "{stdout}");
     assert!(!stdout.contains("--parser "), "{stdout}");
     assert!(!stdout.contains("--grammar "), "{stdout}");
@@ -245,20 +260,461 @@ fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     let parser =
         fs::read_to_string(out.join("shapes_parser.rs")).expect("parser should be emitted");
     for expected in [
-        "pub struct StartContext<'a>",
-        "pub struct SingleLabelContext<'a>",
-        "pub struct ManyLabelContext<'a>",
-        "pub trait ShapesListener",
+        "pub struct StartContext<'a, State = StoredTreeContext>",
+        "pub struct SingleLabelContext<'a, State = StoredTreeContext>",
+        "pub struct ManyLabelContext<'a, State = StoredTreeContext>",
+        "pub trait ShapesListener<E = std::convert::Infallible>",
+        "pub struct ShapesTreeWalker",
+        "pub type ParseTreeWalker = ShapesTreeWalker",
+        "fn enter_every_rule(&mut self",
         "fn enter_single_label(&mut self",
         "fn enter_many_label(&mut self",
+        "pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>>",
+        "pub fn first(&self) -> Result<AtomContext<'a>, MissingChildError>",
+        "pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>>",
+        "pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError>",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }
     assert!(
+        !parser.contains("_all(&self)"),
+        "generated contexts must not expose allocating Java-style list accessors\n{parser}"
+    );
+    assert!(
         !parser.contains("antlr4_runtime::{{"),
         "generated imports must not contain redundant nested braces\n{parser}"
     );
-    assert_generated_modules_compile(temp.path(), &["shapes_lexer.rs", "shapes_parser.rs"]);
+    assert!(
+        !parser.contains("pub trait ShapesVisitor"),
+        "visitor generation must remain opt-in\n{parser}"
+    );
+    assert_generated_project(
+        temp.path(),
+        &["shapes_lexer.rs", "shapes_parser.rs"],
+        r#"
+#[cfg(test)]
+mod typed_label_tests {
+    use super::shapes_lexer::ShapesLexer;
+    use super::shapes_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    #[test]
+    fn list_and_repeated_single_labels_keep_antlr_semantics() {
+        let lexer = ShapesLexer::new(InputStream::new("a,b,c"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = ShapesParser::new(tokens);
+        let root = parser.start().expect("list input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let many = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<ManyLabelContext>()
+            .expect("comma-separated input uses the many alternative");
+        assert_eq!(
+            many
+                .rest()
+                .map(|atom| atom.rule_node().node().text())
+                .collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+
+        let lexer = ShapesLexer::new(InputStream::new("a b c"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = ShapesParser::new(tokens);
+        let root = parser.latest().expect("repeated input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let latest = parsed
+            .tree()
+            .as_rule()
+            .expect("latest rule")
+            .downcast_ref::<LatestContext>()
+            .expect("latest context");
+        assert_eq!(latest.atom_children().count(), 3);
+        assert_eq!(
+            latest
+                .value()
+                .expect("one or more atoms guarantees a value")
+                .rule_node()
+                .node()
+                .text(),
+            "c"
+        );
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
+    let temp = temporary_directory("typed-tree-walkers");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/typed-tree-walkers/Calculator.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--visitor"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(out.join("calculator_parser.rs")).expect("parser should be emitted");
+    for expected in [
+        "pub trait CalculatorVisitor",
+        "pub trait CalculatorVisitable",
+        "pub trait CalculatorListener",
+        "pub struct CalculatorTreeWalker",
+        "fn visit_multiply_label(&mut self",
+        "fn visit_add_label(&mut self",
+        "fn visit_number_label(&mut self",
+        "fn default_result(&mut self) -> Self::Result;",
+        "pub trait CalculatorListener<E = std::convert::Infallible>",
+        "pub fn expression_children(&self) -> impl Iterator<Item = ExpressionContext<'a>>",
+        "pub fn left(&self) -> Result<ExpressionContext<'a>, MissingChildError>",
+        "pub fn right(&self) -> Result<ExpressionContext<'a>, MissingChildError>",
+        "pub fn star_token(&self) -> Option<TerminalNode<'a>>",
+        "pub fn int_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn literal(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn choice(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn other(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn wildcard(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn plus_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "pub fn star_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
+        "__token_children_matching(self.__node",
+        "track_context_alt_numbers: true",
+    ] {
+        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
+    }
+    assert!(
+        !parser.contains("pub fn INT(") && !parser.contains("_all(&self)"),
+        "generated contexts must expose Rust-shaped token and collection accessors\n{parser}"
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["calculator_lexer.rs", "calculator_parser.rs"],
+        r#"
+#[cfg(test)]
+mod typed_tree_tests {
+    use super::calculator_lexer::CalculatorLexer;
+    use super::calculator_parser::*;
+    use antlr4_runtime::{
+        CommonTokenStream, InputStream, MissingChildError, Parser as _, RuleNodeView,
+    };
+
+    struct Eval;
+
+    impl CalculatorVisitor for Eval {
+        type Result = Result<i64, MissingChildError>;
+
+        fn default_result(&mut self) -> Self::Result {
+            Ok(0)
+        }
+
+        fn visit_start(&mut self, ctx: &StartContext) -> Self::Result {
+            self.visit(ctx.expression()?)
+        }
+
+        fn visit_number_label(&mut self, ctx: &NumberLabelContext) -> Self::Result {
+            Ok(ctx
+                .int_token()?
+                .to_string()
+                .parse()
+                .expect("integer token"))
+        }
+
+        fn visit_multiply_label(&mut self, ctx: &MultiplyLabelContext) -> Self::Result {
+            let left = self.visit(ctx.left()?)?;
+            let right = self.visit(ctx.right()?)?;
+            if ctx.star_token().is_some() {
+                Ok(left * right)
+            } else {
+                Ok(left / right)
+            }
+        }
+
+        fn visit_add_label(&mut self, ctx: &AddLabelContext) -> Self::Result {
+            let left = self.visit(ctx.left()?)?;
+            let right = self.visit(ctx.right()?)?;
+            if ctx.plus_token().is_some() {
+                Ok(left + right)
+            } else {
+                Ok(left - right)
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct Trace {
+        events: Vec<&'static str>,
+        entered_rules: usize,
+        exited_rules: usize,
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TraceError;
+
+    impl CalculatorListener<TraceError> for Trace {
+        fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), TraceError> {
+            self.entered_rules += 1;
+            Ok(())
+        }
+
+        fn exit_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), TraceError> {
+            self.exited_rules += 1;
+            Ok(())
+        }
+
+        fn enter_multiply_label(
+            &mut self,
+            _ctx: &MultiplyLabelContext,
+        ) -> Result<(), TraceError> {
+            self.events.push("enter:multiply");
+            Ok(())
+        }
+
+        fn exit_multiply_label(
+            &mut self,
+            _ctx: &MultiplyLabelContext,
+        ) -> Result<(), TraceError> {
+            self.events.push("exit:multiply");
+            Ok(())
+        }
+
+        fn enter_add_label(&mut self, _ctx: &AddLabelContext) -> Result<(), TraceError> {
+            self.events.push("enter:add");
+            Ok(())
+        }
+
+        fn exit_add_label(&mut self, _ctx: &AddLabelContext) -> Result<(), TraceError> {
+            self.events.push("exit:add");
+            Ok(())
+        }
+
+        fn enter_number_label(
+            &mut self,
+            _ctx: &NumberLabelContext,
+        ) -> Result<(), TraceError> {
+            self.events.push("enter:number");
+            Ok(())
+        }
+
+        fn exit_number_label(
+            &mut self,
+            _ctx: &NumberLabelContext,
+        ) -> Result<(), TraceError> {
+            self.events.push("exit:number");
+            Ok(())
+        }
+    }
+
+    struct FailingTrace;
+
+    impl CalculatorListener<&'static str> for FailingTrace {
+        fn enter_multiply_label(
+            &mut self,
+            _ctx: &MultiplyLabelContext,
+        ) -> Result<(), &'static str> {
+            Err("stop at multiply")
+        }
+    }
+
+    #[test]
+    fn evaluates_and_walks_exact_typed_alternatives() {
+        let lexer = CalculatorLexer::new(InputStream::new("2 + 8 / 2"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser.start().expect("calculator input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        assert!(
+            parsed
+                .tree()
+                .descendants()
+                .filter_map(antlr4_runtime::Node::as_rule)
+                .all(|rule| rule.alt_number() == 0),
+            "typed dispatch metadata must not become display-visible alt numbers"
+        );
+        let start = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<StartContext>()
+            .expect("typed start context");
+        assert_eq!(start.eof_token().expect("required EOF").to_string(), "<EOF>");
+
+        assert_eq!(Eval.visit(parsed.tree()).expect("evaluation succeeds"), 6);
+
+        let mut trace = Trace::default();
+        trace.walk(parsed.tree()).expect("typed listener walk");
+        assert_eq!(
+            trace.events,
+            [
+                "enter:add",
+                "enter:number",
+                "exit:number",
+                "enter:multiply",
+                "enter:number",
+                "exit:number",
+                "enter:number",
+                "exit:number",
+                "exit:multiply",
+                "exit:add",
+            ]
+        );
+        assert_eq!(trace.entered_rules, 6);
+        assert_eq!(trace.exited_rules, 6);
+
+        assert_eq!(
+            FailingTrace.walk(parsed.tree()),
+            Err("stop at multiply"),
+            "listener domain errors must stop and escape the generated walker"
+        );
+
+        let start = parsed.tree().as_rule().expect("start rule");
+        let expression = start
+            .child_rule(RULE_EXPRESSION)
+            .expect("top-level expression");
+        let add = expression
+            .downcast_ref::<AddLabelContext>()
+            .expect("top-level expression is addition");
+        assert_eq!(add.rule_node().node().id(), expression.node().id());
+        assert_eq!(add.expression_children().count(), 2);
+        assert!(add.plus_token().is_some());
+        assert!(add.minus_token().is_none());
+        assert_eq!(
+            add.left().expect("left expression").rule_node().node().id(),
+            expression
+                .child_rules(RULE_EXPRESSION)
+                .next()
+                .expect("left expression")
+                .node()
+                .id()
+        );
+        assert!(expression.downcast_ref::<MultiplyLabelContext>().is_none());
+
+        let right = expression
+            .child_rules(RULE_EXPRESSION)
+            .nth(1)
+            .expect("right expression");
+        assert!(right.downcast_ref::<MultiplyLabelContext>().is_some());
+        assert!(right.downcast_ref::<AddLabelContext>().is_none());
+
+        let lexer = CalculatorLexer::new(InputStream::new("+*1-"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser
+            .labeled_tokens()
+            .expect("labeled token input should parse");
+        let parsed = parser.into_parsed_file(root);
+        let labeled = parsed
+            .tree()
+            .as_rule()
+            .expect("labeledTokens rule")
+            .downcast_ref::<LabeledTokensContext>()
+            .expect("typed labeledTokens context");
+        assert_eq!(labeled.literal().expect("literal label").to_string(), "+");
+        assert_eq!(labeled.choice().expect("set label").to_string(), "*");
+        assert_eq!(labeled.other().expect("not-set label").to_string(), "1");
+        assert_eq!(labeled.wildcard().expect("wildcard label").to_string(), "-");
+
+        let lexer = CalculatorLexer::new(InputStream::new("+*"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser
+            .literal_tokens()
+            .expect("literal token input should parse");
+        let parsed = parser.into_parsed_file(root);
+        let literal_tokens = parsed
+            .tree()
+            .as_rule()
+            .expect("literalTokens rule")
+            .downcast_ref::<LiteralTokensContext>()
+            .expect("typed literalTokens context");
+        assert_eq!(
+            literal_tokens
+                .plus_token()
+                .expect("required literal PLUS")
+                .to_string(),
+            "+"
+        );
+        assert_eq!(
+            literal_tokens
+                .star_token()
+                .expect("required literal STAR")
+                .to_string(),
+            "*"
+        );
+        assert_eq!(
+            literal_tokens
+                .eof_token()
+                .expect("required literal EOF")
+                .to_string(),
+            "<EOF>"
+        );
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn listener_and_visitor_generation_can_be_disabled_independently() {
+    let temp = temporary_directory("tree-walker-flags");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/combined-contexts/Shapes.g4");
+    let visitor_only = temp.path().join("visitor-only");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("-no-listener"),
+        OsStr::new("-visitor"),
+        OsStr::new("--out-dir"),
+        visitor_only.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(visitor_only.join("shapes_parser.rs"))
+        .expect("parser should be emitted");
+    assert!(parser.contains("pub trait ShapesVisitor"), "{parser}");
+    assert!(!parser.contains("pub trait ShapesListener"), "{parser}");
+    assert!(!parser.contains("pub struct ShapesTreeWalker"), "{parser}");
+    assert!(!parser.contains("pub type ParseTreeWalker"), "{parser}");
+
+    let neither = temp.path().join("neither");
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--no-listener"),
+        OsStr::new("--visitor"),
+        OsStr::new("--no-visitor"),
+        OsStr::new("--out-dir"),
+        neither.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(neither.join("shapes_parser.rs")).expect("parser should be emitted");
+    assert!(!parser.contains("pub trait ShapesVisitor"), "{parser}");
+    assert!(!parser.contains("pub trait ShapesListener"), "{parser}");
 }
 
 #[test]
@@ -281,9 +737,9 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
     );
     let parser = fs::read_to_string(out.join("t.rs")).expect("parser should be emitted");
     for expected in [
-        "pub struct ObjectCreationExpressionContext<'a>",
-        "pub struct ObjectCreationExpressionLabelContext<'a>",
-        "pub struct ParenthesizedLabelContext<'a>",
+        "pub struct ObjectCreationExpressionContext<'a, State = StoredTreeContext>",
+        "pub struct ObjectCreationExpressionLabelContext<'a, State = StoredTreeContext>",
+        "pub struct ParenthesizedLabelContext<'a, State = StoredTreeContext>",
         "fn enter_object_creation_expression(&mut self",
         "fn enter_object_creation_expression_label(&mut self",
         "fn enter_parenthesized_label(&mut self",

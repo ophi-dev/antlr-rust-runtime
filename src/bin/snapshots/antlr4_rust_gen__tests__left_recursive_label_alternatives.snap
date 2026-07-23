@@ -15,24 +15,64 @@ expression: "model.rules[1].alts"
                     "left",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: None,
                 target: "STAR",
+                token_types: [
+                    2,
+                ],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: Some(
                     "right",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "STAR": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+            "e": ChildCardinality {
+                min: 2,
+                max: Some(
+                    2,
+                ),
+            },
+        },
         leading_target: Some(
             "e",
         ),
@@ -49,24 +89,64 @@ expression: "model.rules[1].alts"
                     "left",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: None,
                 target: "PLUS",
+                token_types: [
+                    3,
+                ],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: Some(
                     "right",
                 ),
                 target: "e",
+                token_types: [],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "PLUS": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+            "e": ChildCardinality {
+                min: 2,
+                max: Some(
+                    2,
+                ),
+            },
+        },
         leading_target: Some(
             "e",
         ),
@@ -81,10 +161,28 @@ expression: "model.rules[1].alts"
             ElementRef {
                 label: None,
                 target: "INT",
+                token_types: [
+                    1,
+                ],
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "INT": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+        },
         leading_target: None,
     },
 ]
