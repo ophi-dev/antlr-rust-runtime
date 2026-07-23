@@ -69,10 +69,18 @@ pub use self::__antlr4_rust_generated::*;
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(args) = Args::parse()? else {
-        let mut stdout = io::stdout().lock();
-        writeln!(stdout, "{}", usage())?;
-        return Ok(());
+    let args = match Args::parse()? {
+        CliCommand::Generate(args) => args,
+        CliCommand::Help => {
+            let mut stdout = io::stdout().lock();
+            writeln!(stdout, "{}", usage())?;
+            return Ok(());
+        }
+        CliCommand::Version => {
+            let mut stdout = io::stdout().lock();
+            writeln!(stdout, "antlr4-rust-gen {}", env!("CARGO_PKG_VERSION"))?;
+            return Ok(());
+        }
     };
     let compilation = grammar::compiler::compile(LoadOptions {
         roots: args.roots.clone(),
@@ -1828,8 +1836,14 @@ struct Args {
     embedded_actions: bool,
 }
 
+enum CliCommand {
+    Generate(Args),
+    Help,
+    Version,
+}
+
 impl Args {
-    fn parse() -> Result<Option<Self>, String> {
+    fn parse() -> Result<CliCommand, String> {
         let mut roots = Vec::new();
         let mut library_directories = Vec::new();
         let mut out_dir = None;
@@ -1888,7 +1902,8 @@ impl Args {
                     sem_unknown =
                         SemUnknownPolicy::parse_flag(&next_arg(&mut iter, "--sem-unknown")?)?;
                 }
-                "--help" | "-h" => return Ok(None),
+                "--help" | "-h" => return Ok(CliCommand::Help),
+                "--version" | "-V" => return Ok(CliCommand::Version),
                 other if other.starts_with("-I") && other.len() > 2 => {
                     library_directories.push(PathBuf::from(&other[2..]));
                 }
@@ -1906,7 +1921,7 @@ impl Args {
             ));
         }
 
-        Ok(Some(Self {
+        Ok(CliCommand::Generate(Self {
             roots,
             library_directories,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
@@ -1948,6 +1963,7 @@ Options:
   --sem-patterns FILE              Load semantic helper patterns
   --option-hook KEY=VALUE          Acknowledge an option implemented by caller hooks
   --require-full-semantics         Fail if any semantic coordinate or option is unsupported
+  -V, --version                    Print version
   -h, --help                       Print this help"
         .to_owned()
 }

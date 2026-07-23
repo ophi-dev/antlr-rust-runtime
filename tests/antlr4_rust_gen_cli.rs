@@ -134,6 +134,7 @@ fn long_help_describes_source_only_cli() {
     assert!(!stdout.contains("--lexer "), "{stdout}");
     assert!(!stdout.contains("--parser "), "{stdout}");
     assert!(!stdout.contains("--grammar "), "{stdout}");
+    assert!(stdout.contains("  -V, --version"), "{stdout}");
     assert!(stdout.contains("  -h, --help"), "{stdout}");
 }
 
@@ -147,8 +148,39 @@ fn short_help_exits_successfully_on_stdout() {
 }
 
 #[test]
+fn long_and_short_version_exit_successfully_on_stdout() {
+    for flag in ["--version", "-V"] {
+        let output = run_antlr4_rust_gen(&[flag]);
+
+        assert!(
+            output.status.success(),
+            "{flag} status: {:?}\nstderr: {}",
+            output.status.code(),
+            utf8(&output.stderr)
+        );
+        assert_eq!(utf8(&output.stderr), "");
+        assert_eq!(
+            utf8(&output.stdout),
+            concat!("antlr4-rust-gen ", env!("CARGO_PKG_VERSION"), "\n")
+        );
+    }
+}
+
+#[test]
 fn help_flag_as_option_value_is_not_intercepted() {
     let output = run_antlr4_rust_gen(&["--option-hook", "--help"]);
+
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    assert_eq!(utf8(&output.stdout), "");
+
+    let stderr = utf8(&output.stderr);
+    assert!(stderr.contains("--option-hook requires KEY=VALUE"));
+    assert!(stderr.contains("Usage: antlr4-rust-gen"));
+}
+
+#[test]
+fn version_flag_as_option_value_is_not_intercepted() {
+    let output = run_antlr4_rust_gen(&["--option-hook", "--version"]);
 
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
     assert_eq!(utf8(&output.stdout), "");
