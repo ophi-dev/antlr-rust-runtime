@@ -227,6 +227,7 @@ struct ClosureParams {
     precedence: i32,
     collect_predicates: bool,
     treat_eof_as_epsilon: bool,
+    preserve_local_rule_stop: bool,
 }
 
 #[derive(Debug)]
@@ -1048,6 +1049,7 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates: true,
             treat_eof_as_epsilon: false,
+            preserve_local_rule_stop: false,
         };
         for (index, transition) in decision_state.transitions().iter().enumerate() {
             let alt = index + 1;
@@ -1258,9 +1260,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             if state.is_rule_stop() {
-                if full_context || symbol == TOKEN_EOF {
-                    skipped_stop_states.push(config.clone());
-                }
+                skipped_stop_states.push(config.clone());
                 continue;
             }
             for transition in &state.transitions() {
@@ -1295,7 +1295,11 @@ impl<'a> ParserAtnSimulator<'a> {
         if symbol == TOKEN_EOF {
             reach = self.rule_stop_configs(reach, merge_cache);
         }
-        if !full_context || !self.configs_contain_rule_stop(&reach) {
+        // A skipped stop state is a completed prefix alternative. Keep it only
+        // while every longer path remains incomplete, so a later dead edge can
+        // fall back to the prefix. Once a longer path reaches rule stop it wins
+        // and the prefix must not turn the completed match into an ambiguity.
+        if !self.configs_contain_rule_stop(&reach) {
             for config in skipped_stop_states {
                 reach.add(config, &mut self.store.contexts, merge_cache);
             }
@@ -1319,6 +1323,10 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates: false,
             treat_eof_as_epsilon: symbol == TOKEN_EOF,
+            // Reach closure must retain a completed local alternative while
+            // other alternatives continue, so later input can either complete
+            // the longer path or fall back to this prefix.
+            preserve_local_rule_stop: true,
         };
         // `closure` takes `AtnConfig` by value, so drain the intermediate set by
         // move instead of cloning each config.
@@ -1395,6 +1403,7 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates,
             treat_eof_as_epsilon,
+            preserve_local_rule_stop,
         } = params;
         let max_token_type = self.atn.max_token_type();
         scratch.stack.clear();
@@ -1408,6 +1417,13 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             let at_rule_stop = state.is_rule_stop();
+            if at_rule_stop
+                && preserve_local_rule_stop
+                && self.store.contexts.is_empty(config.context)
+            {
+                configs.add(config, &mut self.store.contexts, merge_cache);
+                continue;
+            }
             if at_rule_stop
                 && self.closure_at_rule_stop(
                     config.clone(),
@@ -1978,6 +1994,15 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_predict_keeps_prefix_alt_until_longer_alt_finishes() {
+        let atn = three_token_prefix_alt_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [1, 2, TOKEN_EOF]), Ok(1));
+        assert_eq!(simulator.adaptive_predict(0, [1, 2, 1, TOKEN_EOF]), Ok(2));
+    }
+
+    #[test]
     fn adaptive_predict_uses_precedence_dfa_start_states() {
         let atn = two_token_decision_atn_with_precedence(true);
         let mut simulator = ParserAtnSimulator::new(&atn);
@@ -2130,6 +2155,7 @@ mod tests {
                 precedence: 0,
                 collect_predicates: true,
                 treat_eof_as_epsilon: false,
+                preserve_local_rule_stop: false,
             },
         );
 
@@ -2253,6 +2279,7 @@ mod tests {
                 precedence: 0,
                 collect_predicates: true,
                 treat_eof_as_epsilon: false,
+                preserve_local_rule_stop: false,
             },
         );
 
@@ -2602,6 +2629,65 @@ mod tests {
             },
         )
         .expect("transition");
+        finish_atn(atn)
+    }
+
+    fn three_token_prefix_alt_decision_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (state_number, kind) in [
+            (0, AtnStateKind::BlockStart),
+            (1, AtnStateKind::Basic),
+            (2, AtnStateKind::Basic),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::Basic),
+            (5, AtnStateKind::Basic),
+            (6, AtnStateKind::RuleStop),
+        ] {
+            add_state(&mut atn, state_number, kind);
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![6])
+            .expect("rule stop states");
+        atn.add_decision_state(0).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 3,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 2,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
         finish_atn(atn)
     }
 

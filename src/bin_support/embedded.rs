@@ -184,8 +184,19 @@ pub(crate) enum ActionSite {
 /// Rust from the rendered templates) onto the Rust type the generated attrs
 /// struct uses.
 pub(crate) fn map_attr_type(raw: &str) -> String {
-    match raw.trim() {
-        "int" => "i32".to_owned(),
+    let raw = raw.trim();
+    if let Some(inner) = raw
+        .strip_prefix("List")
+        .map(str::trim_start)
+        .and_then(|rest| rest.strip_prefix('<'))
+        .and_then(|inner| inner.strip_suffix('>'))
+        .map(str::trim)
+        .filter(|inner| !inner.is_empty())
+    {
+        return format!("Vec<{}>", map_attr_type(inner));
+    }
+    match raw {
+        "int" | "Integer" => "i32".to_owned(),
         "boolean" => "bool".to_owned(),
         "float" | "double" => "f64".to_owned(),
         other => other.to_owned(),
@@ -721,7 +732,10 @@ mod tests {
     #[test]
     fn maps_attribute_types_for_generated_rust() {
         assert_eq!(map_attr_type("int"), "i32");
+        assert_eq!(map_attr_type("Integer"), "i32");
         assert_eq!(map_attr_type("boolean"), "bool");
+        assert_eq!(map_attr_type("List<Integer>"), "Vec<i32>");
+        assert_eq!(map_attr_type("List < List<Integer> >"), "Vec<Vec<i32>>");
         assert_eq!(map_attr_type("std::string::String"), "std::string::String");
     }
 

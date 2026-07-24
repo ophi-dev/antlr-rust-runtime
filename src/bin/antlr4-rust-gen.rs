@@ -1072,6 +1072,9 @@ const fn predicate_template_disposition(
             predicate_template_disposition(Some(inner), policy)
         }
         Some(PredicateTemplate::Hook) => SemanticsDisposition::Hooked,
+        Some(PredicateTemplate::UnknownWithFailMessage { .. }) => {
+            policy.unknown_predicate_disposition()
+        }
         Some(_) => SemanticsDisposition::Translated,
         None => policy.unknown_predicate_disposition(),
     }
@@ -1383,12 +1386,21 @@ fn structural_predicate_templates(
                 format!("unsupported target predicate template <{}>", predicate.body),
             ));
         }
-        if let Some(template) = template {
-            let template = match predicate.fail {
-                Some(message) => predicate_template_with_fail_message(template, message),
-                None => template,
-            };
-            templates.push((coordinate, template));
+        match (template, predicate.fail) {
+            (Some(template), Some(message)) => {
+                templates.push((
+                    coordinate,
+                    predicate_template_with_fail_message(template, message),
+                ));
+            }
+            (Some(template), None) => templates.push((coordinate, template)),
+            (None, Some(message)) if kind == SemanticsKind::ParserPredicate => {
+                templates.push((
+                    coordinate,
+                    PredicateTemplate::UnknownWithFailMessage { message },
+                ));
+            }
+            (None, _) => {}
         }
     }
     Ok(templates)
@@ -9796,6 +9808,11 @@ enum ActionTemplate {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum PredicateTemplate {
     Hook,
+    /// An untranslated parser predicate whose `<fail=...>` metadata must
+    /// survive. Evaluation still follows hook -> unknown-policy fallback.
+    UnknownWithFailMessage {
+        message: String,
+    },
     True,
     False,
     FalseWithMessage {
@@ -9841,6 +9858,7 @@ fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
     matches!(
         predicate_effective_template(predicate),
         PredicateTemplate::Hook
+            | PredicateTemplate::UnknownWithFailMessage { .. }
             | PredicateTemplate::True
             | PredicateTemplate::False
             | PredicateTemplate::FalseWithMessage { .. }
@@ -10089,6 +10107,7 @@ fn predicate_effective_template(template: &PredicateTemplate) -> &PredicateTempl
 fn predicate_template_fail_message(template: &PredicateTemplate) -> Option<&str> {
     match template {
         PredicateTemplate::FalseWithMessage { message }
+        | PredicateTemplate::UnknownWithFailMessage { message }
         | PredicateTemplate::WithFailMessage { message, .. } => Some(message),
         _ => None,
     }
@@ -10634,6 +10653,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             format!("_base.column_at(predicate.position()) >= {value}")
         }
         PredicateTemplate::Hook
+        | PredicateTemplate::UnknownWithFailMessage { .. }
         | PredicateTemplate::Invoke { .. }
         | PredicateTemplate::FalseWithMessage { .. }
         | PredicateTemplate::LocalIntEquals { .. }
@@ -11477,7 +11497,7 @@ fn render_parser_semir_predicate_expr(
         PredicateTemplate::WithFailMessage { inner, .. } => {
             render_parser_semir_predicate_expr(inner, data)
         }
-        PredicateTemplate::Hook => Ok(
+        PredicateTemplate::Hook | PredicateTemplate::UnknownWithFailMessage { .. } => Ok(
             "ir.expr(antlr4_runtime::semir::PExpr::Hook(antlr4_runtime::semir::HookId::new(0)))"
                 .to_owned(),
         ),
@@ -11560,7 +11580,7 @@ fn render_parser_predicate_array(
         let predicate = predicate_effective_template(predicate);
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
-            PredicateTemplate::Hook => {
+            PredicateTemplate::Hook | PredicateTemplate::UnknownWithFailMessage { .. } => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "hook predicates lower only through parser SemIR",
@@ -14261,6 +14281,18 @@ mod tests {
             predicate_template_disposition(Some(&wrapped), SemUnknownPolicy::AssumeTrue),
             SemanticsDisposition::Hooked
         );
+        let unknown = PredicateTemplate::UnknownWithFailMessage {
+            message: "unknown failed".to_owned(),
+        };
+        assert_eq!(
+            predicate_template_disposition(Some(&unknown), SemUnknownPolicy::AssumeFalse),
+            SemanticsDisposition::AssumeFalse
+        );
+        assert_eq!(
+            predicate_template_fail_message(&unknown),
+            Some("unknown failed")
+        );
+        assert!(can_generate_parser_predicate(&unknown));
         // A later `<fail=...>` replaces the message rather than nesting wrappers.
         let rewrapped = predicate_template_with_fail_message(wrapped, "again".to_owned());
         assert_eq!(

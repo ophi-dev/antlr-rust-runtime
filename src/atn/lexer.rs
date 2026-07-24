@@ -1179,10 +1179,13 @@ where
         }
         if let Some(accept) = cached_state.accept.as_ref() {
             let accept = cached_accept_state(accept, start, position);
-            if best.as_ref().is_none_or(|current: &AcceptState| {
-                accept.position > current.position
-                    || (accept.position == current.position
-                        && accept.rule_index < current.rule_index)
+            if best.as_ref().is_none_or(|current| {
+                accept_has_priority(
+                    accept.position,
+                    accept.consumed_eof,
+                    accept.rule_index,
+                    current,
+                )
             }) {
                 best = Some(accept);
             }
@@ -1629,24 +1632,26 @@ fn update_best_accept(atn: &LexerAtn, active: &[LexerConfig], best: &mut Option<
         return;
     };
     if best.as_ref().is_none_or(|current| {
-        accept.position > current.position
-            || (accept.position == current.position && accept.rule_index < current.rule_index)
+        accept_has_priority(
+            accept.position,
+            accept.consumed_eof,
+            accept.rule_index,
+            current,
+        )
     }) {
         *best = Some(accept);
     }
 }
 
-/// Applies the interpreter's longest-match / lowest-rule preference to one
-/// compiled accept state, materializing its action traces at absolute input
-/// positions.
+/// Applies the interpreter's accept preference to one compiled accept state,
+/// materializing its action traces at absolute input positions.
 fn record_compiled_accept(
     accept: &CompiledLexerAccept,
     position: usize,
     best: &mut Option<AcceptState>,
 ) {
     let replaces = best.as_ref().is_none_or(|current| {
-        position > current.position
-            || (position == current.position && accept.rule_index < current.rule_index)
+        accept_has_priority(position, accept.consumed_eof, accept.rule_index, current)
     });
     if !replaces {
         return;
@@ -1665,6 +1670,24 @@ fn record_compiled_accept(
             })
             .collect(),
     });
+}
+
+/// Orders accepts exactly as ANTLR's lexer simulation encounters them.
+///
+/// Longest input wins first. At the same character position, a path which
+/// explicitly traversed EOF is a later match than an accept captured before
+/// that traversal. Rule order breaks all remaining ties.
+fn accept_has_priority(
+    position: usize,
+    consumed_eof: bool,
+    rule_index: usize,
+    current: &AcceptState,
+) -> bool {
+    position
+        .cmp(&current.position)
+        .then_with(|| consumed_eof.cmp(&current.consumed_eof))
+        .then_with(|| current.rule_index.cmp(&rule_index))
+        .is_gt()
 }
 
 fn cached_mode_start_state<I, P>(
@@ -2077,9 +2100,8 @@ pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> 
 
 /// Selects the highest-priority accept configuration from a closure set.
 ///
-/// ANTLR lexer priority is encoded by rule order. `match_token` already handles
-/// longest-match selection across input positions; within a single position the
-/// lower rule index wins.
+/// `match_token` handles longest-match selection across input positions. Within
+/// one closure, an EOF-consuming accept wins before rule order is considered.
 pub(super) fn best_accept(atn: &LexerAtn, configs: &[LexerConfig]) -> Option<AcceptState> {
     configs
         .iter()
@@ -2095,7 +2117,7 @@ pub(super) fn best_accept(atn: &LexerAtn, configs: &[LexerConfig]) -> Option<Acc
                 actions: config.actions.clone(),
             })
         })
-        .min_by_key(|accept| accept.rule_index)
+        .min_by_key(|accept| (!accept.consumed_eof, accept.rule_index))
 }
 
 /// Returns the token type predicted by an accepting lexer config set, if any.
@@ -2521,6 +2543,54 @@ mod tests {
             rule_index: 0,
             action_index: 0,
         }]);
+        atn
+    }
+
+    fn eof_suffix_priority_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::TokenStart, None),
+            (1, AtnStateKind::RuleStart, Some(0)),
+            (2, AtnStateKind::RuleStop, Some(0)),
+            (3, AtnStateKind::RuleStart, Some(1)),
+            (4, AtnStateKind::Basic, Some(1)),
+            (5, AtnStateKind::RuleStop, Some(1)),
+        ] {
+            let mut state = LexerAtnState::new(state_number, kind);
+            if let Some(rule_index) = rule_index {
+                state = state.with_rule_index(rule_index);
+            }
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 3 });
+        atn.state_mut(1)
+            .expect("plain rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 2,
+                label: 'a' as i32,
+            });
+        atn.state_mut(3)
+            .expect("EOF-suffixed rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 4,
+                label: 'a' as i32,
+            });
+        atn.state_mut(4)
+            .expect("EOF-suffixed rule body")
+            .add_transition(LexerTransition::Atom {
+                target: 5,
+                label: EOF,
+            });
+        atn.set_rule_to_start_state(vec![1, 3]);
+        atn.set_rule_to_stop_state(vec![2, 5]);
+        atn.set_rule_to_token_type(vec![1, 2]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
         atn
     }
 
@@ -3457,6 +3527,55 @@ mod tests {
             assert_eq!(token.token_type, 1, "{strategy:?}");
             assert_eq!((token.start, token.stop), (0, 3), "{strategy:?}");
             assert_eq!(token.text, "/**/", "{strategy:?}");
+        }
+    }
+
+    #[test]
+    fn eof_suffix_outranks_same_length_earlier_rule() {
+        let atn = eof_suffix_priority_atn();
+        let compiled = CompiledLexerDfa::compile(&atn);
+        for strategy in [
+            TestMatchStrategy::Interpreted,
+            TestMatchStrategy::Cached,
+            TestMatchStrategy::Compiled,
+        ] {
+            let data = RecognizerData::new(
+                "EofPriority",
+                Vocabulary::new(
+                    [None::<&str>, None, None],
+                    [None, Some("A"), Some("B")],
+                    [None::<&str>, None, None],
+                ),
+            );
+            let mut lexer = BaseLexer::new(InputStream::new("a"), data);
+            let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+            let mut sink = TokenSink::new(&mut store);
+            if matches!(strategy, TestMatchStrategy::Cached) {
+                next_token(&mut lexer, &mut sink, &atn).expect("warmup token should fit");
+                lexer.reset();
+            }
+            let token = match strategy {
+                TestMatchStrategy::Interpreted => next_token_with_hooks(
+                    &mut lexer,
+                    &mut sink,
+                    &atn,
+                    |_, _| {},
+                    |_, _| true,
+                    |_, _, _| {},
+                ),
+                TestMatchStrategy::Cached => next_token(&mut lexer, &mut sink, &atn),
+                TestMatchStrategy::Compiled => {
+                    next_token_compiled(&mut lexer, &mut sink, &atn, &compiled)
+                }
+            }
+            .expect("priority token should fit");
+            assert_eq!(
+                sink.view(token)
+                    .expect("priority token should exist")
+                    .token_type(),
+                2,
+                "{strategy:?}",
+            );
         }
     }
 

@@ -6793,7 +6793,7 @@ where
             },
         );
         if alt_tracking.public {
-            context.set_alt_number(alt_number);
+            context.set_alt_number(alt_number.max(1));
         }
         if alt_tracking.context {
             context.set_context_alt_number(alt_number);
@@ -6985,7 +6985,7 @@ where
                     self.recognition_arena.sequence_len(children),
                 );
                 if track_alt_numbers {
-                    context.set_alt_number(alt_number as usize);
+                    context.set_alt_number((alt_number as usize).max(1));
                 }
                 if track_context_alt_numbers {
                     context.set_context_alt_number(alt_number as usize);
@@ -7050,7 +7050,7 @@ where
                     self.recognition_arena.sequence_len(children),
                 );
                 if alt_tracking.public {
-                    context.set_alt_number(alt_number as usize);
+                    context.set_alt_number((alt_number as usize).max(1));
                 }
                 if alt_tracking.context {
                     context.set_context_alt_number(alt_number as usize);
@@ -7095,7 +7095,11 @@ where
                     self.arena_recognized_node_tree_with_implicit_tokens(link.head, alt_tracking)?;
                 self.tree.add_child(context, child);
                 if let Some(child_stop) = child_stop {
-                    cursor = self.next_visible_after_token(child_stop);
+                    let next = self.next_visible_after_token(child_stop);
+                    cursor = match (cursor, next) {
+                        (None, _) | (_, None) => None,
+                        (Some(current), Some(next)) => Some(current.max(next)),
+                    };
                 }
             } else {
                 let child =
@@ -7392,7 +7396,7 @@ where
         let mut context =
             ParserRuleContext::new(rule_index, invoking_state.unwrap_or_else(|| self.state()));
         if track_alt_numbers {
-            context.set_alt_number(outcome.alt_number);
+            context.set_alt_number(outcome.alt_number.max(1));
         }
         if track_context_alt_numbers {
             context.set_context_alt_number(outcome.alt_number);
@@ -11988,14 +11992,15 @@ fn select_best_outcome(
                     best_position,
                     best.diagnostics,
                     arena,
-                ) || (!prefer_first_tie
-                    && outcome_position == best_position
+                ) || (outcome_position == best_position
                     && arena.diagnostics_len(outcome.diagnostics)
                         == arena.diagnostics_len(best.diagnostics)
                     && arena.diagnostics_recovery_rank(outcome.diagnostics)
                         == arena.diagnostics_recovery_rank(best.diagnostics)
                     && (outcome.decisions < best.decisions
-                        || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
+                        || (!prefer_first_tie
+                            && outcome.decisions == best.decisions
+                            && outcome.actions > best.actions)))
             }
             PredictionMode::Sll => {
                 outcome_position > best_position
@@ -12032,10 +12037,7 @@ fn transition_decision(
     transition_index: usize,
     predicates: &[(usize, usize, ParserPredicate)],
 ) -> Option<usize> {
-    if transition_count <= 1
-        || state.precedence_rule_decision()
-        || decision_reaches_unsupported_predicate(atn, state, predicates)
-    {
+    if transition_count <= 1 || decision_reaches_unsupported_predicate(atn, state, predicates) {
         return None;
     }
     Some(transition_index)

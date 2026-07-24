@@ -1104,12 +1104,29 @@ fn predicate_fail_message(node: SyntaxNodeRef<'_>) -> Option<String> {
                 return None;
             }
             let value = value.trim();
-            if value.starts_with(['\'', '"']) {
-                get_string_from_grammar_string_literal(value)
-            } else {
-                Some(value.to_owned())
-            }
+            predicate_fail_value(value)
         })
+}
+
+fn predicate_fail_value(value: &str) -> Option<String> {
+    let value = value.trim();
+    if let Some(message) = grammar_string_literal(value) {
+        return Some(message);
+    }
+    let action = value
+        .strip_prefix('{')
+        .and_then(|value| value.strip_suffix('}'))
+        .map(str::trim);
+    action
+        .and_then(grammar_string_literal)
+        .or_else(|| Some(value.to_owned()))
+}
+
+fn grammar_string_literal(value: &str) -> Option<String> {
+    let quote = value.chars().next()?;
+    (matches!(quote, '\'' | '"') && value.ends_with(quote))
+        .then(|| get_string_from_grammar_string_literal(value))
+        .flatten()
 }
 
 fn attribute_clause(node: SyntaxNodeRef<'_>) -> AttributeClause {
@@ -1220,6 +1237,18 @@ WS : (' '|'\n') -> skip ;
             .expect("semantic predicate");
         assert_eq!(body, "false");
         assert_eq!(fail, Some("custom message"));
+    }
+
+    #[test]
+    fn unwraps_braced_predicate_fail_literal() {
+        assert_eq!(
+            predicate_fail_value("{\n  \"custom message\"\n}").as_deref(),
+            Some("custom message")
+        );
+        assert_eq!(
+            predicate_fail_value("{ make_message() }").as_deref(),
+            Some("{ make_message() }")
+        );
     }
 
     #[test]
