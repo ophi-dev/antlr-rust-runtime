@@ -15,10 +15,13 @@
 // byte and a VLQ continuation byte share the range 0x80..0xFF -- they never
 // share a lexer mode here.
 //
-// Adapted (simplified) from milnet2/midi-grammar by Tobias Blaschke, BSD-3:
-// https://github.com/milnet2/midi-grammar. Scope is deliberately small: MThd +
-// MTrk chunks, VLQ delta-times, note-on/off, and set-tempo / end-of-track meta
-// events. Running status, sysex, and most meta events are out of scope.
+// Adapted (simplified) from milnet2/midi-grammar by Tobias Blaschke:
+// https://github.com/milnet2/midi-grammar. Copyright (c) 2024, Tobias Blaschke;
+// licensed BSD-3-Clause. The upstream copyright notice, conditions, and
+// disclaimer are retained verbatim in LICENSE-midi-grammar in this directory.
+// Scope is deliberately small: MThd + MTrk chunks, VLQ delta-times,
+// note-on/off, and set-tempo / end-of-track meta events. Running status,
+// sysex, and most meta events are out of scope.
 
 lexer grammar MidiLexer;
 

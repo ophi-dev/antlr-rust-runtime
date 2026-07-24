@@ -38,13 +38,16 @@
 //! // Zero-copy from an in-memory buffer (e.g. bytes read off a socket):
 //! let stream = ByteStream::new(&packet[..]);
 //!
-//! let lexer = MidiLexer::new(stream);
+//! // Feed it to any generated lexer built from a byte-oriented grammar.
+//! let lexer = FooLexer::new(stream);
 //! let tokens = CommonTokenStream::new(lexer);
-//! let mut parser = MidiParser::new(tokens);
-//! let tree = parser.file()?;
+//! let mut parser = FooParser::new(tokens);
+//! let tree = parser.entry_rule()?;
 //! ```
 //!
-//! Write lexer rules against the byte range, e.g. `BYTE : ' ' .. 'ÿ';`.
+//! Write lexer rules against the byte range, e.g. `BYTE : ' ' .. 'ÿ';`. A
+//! complete worked example — a Standard MIDI File grammar parsed over a
+//! `ByteStream` — lives under `tests/fixtures/antlr4-rust-gen/midi-binary/`.
 //!
 //! # Token text is hex
 //!
@@ -56,7 +59,7 @@
 
 use std::io;
 
-use crate::char_stream::{CharStream, TextInterval};
+use crate::char_stream::{CharStream, PositionSummary, TextInterval};
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 
 /// A [`CharStream`] backed by raw bytes, where each byte is one symbol in
@@ -166,15 +169,22 @@ impl<B: AsRef<[u8]>> CharStream for ByteStream<B> {
     /// Renders the inclusive byte interval as a lowercase, separator-free hex
     /// string. See the [module documentation](self) for the rationale.
     fn text(&self, interval: TextInterval) -> String {
+        // Clamp `stop` before any `+1`, mirroring `InputStream`: a caller
+        // passing `TextInterval::new(_, usize::MAX)` (e.g. an EOF token span)
+        // must not overflow.
         let bytes = self.bytes.as_ref();
-        if interval.is_empty() {
+        let len = bytes.len();
+        if interval.is_empty() || len == 0 {
             return String::new();
         }
-        let stop = (interval.stop + 1).min(bytes.len());
-        let start = interval.start.min(stop);
+        let start = interval.start.min(len);
+        let stop = interval.stop.min(len - 1);
+        if start > stop {
+            return String::new();
+        }
         use std::fmt::Write as _;
-        bytes[start..stop].iter().fold(
-            String::with_capacity((stop - start) * 2),
+        bytes[start..=stop].iter().fold(
+            String::with_capacity((stop - start + 1) * 2),
             |mut acc, byte| {
                 // Writing to a String is infallible.
                 let _ = write!(acc, "{byte:02x}");
@@ -197,16 +207,43 @@ impl<B: AsRef<[u8]>> CharStream for ByteStream<B> {
     // valid for 7-bit input; bytes `>= 0x80` route correctly through the
     // generic path's `wide_rows` instead.
 
-    fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
-        // Index == byte offset, so the byte span is exact.
-        let len = self.bytes.as_ref().len();
-        if interval.is_empty() {
-            let at = self.cursor.min(len);
-            return Some((at, at));
+    /// Summarizes line/column movement over `[start, end)` by scanning the raw
+    /// bytes.
+    ///
+    /// Without this, [`BaseLexer`](crate::lexer::BaseLexer) would fall back to
+    /// iterating [`Self::text`], which is hex — so a span of N bytes would count
+    /// as 2N columns and `0x0A` newline bytes would be invisible, corrupting the
+    /// line/column of split or synthesized tokens.
+    fn position_summary(&self, start: usize, end: usize) -> Option<PositionSummary> {
+        let bytes = self.bytes.as_ref();
+        let len = bytes.len();
+        if start > end {
+            return None;
         }
-        let stop = (interval.stop + 1).min(len);
-        let start = interval.start.min(stop);
-        Some((start, stop))
+        let start = start.min(len);
+        let end = end.min(len);
+        let mut summary = PositionSummary::default();
+        for &byte in &bytes[start..end] {
+            if byte == b'\n' {
+                summary.line_breaks += 1;
+                summary.trailing_columns = 0;
+            } else {
+                summary.trailing_columns += 1;
+            }
+        }
+        Some(summary)
+    }
+
+    fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
+        // Index == byte offset, so the byte span is exact. Clamp `stop` before
+        // the `+1` for the same overflow reason as `text`.
+        let len = self.bytes.as_ref().len();
+        if interval.is_empty() || len == 0 {
+            return None;
+        }
+        let start = interval.start.min(len);
+        let stop = interval.stop.min(len - 1);
+        (start <= stop).then_some((start, stop + 1))
     }
 }
 
@@ -253,8 +290,47 @@ mod tests {
         assert_eq!(stream.text(TextInterval::empty()), "");
         // Inclusive char interval [1, 2] -> half-open byte span [1, 3).
         assert_eq!(stream.byte_interval(TextInterval::new(1, 2)), Some((1, 3)));
+        assert_eq!(stream.byte_interval(TextInterval::empty()), None);
         assert_eq!(stream.symbol_at(0), Some(0xDE));
         assert_eq!(stream.symbol_at(4), Some(EOF));
+    }
+
+    #[test]
+    fn text_and_byte_interval_clamp_usize_max_without_overflow() {
+        // An EOF-token span can carry `stop == usize::MAX`; clamping before the
+        // `+1` must not overflow (debug panic / release wrap).
+        let stream = ByteStream::new(vec![0xDE, 0xAD]);
+        assert_eq!(stream.text(TextInterval::new(0, usize::MAX)), "dead");
+        assert_eq!(
+            stream.byte_interval(TextInterval::new(0, usize::MAX)),
+            Some((0, 2)),
+        );
+        // Out-of-range start clamps to empty rather than panicking.
+        assert_eq!(stream.text(TextInterval::new(5, usize::MAX)), "");
+    }
+
+    #[test]
+    fn position_summary_scans_raw_bytes_not_hex() {
+        // Bytes, not hex: a newline byte (0x0A) is one line break, and each
+        // other byte is one column — never doubled as the hex rendering would.
+        let stream = ByteStream::new(vec![0x41, 0x0A, 0x42, 0x43]);
+        assert_eq!(
+            stream.position_summary(0, 4),
+            Some(PositionSummary {
+                line_breaks: 1,
+                trailing_columns: 2,
+            }),
+        );
+        // No newline in [2, 4): two raw bytes are two columns (hex would say
+        // four).
+        assert_eq!(
+            stream.position_summary(2, 4),
+            Some(PositionSummary {
+                line_breaks: 0,
+                trailing_columns: 2,
+            }),
+        );
+        assert_eq!(stream.position_summary(4, 2), None);
     }
 
     #[test]

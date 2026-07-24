@@ -1,6 +1,9 @@
 // Standard MIDI File (SMF) parser. Pairs with MidiLexer.g4 and the MidiHooks
 // SemanticHooks implementation, driven over a `ByteStream`. See MidiLexer.g4
 // for the byte-oriented lexing strategy and attribution.
+//
+// Adapted from milnet2/midi-grammar; Copyright (c) 2024, Tobias Blaschke;
+// BSD-3-Clause. Full notice in LICENSE-midi-grammar in this directory.
 
 parser grammar MidiParser;
 
