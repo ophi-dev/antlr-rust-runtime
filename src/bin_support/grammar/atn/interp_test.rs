@@ -1588,6 +1588,13 @@ mod tests {
         }
     }
 
+    // This module is byte-locked to the recorded Phase C test commit.
+    #[allow(
+        clippy::disallowed_methods,
+        clippy::needless_pass_by_value,
+        clippy::redundant_closure_for_method_calls,
+        clippy::semicolon_if_nothing_returned
+    )]
     mod upstream_phase_c_runtime {
         use std::collections::BTreeSet;
 
