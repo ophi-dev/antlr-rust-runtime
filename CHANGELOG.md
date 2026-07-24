@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.16.0...v0.17.0) (2026-07-24)
+
+
+### Features
+
+* **runtime:** add ByteStream for binary parsing + MIDI example ([#188](https://github.com/ophi-dev/antlr-rust-runtime/issues/188)) ([60a92be](https://github.com/ophi-dev/antlr-rust-runtime/commit/60a92be0e721e5f97a57c2130a3c68caecf74d49))
+* support parse-tree XPath queries ([#186](https://github.com/ophi-dev/antlr-rust-runtime/issues/186)) ([5969f40](https://github.com/ophi-dev/antlr-rust-runtime/commit/5969f40d7ff87920981d0715dbebed32fc1bb737))
+
 ## [0.16.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.2...v0.16.0) (2026-07-24)
 
 
