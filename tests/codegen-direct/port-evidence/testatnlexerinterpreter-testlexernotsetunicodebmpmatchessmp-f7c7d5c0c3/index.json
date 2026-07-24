@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexernotsetunicodebmpmatchessmp-f7c7d5c0c3",
+  "active_revision_id": "testatnlexerinterpreter-testlexernotsetunicodebmpmatchessmp-f7c7d5c0c3-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexernotsetunicodebmpmatchessmp-f7c7d5c0c3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexernotsetunicodebmpmatchessmp-f7c7d5c0c3/revisions/testatnlexerinterpreter-testlexernotsetunicodebmpmatchessmp-f7c7d5c0c3-r1/manifest.json",
+      "closure_sha256": "12b198b01204e3d4e8f94ced98d913f7bfb1d98a6dbcb516fc77f6744e938ec8"
+    }
+  ]
+}

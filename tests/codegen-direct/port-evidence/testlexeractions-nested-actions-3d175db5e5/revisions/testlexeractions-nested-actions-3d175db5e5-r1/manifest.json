@@ -41,8 +41,9 @@
   "locked_oracle_sections": [
     {
       "path": "src/bin_support/grammar/syntax.rs",
-      "marker": "#[cfg(test)]\nmod tests {",
-      "sha256": "7d42954ce50ccf2a6afa9d7e7dd2e6c5a880992f132b429555ff1c7ff2b51e65"
+      "marker": "        let rule = unit\n            .rules\n            .iter()\n            .find(|rule| rule.name == \"a\")",
+      "end_marker": "\n    }\n\n    #[test]",
+      "sha256": "5b29c387193ec07aa63bf3d14a56017d8fd2b016ad9322e55eee4a004d680f6c"
     }
   ],
   "demonstrated_red": {

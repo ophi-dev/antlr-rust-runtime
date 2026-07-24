@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnparserprediction-testrecursiveleftprefix-32c4086bb3",
+  "active_revision_id": "testatnparserprediction-testrecursiveleftprefix-32c4086bb3-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnparserprediction-testrecursiveleftprefix-32c4086bb3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnparserprediction-testrecursiveleftprefix-32c4086bb3/revisions/testatnparserprediction-testrecursiveleftprefix-32c4086bb3-r1/manifest.json",
+      "closure_sha256": "d290271ab85c19962c9e64fed2bc0ed210a82e69e21445f9042fce8b4afa904e"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testmusttrackpreviousgoodalt2witheof-0d67ab0fb7",
+  "active_revision_id": "testatninterpreter-testmusttrackpreviousgoodalt2witheof-0d67ab0fb7-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testmusttrackpreviousgoodalt2witheof-0d67ab0fb7-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatninterpreter-testmusttrackpreviousgoodalt2witheof-0d67ab0fb7/revisions/testatninterpreter-testmusttrackpreviousgoodalt2witheof-0d67ab0fb7-r1/manifest.json",
+      "closure_sha256": "17face4bf219730f0cd8f5e1fb6111b48dd7ff19b9d1919b31216e0906a0acf7"
+    }
+  ]
+}

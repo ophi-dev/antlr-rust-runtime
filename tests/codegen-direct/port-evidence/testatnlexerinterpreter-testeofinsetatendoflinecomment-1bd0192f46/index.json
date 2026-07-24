@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testeofinsetatendoflinecomment-1bd0192f46",
+  "active_revision_id": "testatnlexerinterpreter-testeofinsetatendoflinecomment-1bd0192f46-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testeofinsetatendoflinecomment-1bd0192f46-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testeofinsetatendoflinecomment-1bd0192f46/revisions/testatnlexerinterpreter-testeofinsetatendoflinecomment-1bd0192f46-r1/manifest.json",
+      "closure_sha256": "84ccf7f189213209c76a36d2c9a23135028d0659ac601018b44a6b4958acf139"
+    }
+  ]
+}

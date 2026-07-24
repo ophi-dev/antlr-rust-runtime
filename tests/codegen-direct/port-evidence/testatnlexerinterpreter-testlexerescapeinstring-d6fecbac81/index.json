@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81",
+  "active_revision_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81/revisions/testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1/manifest.json",
+      "closure_sha256": "663963cd4a46e443475b569729a63971cba5ab1121d78c88f517c5cfafd7d5c2"
+    }
+  ]
+}

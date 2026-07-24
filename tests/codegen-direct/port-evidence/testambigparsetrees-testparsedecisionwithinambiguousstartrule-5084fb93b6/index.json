@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6",
+  "active_revision_id": "testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6-r1",
+  "revisions": [
+    {
+      "revision_id": "testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6/revisions/testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6-r1/manifest.json",
+      "closure_sha256": "e9f4fadc100dd95e3f6fa51eca6cd5ff0ee19d1fe69c6ad20a66da3df9dfd5bb"
+    }
+  ]
+}

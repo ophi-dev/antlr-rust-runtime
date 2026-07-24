@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testambigparsetrees-testambigaltsnotatroot-db08a05a06",
+  "active_revision_id": "testambigparsetrees-testambigaltsnotatroot-db08a05a06-r1",
+  "revisions": [
+    {
+      "revision_id": "testambigparsetrees-testambigaltsnotatroot-db08a05a06-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testambigparsetrees-testambigaltsnotatroot-db08a05a06/revisions/testambigparsetrees-testambigaltsnotatroot-db08a05a06-r1/manifest.json",
+      "closure_sha256": "1c698e134120569141f1fea3ba793b2a9b3ea458e272da72271dd47e53f6c0e2"
+    }
+  ]
+}

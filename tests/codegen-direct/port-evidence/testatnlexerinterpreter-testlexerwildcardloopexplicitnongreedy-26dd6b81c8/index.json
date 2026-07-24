@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerwildcardloopexplicitnongreedy-26dd6b81c8",
+  "active_revision_id": "testatnlexerinterpreter-testlexerwildcardloopexplicitnongreedy-26dd6b81c8-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerwildcardloopexplicitnongreedy-26dd6b81c8-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerwildcardloopexplicitnongreedy-26dd6b81c8/revisions/testatnlexerinterpreter-testlexerwildcardloopexplicitnongreedy-26dd6b81c8-r1/manifest.json",
+      "closure_sha256": "b285fa8bad20482a0262086cc0b5a89e0a96563238221b57beb2ff05a4ad5024"
+    }
+  ]
+}

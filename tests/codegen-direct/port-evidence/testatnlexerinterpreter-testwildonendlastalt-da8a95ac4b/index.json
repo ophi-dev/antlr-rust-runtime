@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b",
+  "active_revision_id": "testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b/revisions/testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b-r1/manifest.json",
+      "closure_sha256": "92c454f758fa34f52d09bdd4620e26ad4a6cc0ef04c219918e6ffc5130a0b61b"
+    }
+  ]
+}

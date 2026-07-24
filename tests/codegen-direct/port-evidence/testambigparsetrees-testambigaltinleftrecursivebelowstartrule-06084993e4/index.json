@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4",
+  "active_revision_id": "testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4-r1",
+  "revisions": [
+    {
+      "revision_id": "testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4/revisions/testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4-r1/manifest.json",
+      "closure_sha256": "797844a058c74baee00197a6ce958eeaeed1fe14c1a1ffcdc5ee0c79c477b5b8"
+    }
+  ]
+}

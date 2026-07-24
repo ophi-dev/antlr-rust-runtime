@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testpegachillesheel-86a37709f7",
+  "active_revision_id": "testatninterpreter-testpegachillesheel-86a37709f7-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testpegachillesheel-86a37709f7-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatninterpreter-testpegachillesheel-86a37709f7/revisions/testatninterpreter-testpegachillesheel-86a37709f7-r1/manifest.json",
+      "closure_sha256": "a612f1d5c60cf3f17f8c075e3d3684c77e8b452b18a0552d6e751f0cde0468c7"
+    }
+  ]
+}

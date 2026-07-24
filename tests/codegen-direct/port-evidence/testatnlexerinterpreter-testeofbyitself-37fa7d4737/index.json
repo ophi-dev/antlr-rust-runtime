@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testeofbyitself-37fa7d4737",
+  "active_revision_id": "testatnlexerinterpreter-testeofbyitself-37fa7d4737-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testeofbyitself-37fa7d4737-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testeofbyitself-37fa7d4737/revisions/testatnlexerinterpreter-testeofbyitself-37fa7d4737-r1/manifest.json",
+      "closure_sha256": "e97029856ed1855071910a651d86cb3170698b424f1821ea00b5ddfc527cb749"
+    }
+  ]
+}

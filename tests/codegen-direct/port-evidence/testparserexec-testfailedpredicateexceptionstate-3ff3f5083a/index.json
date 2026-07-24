@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a",
+  "active_revision_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserexec-testfailedpredicateexceptionstate-3ff3f5083a/revisions/testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1/manifest.json",
+      "closure_sha256": "3d03d408fa7900fc15c13cc554560cbdb5efbe55d8499f1ee49f40e64be89c39"
+    }
+  ]
+}

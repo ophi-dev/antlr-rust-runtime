@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerrule-b5aa50f0d0",
+  "active_revision_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerrule-b5aa50f0d0-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerrule-b5aa50f0d0-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testcaseinsensitiveinlexerrule-b5aa50f0d0/revisions/testatnlexerinterpreter-testcaseinsensitiveinlexerrule-b5aa50f0d0-r1/manifest.json",
+      "closure_sha256": "4f93f22122734b89da556dc5a75774a9cfbf32a3a2e1ca86d90541b34ce97f28"
+    }
+  ]
+}

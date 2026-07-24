@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691",
+  "active_revision_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testgreedybetweenrules-5a20e79691/revisions/testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1/manifest.json",
+      "closure_sha256": "5375fceeff6269f279d3569d9ef1d643ae8ba614b552d724406a9e177a789c3a"
+    }
+  ]
+}

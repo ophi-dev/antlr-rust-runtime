@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c",
+  "active_revision_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c/revisions/testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1/manifest.json",
+      "closure_sha256": "f0a84470cab69129467a7b44cb7dd1553cd9e02f01eae0f75228de53041fd96e"
+    }
+  ]
+}

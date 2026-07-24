@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgrammarparserinterpreter-testonealt-137e50ed33",
+  "revision_id": "testgrammarparserinterpreter-testonealt-137e50ed33-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "2239a4fc17c81d942586c69140a92663ff6194d4",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "63f852a5c9be0d460d94081b441386bb5c3048f0",
+      "command": "cargo test --locked --all-features --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_phase_c_runtime::testgrammarparserinterpreter_testonealt_137e50ed33::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

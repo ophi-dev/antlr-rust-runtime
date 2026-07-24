@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testevalmultipleactions-af7a23955f",
+  "active_revision_id": "testlexeractions-testevalmultipleactions-af7a23955f-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testevalmultipleactions-af7a23955f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-testevalmultipleactions-af7a23955f/revisions/testlexeractions-testevalmultipleactions-af7a23955f-r1/manifest.json",
+      "closure_sha256": "12ffc1e6a2f2c037da1c31e87a5be917dc624fec2d6003b62cec4b612c3bd1f6"
+    }
+  ]
+}

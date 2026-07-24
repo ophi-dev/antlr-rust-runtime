@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testsimplenoblock-bdbf4cfabe",
+  "active_revision_id": "testatninterpreter-testsimplenoblock-bdbf4cfabe-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testsimplenoblock-bdbf4cfabe-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatninterpreter-testsimplenoblock-bdbf4cfabe/revisions/testatninterpreter-testsimplenoblock-bdbf4cfabe-r1/manifest.json",
+      "closure_sha256": "17fcc26b4493abc5253dca64ed862e3451e55e14297a6207fd462dc91e5fe4a5"
+    }
+  ]
+}

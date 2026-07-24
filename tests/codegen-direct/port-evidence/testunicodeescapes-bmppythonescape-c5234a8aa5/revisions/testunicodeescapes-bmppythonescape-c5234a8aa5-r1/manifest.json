@@ -47,8 +47,8 @@
   "locked_oracle_sections": [
     {
       "path": "src/bin_support/grammar/unicode_escape.rs",
-      "marker": "#[cfg(test)]\nmod tests {",
-      "sha256": "f49b7e499bbbfba8ba5ea37ebf39e19fe630b45a7afc5ef61a26d282ded55d02"
+      "marker": "mod tests {",
+      "sha256": "f5b7208da7e34639375685e6fa0b9ac5df1d3780f1858e8fa3d03718ace25aa7"
     }
   ],
   "demonstrated_red": {

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testcommonleftprefix-5b65f6ca88",
+  "active_revision_id": "testatninterpreter-testcommonleftprefix-5b65f6ca88-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testcommonleftprefix-5b65f6ca88-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatninterpreter-testcommonleftprefix-5b65f6ca88/revisions/testatninterpreter-testcommonleftprefix-5b65f6ca88-r1/manifest.json",
+      "closure_sha256": "0dbac3f67082a1caf30125f9067bb82b9a2ce8cbb439fa58d08ad5db0c1ebebf"
+    }
+  ]
+}

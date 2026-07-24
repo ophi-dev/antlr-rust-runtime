@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcodegeneration-csharpaccessleveloption-3bd1318d28",
+  "active_revision_id": "testcodegeneration-csharpaccessleveloption-3bd1318d28-r1",
+  "revisions": [
+    {
+      "revision_id": "testcodegeneration-csharpaccessleveloption-3bd1318d28-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcodegeneration-csharpaccessleveloption-3bd1318d28/revisions/testcodegeneration-csharpaccessleveloption-3bd1318d28-r1/manifest.json",
+      "closure_sha256": "00ecf54358dfa6ba198bf506e40c18f94fb2c4ad129e721ed1ffefc87423f613"
+    }
+  ]
+}

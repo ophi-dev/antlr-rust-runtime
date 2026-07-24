@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testemptyinput-752cd35737",
+  "active_revision_id": "testparserinterpreter-testemptyinput-752cd35737-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testemptyinput-752cd35737-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserinterpreter-testemptyinput-752cd35737/revisions/testparserinterpreter-testemptyinput-752cd35737-r1/manifest.json",
+      "closure_sha256": "56bd93b592905fa2b83a28909f85c8c5dbedbfd24f8a1bcb42c3bfea22b893b5"
+    }
+  ]
+}

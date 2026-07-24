@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcodegeneration-testargdecl-ced2e031e1",
+  "active_revision_id": "testcodegeneration-testargdecl-ced2e031e1-r1",
+  "revisions": [
+    {
+      "revision_id": "testcodegeneration-testargdecl-ced2e031e1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcodegeneration-testargdecl-ced2e031e1/revisions/testcodegeneration-testargdecl-ced2e031e1-r1/manifest.json",
+      "closure_sha256": "791bd6eced100c3d6b08716b5b4bb1c540d2d240c41bb186f5b0b05ca61e2657"
+    }
+  ]
+}

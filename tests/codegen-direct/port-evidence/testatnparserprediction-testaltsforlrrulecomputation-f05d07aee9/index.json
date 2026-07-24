@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnparserprediction-testaltsforlrrulecomputation-f05d07aee9",
+  "active_revision_id": "testatnparserprediction-testaltsforlrrulecomputation-f05d07aee9-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnparserprediction-testaltsforlrrulecomputation-f05d07aee9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnparserprediction-testaltsforlrrulecomputation-f05d07aee9/revisions/testatnparserprediction-testaltsforlrrulecomputation-f05d07aee9-r1/manifest.json",
+      "closure_sha256": "bfe20a2c9c09ee753bbe27da555f97f162af0491ca82348de75360ed7db41dbd"
+    }
+  ]
+}

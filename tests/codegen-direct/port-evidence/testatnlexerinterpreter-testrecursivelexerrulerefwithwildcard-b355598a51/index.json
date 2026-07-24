@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51",
+  "active_revision_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51/revisions/testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1/manifest.json",
+      "closure_sha256": "c5c89c7fb16e50e5f1cf6e4338f3871eef4934e71800e3430ecb9da567d19366"
+    }
+  ]
+}

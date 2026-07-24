@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testleftrecursion-c0160bad5b",
+  "active_revision_id": "testparserinterpreter-testleftrecursion-c0160bad5b-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testleftrecursion-c0160bad5b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserinterpreter-testleftrecursion-c0160bad5b/revisions/testparserinterpreter-testleftrecursion-c0160bad5b-r1/manifest.json",
+      "closure_sha256": "a88f232c6b0b086031af300fbca8151e56f47e23516c4c8f9741b305fed96107"
+    }
+  ]
+}

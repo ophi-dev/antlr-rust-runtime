@@ -48,8 +48,8 @@
     {
       "path": "src/vocabulary.rs",
       "marker": "        #[test]\n        fn vocabulary_from_token_names_matches_java() {",
-      "end_marker": "\n    }\n}",
-      "sha256": "b50ad81bf5f44a7252bb19b2f3c1a6feaa15ffb3d8e7b2b493562434fd962b5b"
+      "end_marker": "\n            );\n",
+      "sha256": "811eaacad21c1cbdcf703a3e6c95ffafa2335d228ae1759bd96984112f17bb5a"
     }
   ],
   "demonstrated_red": {

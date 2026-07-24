@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d",
+  "active_revision_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d/revisions/testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1/manifest.json",
+      "closure_sha256": "055aa582e8e09bae2b8864b46a07c477e40c00b18c1f62b210cc46cb1dc75871"
+    }
+  ]
+}

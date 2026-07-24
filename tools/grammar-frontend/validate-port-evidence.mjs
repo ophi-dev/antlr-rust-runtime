@@ -60,6 +60,10 @@ import {
     NESTED_ACTION_TEST_COMMIT,
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
+    PHASE_C_BASE_COMMIT,
+    PHASE_C_BASE_PARENT_COMMIT,
+    PHASE_C_IMPLEMENTATION_COMMIT,
+    PHASE_C_TEST_COMMIT,
     SCAFFOLD_COMMIT,
     SCOPE_PARSING_BASE_COMMIT,
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
@@ -311,6 +315,7 @@ for (const [logicalId, record] of records) {
             manifest.owner_phase === record.ownerPhase,
             `${logicalId} manifest owner phase differs`,
         );
+        const phaseC = manifest.owner_phase === "C";
         const atnSerialization = logicalId.startsWith(
             "testatnserialization-",
         );
@@ -379,7 +384,22 @@ for (const [logicalId, record] of records) {
         const generalAtnDot =
             GENERAL_ATN_DOT_LOGICAL_IDS.has(logicalId);
         if (resolution === "verified-covered-existing") {
-            if (atnSerialization) {
+            if (phaseC) {
+                expect(
+                    manifest.commits.scaffold === PHASE_C_BASE_COMMIT &&
+                        manifest.commits.primary_test === PHASE_C_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            PHASE_C_BASE_COMMIT,
+                    `${logicalId} Phase C covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            PHASE_C_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            PHASE_C_BASE_PARENT_COMMIT,
+                    `${logicalId} Phase C covered-existing ancestry differs`,
+                );
+            } else if (atnSerialization) {
                 expect(
                     manifest.commits.scaffold === PHASE_B_BASE_COMMIT &&
                         manifest.commits.primary_test ===
@@ -658,7 +678,22 @@ for (const [logicalId, record] of records) {
                 `${logicalId} lacks covered-existing execution evidence`,
             );
         } else {
-            if (atnConstruction) {
+            if (phaseC) {
+                expect(
+                    manifest.commits.scaffold === PHASE_C_BASE_COMMIT &&
+                        manifest.commits.primary_test === PHASE_C_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            PHASE_C_IMPLEMENTATION_COMMIT,
+                    `${logicalId} Phase C evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            PHASE_C_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            PHASE_C_TEST_COMMIT,
+                    `${logicalId} Phase C recorded ancestry differs`,
+                );
+            } else if (atnConstruction) {
                 expect(
                     manifest.commits.scaffold ===
                             ATN_CONSTRUCTION_BASE_COMMIT &&
@@ -1641,6 +1676,36 @@ if (generalAtnDotTestParent !== null) {
         generalAtnDotTestParent.trim() ===
             GENERAL_ATN_DOT_BASE_COMMIT,
         "General ATN DOT test commit is not based on its recorded base",
+    );
+}
+const phaseCBaseParent = gitOptional([
+    "rev-parse",
+    `${PHASE_C_BASE_COMMIT}^`,
+]);
+if (phaseCBaseParent !== null) {
+    expect(
+        phaseCBaseParent.trim() === PHASE_C_BASE_PARENT_COMMIT,
+        "Phase C base commit has an unexpected parent",
+    );
+}
+const phaseCTestParent = gitOptional([
+    "rev-parse",
+    `${PHASE_C_TEST_COMMIT}^`,
+]);
+if (phaseCTestParent !== null) {
+    expect(
+        phaseCTestParent.trim() === PHASE_C_BASE_COMMIT,
+        "Phase C test commit is not based on its recorded base",
+    );
+}
+const phaseCImplementationParent = gitOptional([
+    "rev-parse",
+    `${PHASE_C_IMPLEMENTATION_COMMIT}^`,
+]);
+if (phaseCImplementationParent !== null) {
+    expect(
+        phaseCImplementationParent.trim() === PHASE_C_TEST_COMMIT,
+        "Phase C implementation commit is not based on its locked tests",
     );
 }
 

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8",
+  "active_revision_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1",
+  "revisions": [
+    {
+      "revision_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8/revisions/testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1/manifest.json",
+      "closure_sha256": "0ab20d7268b05c7eb3e27f444bf410c38093118793e2c501b9e5fb3370c50380"
+    }
+  ]
+}
