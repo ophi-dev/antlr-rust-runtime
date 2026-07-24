@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testlexerpushpopmodeaction-680f0b8c72",
+  "active_revision_id": "testlexeractions-testlexerpushpopmodeaction-680f0b8c72-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testlexerpushpopmodeaction-680f0b8c72-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-testlexerpushpopmodeaction-680f0b8c72/revisions/testlexeractions-testlexerpushpopmodeaction-680f0b8c72-r1/manifest.json",
+      "closure_sha256": "912380dc7d87f90e70fc4d69002077b3fd8e710167e7ed1edc0fda5fa2731348"
+    }
+  ]
+}

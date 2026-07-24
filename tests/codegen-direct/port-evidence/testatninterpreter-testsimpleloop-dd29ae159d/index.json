@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testsimpleloop-dd29ae159d",
+  "active_revision_id": "testatninterpreter-testsimpleloop-dd29ae159d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testsimpleloop-dd29ae159d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatninterpreter-testsimpleloop-dd29ae159d/revisions/testatninterpreter-testsimpleloop-dd29ae159d-r1/manifest.json",
+      "closure_sha256": "ad7e3cb130c86ee729819013479a565e409cfd5055e67ee20b42c3d7bbdd6f9a"
+    }
+  ]
+}

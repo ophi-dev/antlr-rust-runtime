@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexernotsetunicodebmp-db75867764",
+  "revision_id": "testatnlexerinterpreter-testlexernotsetunicodebmp-db75867764-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "2239a4fc17c81d942586c69140a92663ff6194d4",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "37be5d72314f1ed36336305bb01dc11d47c711f5",
+      "command": "cargo test --locked --all-features --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_phase_c_runtime::testatnlexerinterpreter_testlexernotsetunicodebmp_db75867764::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase C implementation"
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerrangeunicodebmptosmp-d1f9d6d65c",
+  "active_revision_id": "testatnlexerinterpreter-testlexerrangeunicodebmptosmp-d1f9d6d65c-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerrangeunicodebmptosmp-d1f9d6d65c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerrangeunicodebmptosmp-d1f9d6d65c/revisions/testatnlexerinterpreter-testlexerrangeunicodebmptosmp-d1f9d6d65c-r1/manifest.json",
+      "closure_sha256": "c82abb579266c1a114446b0e6a1c25e0b12bdb93e4ccd0f703d0781c54ab6245"
+    }
+  ]
+}

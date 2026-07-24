@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerwildcardgreedyplusloopbydefault-c49a1198b5",
+  "active_revision_id": "testatnlexerinterpreter-testlexerwildcardgreedyplusloopbydefault-c49a1198b5-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerwildcardgreedyplusloopbydefault-c49a1198b5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerwildcardgreedyplusloopbydefault-c49a1198b5/revisions/testatnlexerinterpreter-testlexerwildcardgreedyplusloopbydefault-c49a1198b5-r1/manifest.json",
+      "closure_sha256": "8838e4414a1e21c3f51c2874fe97e66234c826627d50188b1062c4902eb2cf87"
+    }
+  ]
+}

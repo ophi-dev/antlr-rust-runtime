@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnparserprediction-testrecursiveleftprefixwithaorabissue-9d0d2afc74",
+  "active_revision_id": "testatnparserprediction-testrecursiveleftprefixwithaorabissue-9d0d2afc74-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnparserprediction-testrecursiveleftprefixwithaorabissue-9d0d2afc74-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnparserprediction-testrecursiveleftprefixwithaorabissue-9d0d2afc74/revisions/testatnparserprediction-testrecursiveleftprefixwithaorabissue-9d0d2afc74-r1/manifest.json",
+      "closure_sha256": "7e0378e2cc6c4a151d083cdec3bc269e46839d1053dde86eb438a9086adacc29"
+    }
+  ]
+}

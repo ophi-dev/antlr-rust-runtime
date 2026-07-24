@@ -47,8 +47,8 @@
   "locked_oracle_sections": [
     {
       "path": "src/bin_support/grammar/char_support.rs",
-      "marker": "#[cfg(test)]\nmod tests {",
-      "sha256": "03410ba18785ae5c29b1ebf2fbdde44c97fae47447e7a05a308b2b06fb9a6a5a"
+      "marker": "mod tests {",
+      "sha256": "e7dbf948b05757d38c4495f53e2bf033a5721e86c275a603d821a50753d0d5e0"
     }
   ],
   "demonstrated_red": {

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testemptyinputwithcallsafter-f898132ce1",
+  "active_revision_id": "testparserinterpreter-testemptyinputwithcallsafter-f898132ce1-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testemptyinputwithcallsafter-f898132ce1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserinterpreter-testemptyinputwithcallsafter-f898132ce1/revisions/testparserinterpreter-testemptyinputwithcallsafter-f898132ce1-r1/manifest.json",
+      "closure_sha256": "f4384ee2495bc082111e81ab14647b3012b3dc8bdf421069d4d61541cd472dc8"
+    }
+  ]
+}

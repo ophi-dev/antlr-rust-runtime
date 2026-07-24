@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexergreedyoptionalshouldworkasweexpect-f56c9ac4c1",
+  "active_revision_id": "testatnlexerinterpreter-testlexergreedyoptionalshouldworkasweexpect-f56c9ac4c1-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexergreedyoptionalshouldworkasweexpect-f56c9ac4c1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexergreedyoptionalshouldworkasweexpect-f56c9ac4c1/revisions/testatnlexerinterpreter-testlexergreedyoptionalshouldworkasweexpect-f56c9ac4c1-r1/manifest.json",
+      "closure_sha256": "4613199e2fdacdd4043e96ee9fd1a2bf4ead2cc63ae2fb4a3e6e00784b5c39bf"
+    }
+  ]
+}

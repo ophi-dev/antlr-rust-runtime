@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67",
+  "active_revision_id": "testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67-r1",
+  "revisions": [
+    {
+      "revision_id": "testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67/revisions/testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67-r1/manifest.json",
+      "closure_sha256": "bf97e3046f0b03991ff1bfa6120b77232671386803e51b08a7c0bee2e449ed15"
+    }
+  ]
+}

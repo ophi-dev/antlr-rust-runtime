@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexernotsmpsetmatchesbmp-cae63add90",
+  "active_revision_id": "testatnlexerinterpreter-testlexernotsmpsetmatchesbmp-cae63add90-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexernotsmpsetmatchesbmp-cae63add90-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexernotsmpsetmatchesbmp-cae63add90/revisions/testatnlexerinterpreter-testlexernotsmpsetmatchesbmp-cae63add90-r1/manifest.json",
+      "closure_sha256": "19b44845db9423a5e9df6270e46b57505d1f8b92730a6bd717c9f42b7c72373c"
+    }
+  ]
+}

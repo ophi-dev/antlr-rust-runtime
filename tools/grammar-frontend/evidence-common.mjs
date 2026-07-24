@@ -179,6 +179,14 @@ export const GENERAL_ATN_DOT_BASE_COMMIT =
     "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc";
 export const GENERAL_ATN_DOT_TEST_COMMIT =
     "827ea806215b2547d2c049d1ae25775a4c6eeea2";
+export const PHASE_C_BASE_PARENT_COMMIT =
+    "df87d66ea86e24ed38deed73c6cfd07cef003029";
+export const PHASE_C_BASE_COMMIT =
+    "37be5d72314f1ed36336305bb01dc11d47c711f5";
+export const PHASE_C_TEST_COMMIT =
+    "2239a4fc17c81d942586c69140a92663ff6194d4";
+export const PHASE_C_IMPLEMENTATION_COMMIT =
+    "63f852a5c9be0d460d94081b441386bb5c3048f0";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

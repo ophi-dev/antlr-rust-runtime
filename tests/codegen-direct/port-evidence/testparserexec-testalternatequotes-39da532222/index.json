@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-testalternatequotes-39da532222",
+  "active_revision_id": "testparserexec-testalternatequotes-39da532222-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-testalternatequotes-39da532222-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserexec-testalternatequotes-39da532222/revisions/testparserexec-testalternatequotes-39da532222-r1/manifest.json",
+      "closure_sha256": "e4918a664bc57cc02f9ed92d85678dd52b6fef58ca3faf7498aee44c275873d3"
+    }
+  ]
+}

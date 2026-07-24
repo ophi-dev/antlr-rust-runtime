@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testactionevalsatcorrectindex-9f940f5340",
+  "active_revision_id": "testlexeractions-testactionevalsatcorrectindex-9f940f5340-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testactionevalsatcorrectindex-9f940f5340-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-testactionevalsatcorrectindex-9f940f5340/revisions/testlexeractions-testactionevalsatcorrectindex-9f940f5340-r1/manifest.json",
+      "closure_sha256": "c189556d49a89cf136b5549ad4aba8b224cf66f809769698728add405bf91a60"
+    }
+  ]
+}

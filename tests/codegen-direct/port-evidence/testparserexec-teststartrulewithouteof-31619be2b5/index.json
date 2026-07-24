@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-teststartrulewithouteof-31619be2b5",
+  "active_revision_id": "testparserexec-teststartrulewithouteof-31619be2b5-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-teststartrulewithouteof-31619be2b5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserexec-teststartrulewithouteof-31619be2b5/revisions/testparserexec-teststartrulewithouteof-31619be2b5-r1/manifest.json",
+      "closure_sha256": "c55ab5837bd725dfc8976bbb2200801261bb3f1c79b429bc75a695ad6a3b9cc2"
+    }
+  ]
+}

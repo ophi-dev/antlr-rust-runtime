@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728",
+  "active_revision_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728/revisions/testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1/manifest.json",
+      "closure_sha256": "91e946ebabc8100c860c01138a8d13a6100343c54f5374f6fabde8c6e6c6b022"
+    }
+  ]
+}

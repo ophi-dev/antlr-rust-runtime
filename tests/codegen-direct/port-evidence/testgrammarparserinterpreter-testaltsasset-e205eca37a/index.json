@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgrammarparserinterpreter-testaltsasset-e205eca37a",
+  "active_revision_id": "testgrammarparserinterpreter-testaltsasset-e205eca37a-r1",
+  "revisions": [
+    {
+      "revision_id": "testgrammarparserinterpreter-testaltsasset-e205eca37a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testgrammarparserinterpreter-testaltsasset-e205eca37a/revisions/testgrammarparserinterpreter-testaltsasset-e205eca37a-r1/manifest.json",
+      "closure_sha256": "b9f6dcfbca89dff7413511533eed462a98a5385eed7b741a7e04f7546a590250"
+    }
+  ]
+}

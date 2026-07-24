@@ -86,8 +86,8 @@
     {
       "path": "src/bin_support/grammar/atn/interp_test.rs",
       "marker": "    mod upstream_tool_syntax_errors {",
-      "end_marker": "\n    mod upstream_token_position_options {",
-      "sha256": "7b8cc97f2e78edfd22563d77ce3d75abcf7e7b5c4563e1993548a4ab3424d6aa"
+      "end_marker": "\n        #[derive(Clone, Copy)]\n        struct ExpectedDiagnostic",
+      "sha256": "bd026f4072a55d24a04f1e1679950538421ab164773506b01659076b0c7619b1"
     },
     {
       "path": "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs",

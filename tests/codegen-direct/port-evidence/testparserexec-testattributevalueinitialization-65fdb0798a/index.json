@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-testattributevalueinitialization-65fdb0798a",
+  "active_revision_id": "testparserexec-testattributevalueinitialization-65fdb0798a-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-testattributevalueinitialization-65fdb0798a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserexec-testattributevalueinitialization-65fdb0798a/revisions/testparserexec-testattributevalueinitialization-65fdb0798a-r1/manifest.json",
+      "closure_sha256": "3330c1212fb8a9378de55fb3f9f3237549bafd143cd686e4bca4fab35960b15d"
+    }
+  ]
+}

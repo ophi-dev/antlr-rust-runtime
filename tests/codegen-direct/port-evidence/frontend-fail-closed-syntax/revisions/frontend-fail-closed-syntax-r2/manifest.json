@@ -218,8 +218,15 @@
   "locked_oracle_sections": [
     {
       "path": "src/bin_support/grammar/ported_tests.rs",
-      "marker": "use super::frontend",
-      "sha256": "e9487783eb0be79f6d3bc2df28bda34a6a61a1133518345db0da11c8b9e37578"
+      "marker": "fn frontend_tool_syntax_cases_match_upstream_outcomes() {",
+      "end_marker": "\n    let rejected = [",
+      "sha256": "ed29f57cd99caebf7effffcc7ada8cffa688fc62cd2e14f120c19590c9f608d7"
+    },
+    {
+      "path": "src/bin_support/grammar/ported_tests.rs",
+      "marker": "    let rejected = [",
+      "end_marker": "\n    ];\n",
+      "sha256": "08116d60767a3a1077c2021b1428be61ba5797c96330a00977a6412983c3df4b"
     },
     {
       "path": "src/bin_support/grammar/mod.rs",

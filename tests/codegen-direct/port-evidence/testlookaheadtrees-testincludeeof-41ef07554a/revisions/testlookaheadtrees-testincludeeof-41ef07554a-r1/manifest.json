@@ -104,8 +104,8 @@
     {
       "path": "src/bin_support/grammar/atn/interp_test.rs",
       "marker": "    mod upstream_lookahead_trees {",
-      "end_marker": "\n    mod upstream_left_recursion_tool_issues {",
-      "sha256": "987451e27fe7663bc015f4cef6409cde24c654dd62e0066e07bc9f7044bc0709"
+      "end_marker": "\n        #[derive(Debug)]",
+      "sha256": "a9c9c65cef3a0314b1c77abe4e1f79d188ffac9c55c208b3a0645eefd02f5dc2"
     }
   ],
   "demonstrated_red": {

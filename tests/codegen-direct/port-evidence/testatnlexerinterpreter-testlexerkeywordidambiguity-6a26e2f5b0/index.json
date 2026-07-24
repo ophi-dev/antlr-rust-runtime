@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerkeywordidambiguity-6a26e2f5b0",
+  "active_revision_id": "testatnlexerinterpreter-testlexerkeywordidambiguity-6a26e2f5b0-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerkeywordidambiguity-6a26e2f5b0-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerkeywordidambiguity-6a26e2f5b0/revisions/testatnlexerinterpreter-testlexerkeywordidambiguity-6a26e2f5b0-r1/manifest.json",
+      "closure_sha256": "8efa13c3ff8b25d08686c32c43c095d38a6b5de7f38d1b3b8f0644aa82ccce68"
+    }
+  ]
+}

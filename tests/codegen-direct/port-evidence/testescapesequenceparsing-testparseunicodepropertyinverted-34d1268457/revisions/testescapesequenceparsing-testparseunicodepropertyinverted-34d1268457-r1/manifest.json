@@ -47,8 +47,9 @@
   "locked_oracle_sections": [
     {
       "path": "src/bin_support/grammar/escape_sequence.rs",
-      "marker": "#[cfg(test)]\nmod tests {",
-      "sha256": "ece072cc2218f60f9b47b7de54166339f58420fe30aa3aae129394f8438dd9a6"
+      "marker": "mod tests {",
+      "end_marker": "\n    #[test]\n    fn parse_unicode_property_inverted_matches_java()",
+      "sha256": "f173c9fb9b79b33d75f6e3cebbc97fc86ff395192f7b8647a90795fffa80c289"
     }
   ],
   "demonstrated_red": {

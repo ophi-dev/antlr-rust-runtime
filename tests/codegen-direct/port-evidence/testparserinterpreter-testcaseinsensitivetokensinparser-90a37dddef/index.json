@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testcaseinsensitivetokensinparser-90a37dddef",
+  "active_revision_id": "testparserinterpreter-testcaseinsensitivetokensinparser-90a37dddef-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testcaseinsensitivetokensinparser-90a37dddef-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testparserinterpreter-testcaseinsensitivetokensinparser-90a37dddef/revisions/testparserinterpreter-testcaseinsensitivetokensinparser-90a37dddef-r1/manifest.json",
+      "closure_sha256": "56151fb96ef7ac8f021769efd00b1d07758536235f38c9703b1be2fabc07fb5b"
+    }
+  ]
+}

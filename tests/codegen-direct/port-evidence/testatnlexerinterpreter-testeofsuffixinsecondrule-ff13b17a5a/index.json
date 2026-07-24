@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a",
+  "active_revision_id": "testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a/revisions/testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a-r1/manifest.json",
+      "closure_sha256": "14662b1cc7c758b42cfc978e55c0234d3ac8c336b0907286dfc5ec21f17067c0"
+    }
+  ]
+}

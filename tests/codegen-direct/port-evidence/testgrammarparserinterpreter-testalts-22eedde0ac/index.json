@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgrammarparserinterpreter-testalts-22eedde0ac",
+  "active_revision_id": "testgrammarparserinterpreter-testalts-22eedde0ac-r1",
+  "revisions": [
+    {
+      "revision_id": "testgrammarparserinterpreter-testalts-22eedde0ac-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testgrammarparserinterpreter-testalts-22eedde0ac/revisions/testgrammarparserinterpreter-testalts-22eedde0ac-r1/manifest.json",
+      "closure_sha256": "90861fa0c84bbda98fa1a4e354759a46ca5a50bae8324ef28b845968be6a394b"
+    }
+  ]
+}

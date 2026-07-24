@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerruleoverridesglobalvalue-dea4d25945",
+  "active_revision_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerruleoverridesglobalvalue-dea4d25945-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testcaseinsensitiveinlexerruleoverridesglobalvalue-dea4d25945-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testcaseinsensitiveinlexerruleoverridesglobalvalue-dea4d25945/revisions/testatnlexerinterpreter-testcaseinsensitiveinlexerruleoverridesglobalvalue-dea4d25945-r1/manifest.json",
+      "closure_sha256": "465dbeafd8647b9287891d3c7b7bd572308d729bf5d62af5be16f0f91b0f2a98"
+    }
+  ]
+}

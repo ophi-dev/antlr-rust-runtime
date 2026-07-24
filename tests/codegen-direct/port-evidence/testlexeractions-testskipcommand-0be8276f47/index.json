@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testskipcommand-0be8276f47",
+  "active_revision_id": "testlexeractions-testskipcommand-0be8276f47-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testskipcommand-0be8276f47-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-testskipcommand-0be8276f47/revisions/testlexeractions-testskipcommand-0be8276f47-r1/manifest.json",
+      "closure_sha256": "b1488ca10487eb1ff978eee7375eb81a5d0a6a2f1697e8765a70464ca44b78c5"
+    }
+  ]
+}

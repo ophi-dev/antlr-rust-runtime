@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testshortlongrule-c63fa23669",
+  "active_revision_id": "testatnlexerinterpreter-testshortlongrule-c63fa23669-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testshortlongrule-c63fa23669-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testshortlongrule-c63fa23669/revisions/testatnlexerinterpreter-testshortlongrule-c63fa23669-r1/manifest.json",
+      "closure_sha256": "a67ac2d46fd1d1a57f4a4255939f7511883691562d138e9f60c3df7323905b5c"
+    }
+  ]
+}

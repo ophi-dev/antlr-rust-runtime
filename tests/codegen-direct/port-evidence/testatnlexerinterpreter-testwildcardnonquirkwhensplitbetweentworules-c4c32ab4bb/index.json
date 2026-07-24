@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testwildcardnonquirkwhensplitbetweentworules-c4c32ab4bb",
+  "active_revision_id": "testatnlexerinterpreter-testwildcardnonquirkwhensplitbetweentworules-c4c32ab4bb-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testwildcardnonquirkwhensplitbetweentworules-c4c32ab4bb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnlexerinterpreter-testwildcardnonquirkwhensplitbetweentworules-c4c32ab4bb/revisions/testatnlexerinterpreter-testwildcardnonquirkwhensplitbetweentworules-c4c32ab4bb-r1/manifest.json",
+      "closure_sha256": "92d0a38c451c60476f25ed35283d6ddeb59e4ac89b7427b62349f6a2a54bb951"
+    }
+  ]
+}

@@ -50,6 +50,9 @@ import {
     NESTED_ACTION_TEST_COMMIT,
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
+    PHASE_C_BASE_COMMIT,
+    PHASE_C_IMPLEMENTATION_COMMIT,
+    PHASE_C_TEST_COMMIT,
     SCAFFOLD_COMMIT,
     SCOPE_PARSING_BASE_COMMIT,
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
@@ -174,6 +177,62 @@ const GENERAL_ATN_DOT_PORTS = new Map([
     [
         "general-bug-35-tool-crashes-with-atn-4bd74f316f",
         "bug_35_eof_dot_edge_does_not_crash",
+    ],
+]);
+const PHASE_C_TEST_PREFIX =
+    "cargo test --locked --all-features --bin antlr4-rust-gen ";
+const PHASE_C_RED_CASES = new Map([
+    [
+        "testambigparsetrees-testambigaltdipsintooutercontextbelowroot-0b56365d67",
+        "the outer start-rule context omitted authored alternative 1",
+    ],
+    [
+        "testambigparsetrees-testambigaltinleftrecursivebelowstartrule-06084993e4",
+        "the outer start-rule context omitted authored alternative 1",
+    ],
+    [
+        "testambigparsetrees-testambigaltsatroot-b14e3cb45c",
+        "the single-alternative child context omitted authored alternative 1",
+    ],
+    [
+        "testambigparsetrees-testambigaltsnotatroot-db08a05a06",
+        "single-alternative wrapper contexts omitted authored alternative 1",
+    ],
+    [
+        "testambigparsetrees-testparsedecisionwithinambiguousstartrule-5084fb93b6",
+        "the forced-alternative child context omitted authored alternative 1",
+    ],
+    [
+        "testatnlexerinterpreter-testeofsuffixinsecondrule-ff13b17a5a",
+        "same-length rule A won instead of the EOF-consuming rule B",
+    ],
+    [
+        "testgrammarparserinterpreter-testaltsasset-e205eca37a",
+        "the parse tree omitted authored alternative 1",
+    ],
+    [
+        "testgrammarparserinterpreter-testleftrecursionwithmultipleprimaryandrecursiveops-092e21365b",
+        "the start-rule context omitted authored alternative 1",
+    ],
+    [
+        "testgrammarparserinterpreter-testonealt-137e50ed33",
+        "the parse tree omitted authored alternative 1",
+    ],
+    [
+        "testparserexec-testattributevalueinitialization-65fdb0798a",
+        "Java List<Integer> attributes remained untranslated instead of becoming Vec<i32>",
+    ],
+    [
+        "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a",
+        "the predicate fail message retained its braced Java action wrapper",
+    ],
+    [
+        "testparserexec-teststartrulewithouteof-31619be2b5",
+        "adaptive prediction selected longer alternative 2 after its path dead-ended",
+    ],
+    [
+        "testparserinterpreter-testemptyruleaftereofinchild-4932ad515d",
+        "the parent parse tree emitted a duplicate trailing EOF after its child consumed EOF",
     ],
 ]);
 const COMPOSITE_GRAMMARS_RED_CASES = new Map([
@@ -1005,6 +1064,7 @@ const externalAssertions = new Map(
     ),
 );
 const completedPhaseBPorts = await loadCompletedPhaseBPorts();
+const completedPhaseCPorts = await loadCompletedPhaseCPorts();
 
 const unassigned = new Map(inventory.cases.map((testCase) => [testCase.id, testCase]));
 const rows = [];
@@ -1294,6 +1354,16 @@ function mappedRow(logicalId, cases, policy) {
             completed,
         );
     }
+    const completedPhaseC = completedPhaseCPorts.get(logicalId);
+    if (completedPhaseC) {
+        return completedPhaseCRow(
+            logicalId,
+            cases,
+            policy,
+            externalAssertionIds,
+            completedPhaseC,
+        );
+    }
 
     const closure = {
         logical_id: logicalId,
@@ -1492,6 +1562,126 @@ function completedPhaseBRow(
         closure_sha256: digest(stableStringify(closure)),
         evidence_path: `tests/codegen-direct/port-evidence/${logicalId}`,
     };
+}
+
+function completedPhaseCRow(
+    logicalId,
+    cases,
+    policy,
+    externalAssertionIds,
+    completed,
+) {
+    if (policy.owner !== "C") {
+        throw new Error(`${logicalId} completed Phase C port has owner ${policy.owner}`);
+    }
+    const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
+    const coveredExisting =
+        completed.resolution === "verified-covered-existing";
+    const observable =
+        `the wired Rust compiler/runtime matches the pinned Java 4.13.2 ` +
+        `${cases[0].suite}.${cases[0].name} behavior`;
+    const closure = {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        fixture_paths: completed.fixturePaths,
+        owner_phase: "C",
+        disposition: "port",
+        rust_test: completed.rustTest,
+        unit_under_test: policy.unit,
+        observable,
+        scaffold_commit: PHASE_C_BASE_COMMIT,
+        primary_test_commit: PHASE_C_TEST_COMMIT,
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
+    };
+    return {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        owner_phase: "C",
+        disposition: "port",
+        active_revision_id: `${logicalId}-r1`,
+        tdd_state: "done",
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
+        rust_test: completed.rustTest,
+        primary_test_source: sourceIdentity(cases, "java-antlr"),
+        alternate_test_source: sourceIdentity(cases, "antlr-ng"),
+        primary_implementation_source: `antlr-ng@${ANTLR_NG_COMMIT}`,
+        alternate_implementation_source: `java-antlr@${JAVA_COMMIT}`,
+        prerequisites: ["Phase C compiler/runtime boundary"],
+        unit_under_test: policy.unit,
+        expected_red_failure_fingerprint: coveredExisting
+            ? "not applicable: the case-specific port passed against the existing Phase C implementation"
+            : completed.redFingerprint,
+        observable_equivalence: observable,
+        scaffold_commit: PHASE_C_BASE_COMMIT,
+        primary_test_commit: PHASE_C_TEST_COMMIT,
+        ...(coveredExisting
+            ? {
+                  verified_covered_existing: {
+                      command: completed.testCommand,
+                      commit: PHASE_C_TEST_COMMIT,
+                      exit_code: 0,
+                      result: completed.greenResult,
+                  },
+              }
+            : {
+                  demonstrated_red: {
+                      command: completed.testCommand,
+                      exit_code: 101,
+                      fingerprint: completed.redFingerprint,
+                  },
+              }),
+        primary_implementation_commit: coveredExisting
+            ? PHASE_C_BASE_COMMIT
+            : PHASE_C_IMPLEMENTATION_COMMIT,
+        green_result: {
+            command: completed.testCommand,
+            result: completed.greenResult,
+        },
+        closure,
+        closure_sha256: digest(stableStringify(closure)),
+        evidence_path: `tests/codegen-direct/port-evidence/${logicalId}`,
+    };
+}
+
+async function loadCompletedPhaseCPorts() {
+    const generatedPath =
+        "tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs";
+    const source = await readFile(resolve(repoRoot, generatedPath), "utf8");
+    const ports = new Map();
+    const pattern =
+        /^\w+_case!\(\s*(\w+),\s*"(test[^"]+-[0-9a-f]{10})",/gmu;
+    for (const match of source.matchAll(pattern)) {
+        const [, moduleName, logicalId] = match;
+        const redFingerprint = PHASE_C_RED_CASES.get(logicalId);
+        const rustTest =
+            "grammar::atn::interp_test::tests::upstream_phase_c_runtime::" +
+            `${moduleName}::matches_java`;
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest,
+            resolution: redFingerprint
+                ? "ported"
+                : "verified-covered-existing",
+            testCommand: `${PHASE_C_TEST_PREFIX}${rustTest} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+    }
+    if (ports.size !== 132) {
+        throw new Error(`expected 132 completed Phase C ports, found ${ports.size}`);
+    }
+    for (const logicalId of PHASE_C_RED_CASES.keys()) {
+        if (!ports.has(logicalId)) {
+            throw new Error(`unknown Phase C red case ${logicalId}`);
+        }
+    }
+    return ports;
 }
 
 async function loadCompletedPhaseBPorts() {

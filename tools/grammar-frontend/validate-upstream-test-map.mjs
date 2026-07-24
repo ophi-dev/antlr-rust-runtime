@@ -163,15 +163,15 @@ for (const row of testMap.rows ?? []) {
                 row.tdd_state === "done",
                 `${row.logical_id} Phase A port is not done`,
             );
-        } else if (row.owner_phase === "B") {
+        } else if (["B", "C"].includes(row.owner_phase)) {
             expect(
                 ["mapped", "done"].includes(row.tdd_state),
-                `${row.logical_id} Phase B port has invalid progress state`,
+                `${row.logical_id} Phase ${row.owner_phase} port has invalid progress state`,
             );
         } else {
             expect(
                 row.tdd_state === "mapped",
-                `${row.logical_id} later-phase port advanced during Phase B`,
+                `${row.logical_id} non-active port has advanced progress`,
             );
         }
         if (row.tdd_state === "done") {
