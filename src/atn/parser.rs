@@ -29,6 +29,9 @@ pub struct ParserAtnSimulator<'a> {
     outer_context_cache: Option<CachedOuterContext>,
     outer_context_cache_hits: usize,
     outer_context_cache_misses: usize,
+    /// Accept states treated as provisional by the latest direct prediction.
+    /// Generated SLL still uses their stored accept metadata.
+    deferred_accept_states: FxHashSet<(usize, DfaStateId)>,
     shared_cache_key: Option<usize>,
     shared_cache_generation: u64,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
@@ -140,6 +143,12 @@ struct DfaEdge {
     source_state: DfaStateId,
 }
 
+#[derive(Clone, Debug)]
+struct PreviousGoodAlt {
+    alt: usize,
+    configs: Vec<AtnConfig>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DfaPredictionInfo {
     prediction: ParserAtnPrediction,
@@ -227,7 +236,6 @@ struct ClosureParams {
     precedence: i32,
     collect_predicates: bool,
     treat_eof_as_epsilon: bool,
-    preserve_local_rule_stop: bool,
 }
 
 #[derive(Debug)]
@@ -430,6 +438,7 @@ impl<'a> ParserAtnSimulator<'a> {
             outer_context_cache: None,
             outer_context_cache_hits: 0,
             outer_context_cache_misses: 0,
+            deferred_accept_states: FxHashSet::default(),
             shared_cache_key: None,
             shared_cache_generation: 0,
             exact_ambig_detection: false,
@@ -439,6 +448,7 @@ impl<'a> ParserAtnSimulator<'a> {
     /// Resets transient simulator state while retaining learned decision DFAs.
     pub fn reset(&mut self) {
         self.outer_context_cache = None;
+        self.deferred_accept_states.clear();
         self.workspace.reset();
     }
 
@@ -497,13 +507,22 @@ impl<'a> ParserAtnSimulator<'a> {
             seen_one = true;
             let _ = writeln!(out, "Decision {}:", dfa.decision());
             for state in dfa.states() {
-                let source = dfa_state_display(state);
+                let source = dfa_state_display(
+                    state,
+                    self.deferred_accept_states
+                        .contains(&(dfa.decision(), state.id())),
+                );
                 for transition in state.transitions() {
                     let Some(target_state) = dfa.state(transition.target) else {
                         continue;
                     };
                     let label = vocabulary.display_name(transition.symbol);
-                    let _ = writeln!(out, "{source}-{label}->{}", dfa_state_display(target_state));
+                    let target = dfa_state_display(
+                        target_state,
+                        self.deferred_accept_states
+                            .contains(&(dfa.decision(), target_state.id())),
+                    );
+                    let _ = writeln!(out, "{source}-{label}->{target}");
                 }
             }
         }
@@ -542,6 +561,7 @@ impl<'a> ParserAtnSimulator<'a> {
             outer_context_cache: None,
             outer_context_cache_hits: 0,
             outer_context_cache_misses: 0,
+            deferred_accept_states: FxHashSet::default(),
             shared_cache_key: Some(key),
             shared_cache_generation: generation,
             exact_ambig_detection: false,
@@ -751,6 +771,8 @@ impl<'a> ParserAtnSimulator<'a> {
             force_full_context_retry,
             sll_probe_only,
         } = request;
+        self.deferred_accept_states
+            .retain(|(stored_decision, _)| *stored_decision != decision);
         #[cfg(feature = "perf-counters")]
         crate::perf::record_adaptive_call(decision, force_full_context_retry);
         let Some(decision_state) = self.atn.decision_to_state().get(decision) else {
@@ -765,6 +787,10 @@ impl<'a> ParserAtnSimulator<'a> {
         let precedence = i32::try_from(precedence).unwrap_or(i32::MAX);
         let mut state_number =
             self.ensure_start_state(decision, decision_state, precedence, merge_cache)?;
+        // The direct interpreter API can continue past a completed prefix, but
+        // generated parsers retain standard SLL early termination.
+        let track_previous_good_alt = !force_full_context_retry && !sll_probe_only;
+        let mut previous_good_alt = None;
         if let Some(prediction) = self.prediction_or_full_context(
             input,
             PredictionCheck {
@@ -782,6 +808,17 @@ impl<'a> ParserAtnSimulator<'a> {
             return Ok(prediction);
         }
         loop {
+            if track_previous_good_alt {
+                let finished = self
+                    .store
+                    .decision_to_dfa
+                    .get(decision)
+                    .map(|dfa| dfa.configs(state_number))
+                    .and_then(|configs| self.previous_good_alt(configs));
+                if finished.is_some() {
+                    previous_good_alt = finished;
+                }
+            }
             let symbol = input.la(1);
             let target = self
                 .store
@@ -799,11 +836,12 @@ impl<'a> ParserAtnSimulator<'a> {
                     .get(decision)
                     .map(|dfa| dfa.configs(state_number).clone())
                     .ok_or(ParserAtnSimulatorError::MissingDfaState(state_number))?;
+                let edge = DfaEdge {
+                    decision,
+                    source_state: state_number,
+                };
                 let target = match self.compute_target_state(
-                    DfaEdge {
-                        decision,
-                        source_state: state_number,
-                    },
+                    edge,
                     &configs,
                     symbol,
                     precedence,
@@ -811,10 +849,14 @@ impl<'a> ParserAtnSimulator<'a> {
                 ) {
                     Ok(target) => target,
                     Err(ParserAtnSimulatorError::NoViableAlt { symbol, .. }) => {
-                        return Err(ParserAtnSimulatorError::NoViableAlt {
-                            symbol,
-                            index: input.index(),
-                        });
+                        if let Some(fallback) = previous_good_alt.as_ref() {
+                            self.add_previous_good_alt_target(edge, symbol, fallback, merge_cache)
+                        } else {
+                            return Err(ParserAtnSimulatorError::NoViableAlt {
+                                symbol,
+                                index: input.index(),
+                            });
+                        }
                     }
                     Err(error) => return Err(error),
                 };
@@ -834,7 +876,23 @@ impl<'a> ParserAtnSimulator<'a> {
                 },
                 merge_cache,
             )? {
-                return Ok(prediction);
+                let defer_unique = track_previous_good_alt
+                    && previous_good_alt.is_some()
+                    && !prediction.requires_full_context
+                    && !self.prediction_reached_decision_entry_rule_stop(
+                        DfaEdge {
+                            decision,
+                            source_state: state_number,
+                        },
+                        prediction.alt,
+                        precedence,
+                        symbol,
+                        merge_cache,
+                    );
+                if !defer_unique {
+                    return Ok(prediction);
+                }
+                self.deferred_accept_states.insert((decision, state_number));
             }
             if symbol == TOKEN_EOF {
                 // We ran out of input while still inside the decision and the
@@ -1049,7 +1107,6 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates: true,
             treat_eof_as_epsilon: false,
-            preserve_local_rule_stop: false,
         };
         for (index, transition) in decision_state.transitions().iter().enumerate() {
             let alt = index + 1;
@@ -1260,7 +1317,9 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             if state.is_rule_stop() {
-                skipped_stop_states.push(config.clone());
+                if full_context || symbol == TOKEN_EOF {
+                    skipped_stop_states.push(config.clone());
+                }
                 continue;
             }
             for transition in &state.transitions() {
@@ -1295,11 +1354,7 @@ impl<'a> ParserAtnSimulator<'a> {
         if symbol == TOKEN_EOF {
             reach = self.rule_stop_configs(reach, merge_cache);
         }
-        // A skipped stop state is a completed prefix alternative. Keep it only
-        // while every longer path remains incomplete, so a later dead edge can
-        // fall back to the prefix. Once a longer path reaches rule stop it wins
-        // and the prefix must not turn the completed match into an ambiguity.
-        if !self.configs_contain_rule_stop(&reach) {
+        if !full_context || !self.configs_contain_rule_stop(&reach) {
             for config in skipped_stop_states {
                 reach.add(config, &mut self.store.contexts, merge_cache);
             }
@@ -1323,10 +1378,6 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates: false,
             treat_eof_as_epsilon: symbol == TOKEN_EOF,
-            // Reach closure must retain a completed local alternative while
-            // other alternatives continue, so later input can either complete
-            // the longer path or fall back to this prefix.
-            preserve_local_rule_stop: true,
         };
         // `closure` takes `AtnConfig` by value, so drain the intermediate set by
         // move instead of cloning each config.
@@ -1340,16 +1391,68 @@ impl<'a> ParserAtnSimulator<'a> {
         configs
             .configs()
             .iter()
-            .filter(|config| {
-                config.reaches_into_outer_context > 0
-                    || self
-                        .atn
-                        .state(config.state)
-                        .is_some_and(AtnState::is_rule_stop)
-                        && self.store.contexts.has_empty_path(config.context)
-            })
+            .filter(|config| self.config_finished_decision_entry_rule(config))
             .map(|config| config.alt)
             .min()
+    }
+
+    fn previous_good_alt(&self, configs: &AtnConfigSet) -> Option<PreviousGoodAlt> {
+        let alt = self.alt_that_finished_decision_entry_rule(configs)?;
+        let configs = configs
+            .configs()
+            .iter()
+            .filter(|config| config.alt == alt && self.config_finished_decision_entry_rule(config))
+            .cloned()
+            .collect();
+        Some(PreviousGoodAlt { alt, configs })
+    }
+
+    fn config_finished_decision_entry_rule(&self, config: &AtnConfig) -> bool {
+        config.reaches_into_outer_context > 0
+            || self
+                .atn
+                .state(config.state)
+                .is_some_and(AtnState::is_rule_stop)
+                && self.store.contexts.has_empty_path(config.context)
+    }
+
+    fn add_previous_good_alt_target(
+        &mut self,
+        edge: DfaEdge,
+        symbol: i32,
+        fallback: &PreviousGoodAlt,
+        merge_cache: &mut PredictionWorkspace,
+    ) -> DfaStateId {
+        let mut configs = AtnConfigSet::new();
+        for config in &fallback.configs {
+            configs.add(config.clone(), &mut self.store.contexts, merge_cache);
+        }
+        let has_semantic_context = configs_have_semantic_context_for_alt(&configs, fallback.alt);
+        let mut state = DfaStateBuilder::new(configs);
+        state.mark_accept(fallback.alt);
+        state.set_has_semantic_context_for_alt(has_semantic_context);
+        let target = self.add_dfa_state(edge.decision, state);
+        self.store.decision_to_dfa[edge.decision].add_edge(edge.source_state, symbol, target);
+        target
+    }
+
+    fn prediction_reached_decision_entry_rule_stop(
+        &mut self,
+        edge: DfaEdge,
+        alt: usize,
+        precedence: i32,
+        symbol: i32,
+        merge_cache: &mut PredictionWorkspace,
+    ) -> bool {
+        let configs = self.store.decision_to_dfa[edge.decision]
+            .configs(edge.source_state)
+            .clone();
+        if self.alt_that_finished_decision_entry_rule(&configs) == Some(alt) {
+            return true;
+        }
+        let closed =
+            self.close_intermediate_reach_set(configs, false, precedence, symbol, merge_cache);
+        self.alt_that_finished_decision_entry_rule(&closed) == Some(alt)
     }
 
     fn rule_stop_configs(
@@ -1403,7 +1506,6 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             collect_predicates,
             treat_eof_as_epsilon,
-            preserve_local_rule_stop,
         } = params;
         let max_token_type = self.atn.max_token_type();
         scratch.stack.clear();
@@ -1417,13 +1519,6 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             let at_rule_stop = state.is_rule_stop();
-            if at_rule_stop
-                && preserve_local_rule_stop
-                && self.store.contexts.is_empty(config.context)
-            {
-                configs.add(config, &mut self.store.contexts, merge_cache);
-                continue;
-            }
             if at_rule_stop
                 && self.closure_at_rule_stop(
                     config.clone(),
@@ -1717,9 +1812,10 @@ pub enum ParserAtnSimulatorError {
 }
 
 /// Java `DFASerializer.getStateString`: `:sN^=>alt` for accept states.
-fn dfa_state_display(state: ParserDfaStateView<'_>) -> String {
+fn dfa_state_display(state: ParserDfaStateView<'_>, deferred: bool) -> String {
     let mut out = String::new();
-    if state.is_accept_state() {
+    let is_accept = state.is_accept_state() && !deferred;
+    if is_accept {
         out.push(':');
     }
     out.push('s');
@@ -1727,7 +1823,7 @@ fn dfa_state_display(state: ParserDfaStateView<'_>) -> String {
     if state.requires_full_context() {
         out.push('^');
     }
-    if state.is_accept_state() {
+    if is_accept {
         out.push_str("=>");
         out.push_str(
             &state
@@ -2003,6 +2099,19 @@ mod tests {
     }
 
     #[test]
+    fn sll_probe_keeps_unique_alt_early_termination() {
+        let atn = three_token_prefix_alt_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, 2, TOKEN_EOF]);
+
+        let prediction = simulator
+            .adaptive_predict_stream_info_sll_probe(0, 0, &mut input)
+            .expect("SLL prediction should succeed");
+
+        assert_eq!(prediction.alt, 2);
+    }
+
+    #[test]
     fn adaptive_predict_uses_precedence_dfa_start_states() {
         let atn = two_token_decision_atn_with_precedence(true);
         let mut simulator = ParserAtnSimulator::new(&atn);
@@ -2155,7 +2264,6 @@ mod tests {
                 precedence: 0,
                 collect_predicates: true,
                 treat_eof_as_epsilon: false,
-                preserve_local_rule_stop: false,
             },
         );
 
@@ -2279,7 +2387,6 @@ mod tests {
                 precedence: 0,
                 collect_predicates: true,
                 treat_eof_as_epsilon: false,
-                preserve_local_rule_stop: false,
             },
         );
 
