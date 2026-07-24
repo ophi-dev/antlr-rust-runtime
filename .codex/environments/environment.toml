@@ -1,0 +1,8 @@
+name    = "antlr-rust-runtime"
+version = 1
+
+[setup]
+script = '''
+cd "$CODEX_WORKTREE_PATH"
+hk install
+'''

@@ -1,0 +1,24 @@
+suppress_unstable_features_warning = true
+
+[shell_environment_policy]
+inherit = "all"
+
+[shell_environment_policy.set]
+CLICOLOR = "0"
+CLICOLOR_FORCE = "0"
+GH_PAGER = "cat"
+PYTHONDONTWRITEBYTECODE = "1"
+
+[features]
+apply_patch_freeform = true
+default_mode_request_user_input = true
+fast_mode = true
+shell_snapshot = true
+steer = true
+unified_exec = true
+multi_agent = true
+goals = true
+
+[sandbox_workspace_write]
+network_access = true
+
