@@ -1,0 +1,15 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: lowered
+---
+[
+    Some(
+        TokenPairAdjacent,
+    ),
+    Some(
+        ContextChildRuleTextNotEquals {
+            rule_name: "local_type",
+            text: "var",
+        },
+    ),
+]

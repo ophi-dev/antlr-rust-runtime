@@ -1,0 +1,9 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: render_lexer_state_constants(&data)
+---
+pub const CHANNEL_DEFAULT_TOKEN_CHANNEL: i32 = 0;
+pub const CHANNEL_DIRECTIVE: i32 = 3;
+pub const CHANNEL_HIDDEN: i32 = 1;
+pub const MODE_DEFAULT_MODE: i32 = 0;
+pub const MODE_INTERPOLATION_FORMAT: i32 = 2;

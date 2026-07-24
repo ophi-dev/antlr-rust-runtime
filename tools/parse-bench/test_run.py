@@ -100,6 +100,62 @@ class DumpTreeHelpersTests(unittest.TestCase):
         )
 
 
+class RustCSharpSupportTests(unittest.TestCase):
+    def test_runner_copies_and_uses_typed_lexer_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            runner = RUN.write_rust_runner(
+                Path(temp),
+                [RUN.LANGUAGES["csharp"]],
+                RUN.ROOT,
+                rust_thin_lto=False,
+            )
+            source = (runner / "src" / "main.rs").read_text()
+
+            self.assertTrue((runner / "src" / "csharp_lexer_base.rs").is_file())
+            self.assertIn("mod csharp_lexer_base;", source)
+            self.assertIn(
+                "CSharpLexer::with_typed_hooks("
+                "InputStream::new(src), csharp_lexer_base::CSharpLexerBase::default())",
+                source,
+            )
+
+    def test_csharp_codegen_uses_strict_grammar_semantics(self) -> None:
+        spec = RUN.LANGUAGES["csharp"]
+        with tempfile.TemporaryDirectory() as temp, mock.patch.object(RUN, "run") as run:
+            root = Path(temp)
+            RUN.generate_rust_modules(
+                spec,
+                root / "grammar",
+                root / "generated",
+                require_generated_parser=True,
+                runtime_root=RUN.ROOT,
+            )
+
+        command = run.call_args.args[0]
+        self.assertNotIn("--allow-unsupported-lexer-actions", command)
+        self.assertIn("--require-full-semantics", command)
+        self.assertIn("--require-generated-parser", command)
+        self.assertEqual(
+            command[command.index("--sem-patterns") + 1],
+            str(RUN.ROOT / "patterns/csharp.toml"),
+        )
+        self.assertEqual(
+            [
+                command[index + 1]
+                for index, argument in enumerate(command)
+                if argument == "--option-hook"
+            ],
+            [
+                "superClass=CSharpLexerBase",
+                "superClass=CSharpParserBase",
+            ],
+        )
+        self.assertEqual(
+            command[command.index("--sem-unknown") + 1],
+            "error",
+        )
+
+
 class ClearWorkDirTests(unittest.TestCase):
     def test_rejects_runtime_root_and_ancestor(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

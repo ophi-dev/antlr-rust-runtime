@@ -46,6 +46,12 @@ class LanguageSpec:
     tree_sitter_name: str
     python_support: tuple[Path, ...] = ()
     go_support: tuple[Path, ...] = ()
+    rust_support: tuple[Path, ...] = ()
+    rust_sem_patterns: Path | None = None
+    rust_option_hooks: tuple[str, ...] = ()
+    rust_sem_unknown: str | None = None
+    rust_require_full_semantics: bool = False
+    rust_lexer_hooks: str | None = None
 
 
 LANGUAGES: dict[str, LanguageSpec] = {
@@ -86,6 +92,15 @@ LANGUAGES: dict[str, LanguageSpec] = {
             Path("csharp/v7/Go/CSharpLexerBase.go"),
             Path("csharp/v7/Go/CSharpParserBase.go"),
         ),
+        rust_support=(Path("tools/parse-bench/rust-support/csharp_lexer_base.rs"),),
+        rust_sem_patterns=Path("patterns/csharp.toml"),
+        rust_option_hooks=(
+            "superClass=CSharpLexerBase",
+            "superClass=CSharpParserBase",
+        ),
+        rust_sem_unknown="error",
+        rust_require_full_semantics=True,
+        rust_lexer_hooks="csharp_lexer_base::CSharpLexerBase",
     ),
     "java": LanguageSpec(
         name="java",
@@ -376,8 +391,15 @@ def generate_rust_modules(
         str(grammar_dir),
         "--out-dir",
         str(rust_generated_dir),
-        "--allow-unsupported-lexer-actions",
     ]
+    if spec.rust_sem_patterns is not None:
+        cmd.extend(["--sem-patterns", str(runtime_root / spec.rust_sem_patterns)])
+    for option_hook in spec.rust_option_hooks:
+        cmd.extend(["--option-hook", option_hook])
+    if spec.rust_sem_unknown is not None:
+        cmd.extend(["--sem-unknown", spec.rust_sem_unknown])
+    if spec.rust_require_full_semantics:
+        cmd.append("--require-full-semantics")
     if require_generated_parser:
         cmd.append("--require-generated-parser")
     run(cmd)
@@ -392,6 +414,14 @@ def write_rust_runner(
     runner = work_dir / "rust-runner"
     generated = runner / "src" / "generated"
     generated.mkdir(parents=True, exist_ok=True)
+    support_modules: dict[str, Path] = {}
+    for spec in specs:
+        for relative in spec.rust_support:
+            source = runtime_root / relative
+            require_path(source, f"{spec.name} Rust support")
+            support_modules.setdefault(source.stem, source)
+    for source in support_modules.values():
+        shutil.copy2(source, runner / "src" / source.name)
     manifest = [
         "[package]",
         'name = "parse-bench-rust-runner"',
@@ -419,6 +449,9 @@ def write_rust_runner(
     modules = "\n".join(
         f"    pub mod {spec.rust_lexer_module};\n    pub mod {spec.rust_parser_module};"
         for spec in specs
+    )
+    support_module_declarations = "\n".join(
+        f"mod {module};" for module in support_modules
     )
     arms = "\n".join(
         f'        "{spec.name}" => parse_{spec.name}(&src).map_err(|err| err.to_string())?,'
@@ -451,6 +484,8 @@ mod generated {{
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
 {modules}
 }}
+
+{support_module_declarations}
 
 {functions}
 
@@ -728,15 +763,16 @@ def rust_build_environment(args: argparse.Namespace) -> dict[str, str] | None:
 
 
 def rust_parse_function(spec: LanguageSpec) -> str:
+    lexer = rust_lexer_constructor(spec, "InputStream::new(src)")
     return f"""fn lex_{spec.name}(src: &str) -> Result<(), String> {{
-    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let lexer = {lexer};
     let tokens = CommonTokenStream::new(lexer);
     black_box(tokens.token_count());
     Ok(())
 }}
 
 fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
-    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let lexer = {lexer};
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
     let tree = parser.{spec.rust_entry}()?;
@@ -745,7 +781,7 @@ fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
 }}
 
 fn dump_tree_{spec.name}(src: &str, out: &mut dyn Write) -> Result<(), String> {{
-    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let lexer = {lexer};
     let mut tokens = CommonTokenStream::new(lexer);
     tokens.fill();
     let lexer_errors = tokens.drain_source_errors().len();
@@ -771,7 +807,7 @@ fn dump_tree_{spec.name}(src: &str, out: &mut dyn Write) -> Result<(), String> {
 fn prediction_stats_{spec.name}(
     src: &str,
 ) -> Result<(antlr4_runtime::PredictionContextStats, antlr4_runtime::ParserDfaStats), antlr4_runtime::AntlrError> {{
-    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let lexer = {lexer};
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
     let tree = parser.{spec.rust_entry}()?;
@@ -779,6 +815,16 @@ fn prediction_stats_{spec.name}(
     black_box(&tree);
     Ok(stats)
 }}"""
+
+
+def rust_lexer_constructor(spec: LanguageSpec, input_expression: str) -> str:
+    lexer_type = f"generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}"
+    if spec.rust_lexer_hooks is None:
+        return f"{lexer_type}::new({input_expression})"
+    return (
+        f"{lexer_type}::with_typed_hooks("
+        f"{input_expression}, {spec.rust_lexer_hooks}::default())"
+    )
 
 
 def write_python_antlr_runner(work_dir: Path, specs: list[LanguageSpec], py_gen_dir: Path) -> Path:

@@ -1,0 +1,89 @@
+version = 1
+
+# Grammar-family semantic helpers for grammars-v4's C# lexer/parser. Stateful
+# lexer behavior lives in the parse-bench support module; generic parser
+# predicates lower to existing SemIR operations.
+
+[[helper]]
+kind = "lexer-action"
+name = "OnInterpolatedRegularStringStart"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnInterpolatedVerbatiumStringStart"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnOpenBrace"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnCloseBrace"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnColon"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OpenBraceInside"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnDoubleQuoteInside"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "OnCloseBraceInside"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsRegularCharInside"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsVerbatiumDoubleQuoteInside"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "parser-predicate"
+name = "IsLocalVariableDeclaration"
+returns = "bool"
+lower = "cmp(ne, ctx_rule_text(local_variable_type), str(\"var\"))"
+
+[[helper]]
+kind = "parser-predicate"
+name = "IsRightArrow"
+returns = "bool"
+lower = "token_index_adjacent"
+
+[[helper]]
+kind = "parser-predicate"
+name = "IsRightShift"
+returns = "bool"
+lower = "token_index_adjacent"
+
+[[helper]]
+kind = "parser-predicate"
+name = "IsRightShiftAssignment"
+returns = "bool"
+lower = "token_index_adjacent"
