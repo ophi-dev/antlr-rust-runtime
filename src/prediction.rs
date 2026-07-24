@@ -240,9 +240,11 @@ impl ContextArena {
                 }
             }
             _ => {
-                debug_assert!(entries
-                    .windows(2)
-                    .all(|pair| { compare_entries(pair[0], pair[1]) == Ordering::Less }));
+                debug_assert!(
+                    entries
+                        .windows(2)
+                        .all(|pair| { compare_entries(pair[0], pair[1]) == Ordering::Less })
+                );
                 #[cfg(feature = "perf-counters")]
                 crate::perf::record_context_cache_call();
                 let cached_hash = prediction_context_array_hash(self, entries);
