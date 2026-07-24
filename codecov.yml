@@ -39,6 +39,12 @@ comment:
   layout: "reach, diff, flags, files"
   require_changes: false
 
-# Machine-emitted sources should not dilute the hand-written coverage signal.
+# Machine-emitted sources and test-only modules should not dilute the
+# hand-written coverage signal.
 ignore:
   - "**/generated/**"
+  # `#[cfg(test)]` modules split into their own files — both the `_test.rs` and
+  # the `_tests.rs` (plural) spellings the tree uses. Coverage of the tests
+  # themselves is noise, not a signal about the code under test.
+  - "**/*_test.rs"
+  - "**/*_tests.rs"
