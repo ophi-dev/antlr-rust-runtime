@@ -1,5 +1,7 @@
 //! Clean-room ANTLR v4 runtime foundation for Rust.
 
+extern crate self as antlr4_runtime;
+
 pub mod atn;
 pub mod char_stream;
 pub mod dfa;
@@ -17,6 +19,7 @@ pub mod token;
 pub mod token_stream;
 pub mod tree;
 pub mod vocabulary;
+pub mod xpath;
 
 pub use atn::parser::{ParserAtnPrediction, ParserAtnSimulator, ParserAtnSimulatorError};
 pub use char_stream::{CharStream, InputStream, PositionSummary, TextInterval};
@@ -50,6 +53,7 @@ pub use tree::{
     RuleNodeView, TerminalNodeView,
 };
 pub use vocabulary::Vocabulary;
+pub use xpath::{XPath, XPathError};
 
 /// Formats a slice the way Java's `List.toString` does: `[a, b, c]`.
 ///

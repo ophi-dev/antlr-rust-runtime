@@ -1,0 +1,30 @@
+---
+source: src/xpath.rs
+expression: errors
+---
+[
+    (
+        "&",
+        "Invalid tokens or characters at index 0 in path '&'",
+    ),
+    (
+        "//w&e/",
+        "Invalid tokens or characters at index 3 in path '//w&e/'",
+    ),
+    (
+        "///",
+        "/ at index 2 isn't a valid rule name",
+    ),
+    (
+        "//",
+        "Missing path element at end of path",
+    ),
+    (
+        "//Ick",
+        "Ick at index 2 isn't a valid token name",
+    ),
+    (
+        "/prog/ick",
+        "ick at index 6 isn't a valid rule name",
+    ),
+]
