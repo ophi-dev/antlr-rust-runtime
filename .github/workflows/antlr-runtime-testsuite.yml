@@ -76,6 +76,7 @@ jobs:
       - name: Run ANTLR runtime testsuite with coverage
         run: |
           set -euo pipefail
+          # shellcheck disable=SC1090  # process-substitution source is dynamic by design
           source <(cargo llvm-cov show-env --sh)
           cargo llvm-cov clean --workspace
           cargo build --locked --quiet --bin antlr4-runtime-testsuite --features codegen

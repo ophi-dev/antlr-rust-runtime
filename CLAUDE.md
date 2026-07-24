@@ -280,4 +280,7 @@ loop.
 
 CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing — `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
 
+Validate `.github/workflows/*.yml` with `actionlint` (not a generic YAML linter);
+it shellchecks `run:` scripts too.
+
 `AGENTS.md` mirrors this file for Codex / generic agents — keep them in sync when adding sections.

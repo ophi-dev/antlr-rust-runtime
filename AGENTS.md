@@ -202,6 +202,9 @@ only for small, stable values. Project specifics:
 
 CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing — `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
 
+Validate `.github/workflows/*.yml` with `actionlint` (not a generic YAML linter);
+it shellchecks `run:` scripts too.
+
 Run `cargo fmt` on files you touched before committing so formatting-only churn
 doesn't ride along with logic changes (and never bulk-`cargo fmt` unrelated files
 in a logic commit). Hand-grouped data — e.g. the positional serialized-ATN
