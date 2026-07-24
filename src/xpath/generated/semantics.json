@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "policy": "assume-true",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "XPathLexer",
+      "coordinates": []
+    }
+  ]
+}

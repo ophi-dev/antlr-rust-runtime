@@ -79,6 +79,33 @@ impl Vocabulary {
             .map_or_else(|| token_type.to_string(), ToOwned::to_owned)
     }
 
+    /// Resolves a literal or symbolic token name to its token type.
+    ///
+    /// This follows ANTLR's recognizer lookup behavior: display-only names are
+    /// ignored, duplicate names resolve to the highest token type, and `EOF`
+    /// resolves to [`crate::TOKEN_EOF`].
+    #[must_use]
+    pub fn token_type(&self, name: &str) -> Option<i32> {
+        if name == "EOF" {
+            return Some(crate::token::TOKEN_EOF);
+        }
+
+        let len = self.literal.len().max(self.symbolic.len());
+        (0..len).rev().find_map(|index| {
+            let matches = self
+                .literal
+                .get(index)
+                .and_then(Option::as_deref)
+                .is_some_and(|literal| literal == name)
+                || self
+                    .symbolic
+                    .get(index)
+                    .and_then(Option::as_deref)
+                    .is_some_and(|symbolic| symbolic == name);
+            matches.then(|| i32::try_from(index).ok()).flatten()
+        })
+    }
+
     fn get(values: &[Option<String>], token_type: i32) -> Option<&str> {
         usize::try_from(token_type)
             .ok()
@@ -103,6 +130,10 @@ mod tests {
         assert_eq!(vocabulary.display_name(2), "identifier");
         assert_eq!(vocabulary.display_name(99), "99");
         assert_eq!(vocabulary.symbolic_name(-1), Some("EOF"));
+        assert_eq!(vocabulary.token_type("'let'"), Some(1));
+        assert_eq!(vocabulary.token_type("ID"), Some(2));
+        assert_eq!(vocabulary.token_type("identifier"), None);
+        assert_eq!(vocabulary.token_type("EOF"), Some(crate::token::TOKEN_EOF));
     }
 
     mod upstream_vocabulary {

@@ -39,7 +39,6 @@ comment:
   layout: "reach, diff, flags, files"
   require_changes: false
 
-# The generated ANTLR v4 frontend parser/lexer are machine-emitted artifacts,
-# not hand-written runtime code, so they should not dilute the coverage signal.
+# Machine-emitted sources should not dilute the hand-written coverage signal.
 ignore:
-  - "src/bin_support/grammar/generated"
+  - "**/generated/**"

@@ -1,0 +1,26 @@
+---
+source: src/xpath.rs
+expression: errors
+---
+[
+    (
+        "",
+        "Missing path element at end of path",
+    ),
+    (
+        "// ID",
+        "Invalid tokens or characters at index 2 in path '// ID'",
+    ),
+    (
+        "//'return",
+        "Invalid tokens or characters at index 2 in path '//'return'",
+    ),
+    (
+        "!",
+        "Unknown path element ! at index 0",
+    ),
+    (
+        "//!",
+        "Missing path element at end of path",
+    ),
+]
