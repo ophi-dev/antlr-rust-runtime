@@ -52,21 +52,26 @@ impl XPath {
     /// Evaluates this expression relative to `root`.
     ///
     /// Results retain parse-tree order and contain each node at most once.
+    /// ANTLR's synthetic evaluation root is retained between path steps so a
+    /// wildcard prefix can select `root` later. A final synthetic-root match is
+    /// omitted because it is not part of the caller's parse tree.
     #[must_use]
     pub fn evaluate<'tree>(&self, root: Node<'tree>) -> Vec<Node<'tree>> {
-        let mut work = evaluate_virtual_root(self.elements[0], root);
-        for element in &self.elements[1..] {
+        let mut work = vec![EvaluationNode::VirtualRoot(root)];
+        for element in &self.elements {
             let mut next = Vec::new();
             let mut seen = BTreeSet::new();
             for node in work {
-                if node.children().next().is_none() {
+                if !node.has_children() {
                     continue;
                 }
                 extend_unique(&mut next, &mut seen, evaluate_element(*element, node));
             }
             work = next;
         }
-        work
+        work.into_iter()
+            .filter_map(EvaluationNode::tree_node)
+            .collect()
     }
 
     /// Compiles and evaluates `path` relative to `root`.
@@ -117,6 +122,35 @@ enum NodeTest {
     Rule(usize),
     Token(i32),
     Wildcard,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum EvaluationNode<'tree> {
+    VirtualRoot(Node<'tree>),
+    Tree(Node<'tree>),
+}
+
+impl<'tree> EvaluationNode<'tree> {
+    fn has_children(self) -> bool {
+        match self {
+            Self::VirtualRoot(_) => true,
+            Self::Tree(node) => node.children().next().is_some(),
+        }
+    }
+
+    const fn id(self) -> Option<NodeId> {
+        match self {
+            Self::VirtualRoot(_) => None,
+            Self::Tree(node) => Some(node.id()),
+        }
+    }
+
+    const fn tree_node(self) -> Option<Node<'tree>> {
+        match self {
+            Self::VirtualRoot(_) => None,
+            Self::Tree(node) => Some(node),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -288,33 +322,51 @@ fn resolve_rule(token: &Lexeme, rule_names: &[String]) -> Result<usize, XPathErr
         })
 }
 
-fn evaluate_virtual_root(element: PathElement, root: Node<'_>) -> Vec<Node<'_>> {
-    let mut nodes = Vec::new();
-    let mut seen = BTreeSet::new();
-    match element.axis {
-        Axis::Child => extend_unique(
-            &mut nodes,
-            &mut seen,
-            std::iter::once(root)
-                .filter(move |node| matches_direct(*node, element.test, element.invert)),
-        ),
-        Axis::DescendantOrSelf => {
-            extend_unique(&mut nodes, &mut seen, evaluate_anywhere(element, root));
-        }
-    }
-    nodes
-}
-
 fn evaluate_element<'tree>(
     element: PathElement,
+    node: EvaluationNode<'tree>,
+) -> Box<dyn Iterator<Item = EvaluationNode<'tree>> + 'tree> {
+    match node {
+        EvaluationNode::VirtualRoot(root) => evaluate_virtual_root(element, root),
+        EvaluationNode::Tree(node) => evaluate_tree_element(element, node),
+    }
+}
+
+fn evaluate_virtual_root<'tree>(
+    element: PathElement,
+    root: Node<'tree>,
+) -> Box<dyn Iterator<Item = EvaluationNode<'tree>> + 'tree> {
+    match element.axis {
+        Axis::Child => Box::new(
+            std::iter::once(root)
+                .filter(move |node| matches_direct(*node, element.test, element.invert))
+                .map(EvaluationNode::Tree),
+        ),
+        Axis::DescendantOrSelf if matches!(element.test, NodeTest::Wildcard) && !element.invert => {
+            Box::new(
+                std::iter::once(EvaluationNode::VirtualRoot(root))
+                    .chain(evaluate_anywhere(element, root).map(EvaluationNode::Tree)),
+            )
+        }
+        Axis::DescendantOrSelf => {
+            Box::new(evaluate_anywhere(element, root).map(EvaluationNode::Tree))
+        }
+    }
+}
+
+fn evaluate_tree_element<'tree>(
+    element: PathElement,
     node: Node<'tree>,
-) -> Box<dyn Iterator<Item = Node<'tree>> + 'tree> {
+) -> Box<dyn Iterator<Item = EvaluationNode<'tree>> + 'tree> {
     match element.axis {
         Axis::Child => Box::new(
             node.children()
-                .filter(move |child| matches_direct(*child, element.test, element.invert)),
+                .filter(move |child| matches_direct(*child, element.test, element.invert))
+                .map(EvaluationNode::Tree),
         ),
-        Axis::DescendantOrSelf => evaluate_anywhere(element, node),
+        Axis::DescendantOrSelf => {
+            Box::new(evaluate_anywhere(element, node).map(EvaluationNode::Tree))
+        }
     }
 }
 
@@ -360,9 +412,9 @@ fn node_token_type(node: Node<'_>) -> Option<i32> {
 }
 
 fn extend_unique<'tree>(
-    nodes: &mut Vec<Node<'tree>>,
-    seen: &mut BTreeSet<NodeId>,
-    matches: impl IntoIterator<Item = Node<'tree>>,
+    nodes: &mut Vec<EvaluationNode<'tree>>,
+    seen: &mut BTreeSet<Option<NodeId>>,
+    matches: impl IntoIterator<Item = EvaluationNode<'tree>>,
 ) {
     for node in matches {
         if seen.insert(node.id()) {
@@ -705,5 +757,18 @@ mod tests {
             .collect::<Vec<_>>();
 
         insta::assert_debug_snapshot!("named_anywhere_inversion_matches_java_4_13_2", results);
+    }
+
+    #[test]
+    fn wildcard_anywhere_preserves_java_virtual_root_for_later_steps() {
+        let tree = sample_tree();
+        let recognizer = expr_recognizer();
+        let nodes =
+            XPath::find_all(tree.tree(), "//*/prog", &recognizer).expect("valid XPath query");
+
+        insta::assert_debug_snapshot!(
+            "wildcard_anywhere_virtual_root",
+            display_nodes(nodes, recognizer.data().rule_names())
+        );
     }
 }

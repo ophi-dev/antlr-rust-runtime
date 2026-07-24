@@ -269,6 +269,7 @@ The runtime contains:
 - `Vocabulary`
 - recognizer metadata and error listener plumbing
 - parse tree node types, rule contexts, terminal nodes, error nodes, and walkers
+- parse-tree XPath queries on par with the official ANTLR runtimes
 - ANTLR v4 serialized lexer ATN deserialization
 - lexer ATN recognition with longest-match/rule-priority behavior and lexer
   actions
