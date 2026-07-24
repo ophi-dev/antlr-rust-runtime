@@ -1,0 +1,14 @@
+# Semantic-helper patterns for the MIDI binary-parsing example.
+#
+# The lexer's `{beginChunk();}` action is a bare helper call with no portable
+# lowering, so we route it to a generated hook method. `antlr4-rust-gen` then
+# emits a `MidiLexerHooks` trait with `fn begin_chunk(&mut self, ctx)`, which
+# `MidiHooks` implements to start the chunk-length countdown.
+version = 1
+
+[[helper]]
+kind = "lexer-action"
+name = "beginChunk"
+arguments = ""
+returns = "unit"
+lower = "hook"

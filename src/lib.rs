@@ -3,6 +3,7 @@
 extern crate self as antlr4_runtime;
 
 pub mod atn;
+pub mod byte_stream;
 pub mod char_stream;
 pub mod dfa;
 pub mod errors;
@@ -22,6 +23,7 @@ pub mod vocabulary;
 pub mod xpath;
 
 pub use atn::parser::{ParserAtnPrediction, ParserAtnSimulator, ParserAtnSimulatorError};
+pub use byte_stream::ByteStream;
 pub use char_stream::{CharStream, InputStream, PositionSummary, TextInterval};
 pub use dfa::{DfaStateId, DfaTransition, ParserDfa, ParserDfaStateView, ParserDfaStats};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
