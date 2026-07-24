@@ -1,0 +1,26 @@
+---
+source: src/bin_support/grammar/semantics.rs
+expression: diagnostics
+---
+[
+    (
+        "G4S048",
+        Error,
+        "command Skip does not take an argument",
+    ),
+    (
+        "G4S050",
+        Error,
+        "command Channel requires an argument",
+    ),
+    (
+        "G4S049",
+        Error,
+        "unsupported lexer command CHANNEL",
+    ),
+    (
+        "G4S046",
+        Warning,
+        "duplicated command Channel",
+    ),
+]
