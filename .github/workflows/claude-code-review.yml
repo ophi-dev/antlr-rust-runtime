@@ -12,11 +12,16 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Skip bot-authored PRs (release-please's ophiarch[bot], Renovate,
+    # Dependabot, …). A review adds no value on an automated release commit or
+    # dependency bump, and claude-code-action@v1 hard-fails on a Bot actor
+    # ("Workflow initiated by non-human actor") — so without this guard those
+    # PRs get a red ✗ after ~7 min of wasted toolchain setup. A job-level `if`
+    # skips cleanly instead: the job reports "skipped" (neutral, not failed) and
+    # never starts, so it neither blocks the PR nor burns CI minutes.
+    # `user.type` is the same field the action keys on ("Actor type: Bot") and
+    # is more robust than matching a "[bot]" login suffix.
+    if: github.event.pull_request.user.type != 'Bot'
 
     runs-on: ubuntu-latest
     permissions:
