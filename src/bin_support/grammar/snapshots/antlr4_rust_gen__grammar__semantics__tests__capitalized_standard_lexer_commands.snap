@@ -1,0 +1,35 @@
+---
+source: src/bin_support/grammar/semantics.rs
+expression: "(&grammar.recognizer.vocabulary.by_name, commands)"
+---
+(
+    {
+        "A": 2,
+        "B": 3,
+        "C": 4,
+        "D": 5,
+        "E": 6,
+        "EOF": -1,
+        "F": 7,
+        "G": 8,
+        "H": 9,
+        "REMAPPED": 1,
+    },
+    [
+        Skip,
+        More,
+        PopMode,
+        Mode(
+            0,
+        ),
+        PushMode(
+            1,
+        ),
+        Type(
+            1,
+        ),
+        Channel(
+            2,
+        ),
+    ],
+)

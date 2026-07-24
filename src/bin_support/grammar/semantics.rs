@@ -2447,7 +2447,15 @@ impl<'a> BindingCollector<'a> {
         &mut self,
         command: &super::model::LexerCommand,
     ) -> Option<ResolvedLexerCommand> {
-        let no_arg = match command.name.as_str() {
+        let Some(command_name) = canonical_lexer_command_name(&command.name) else {
+            self.diagnostics.push(Diagnostic::error(
+                "G4S049",
+                command.span.clone(),
+                format!("unsupported lexer command {}", command.name),
+            ));
+            return None;
+        };
+        let no_arg = match command_name {
             "skip" => Some(ResolvedLexerCommand::Skip),
             "more" => Some(ResolvedLexerCommand::More),
             "popMode" => Some(ResolvedLexerCommand::PopMode),
@@ -2465,18 +2473,6 @@ impl<'a> BindingCollector<'a> {
             return Some(resolved);
         }
 
-        let requires_arg = matches!(
-            command.name.as_str(),
-            "mode" | "pushMode" | "type" | "channel"
-        );
-        if !requires_arg {
-            self.diagnostics.push(Diagnostic::error(
-                "G4S049",
-                command.span.clone(),
-                format!("unsupported lexer command {}", command.name),
-            ));
-            return None;
-        }
         let Some(argument) = command.argument.as_deref() else {
             self.diagnostics.push(Diagnostic::error(
                 "G4S050",
@@ -2486,7 +2482,7 @@ impl<'a> BindingCollector<'a> {
             return None;
         };
 
-        match command.name.as_str() {
+        match command_name {
             "mode" | "pushMode" => {
                 if argument != "DEFAULT_MODE" && COMMON_CONSTANTS.contains(&argument) {
                     self.diagnostics.push(Diagnostic::error(
@@ -2515,7 +2511,7 @@ impl<'a> BindingCollector<'a> {
                     ));
                     return None;
                 };
-                if command.name == "mode" {
+                if command_name == "mode" {
                     Some(ResolvedLexerCommand::Mode(value))
                 } else {
                     Some(ResolvedLexerCommand::PushMode(value))
@@ -2586,6 +2582,20 @@ impl<'a> BindingCollector<'a> {
             }
             _ => unreachable!("required command set checked above"),
         }
+    }
+}
+
+fn canonical_lexer_command_name(name: &str) -> Option<&'static str> {
+    // ANTLR target templates expose these exact initial-cap aliases.
+    match name {
+        "skip" | "Skip" => Some("skip"),
+        "more" | "More" => Some("more"),
+        "popMode" | "PopMode" => Some("popMode"),
+        "mode" | "Mode" => Some("mode"),
+        "pushMode" | "PushMode" => Some("pushMode"),
+        "type" | "Type" => Some("type"),
+        "channel" | "Channel" => Some("channel"),
+        _ => None,
     }
 }
 
@@ -3319,6 +3329,73 @@ A : 'a' -> channel(COMMENTS);
                 .values()
                 .any(|binding| { binding.command == ResolvedLexerCommand::Channel(2) })
         );
+    }
+
+    #[test]
+    fn capitalized_standard_lexer_commands_resolve() {
+        let fixture = Fixture::new("capitalized-commands");
+        fixture.write(
+            "Commands.g4",
+            r#"
+lexer grammar Commands;
+tokens { REMAPPED }
+channels { COMMENTS }
+A : 'a' -> Skip;
+B : 'b' -> More;
+C : 'c' -> PopMode;
+D : 'd' -> Mode(DEFAULT_MODE);
+E : 'e' -> PushMode(OTHER);
+F : 'f' -> Type(REMAPPED);
+G : 'g' -> Channel(COMMENTS);
+mode OTHER;
+H : 'h';
+"#,
+        );
+
+        let semantic = compile(&fixture, "Commands.g4").expect("lexer should analyze");
+        let grammar = &semantic.grammars[0];
+        let commands = grammar
+            .bindings
+            .commands
+            .values()
+            .map(|binding| binding.command)
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(
+            "capitalized_standard_lexer_commands",
+            (&grammar.recognizer.vocabulary.by_name, commands)
+        );
+    }
+
+    #[test]
+    fn capitalized_lexer_commands_keep_exact_spelling_diagnostics() {
+        let fixture = Fixture::new("capitalized-command-diagnostics");
+        fixture.write(
+            "Commands.g4",
+            r#"
+lexer grammar Commands;
+channels { COMMENTS }
+A : 'a' -> Skip(1);
+B : 'b' -> Channel;
+C : 'c' -> CHANNEL(COMMENTS);
+D : 'd' -> Channel(COMMENTS), Channel(COMMENTS);
+E : 'e' -> channel(COMMENTS), Channel(COMMENTS);
+F : 'f' -> skip, Channel(COMMENTS);
+"#,
+        );
+
+        let error = compile(&fixture, "Commands.g4").expect_err("invalid commands must fail");
+        let diagnostics = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| {
+                (
+                    diagnostic.code,
+                    diagnostic.severity,
+                    diagnostic.message.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!("capitalized_lexer_command_diagnostics", diagnostics);
     }
 
     #[test]
