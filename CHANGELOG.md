@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.2...v0.16.0) (2026-07-24)
+
+
+### Features
+
+* add grammar-driven C# parity support ([#182](https://github.com/ophi-dev/antlr-rust-runtime/issues/182)) ([37be5d7](https://github.com/ophi-dev/antlr-rust-runtime/commit/37be5d72314f1ed36336305bb01dc11d47c711f5))
+
+
+### Bug Fixes
+
+* **runtime:** isolate interpreter prefix fallback ([8dbde5c](https://github.com/ophi-dev/antlr-rust-runtime/commit/8dbde5c729588112600df7201f111481d55b96b7))
+* **runtime:** match Phase C ANTLR behavior ([1b6e4db](https://github.com/ophi-dev/antlr-rust-runtime/commit/1b6e4db8a92f11cb0f700aba3138ba91e743366c))
+
 ## [0.15.2](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.15.1...v0.15.2) (2026-07-23)
 
 
