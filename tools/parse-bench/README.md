@@ -81,6 +81,13 @@ the comparator skips only method changes such as this legacy-to-predicate
 transition and resumes Java regression checks once both reports use the same
 variant.
 
+Rust generation also keeps the pinned C# grammar unchanged. Its semantic
+helper names are described by `patterns/csharp.toml`, while the benchmark-owned
+Rust support module implements interpolation and the `CSharpLexerBase`
+preprocessor state. Generic codegen exposes typed lexer lifecycle hooks,
+structural channel/mode constants, and reusable parser-predicate lowerings; it
+does not contain C# grammar or rule names.
+
 The output table reports `min` and `avg` parse time per fixture and a relative
 ratio against `rust-antlr` for the same fixture.
 Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
@@ -99,14 +106,15 @@ requires:
 
 Dumps land under `<work-dir>/ast-dumps/<language>/`.
 
-Kotlin, Java, and Trino fixtures currently pass this gate. Some C# Mono
-fixtures diverge (preprocessor/`#if` handling differences between the Go support
-base and the Rust source-compiled path) — the check fails those intentionally so
-timings are not compared on unequal trees.
+Kotlin, C#, Java, and Trino fixtures pass this gate. The former C# divergence
+was caused by the missing `CSharpLexerBase.NextToken` preprocessing behavior:
+inactive `#if` sections were still lexed as ordinary C# by the Rust runner.
+The Rust support module now evaluates directives and consumes inactive sections
+before normal lexing resumes.
 
 ```bash
 python3 tools/parse-bench/run.py \
-  --languages kotlin,trino \
+  --languages kotlin,csharp,java,trino \
   --runtimes rust-antlr,go-antlr \
   --ast-check \
   --quick

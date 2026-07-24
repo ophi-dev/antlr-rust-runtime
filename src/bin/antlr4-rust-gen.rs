@@ -817,10 +817,12 @@ fn parse_pattern_lower(lower: &str) -> io::Result<PredicateTemplate> {
         "true" | "bool(true)" => return Ok(PredicateTemplate::True),
         "false" | "bool(false)" => return Ok(PredicateTemplate::False),
         "hook" => return Ok(PredicateTemplate::Hook),
+        "token_index_adjacent" => return Ok(PredicateTemplate::TokenPairAdjacent),
         _ => {}
     }
     parse_pattern_lt_text(lower)
         .or_else(|| parse_pattern_la_not_equals(lower))
+        .or_else(|| parse_pattern_ctx_rule_text_not_equals(lower))
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -846,6 +848,16 @@ fn parse_pattern_la_not_equals(lower: &str) -> Option<PredicateTemplate> {
     Some(PredicateTemplate::LookaheadNotEquals {
         offset: offset.trim().parse().ok()?,
         token_name: token_name.trim().to_owned(),
+    })
+}
+
+fn parse_pattern_ctx_rule_text_not_equals(lower: &str) -> Option<PredicateTemplate> {
+    let body = lower.strip_prefix("cmp(ne, ctx_rule_text(")?;
+    let (rule_name, rest) = body.split_once("), str(\"")?;
+    let text = rest.strip_suffix("\"))")?;
+    Some(PredicateTemplate::ContextChildRuleTextNotEquals {
+        rule_name: rule_name.trim().to_owned(),
+        text: text.to_owned(),
     })
 }
 
@@ -1974,7 +1986,9 @@ struct CodegenData<'a> {
     symbolic_names: Vec<Option<String>>,
     rule_names: Vec<String>,
     channel_names: Vec<String>,
+    channel_numbers: BTreeMap<String, i32>,
     mode_names: Vec<String>,
+    mode_numbers: BTreeMap<String, usize>,
     lexer_atn_words: Vec<i32>,
     lexer_atn: Option<LexerAtn>,
     parser_atn: Option<ParserAtn>,
@@ -1997,7 +2011,9 @@ impl<'a> CodegenData<'a> {
                 .iter()
                 .map(|name| name.clone().unwrap_or_default())
                 .collect(),
+            channel_numbers: recognizer.channel_numbers.clone(),
             mode_names: recognizer.mode_names.clone(),
+            mode_numbers: recognizer.mode_numbers.clone(),
             lexer_atn_words: compiled.runtime_artifact.atn_words.clone(),
             lexer_atn: Some(compiled.atn.clone()),
             parser_atn: None,
@@ -2020,7 +2036,9 @@ impl<'a> CodegenData<'a> {
                 .iter()
                 .map(|name| name.clone().unwrap_or_default())
                 .collect(),
+            channel_numbers: recognizer.channel_numbers.clone(),
             mode_names: recognizer.mode_names.clone(),
+            mode_numbers: recognizer.mode_numbers.clone(),
             lexer_atn_words: Vec::new(),
             lexer_atn: None,
             parser_atn: Some(compiled.packed.clone()),
@@ -2884,6 +2902,7 @@ fn render_lexer(
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
+    let lexer_state_constants = render_lexer_state_constants(data);
     // Embedded mode: lexer action/predicate bodies are verbatim Rust from the
     // rendered grammar; translate the recognizer surface textually and skip
     // the template machinery entirely.
@@ -2978,16 +2997,21 @@ fn render_lexer(
     } else {
         lexer_typed_hook_mappings(data, patterns, &actions)?
     };
-    let typed_hook_adapter =
-        render_lexer_typed_hook_adapter(&type_name, &lexer_typed_hook_mappings);
-    let typed_lexer_constructor = if lexer_typed_hook_mappings.is_empty() {
-        String::new()
+    let needs_typed_hook_adapter =
+        !lexer_typed_hook_mappings.is_empty() || uses_lexer_superclass(data);
+    let typed_hook_adapter = if needs_typed_hook_adapter {
+        render_lexer_typed_hook_adapter(&type_name, &lexer_typed_hook_mappings)
     } else {
+        String::new()
+    };
+    let typed_lexer_constructor = if needs_typed_hook_adapter {
         let trait_name = format!("{type_name}Hooks");
         let adapter_name = format!("{type_name}TypedHooks");
         format!(
             "impl<I, T> {type_name}<I, {adapter_name}<T>>\nwhere\n    I: CharStream,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: I, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
         )
+    } else {
+        String::new()
     };
     let action_coordinates = lexer_custom_actions(data)?;
     let has_hook_disposed_actions = lexer_actions_require_semantic_hooks(
@@ -3090,6 +3114,7 @@ use antlr4_runtime::{{BaseLexer, GeneratedLexer, GrammarMetadata, Lexer, Recogni
 use std::sync::OnceLock;
 
 {token_constants}
+{lexer_state_constants}
 {metadata}
 {typed_hook_adapter}
 
@@ -10088,6 +10113,16 @@ fn uses_alt_number_contexts(data: &CodegenData<'_>) -> bool {
         .any(|option| option.name.value == "contextSuperClass")
 }
 
+fn uses_lexer_superclass(data: &CodegenData<'_>) -> bool {
+    data.semantic.is_some_and(|semantic| {
+        semantic
+            .unit
+            .options
+            .iter()
+            .any(|option| option.name.value == "superClass")
+    })
+}
+
 fn uses_structural_context_alt_numbers(data: &CodegenData<'_>) -> io::Result<bool> {
     if data.semantic.is_none() {
         return Ok(false);
@@ -10136,7 +10171,6 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_raw_local_int_less_or_equal_predicate(body))
-            .or_else(|| parse_csharp_parser_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
@@ -10235,21 +10269,6 @@ fn parse_invoke_predicate(body: &str) -> Option<PredicateTemplate> {
         "True()" => Some(PredicateTemplate::Invoke { value: true }),
         "False()" => Some(PredicateTemplate::Invoke { value: false }),
         r#"ValEquals("$i","99")"# => Some(PredicateTemplate::Invoke { value: true }),
-        _ => None,
-    }
-}
-
-fn parse_csharp_parser_predicate(body: &str) -> Option<PredicateTemplate> {
-    match body.trim() {
-        "this.IsRightArrow()" | "this.IsRightShift()" | "this.IsRightShiftAssignment()" => {
-            Some(PredicateTemplate::TokenPairAdjacent)
-        }
-        "this.IsLocalVariableDeclaration()" => {
-            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
-                rule_name: "local_variable_type".to_owned(),
-                text: "var".to_owned(),
-            })
-        }
         _ => None,
     }
 }
@@ -10814,6 +10833,27 @@ fn render_token_constants(data: &CodegenData<'_>) -> String {
     out
 }
 
+fn render_lexer_state_constants(data: &CodegenData<'_>) -> String {
+    let mut out = String::new();
+    for (name, number) in &data.channel_numbers {
+        writeln!(
+            out,
+            "pub const CHANNEL_{}: i32 = {number};",
+            rust_const_name(name)
+        )
+        .expect("writing to a string cannot fail");
+    }
+    for (name, number) in &data.mode_numbers {
+        writeln!(
+            out,
+            "pub const MODE_{}: i32 = {number};",
+            rust_const_name(name)
+        )
+        .expect("writing to a string cannot fail");
+    }
+    out
+}
+
 /// Renders rule-index constants from grammar rule names.
 fn render_rule_constants(data: &CodegenData<'_>) -> String {
     let mut out = String::new();
@@ -10981,9 +11021,16 @@ fn lexer_typed_hook_mappings(
         .filter(|mapping| mapping.kind == LexerTypedHookKind::Action)
         .map(|mapping| mapping.method_name.clone())
         .collect::<BTreeSet<_>>();
+    const RESERVED_METHODS: [&str; 4] = [
+        "lexer_reset",
+        "lexer_before_token",
+        "lexer_after_accept",
+        "token_emitted",
+    ];
     for mapping in &mut mappings {
-        if predicate_names.contains(&mapping.method_name)
-            && action_names.contains(&mapping.method_name)
+        if RESERVED_METHODS.contains(&mapping.method_name.as_str())
+            || (predicate_names.contains(&mapping.method_name)
+                && action_names.contains(&mapping.method_name))
         {
             mapping.method_name.push_str(match mapping.kind {
                 LexerTypedHookKind::Predicate => "_pred",
@@ -11033,9 +11080,6 @@ fn validate_lexer_typed_hook_signatures(mappings: &[LexerTypedHookMapping]) -> i
 }
 
 fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMapping]) -> String {
-    if mappings.is_empty() {
-        return String::new();
-    }
     let trait_name = format!("{type_name}Hooks");
     let adapter_name = format!("{type_name}TypedHooks");
     let mut methods = BTreeMap::<(String, bool), Vec<SemanticLiteral>>::new();
@@ -11097,6 +11141,21 @@ fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMa
         r#"pub trait {trait_name}: Sized {{
 {method_decls}
 
+    fn lexer_reset<I>(&mut self, _ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{}}
+
+    fn lexer_before_token<I>(&mut self, _ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{}}
+
+    fn lexer_after_accept<I>(&mut self, _ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{}}
+
     fn token_emitted(&mut self, _token: antlr4_runtime::TokenView<'_>) {{}}
 }}
 
@@ -11131,6 +11190,27 @@ where
 {action_arms}
             _ => false,
         }}
+    }}
+
+    fn lexer_reset<I>(&mut self, ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{
+        self.0.lexer_reset(ctx);
+    }}
+
+    fn lexer_before_token<I>(&mut self, ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{
+        self.0.lexer_before_token(ctx);
+    }}
+
+    fn lexer_after_accept<I>(&mut self, ctx: &mut antlr4_runtime::LexerLifecycleCtx<'_, I>)
+    where
+        I: antlr4_runtime::CharStream,
+    {{
+        self.0.lexer_after_accept(ctx);
     }}
 
     fn lexer_token_emitted(&mut self, token: antlr4_runtime::TokenView<'_>) {{
@@ -11719,6 +11799,27 @@ mod tests {
         assert_eq!(rust_function_name("try"), "r#try");
         assert_eq!(rust_function_name("Self"), "r#self");
         assert!(is_rust_keyword("Self"));
+    }
+
+    #[test]
+    fn renders_structural_channel_and_mode_constants() {
+        let data = CodegenData {
+            channel_numbers: BTreeMap::from([
+                ("DEFAULT_TOKEN_CHANNEL".to_owned(), 0),
+                ("DIRECTIVE".to_owned(), 3),
+                ("HIDDEN".to_owned(), 1),
+            ]),
+            mode_numbers: BTreeMap::from([
+                ("DEFAULT_MODE".to_owned(), 0),
+                ("INTERPOLATION_FORMAT".to_owned(), 2),
+            ]),
+            ..CodegenData::default()
+        };
+
+        insta::assert_snapshot!(
+            "structural_channel_and_mode_constants",
+            render_lexer_state_constants(&data)
+        );
     }
 
     #[test]
@@ -14200,15 +14301,47 @@ mod tests {
                 parse_raw_local_int_less_or_equal_predicate("5 >= $_p"),
             ),
             (
-                "is_right_arrow",
-                parse_predicate_template("this.IsRightArrow()"),
+                "foreign_predicate",
+                parse_predicate_template("this.ForeignPredicate()"),
             ),
             (
-                "is_local_variable_declaration",
-                parse_predicate_template("this.IsLocalVariableDeclaration()"),
+                "foreign_context_check",
+                parse_predicate_template("this.ForeignContextCheck()"),
             ),
         ];
         insta::assert_debug_snapshot!("parses_supported_predicate_helpers", parsed);
+    }
+
+    #[test]
+    fn semantic_patterns_lower_structural_parser_predicates() {
+        let patterns = parse_sem_patterns(
+            r#"
+version = 1
+
+[[helper]]
+kind = "parser-predicate"
+name = "tokensTouch"
+returns = "bool"
+lower = "token_index_adjacent"
+
+[[helper]]
+kind = "parser-predicate"
+name = "isTyped"
+returns = "bool"
+lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
+"#,
+        )
+        .expect("pattern file parses");
+        let lowered = [
+            patterns
+                .predicate_template(SemanticsKind::ParserPredicate, "this.tokensTouch()")
+                .expect("pattern lookup succeeds"),
+            patterns
+                .predicate_template(SemanticsKind::ParserPredicate, "this.isTyped()")
+                .expect("pattern lookup succeeds"),
+        ];
+
+        insta::assert_debug_snapshot!("structural_parser_predicate_patterns", lowered);
     }
 
     #[test]
@@ -16141,6 +16274,29 @@ dispose = "hook"
         assert!(module.contains("Recognizer::notify_error_listeners("));
         assert!(!module.contains("CommonToken"));
         assert!(!module.contains("TokenFactory"));
+    }
+
+    #[test]
+    fn lexer_superclass_emits_typed_lifecycle_contract_without_semantic_helpers() {
+        let module = render_lexer(
+            "LLexer",
+            &lexer_fixture_data("lexer-superclass/L.g4"),
+            false,
+            SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
+            false,
+        )
+        .expect("lexer superclass should render a lifecycle contract");
+
+        assert!(module.contains("pub trait LLexerHooks: Sized"));
+        assert!(module.contains("fn lexer_reset<I>"));
+        assert!(module.contains("fn lexer_before_token<I>"));
+        assert!(module.contains("fn lexer_after_accept<I>"));
+        assert!(module.contains("fn token_emitted"));
+        assert!(module.contains("self.0.lexer_reset(ctx);"));
+        assert!(module.contains("self.0.lexer_before_token(ctx);"));
+        assert!(module.contains("self.0.lexer_after_accept(ctx);"));
+        assert!(module.contains("pub fn with_typed_hooks(input: I, hooks: T) -> Self"));
     }
 
     #[test]

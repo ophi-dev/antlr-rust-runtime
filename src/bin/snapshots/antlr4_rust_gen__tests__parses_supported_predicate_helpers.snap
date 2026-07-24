@@ -60,18 +60,11 @@ expression: parsed
         ),
     ),
     (
-        "is_right_arrow",
-        Some(
-            TokenPairAdjacent,
-        ),
+        "foreign_predicate",
+        None,
     ),
     (
-        "is_local_variable_declaration",
-        Some(
-            ContextChildRuleTextNotEquals {
-                rule_name: "local_variable_type",
-                text: "var",
-            },
-        ),
+        "foreign_context_check",
+        None,
     ),
 ]
