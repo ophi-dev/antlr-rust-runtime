@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testparserinterpreter-testoptionalaorb-489d46e116"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testparserinterpreter-testoptionalaorb@6af5106ced87",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestParserInterpreter.spec.ts",
+      "case": "testOptionalAorB",
+      "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+    },
+    {
+      "source_case_id": "java-antlr:testparserinterpreter-testoptionalaorb@6af5106ced87",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+      "case": "testOptionalAorB",
+      "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testparserinterpreter-testoptionalaorb@6af5106ced87",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+    "case": "testOptionalAorB",
+    "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testparserinterpreter-testoptionalaorb@6af5106ced87",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestParserInterpreter.spec.ts",
+    "case": "testOptionalAorB",
+    "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "41c2f2101019840f201e0f0ab804a606134014c50d47392f04123fd948befc56",
+    "T.g4": "1bb2dfb0b25869f77b1c2db8ff95794a8d5da2f6b525ab5a78f5d66be549567c"
+  }
+}

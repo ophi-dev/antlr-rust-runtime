@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testatnparserprediction-testcontinueprediction-1dbc43e8ad"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnparserprediction-testcontinueprediction@6f9e9bc52a57",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNParserPrediction.spec.ts",
+      "case": "testContinuePrediction",
+      "source_sha256": "030dfaa8b5745f753ac535b595bc8648e1e60e1438c67807b961b14024190ce1"
+    },
+    {
+      "source_case_id": "java-antlr:testatnparserprediction-testcontinueprediction@6f9e9bc52a57",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNParserPrediction.java",
+      "case": "testContinuePrediction",
+      "source_sha256": "3f1fa4694bcfe1523342d50615a831ec440d524155ae247bfd286a5677b3cb03"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnparserprediction-testcontinueprediction@6f9e9bc52a57",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNParserPrediction.java",
+    "case": "testContinuePrediction",
+    "source_sha256": "3f1fa4694bcfe1523342d50615a831ec440d524155ae247bfd286a5677b3cb03"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnparserprediction-testcontinueprediction@6f9e9bc52a57",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNParserPrediction.spec.ts",
+    "case": "testContinuePrediction",
+    "source_sha256": "030dfaa8b5745f753ac535b595bc8648e1e60e1438c67807b961b14024190ce1"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "prediction",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "6e5f6dc11d55b75268f243623783e995da92d2b2606ab7b31f52d0fea8b5e1db",
+    "T.g4": "9cf0ad5678239dc5ac27d46f639f2c21a6363cb90e1b5baa7718bd6740911c7a"
+  }
+}

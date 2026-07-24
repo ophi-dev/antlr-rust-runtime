@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testlexeractions-testlexerpushpopmodeaction-680f0b8c72"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testlexeractions-testlexerpushpopmodeaction@d46f531f22de",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestLexerActions.spec.ts",
+      "case": "testLexerPushPopModeAction",
+      "source_sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
+    },
+    {
+      "source_case_id": "java-antlr:testlexeractions-testlexerpushpopmodeaction@d46f531f22de",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLexerActions.java",
+      "case": "testLexerPushPopModeAction",
+      "source_sha256": "190298035beb2555425795c7d9e54a7608e305984c5459df8926c39572ac52b2"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testlexeractions-testlexerpushpopmodeaction@d46f531f22de",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLexerActions.java",
+    "case": "testLexerPushPopModeAction",
+    "source_sha256": "190298035beb2555425795c7d9e54a7608e305984c5459df8926c39572ac52b2"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testlexeractions-testlexerpushpopmodeaction@d46f531f22de",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestLexerActions.spec.ts",
+    "case": "testLexerPushPopModeAction",
+    "source_sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "lexer-actions",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "L.g4": "b52fec39debe7e725cc0937bc48bf1f0013ddba9f4e6fa2c4ae8bf999d9bdfe3"
+  }
+}

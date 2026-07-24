@@ -1089,8 +1089,12 @@ mod tests {
     struct LexerTokenSnapshot {
         token_type: i32,
         channel: i32,
+        start: usize,
+        stop: usize,
         byte_start: usize,
         byte_stop: usize,
+        line: usize,
+        column: usize,
         text: String,
     }
 
@@ -1195,8 +1199,12 @@ mod tests {
             .map(|token| LexerTokenSnapshot {
                 token_type: token.token_type(),
                 channel: token.channel(),
+                start: token.start(),
+                stop: token.stop(),
                 byte_start: token.start_byte(),
                 byte_stop: token.stop_byte(),
+                line: token.line(),
+                column: token.column(),
                 text: token.text_or_empty().to_owned(),
             })
             .collect::<Vec<_>>();
@@ -1430,11 +1438,11 @@ mod tests {
         }
 
         #[derive(Debug)]
-        struct ForcedDecisionHooks {
-            decision: usize,
-            input_index: usize,
-            alternative: usize,
-            reached: bool,
+        pub(super) struct ForcedDecisionHooks {
+            pub(super) decision: usize,
+            pub(super) input_index: usize,
+            pub(super) alternative: usize,
+            pub(super) reached: bool,
         }
 
         impl SemanticHooks for ForcedDecisionHooks {
@@ -1458,12 +1466,12 @@ mod tests {
         }
 
         #[derive(Debug)]
-        struct LeftRecursiveAltNumbers {
+        pub(super) struct LeftRecursiveAltNumbers {
             primary: Vec<usize>,
             operator: Vec<usize>,
         }
 
-        fn left_recursive_alt_numbers(
+        pub(super) fn left_recursive_alt_numbers(
             compiled: &super::super::super::parser::CompiledParser,
         ) -> Vec<Option<LeftRecursiveAltNumbers>> {
             let mut mappings = (0..compiled.semantic.recognizer.rule_names.len())
@@ -1506,7 +1514,7 @@ mod tests {
             .with_rule_names(recognizer.rule_names.clone())
         }
 
-        fn lookahead_tree_string(
+        pub(super) fn lookahead_tree_string(
             node: antlr4_runtime::tree::Node<'_>,
             rule_names: &[String],
             left_recursive_alt_numbers: &[Option<LeftRecursiveAltNumbers>],
@@ -1577,6 +1585,1161 @@ mod tests {
                 .get(rewritten_alt_number.saturating_sub(1))
                 .copied()
                 .unwrap_or(rewritten_alt_number)
+        }
+    }
+
+    mod upstream_phase_c_runtime {
+        use std::collections::BTreeSet;
+
+        use antlr4_runtime::atn::parser::{ParserAtnSimulator, ParserAtnSimulatorError};
+        use antlr4_runtime::{
+            LexerCustomAction, LexerPredicate, NoSemanticHooks, Parser, PredictionMode,
+            SemanticHooks, TOKEN_EOF,
+        };
+
+        use crate::{
+            CodegenData, collect_structural_grammar_options, render_parser,
+            structural_embedded_model, structural_predicates,
+        };
+
+        use super::upstream_lookahead_trees::{
+            ForcedDecisionHooks, left_recursive_alt_numbers, lookahead_tree_string,
+        };
+        use super::*;
+
+        struct LexerCheck {
+            input: &'static str,
+            expected: Option<&'static [&'static str]>,
+            errors: &'static [&'static str],
+        }
+
+        struct ParserCheck {
+            start_rule: &'static str,
+            input: &'static str,
+            tree: &'static str,
+            intervals: &'static [IntervalCheck],
+        }
+
+        struct IntervalCheck {
+            path: &'static [usize],
+            expected: &'static str,
+        }
+
+        struct AltCheck {
+            input: &'static str,
+            expected: AltExpectation,
+        }
+
+        enum AltExpectation {
+            Alternative(usize),
+            NoViableAlt { token_index: usize, token_type: i32 },
+        }
+
+        struct PredictionCheck {
+            decision: usize,
+            input: &'static str,
+            expected: usize,
+        }
+
+        struct DfaCheck {
+            decision: usize,
+            inputs: &'static [&'static str],
+            expected: &'static [&'static str],
+        }
+
+        struct AmbiguousCheck {
+            start_rule: &'static str,
+            decision: usize,
+            input_index: usize,
+            input: &'static str,
+            overall: Option<&'static str>,
+            alternatives: &'static [(usize, &'static str)],
+        }
+
+        struct ExpectedLexerAction {
+            rule: &'static str,
+            action_index: usize,
+            position: usize,
+            text: &'static str,
+        }
+
+        struct ExpectedLexerPredicate {
+            rule: &'static str,
+            predicate_index: usize,
+            position: usize,
+            result: bool,
+        }
+
+        enum ToolCase {
+            CodegenLiteralAccessor {
+                repeated: bool,
+            },
+            CodegenAccessLevel,
+            CodegenArgumentDeclaration,
+            ParserFailOption,
+            ParserAlternateQuotes,
+            ParserAttributeInitialization,
+            ParserRuntime {
+                lexer: &'static str,
+                parser: &'static str,
+                start_rule: &'static str,
+                input: &'static str,
+            },
+            ParserFailedPredicate,
+            ParserStartWithoutEof {
+                lexer: &'static str,
+                parser: &'static str,
+                start_rule: &'static str,
+                input: &'static str,
+            },
+        }
+
+        #[derive(Clone, Copy)]
+        enum LexerPredicateKind {
+            AlwaysTrue,
+            LineDoesNotStartWithItem,
+        }
+
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        struct ObservedLexerAction {
+            rule: String,
+            action_index: usize,
+            position: usize,
+            text: String,
+        }
+
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        struct ObservedLexerPredicate {
+            rule: String,
+            predicate_index: usize,
+            position: usize,
+            result: bool,
+        }
+
+        #[derive(Clone, Debug, Eq, PartialEq)]
+        struct ActionLexerResult {
+            stream: LexerStreamSnapshot,
+            actions: Vec<ObservedLexerAction>,
+            predicates: Vec<ObservedLexerPredicate>,
+        }
+
+        struct ActionTokenSource<'a> {
+            base: BaseLexer<InputStream>,
+            atn: &'a antlr4_runtime::atn::LexerAtn,
+            strategy: LexerStrategy<'a>,
+            recognizer: &'a RecognizerModel,
+            predicate_kind: LexerPredicateKind,
+            actions: Vec<ObservedLexerAction>,
+            predicates: Vec<ObservedLexerPredicate>,
+        }
+
+        impl TokenSource for ActionTokenSource<'_> {
+            fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+                let Self {
+                    base,
+                    atn,
+                    strategy,
+                    recognizer,
+                    predicate_kind,
+                    actions,
+                    predicates,
+                } = self;
+                let mut action = |base: &mut BaseLexer<InputStream>, event: LexerCustomAction| {
+                    actions.push(ObservedLexerAction {
+                        rule: lexer_rule_name(recognizer, event.rule_index()),
+                        action_index: usize::try_from(event.action_index())
+                            .expect("lexer action index should be non-negative"),
+                        position: event.position(),
+                        text: base.token_text_until(event.position()),
+                    });
+                };
+                let mut predicate = |base: &BaseLexer<InputStream>, event: LexerPredicate| {
+                    let result = match predicate_kind {
+                        LexerPredicateKind::AlwaysTrue => true,
+                        LexerPredicateKind::LineDoesNotStartWithItem => !base
+                            .token_text_until(event.position())
+                            .trim()
+                            .starts_with("Item:"),
+                    };
+                    predicates.push(ObservedLexerPredicate {
+                        rule: recognizer
+                            .rule_names
+                            .get(event.rule_index())
+                            .cloned()
+                            .unwrap_or_else(|| panic!("missing lexer rule {}", event.rule_index())),
+                        predicate_index: event.pred_index(),
+                        position: event.position(),
+                        result,
+                    });
+                    result
+                };
+                match *strategy {
+                    LexerStrategy::Interpreted => next_token_with_hooks(
+                        base,
+                        sink,
+                        atn,
+                        &mut action,
+                        &mut predicate,
+                        |_, _, _| {},
+                    ),
+                    LexerStrategy::Compiled(dfa) => next_token_compiled_with_hooks(
+                        base,
+                        sink,
+                        atn,
+                        dfa,
+                        &mut action,
+                        &mut predicate,
+                        |_, _, _| {},
+                    ),
+                }
+            }
+
+            fn line(&self) -> usize {
+                self.base.line()
+            }
+
+            fn column(&self) -> usize {
+                self.base.column()
+            }
+
+            fn source_name(&self) -> &str {
+                self.base.source_name()
+            }
+
+            fn source_text(&self) -> Option<Rc<str>> {
+                self.base.source_text()
+            }
+
+            fn drain_errors(&mut self) -> Vec<TokenSourceError> {
+                self.base.drain_errors()
+            }
+        }
+
+        macro_rules! lexer_case {
+            ($name:ident, $fixture:literal, $roots:expr, $checks:expr $(,)?) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_lexer_case($fixture, $roots, $checks);
+                    }
+                }
+            };
+        }
+
+        macro_rules! lexer_action_case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $roots:expr,
+                $lexer:literal,
+                $input:literal,
+                $tokens:expr,
+                $actions:expr,
+                $predicate:expr,
+                $predicates:expr $(,)?
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_lexer_action_case(
+                            $fixture,
+                            $roots,
+                            $lexer,
+                            $input,
+                            $tokens,
+                            $actions,
+                            $predicate,
+                            $predicates,
+                        );
+                    }
+                }
+            };
+        }
+
+        macro_rules! parser_case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $roots:expr,
+                $grammar_parser:expr,
+                $checks:expr $(,)?
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_parser_case($fixture, $roots, $grammar_parser, $checks);
+                    }
+                }
+            };
+        }
+
+        macro_rules! parser_alt_case {
+            ($name:ident, $fixture:literal, $roots:expr, $checks:expr $(,)?) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_parser_alt_case($fixture, $roots, $checks);
+                    }
+                }
+            };
+        }
+
+        macro_rules! prediction_case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $roots:expr,
+                $predictions:expr,
+                $dfas:expr $(,)?
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_prediction_case($fixture, $roots, $predictions, $dfas);
+                    }
+                }
+            };
+        }
+
+        macro_rules! left_recursion_alts_case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $roots:expr,
+                $rule:literal,
+                $primary:expr,
+                $recursive:expr $(,)?
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_left_recursion_alts($fixture, $roots, $rule, $primary, $recursive);
+                    }
+                }
+            };
+        }
+
+        macro_rules! ambiguous_case {
+            ($name:ident, $fixture:literal, $roots:expr, $checks:expr $(,)?) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_ambiguous_case($fixture, $roots, $checks);
+                    }
+                }
+            };
+        }
+
+        macro_rules! tool_case {
+            ($name:ident, $fixture:literal, $roots:expr, $case:expr $(,)?) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_tool_case($fixture, $roots, $case);
+                    }
+                }
+            };
+        }
+
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs"
+        ));
+
+        fn assert_tool_case(fixture_name: &str, roots: &[&str], case: ToolCase) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            match case {
+                ToolCase::CodegenLiteralAccessor { repeated } => {
+                    let data = parser_codegen_data(&compilation, "TParser");
+                    let rendered =
+                        render_parser("TParser", &data).expect("fixture parser should render");
+                    let single =
+                        "pub fn token_token(&self) -> Result<TerminalNode<'a>, MissingChildError>";
+                    let repeated_signature =
+                        "pub fn token_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_";
+                    if repeated {
+                        assert!(rendered.contains(repeated_signature), "{fixture_name}");
+                        assert!(!rendered.contains(single), "{fixture_name}");
+                    } else {
+                        assert!(rendered.contains(single), "{fixture_name}");
+                        assert!(!rendered.contains(repeated_signature), "{fixture_name}");
+                    }
+                }
+                ToolCase::CodegenAccessLevel => {
+                    let data = parser_codegen_data(&compilation, "TParser");
+                    let mut actual = collect_structural_grammar_options(&data, &BTreeSet::new())
+                        .expect("grammar options should resolve")
+                        .into_iter()
+                        .map(|entry| (entry.key, entry.value, entry.disposition.manifest_name()))
+                        .collect::<Vec<_>>();
+                    actual.sort();
+                    assert_eq!(
+                        actual,
+                        [
+                            (
+                                "accessLevel".to_owned(),
+                                "internal".to_owned(),
+                                "unsupported",
+                            ),
+                            ("language".to_owned(), "CSharp".to_owned(), "tool-handled",),
+                        ],
+                        "{fixture_name}",
+                    );
+                }
+                ToolCase::CodegenArgumentDeclaration => {
+                    let data = parser_codegen_data(&compilation, "TParser");
+                    let model = structural_embedded_model(&data, false)
+                        .expect("structural parser model should resolve");
+                    let rule = model
+                        .rules
+                        .iter()
+                        .find(|rule| rule.name == "a")
+                        .expect("fixture should contain rule a");
+                    assert_eq!(rule.arg_names, ["xyz"], "{fixture_name}");
+                    assert_eq!(
+                        rule.attrs
+                            .iter()
+                            .map(|attr| (attr.name.as_str(), attr.ty.as_str()))
+                            .collect::<Vec<_>>(),
+                        [("xyz", "i32")],
+                        "{fixture_name}",
+                    );
+                    let rendered =
+                        render_parser("TParser", &data).expect("fixture parser should render");
+                    assert!(rendered.contains("pub xyz: i32,"), "{fixture_name}");
+                }
+                ToolCase::ParserFailOption => {
+                    assert_predicate_failure_message(
+                        fixture_name,
+                        &compilation,
+                        "TParser",
+                        "false",
+                        "custom message",
+                    );
+                }
+                ToolCase::ParserAlternateQuotes => {
+                    assert_runtime_parse(
+                        fixture_name,
+                        &compilation,
+                        "ModeTagsLexer",
+                        "ModeTagsParser",
+                        "file",
+                        "",
+                    );
+                }
+                ToolCase::ParserAttributeInitialization => {
+                    let data = parser_codegen_data(&compilation, "DataParser");
+                    let model = structural_embedded_model(&data, false)
+                        .expect("structural parser model should resolve");
+                    let rule = model
+                        .rules
+                        .iter()
+                        .find(|rule| rule.name == "sequence")
+                        .expect("fixture should contain rule sequence");
+                    assert_eq!(rule.local_names, ["localValues"], "{fixture_name}");
+                    assert_eq!(
+                        rule.attrs
+                            .iter()
+                            .map(|attr| (attr.name.as_str(), attr.ty.as_str()))
+                            .collect::<Vec<_>>(),
+                        [("values", "Vec<i32>"), ("localValues", "Vec<i32>")],
+                        "{fixture_name}",
+                    );
+                    let rendered =
+                        render_parser("DataParser", &data).expect("fixture parser should render");
+                    assert!(rendered.contains("pub values: Vec<i32>,"), "{fixture_name}");
+                    assert!(
+                        rendered.contains("pub localValues: Vec<i32>,"),
+                        "{fixture_name}",
+                    );
+                    assert!(!rendered.contains("List<Integer>"), "{fixture_name}");
+                }
+                ToolCase::ParserRuntime {
+                    lexer,
+                    parser,
+                    start_rule,
+                    input,
+                } => {
+                    assert_runtime_parse(
+                        fixture_name,
+                        &compilation,
+                        lexer,
+                        parser,
+                        start_rule,
+                        input,
+                    );
+                }
+                ToolCase::ParserFailedPredicate => {
+                    assert_predicate_failure_message(
+                        fixture_name,
+                        &compilation,
+                        "PslParser",
+                        "isValidFloatingConstant(null",
+                        "DEC:A floating-point constant cannot have internal white space",
+                    );
+                }
+                ToolCase::ParserStartWithoutEof {
+                    lexer,
+                    parser,
+                    start_rule,
+                    input,
+                } => {
+                    assert_runtime_parse(
+                        fixture_name,
+                        &compilation,
+                        lexer,
+                        parser,
+                        start_rule,
+                        input,
+                    );
+                    let lexer = lexer_named(&compilation, lexer);
+                    let compiled = parser_named(&compilation, parser);
+                    let rule = rule_index(compiled, start_rule);
+                    let decision =
+                        entry_decision(&compiled.packed, rule).expect("start rule has a decision");
+                    assert_eq!(decision, 0, "{fixture_name}");
+                    let mut stream = token_stream(lexer, input);
+                    let mut simulator = ParserAtnSimulator::new(&compiled.packed);
+                    assert_eq!(
+                        simulator
+                            .adaptive_predict_stream(decision, &mut stream)
+                            .expect("start-rule prediction should succeed"),
+                        1,
+                        "{fixture_name}",
+                    );
+                    assert_eq!(
+                        simulator.dump_dfa_java_style(&runtime_vocabulary(
+                            &compiled.semantic.recognizer,
+                        )),
+                        "Decision 0:\ns0-ID->s1\ns1-INT->s2\ns2-EOF->:s3=>1\n",
+                        "{fixture_name}",
+                    );
+                }
+            }
+        }
+
+        fn parser_codegen_data<'a>(
+            compilation: &'a Compilation,
+            parser_name: &str,
+        ) -> CodegenData<'a> {
+            CodegenData::from_parser(parser_named(compilation, parser_name), &compilation.sources)
+        }
+
+        fn assert_runtime_parse(
+            fixture_name: &str,
+            compilation: &Compilation,
+            lexer_name: &str,
+            parser_name: &str,
+            start_rule: &str,
+            input: &str,
+        ) {
+            let lexer = lexer_named(compilation, lexer_name);
+            let compiled = parser_named(compilation, parser_name);
+            let mut parser = parser_for(lexer, compiled, input, NoSemanticHooks);
+            let rule = rule_index(compiled, start_rule);
+            let (tree, _) = parser
+                .parse_atn_rule_with_runtime_options(
+                    &compiled.packed,
+                    rule,
+                    ParserRuntimeOptions {
+                        unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                        ..ParserRuntimeOptions::default()
+                    },
+                )
+                .unwrap_or_else(|error| panic!("{fixture_name}: {input:?}: {error:?}"));
+            assert_eq!(
+                parser
+                    .node(tree)
+                    .as_rule()
+                    .map(|context| context.rule_index()),
+                Some(rule),
+                "{fixture_name}",
+            );
+            assert_eq!(
+                parser.number_of_syntax_errors(),
+                0,
+                "{fixture_name}: {input:?}",
+            );
+        }
+
+        fn assert_predicate_failure_message(
+            fixture_name: &str,
+            compilation: &Compilation,
+            parser_name: &str,
+            body_fragment: &str,
+            expected: &str,
+        ) {
+            let data = parser_codegen_data(compilation, parser_name);
+            let predicate = structural_predicates(&data)
+                .expect("structural predicates should resolve")
+                .into_iter()
+                .find(|predicate| predicate.body.contains(body_fragment))
+                .unwrap_or_else(|| panic!("{fixture_name}: missing predicate {body_fragment:?}"));
+            assert_eq!(predicate.fail.as_deref(), Some(expected), "{fixture_name}");
+            let rendered = render_parser(parser_name, &data).expect("fixture parser should render");
+            assert!(
+                rendered.contains(&format!(
+                    "failure_message: Some(\"{}\")",
+                    crate::rust_string(expected),
+                )),
+                "{fixture_name}: generated parser dropped {expected:?}",
+            );
+        }
+
+        fn assert_lexer_case(fixture_name: &str, roots: &[&str], checks: &[LexerCheck]) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, "L");
+            for check in checks {
+                assert_lexer_strategies_match(lexer, check.input);
+                let stream = lexer_stream(lexer, check.input, LexerStrategy::Interpreted);
+                let token_names = stream
+                    .tokens
+                    .iter()
+                    .map(|token| token_name(&lexer.semantic.recognizer, token.token_type))
+                    .collect::<Vec<_>>();
+                if let Some(expected) = check.expected {
+                    assert_eq!(token_names, expected, "{fixture_name}: {:?}", check.input);
+                }
+                let errors = stream
+                    .errors
+                    .iter()
+                    .map(|error| format!("line {}:{} {}", error.line, error.column, error.message))
+                    .collect::<Vec<_>>();
+                assert_eq!(errors, check.errors, "{fixture_name}: {:?}", check.input);
+            }
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn assert_lexer_action_case(
+            fixture_name: &str,
+            roots: &[&str],
+            lexer_name: &str,
+            input: &str,
+            expected_tokens: &[&str],
+            expected_actions: &[ExpectedLexerAction],
+            predicate_kind: LexerPredicateKind,
+            expected_predicates: &[ExpectedLexerPredicate],
+        ) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, lexer_name);
+            let interpreted =
+                run_action_lexer(lexer, input, LexerStrategy::Interpreted, predicate_kind);
+            let compiled = run_action_lexer(
+                lexer,
+                input,
+                LexerStrategy::Compiled(&lexer.dfa),
+                predicate_kind,
+            );
+            assert_eq!(compiled, interpreted, "{fixture_name}: accelerated lexer");
+            assert_eq!(
+                java_token_lines(&interpreted.stream.tokens),
+                expected_tokens,
+                "{fixture_name}: Java token stream",
+            );
+            assert!(
+                interpreted.stream.errors.is_empty(),
+                "{fixture_name}: unexpected lexer errors: {:?}",
+                interpreted.stream.errors,
+            );
+            assert_eq!(
+                interpreted.stream.final_mode,
+                antlr4_runtime::lexer::DEFAULT_MODE,
+                "{fixture_name}: final lexer mode",
+            );
+            assert!(
+                interpreted.stream.mode_stack.is_empty(),
+                "{fixture_name}: final lexer mode stack",
+            );
+
+            let actions = expected_actions
+                .iter()
+                .map(|event| ObservedLexerAction {
+                    rule: event.rule.to_owned(),
+                    action_index: event.action_index,
+                    position: event.position,
+                    text: event.text.to_owned(),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                interpreted.actions, actions,
+                "{fixture_name}: custom action trace",
+            );
+            let predicates = expected_predicates
+                .iter()
+                .map(|event| ObservedLexerPredicate {
+                    rule: event.rule.to_owned(),
+                    predicate_index: event.predicate_index,
+                    position: event.position,
+                    result: event.result,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                interpreted.predicates, predicates,
+                "{fixture_name}: predicate trace",
+            );
+        }
+
+        fn run_action_lexer(
+            compiled: &super::super::super::lexer::CompiledLexer,
+            input: &str,
+            strategy: LexerStrategy<'_>,
+            predicate_kind: LexerPredicateKind,
+        ) -> ActionLexerResult {
+            let recognizer = &compiled.semantic.recognizer;
+            let source = ActionTokenSource {
+                base: BaseLexer::new(
+                    InputStream::with_source_name(input, "phase-c-lexer-actions"),
+                    recognizer_data(recognizer),
+                ),
+                atn: &compiled.atn,
+                strategy,
+                recognizer,
+                predicate_kind,
+                actions: Vec::new(),
+                predicates: Vec::new(),
+            };
+            let mut stream =
+                CommonTokenStream::try_new(source).expect("lexer action token stream should fit");
+            let tokens = stream
+                .tokens()
+                .map(|view| LexerTokenSnapshot {
+                    token_type: view.token_type(),
+                    channel: view.channel(),
+                    start: view.start(),
+                    stop: view.stop(),
+                    byte_start: view.start_byte(),
+                    byte_stop: view.stop_byte(),
+                    line: view.line(),
+                    column: view.column(),
+                    text: view.text_or_empty().to_owned(),
+                })
+                .collect::<Vec<_>>();
+            let errors = stream.drain_source_errors();
+            let source = stream.token_source_mut();
+            let final_mode = source.base.mode();
+            let mut mode_stack = Vec::new();
+            while let Some(mode) = source.base.pop_mode() {
+                mode_stack.push(mode);
+            }
+            ActionLexerResult {
+                stream: LexerStreamSnapshot {
+                    tokens,
+                    errors,
+                    final_mode,
+                    mode_stack,
+                },
+                actions: std::mem::take(&mut source.actions),
+                predicates: std::mem::take(&mut source.predicates),
+            }
+        }
+
+        fn lexer_rule_name(recognizer: &RecognizerModel, rule_index: i32) -> String {
+            usize::try_from(rule_index)
+                .ok()
+                .and_then(|index| recognizer.rule_names.get(index))
+                .cloned()
+                .unwrap_or_else(|| panic!("missing lexer rule {rule_index}"))
+        }
+
+        fn java_token_lines(tokens: &[LexerTokenSnapshot]) -> Vec<String> {
+            tokens
+                .iter()
+                .enumerate()
+                .map(|(index, token)| {
+                    let stop = if token.stop == usize::MAX {
+                        "-1".to_owned()
+                    } else {
+                        token.stop.to_string()
+                    };
+                    let text = token
+                        .text
+                        .replace('\n', "\\n")
+                        .replace('\r', "\\r")
+                        .replace('\t', "\\t");
+                    format!(
+                        "[@{index},{}:{stop}='{text}',<{}>,{}:{}]",
+                        token.start, token.token_type, token.line, token.column,
+                    )
+                })
+                .collect()
+        }
+
+        fn assert_parser_case(
+            fixture_name: &str,
+            roots: &[&str],
+            grammar_parser: bool,
+            checks: &[ParserCheck],
+        ) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, "L");
+            let compiled = parser_named(&compilation, "T");
+            let authored_alts = left_recursive_alt_numbers(compiled);
+            for check in checks {
+                let mut parser = parser_for(lexer, compiled, check.input, NoSemanticHooks);
+                let rule_index = rule_index(compiled, check.start_rule);
+                let (tree, _) = parser
+                    .parse_atn_rule_with_runtime_options(
+                        &compiled.packed,
+                        rule_index,
+                        ParserRuntimeOptions {
+                            track_alt_numbers: grammar_parser,
+                            unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                            ..ParserRuntimeOptions::default()
+                        },
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("{fixture_name}: input {:?}: {error:?}", check.input)
+                    });
+                let node = parser.node(tree);
+                let actual_tree = if grammar_parser {
+                    lookahead_tree_string(
+                        node,
+                        &compiled.semantic.recognizer.rule_names,
+                        &authored_alts,
+                    )
+                } else {
+                    node.to_string_tree_with_names(&compiled.semantic.recognizer.rule_names)
+                };
+                assert_eq!(actual_tree, check.tree, "{fixture_name}: {:?}", check.input);
+                for interval in check.intervals {
+                    let mut interval_node = node;
+                    for &child in interval.path {
+                        interval_node = interval_node.children().nth(child).unwrap_or_else(|| {
+                            panic!(
+                                "{fixture_name}: input {:?} has no child path {:?}",
+                                check.input, interval.path,
+                            )
+                        });
+                    }
+                    let rule = interval_node.as_rule().unwrap_or_else(|| {
+                        panic!(
+                            "{fixture_name}: input {:?} path {:?} is not a rule",
+                            check.input, interval.path,
+                        )
+                    });
+                    assert_eq!(
+                        source_interval(rule),
+                        interval.expected,
+                        "{fixture_name}: input {:?} path {:?}",
+                        check.input,
+                        interval.path,
+                    );
+                }
+            }
+        }
+
+        fn assert_parser_alt_case(fixture_name: &str, roots: &[&str], checks: &[AltCheck]) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, "L");
+            let compiled = parser_named(&compilation, "T");
+            let rule = rule_index(compiled, "a");
+            let decision = entry_decision(&compiled.packed, rule);
+
+            for check in checks {
+                let mut stream = token_stream(lexer, check.input);
+                let actual = decision.map_or(Ok(1), |decision| {
+                    ParserAtnSimulator::new(&compiled.packed)
+                        .adaptive_predict_stream(decision, &mut stream)
+                });
+                match (actual, &check.expected) {
+                    (Ok(actual), AltExpectation::Alternative(expected)) => {
+                        assert_eq!(actual, *expected, "{fixture_name}: {:?}", check.input);
+                    }
+                    (
+                        Err(ParserAtnSimulatorError::NoViableAlt { symbol, index }),
+                        AltExpectation::NoViableAlt {
+                            token_index,
+                            token_type,
+                        },
+                    ) => {
+                        assert_eq!(index, *token_index, "{fixture_name}: {:?}", check.input);
+                        assert_eq!(symbol, *token_type, "{fixture_name}: {:?}", check.input);
+                    }
+                    (actual, expected) => panic!(
+                        "{fixture_name}: input {:?}: expected {}, got {actual:?}",
+                        check.input,
+                        alt_expectation_name(expected),
+                    ),
+                }
+            }
+        }
+
+        fn assert_prediction_case(
+            fixture_name: &str,
+            roots: &[&str],
+            predictions: &[PredictionCheck],
+            dfa_checks: &[DfaCheck],
+        ) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, "L");
+            let compiled = parser_named(&compilation, "T");
+            for check in predictions {
+                let mut simulator = ParserAtnSimulator::new(&compiled.packed);
+                for _ in 0..3 {
+                    let mut stream = token_stream(lexer, check.input);
+                    let actual = simulator
+                        .adaptive_predict_stream(check.decision, &mut stream)
+                        .unwrap_or_else(|error| {
+                            panic!("{fixture_name}: input {:?}: {error:?}", check.input)
+                        });
+                    assert_eq!(actual, check.expected, "{fixture_name}: {:?}", check.input);
+                }
+            }
+
+            let vocabulary = runtime_vocabulary(&compiled.semantic.recognizer);
+            for check in dfa_checks {
+                assert_eq!(
+                    check.inputs.len(),
+                    check.expected.len(),
+                    "{fixture_name}: malformed DFA oracle",
+                );
+                let mut simulator = ParserAtnSimulator::new(&compiled.packed);
+                for (&input, &expected) in check.inputs.iter().zip(check.expected) {
+                    let mut stream = token_stream(lexer, input);
+                    let _ = simulator.adaptive_predict_stream(check.decision, &mut stream);
+                    assert_eq!(
+                        simulator.dump_dfa_java_style(&vocabulary),
+                        format!("Decision {}:\n{expected}", check.decision),
+                        "{fixture_name}: {input:?}",
+                    );
+                }
+            }
+        }
+
+        fn assert_left_recursion_alts(
+            fixture_name: &str,
+            roots: &[&str],
+            rule_name: &str,
+            expected_primary: &[usize],
+            expected_recursive: &[usize],
+        ) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let compiled = parser_named(&compilation, "TParser");
+            let rule = compiled
+                .semantic
+                .unit
+                .rules
+                .iter()
+                .find(|rule| rule.name == rule_name)
+                .unwrap_or_else(|| panic!("{fixture_name}: missing rule {rule_name}"));
+            let info = rule
+                .left_recursion
+                .as_ref()
+                .unwrap_or_else(|| panic!("{fixture_name}: {rule_name} is not left recursive"));
+            let mut primary = vec![0];
+            let mut recursive = vec![0];
+            for (index, kind) in info.alternative_kinds.values().enumerate() {
+                match kind {
+                    LeftRecursiveAlternativeKind::Primary
+                    | LeftRecursiveAlternativeKind::Prefix => primary.push(index + 1),
+                    LeftRecursiveAlternativeKind::Binary | LeftRecursiveAlternativeKind::Suffix => {
+                        recursive.push(index + 1)
+                    }
+                }
+            }
+            assert_eq!(primary, expected_primary, "{fixture_name}");
+            assert_eq!(recursive, expected_recursive, "{fixture_name}");
+        }
+
+        fn assert_ambiguous_case(fixture_name: &str, roots: &[&str], checks: &[AmbiguousCheck]) {
+            let compilation = compile_runtime_fixture(fixture_name, roots);
+            let lexer = lexer_named(&compilation, "L");
+            let compiled = parser_named(&compilation, "T");
+            let authored_alts = left_recursive_alt_numbers(compiled);
+            for check in checks {
+                let start_rule = rule_index(compiled, check.start_rule);
+                if let Some(expected) = check.overall {
+                    let mut parser = parser_for(lexer, compiled, check.input, NoSemanticHooks);
+                    parser.set_prediction_mode(PredictionMode::LlExactAmbigDetection);
+                    let (tree, _) = parser
+                        .parse_atn_rule_with_runtime_options(
+                            &compiled.packed,
+                            start_rule,
+                            ParserRuntimeOptions {
+                                track_alt_numbers: true,
+                                unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                                ..ParserRuntimeOptions::default()
+                            },
+                        )
+                        .unwrap_or_else(|error| {
+                            panic!("{fixture_name}: input {:?}: {error:?}", check.input)
+                        });
+                    assert_eq!(
+                        lookahead_tree_string(
+                            parser.node(tree),
+                            &compiled.semantic.recognizer.rule_names,
+                            &authored_alts,
+                        ),
+                        expected,
+                        "{fixture_name}: overall tree",
+                    );
+                }
+
+                for &(alternative, expected) in check.alternatives {
+                    let hooks = ForcedDecisionHooks {
+                        decision: check.decision,
+                        input_index: check.input_index,
+                        alternative,
+                        reached: false,
+                    };
+                    let mut parser = parser_for(lexer, compiled, check.input, hooks);
+                    let (tree, _) = parser
+                        .parse_atn_rule_with_runtime_options(
+                            &compiled.packed,
+                            start_rule,
+                            ParserRuntimeOptions {
+                                track_alt_numbers: true,
+                                unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                                ..ParserRuntimeOptions::default()
+                            },
+                        )
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "{fixture_name}: input {:?}, alternative {alternative}: {error:?}",
+                                check.input,
+                            )
+                        });
+                    let tree = parser.node(tree);
+                    let expected_rule = expected_tree_rule(expected);
+                    let subtree = compiled
+                        .semantic
+                        .recognizer
+                        .rule_names
+                        .iter()
+                        .position(|rule| rule == expected_rule)
+                        .and_then(|rule| tree.first_rule(rule))
+                        .unwrap_or(tree);
+                    assert_eq!(
+                        lookahead_tree_string(
+                            subtree,
+                            &compiled.semantic.recognizer.rule_names,
+                            &authored_alts,
+                        ),
+                        expected,
+                        "{fixture_name}: alternative {alternative}",
+                    );
+                }
+            }
+        }
+
+        fn compile_runtime_fixture(fixture_name: &str, roots: &[&str]) -> Compilation {
+            compile_fixture(fixture_name, roots)
+                .unwrap_or_else(|error| panic!("{fixture_name} should compile: {error:#?}"))
+        }
+
+        fn parser_for<'a, H: SemanticHooks>(
+            lexer: &'a super::super::super::lexer::CompiledLexer,
+            parser: &super::super::super::parser::CompiledParser,
+            input: &str,
+            hooks: H,
+        ) -> BaseParser<DirectTokenSource<'a>, H> {
+            BaseParser::with_semantic_hooks(
+                token_stream(lexer, input),
+                recognizer_data(&parser.semantic.recognizer),
+                hooks,
+            )
+        }
+
+        fn token_stream<'a>(
+            lexer: &'a super::super::super::lexer::CompiledLexer,
+            input: &str,
+        ) -> CommonTokenStream<DirectTokenSource<'a>> {
+            CommonTokenStream::try_new(DirectTokenSource {
+                base: BaseLexer::new(
+                    InputStream::with_source_name(input, "phase-c-runtime"),
+                    recognizer_data(&lexer.semantic.recognizer),
+                ),
+                atn: &lexer.atn,
+                strategy: LexerStrategy::Interpreted,
+            })
+            .expect("upstream input token stream should fit")
+        }
+
+        fn recognizer_data(recognizer: &RecognizerModel) -> RecognizerData {
+            RecognizerData::new(recognizer.name.clone(), runtime_vocabulary(recognizer))
+                .with_rule_names(recognizer.rule_names.clone())
+        }
+
+        fn runtime_vocabulary(recognizer: &RecognizerModel) -> Vocabulary {
+            Vocabulary::new(
+                recognizer.literal_names.clone(),
+                recognizer.symbolic_names.clone(),
+                vec![None::<String>; recognizer.symbolic_names.len()],
+            )
+        }
+
+        fn token_name(recognizer: &RecognizerModel, token_type: i32) -> String {
+            if token_type == TOKEN_EOF {
+                return "EOF".to_owned();
+            }
+            usize::try_from(token_type)
+                .ok()
+                .and_then(|index| recognizer.symbolic_names.get(index))
+                .and_then(Clone::clone)
+                .unwrap_or_else(|| panic!("missing symbolic name for token type {token_type}"))
+        }
+
+        fn rule_index(compiled: &super::super::super::parser::CompiledParser, name: &str) -> usize {
+            compiled
+                .semantic
+                .recognizer
+                .rule_names
+                .iter()
+                .position(|candidate| candidate == name)
+                .unwrap_or_else(|| panic!("missing parser rule {name}"))
+        }
+
+        fn entry_decision(
+            atn: &antlr4_runtime::atn::parser_atn::ParserAtn,
+            rule: usize,
+        ) -> Option<usize> {
+            let start = atn.rule_to_start_state().get(rule)?;
+            let target = atn.state(start)?.transitions().first()?.data().target();
+            atn.decision_to_state()
+                .iter()
+                .position(|decision_state| decision_state == target)
+        }
+
+        fn source_interval(rule: antlr4_runtime::tree::RuleNodeView<'_>) -> String {
+            let start = rule
+                .start_id()
+                .expect("parser rule should have a start token")
+                .index();
+            let stop = rule.stop_id().map_or_else(
+                || isize::try_from(start).expect("token index exceeds isize") - 1,
+                |token| isize::try_from(token.index()).expect("token index exceeds isize"),
+            );
+            format!("{start}..{stop}")
+        }
+
+        fn expected_tree_rule(tree: &str) -> &str {
+            tree.trim_start_matches('(')
+                .split([':', ' ', ')'])
+                .next()
+                .expect("expected tree should start with a rule name")
+        }
+
+        const fn alt_expectation_name(expectation: &AltExpectation) -> &'static str {
+            match expectation {
+                AltExpectation::Alternative(_) => "alternative",
+                AltExpectation::NoViableAlt { .. } => "no viable alternative",
+            }
         }
     }
 

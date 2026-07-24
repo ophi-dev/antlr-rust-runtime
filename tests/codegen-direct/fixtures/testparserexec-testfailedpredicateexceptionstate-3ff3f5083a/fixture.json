@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "Psl.g4"
+  ],
+  "logical_ids": [
+    "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testparserexec-testfailedpredicateexceptionstate@e40a218bb278",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestParserExec.spec.ts",
+      "case": "testFailedPredicateExceptionState",
+      "source_sha256": "4faeffad53d8e8f63f6514f218445c65b379a9d06b14b95641f54b6d5805bfac"
+    },
+    {
+      "source_case_id": "java-antlr:testparserexec-testfailedpredicateexceptionstate@e40a218bb278",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserExec.java",
+      "case": "testFailedPredicateExceptionState",
+      "source_sha256": "f9fe80f25d7083d15d30aaacd33e4194f9e53cfef98e165a855c83e9374b0512"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testparserexec-testfailedpredicateexceptionstate@e40a218bb278",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserExec.java",
+    "case": "testFailedPredicateExceptionState",
+    "source_sha256": "f9fe80f25d7083d15d30aaacd33e4194f9e53cfef98e165a855c83e9374b0512"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testparserexec-testfailedpredicateexceptionstate@e40a218bb278",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestParserExec.spec.ts",
+    "case": "testFailedPredicateExceptionState",
+    "source_sha256": "4faeffad53d8e8f63f6514f218445c65b379a9d06b14b95641f54b6d5805bfac"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser-failed-predicate",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "copied the pinned Psl.g4 dependency loaded by the upstream test"
+  },
+  "files": {
+    "Psl.g4": "4768b525c074112b9f6bbe8a423df256ea737993b00d1a9dfe8bbb8d4da041e8"
+  }
+}

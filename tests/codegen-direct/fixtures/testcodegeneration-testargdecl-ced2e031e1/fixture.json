@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testcodegeneration-testargdecl-ced2e031e1"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testcodegeneration-testargdecl@1d3331b06b2b",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestCodeGeneration.spec.ts",
+      "case": "testArgDecl",
+      "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+    },
+    {
+      "source_case_id": "java-antlr:testcodegeneration-testargdecl@1d3331b06b2b",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCodeGeneration.java",
+      "case": "testArgDecl",
+      "source_sha256": "62f803938ae53c7c23779e75a12996beff8f3b0ed499a168d43dd0b6c0cb1244"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testcodegeneration-testargdecl@1d3331b06b2b",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCodeGeneration.java",
+    "case": "testArgDecl",
+    "source_sha256": "62f803938ae53c7c23779e75a12996beff8f3b0ed499a168d43dd0b6c0cb1244"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testcodegeneration-testargdecl@1d3331b06b2b",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestCodeGeneration.spec.ts",
+    "case": "testArgDecl",
+    "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "codegen-argument-declaration",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "T.g4": "c008ca2cbef9886ac3c84b92ead2a8e68f0022310b1d7f679312db0afa8eeb49"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testcodegeneration-assigntokennamestostringliteralsingeneratedparserrule@f176d948c498",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestCodeGeneration.spec.ts",
+      "case": "AssignTokenNamesToStringLiteralsInGeneratedParserRuleContexts",
+      "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+    },
+    {
+      "source_case_id": "java-antlr:testcodegeneration-assigntokennamestostringliteralsingeneratedparserrule@f176d948c498",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCodeGeneration.java",
+      "case": "AssignTokenNamesToStringLiteralsInGeneratedParserRuleContexts",
+      "source_sha256": "62f803938ae53c7c23779e75a12996beff8f3b0ed499a168d43dd0b6c0cb1244"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testcodegeneration-assigntokennamestostringliteralsingeneratedparserrule@f176d948c498",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCodeGeneration.java",
+    "case": "AssignTokenNamesToStringLiteralsInGeneratedParserRuleContexts",
+    "source_sha256": "62f803938ae53c7c23779e75a12996beff8f3b0ed499a168d43dd0b6c0cb1244"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testcodegeneration-assigntokennamestostringliteralsingeneratedparserrule@f176d948c498",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestCodeGeneration.spec.ts",
+    "case": "AssignTokenNamesToStringLiteralsInGeneratedParserRuleContexts",
+    "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "codegen-single-literal-accessor",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "T.g4": "9f38e72c8c8f227b95a1ddb864ed083bf1e3687f9e666391fd27793d5f59b397"
+  }
+}

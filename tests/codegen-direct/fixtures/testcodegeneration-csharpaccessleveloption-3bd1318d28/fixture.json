@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testcodegeneration-csharpaccessleveloption-3bd1318d28"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testcodegeneration-csharpaccessleveloption@1434d72b49c9",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestCodeGeneration.spec.ts",
+      "case": "CSharpAccessLevelOption",
+      "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+    }
+  ],
+  "java_antlr_test": null,
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testcodegeneration-csharpaccessleveloption@1434d72b49c9",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestCodeGeneration.spec.ts",
+    "case": "CSharpAccessLevelOption",
+    "source_sha256": "e6401a7f51eca0359fbd999d7a760532fa9d0a4cffb2066a3f68415cc4ad9576"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "codegen-access-level",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "T.g4": "69c5ddf18c8b14fe50d16db1becf21a7e806df59138325b2d5746ea26fdd73a6"
+  }
+}

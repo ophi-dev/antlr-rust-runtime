@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testlexeractions-testaltactionsin1rule-cd7e8e3c06"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testlexeractions-testaltactionsin1rule@d58c41ddb7bd",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestLexerActions.spec.ts",
+      "case": "testAltActionsIn1Rule",
+      "source_sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
+    },
+    {
+      "source_case_id": "java-antlr:testlexeractions-testaltactionsin1rule@d58c41ddb7bd",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLexerActions.java",
+      "case": "testAltActionsIn1Rule",
+      "source_sha256": "190298035beb2555425795c7d9e54a7608e305984c5459df8926c39572ac52b2"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testlexeractions-testaltactionsin1rule@d58c41ddb7bd",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLexerActions.java",
+    "case": "testAltActionsIn1Rule",
+    "source_sha256": "190298035beb2555425795c7d9e54a7608e305984c5459df8926c39572ac52b2"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testlexeractions-testaltactionsin1rule@d58c41ddb7bd",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestLexerActions.spec.ts",
+    "case": "testAltActionsIn1Rule",
+    "source_sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "lexer-actions",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "L.g4": "bad295226587a2d0c4e2f49722525ef3b5558ff2126acf093942e66ee3205e41"
+  }
+}

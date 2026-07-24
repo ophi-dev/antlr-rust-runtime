@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testatnlexerinterpreter-testwildonendlastalt-da8a95ac4b"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnlexerinterpreter-testwildonendlastalt@e9ffc36f7077",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNLexerInterpreter.spec.ts",
+      "case": "testWildOnEndLastAlt",
+      "source_sha256": "58c8a781abb7b5219c751bffdf3d5d7a1c4f90a32ac956c37b645ec4498add06"
+    },
+    {
+      "source_case_id": "java-antlr:testatnlexerinterpreter-testwildonendlastalt@e9ffc36f7077",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNLexerInterpreter.java",
+      "case": "testWildOnEndLastAlt",
+      "source_sha256": "f305febd683ea1218967328076cbd70e39dd9f5af3f22f59798119560dd642e7"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnlexerinterpreter-testwildonendlastalt@e9ffc36f7077",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNLexerInterpreter.java",
+    "case": "testWildOnEndLastAlt",
+    "source_sha256": "f305febd683ea1218967328076cbd70e39dd9f5af3f22f59798119560dd642e7"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnlexerinterpreter-testwildonendlastalt@e9ffc36f7077",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNLexerInterpreter.spec.ts",
+    "case": "testWildOnEndLastAlt",
+    "source_sha256": "58c8a781abb7b5219c751bffdf3d5d7a1c4f90a32ac956c37b645ec4498add06"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "lexer",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "L.g4": "18632c51c14160ea797e5b25d75af529143996364bb4c0f973d92f7e6dcae8cf"
+  }
+}
