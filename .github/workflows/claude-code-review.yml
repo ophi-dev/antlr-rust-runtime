@@ -40,6 +40,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      # This runtime is a port of ANTLR's reference implementation, so a faithful
+      # review of changes to the ported algorithms usually needs to compare
+      # against upstream behavior. Clone the reference tree into a side directory
+      # (kept out of the checkout above via a distinct `path`) the reviewer can
+      # read and grep. Pinned to the v4.13.2 tag the runtime targets everywhere
+      # else (see CLAUDE.md) — `master`/`dev` would surface post-4.13.2 changes a
+      # reviewer could wrongly flag as divergence. Shallow single-tag snapshot:
+      # the reviewer reads source, not git history. The directory name is
+      # deliberately non-hidden so ripgrep-backed search (Grep) descends into it.
+      - name: Checkout upstream ANTLR (reference for review comparisons)
+        uses: actions/checkout@v7
+        with:
+          repository: antlr/antlr4
+          ref: "4.13.2"
+          path: antlr-upstream
+          fetch-depth: 1
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -90,7 +107,7 @@ jobs:
           use_sticky_comment: true
           claude_args: |
             --effort max
-            --model "claude-opus-4-8[1m]"
+            --model "claude-opus-5[1m]"
             --no-chrome
             --dangerously-skip-permissions
           plugins: "code-review@claude-code-plugins"
@@ -103,6 +120,14 @@ jobs:
           # yield: sub-agent results are available synchronously in-session.
           prompt: |
             /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            UPSTREAM REFERENCE: This crate ports ANTLR (antlr/antlr4). A read-only
+            checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`
+            (Java runtime: `runtime/Java/src/org/antlr/v4/runtime/`; generator:
+            `tool/`). For changes to ported logic (ATN/prediction, lexer/parser
+            simulation, serialized-ATN decoding, generated-code shape), compare
+            against it and cite the upstream file:line. Flag unintended divergence
+            from ANTLR semantics; treat documented deviations as intentional.
 
             IMPORTANT (non-interactive CI run): You cannot pause and resume. Any
             sub-agents you spawn return their results synchronously within this same
