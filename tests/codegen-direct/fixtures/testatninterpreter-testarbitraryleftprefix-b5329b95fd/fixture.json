@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testatninterpreter-testarbitraryleftprefix-b5329b95fd"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatninterpreter-testarbitraryleftprefix@7f75dea09fbc",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNInterpreter.spec.ts",
+      "case": "testArbitraryLeftPrefix",
+      "source_sha256": "5e5e1ffa03b1721070db97a841ef55ad8f304feb2c49fb0166dd925adfe92d43"
+    },
+    {
+      "source_case_id": "java-antlr:testatninterpreter-testarbitraryleftprefix@7f75dea09fbc",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNInterpreter.java",
+      "case": "testArbitraryLeftPrefix",
+      "source_sha256": "2c26eed4d3c4b262fcf2e47cd952c59f5adb5689abbd47872667a84166c861f6"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatninterpreter-testarbitraryleftprefix@7f75dea09fbc",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNInterpreter.java",
+    "case": "testArbitraryLeftPrefix",
+    "source_sha256": "2c26eed4d3c4b262fcf2e47cd952c59f5adb5689abbd47872667a84166c861f6"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatninterpreter-testarbitraryleftprefix@7f75dea09fbc",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNInterpreter.spec.ts",
+    "case": "testArbitraryLeftPrefix",
+    "source_sha256": "5e5e1ffa03b1721070db97a841ef55ad8f304feb2c49fb0166dd925adfe92d43"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser-alt",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "41c2f2101019840f201e0f0ab804a606134014c50d47392f04123fd948befc56",
+    "T.g4": "6de18ecb59bff1e30da86e1079b447b31a995ce732950470da4e7091729d590c"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testparserinterpreter-testleftrecursivestartrule-707842eb76"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testparserinterpreter-testleftrecursivestartrule@8124efabd3f8",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestParserInterpreter.spec.ts",
+      "case": "testLeftRecursiveStartRule",
+      "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+    },
+    {
+      "source_case_id": "java-antlr:testparserinterpreter-testleftrecursivestartrule@8124efabd3f8",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+      "case": "testLeftRecursiveStartRule",
+      "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testparserinterpreter-testleftrecursivestartrule@8124efabd3f8",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+    "case": "testLeftRecursiveStartRule",
+    "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testparserinterpreter-testleftrecursivestartrule@8124efabd3f8",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestParserInterpreter.spec.ts",
+    "case": "testLeftRecursiveStartRule",
+    "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "5c7a3b554663b91b65a80cf669115083d14b6d478e88ff7909b0df83507fdc9b",
+    "T.g4": "2bcf5dc5f44eb1aed3103282858e5bb8828558792aa94e66c5d5539aa597d44f"
+  }
+}

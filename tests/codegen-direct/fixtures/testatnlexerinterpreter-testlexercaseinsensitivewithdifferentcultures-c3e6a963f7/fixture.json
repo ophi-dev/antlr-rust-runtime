@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testatnlexerinterpreter-testlexercaseinsensitivewithdifferentcultures-c3e6a963f7"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnlexerinterpreter-testlexercaseinsensitivewithdifferentcultures@038a33357188",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNLexerInterpreter.spec.ts",
+      "case": "testLexerCaseInsensitiveWithDifferentCultures",
+      "source_sha256": "58c8a781abb7b5219c751bffdf3d5d7a1c4f90a32ac956c37b645ec4498add06"
+    },
+    {
+      "source_case_id": "java-antlr:testatnlexerinterpreter-testlexercaseinsensitivewithdifferentcultures@038a33357188",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNLexerInterpreter.java",
+      "case": "testLexerCaseInsensitiveWithDifferentCultures",
+      "source_sha256": "f305febd683ea1218967328076cbd70e39dd9f5af3f22f59798119560dd642e7"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnlexerinterpreter-testlexercaseinsensitivewithdifferentcultures@038a33357188",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNLexerInterpreter.java",
+    "case": "testLexerCaseInsensitiveWithDifferentCultures",
+    "source_sha256": "f305febd683ea1218967328076cbd70e39dd9f5af3f22f59798119560dd642e7"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnlexerinterpreter-testlexercaseinsensitivewithdifferentcultures@038a33357188",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNLexerInterpreter.spec.ts",
+    "case": "testLexerCaseInsensitiveWithDifferentCultures",
+    "source_sha256": "58c8a781abb7b5219c751bffdf3d5d7a1c4f90a32ac956c37b645ec4498add06"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "lexer",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "L.g4": "fd4b2c3015e5df414cabf5a3a291e511f0b379ff57abf72eca287730e1f8aa50"
+  }
+}

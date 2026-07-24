@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testparserexec-fail-element-option-5aa5efff9b"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testparserexec-fail-element-option@73414ebe9f8d",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestParserExec.spec.ts",
+      "case": "Fail Element Option",
+      "source_sha256": "4faeffad53d8e8f63f6514f218445c65b379a9d06b14b95641f54b6d5805bfac"
+    }
+  ],
+  "java_antlr_test": null,
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testparserexec-fail-element-option@73414ebe9f8d",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestParserExec.spec.ts",
+    "case": "Fail Element Option",
+    "source_sha256": "4faeffad53d8e8f63f6514f218445c65b379a9d06b14b95641f54b6d5805bfac"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser-fail-option",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": null
+  },
+  "files": {
+    "T.g4": "10bc8ab6b0a3604c4ddc29c0750733f2a69ce59dacf9e104491b39abaddd84da"
+  }
+}

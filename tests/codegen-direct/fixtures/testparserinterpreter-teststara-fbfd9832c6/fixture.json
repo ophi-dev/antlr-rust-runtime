@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testparserinterpreter-teststara-fbfd9832c6"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testparserinterpreter-teststara@f3794723bfc9",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestParserInterpreter.spec.ts",
+      "case": "testStarA",
+      "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+    },
+    {
+      "source_case_id": "java-antlr:testparserinterpreter-teststara@f3794723bfc9",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+      "case": "testStarA",
+      "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testparserinterpreter-teststara@f3794723bfc9",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestParserInterpreter.java",
+    "case": "testStarA",
+    "source_sha256": "ffd80d041f6f36ae0e0ff7de01385c673b4e9a5d4ec83223b208943010aa98fb"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testparserinterpreter-teststara@f3794723bfc9",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestParserInterpreter.spec.ts",
+    "case": "testStarA",
+    "source_sha256": "0a463f1e1a5e983a7a4eb120259c90f49d0e7f6dbf48c5b5ed85481d55cb579f"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "parser",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "41c2f2101019840f201e0f0ab804a606134014c50d47392f04123fd948befc56",
+    "T.g4": "746979cf9e8733b4534a8a82d206b04981ebe0b04a55cca8328817c1e35b3d15"
+  }
+}

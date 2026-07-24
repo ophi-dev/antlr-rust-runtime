@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testgrammarparserinterpreter-testaltswithlabels-af19668d8d"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testgrammarparserinterpreter-testaltswithlabels@c44c606fe27f",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestGrammarParserInterpreter.spec.ts",
+      "case": "testAltsWithLabels",
+      "source_sha256": "24c1e8543033be8b149ecb71391e3b0309e4f95b9c02820fe440f91768252602"
+    },
+    {
+      "source_case_id": "java-antlr:testgrammarparserinterpreter-testaltswithlabels@c44c606fe27f",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestGrammarParserInterpreter.java",
+      "case": "testAltsWithLabels",
+      "source_sha256": "c34acb711f79a3064b30c2e7fe0d13f834d007f1be55029311a22ecf91258bb1"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testgrammarparserinterpreter-testaltswithlabels@c44c606fe27f",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestGrammarParserInterpreter.java",
+    "case": "testAltsWithLabels",
+    "source_sha256": "c34acb711f79a3064b30c2e7fe0d13f834d007f1be55029311a22ecf91258bb1"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testgrammarparserinterpreter-testaltswithlabels@c44c606fe27f",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestGrammarParserInterpreter.spec.ts",
+    "case": "testAltsWithLabels",
+    "source_sha256": "24c1e8543033be8b149ecb71391e3b0309e4f95b9c02820fe440f91768252602"
+  },
+  "expected": "success",
+  "phase_c_runtime_oracle": {
+    "kind": "grammar-parser",
+    "compatibility_verdict": "Java ANTLR 4.13.2",
+    "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"
+  },
+  "files": {
+    "L.g4": "d6159a768189ec9965e4de6e23a1aa248201e68697ac6187ee8c0d112d825ede",
+    "T.g4": "124c11b260dfc4d474a8012ab16425fbda4bb9981ff038cb3648853b9be3e0a6"
+  }
+}
