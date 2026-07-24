@@ -97,6 +97,11 @@ impl RecognizerData {
         &self.rule_names
     }
 
+    /// The token vocabulary for literal/symbolic name resolution.
+    pub const fn vocabulary(&self) -> &Vocabulary {
+        &self.vocabulary
+    }
+
     pub const fn state(&self) -> isize {
         self.state
     }

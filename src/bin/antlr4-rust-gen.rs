@@ -9220,6 +9220,54 @@ fn embedded_render_slots(
     )
 }
 
+/// The `compile_parse_tree_pattern` method spliced into every generated parser.
+///
+/// Kept as a standalone literal (single braces, no format placeholders) so the
+/// large parser template stays under the line-length lint and this ANTLR
+/// `Parser.compileParseTreePattern` analog reads as ordinary code.
+const fn render_compile_parse_tree_pattern_method() -> &'static str {
+    r#"
+    /// Compiles a tree pattern rooted at parser rule `rule_index`.
+    ///
+    /// Mirrors ANTLR's `Parser.compileParseTreePattern`. Literal chunks of
+    /// `pattern` are lexed with a fresh lexer built by `make_lexer` (pass this
+    /// grammar's generated lexer constructor, e.g. `MyGrammarLexer::new`);
+    /// `<tag>` placeholders become rule/token references matched over a
+    /// rule-bypass ATN. The returned [`antlr4_runtime::ParseTreePattern`] can
+    /// then match subtrees.
+    ///
+    /// Takes `&self` only to mirror ANTLR's instance method; the ATN and
+    /// grammar metadata come from this module, so the parser's own state is
+    /// untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`antlr4_runtime::ParseTreePatternError`] for a malformed
+    /// pattern, an unknown tag, a lexer failure, or a pattern the start rule
+    /// does not fully consume.
+    pub fn compile_parse_tree_pattern<PL>(
+        &self,
+        pattern: &str,
+        rule_index: usize,
+        mut make_lexer: impl FnMut(antlr4_runtime::InputStream) -> PL,
+    ) -> Result<antlr4_runtime::ParseTreePattern, antlr4_runtime::ParseTreePatternError>
+    where
+        PL: antlr4_runtime::TokenSource,
+    {
+        let grammar_metadata = metadata();
+        let data = antlr4_runtime::RecognizerData::new(
+            grammar_metadata.grammar_file_name(),
+            grammar_metadata.vocabulary(),
+        )
+        .with_rule_names(grammar_metadata.rule_names().iter().copied());
+        let matcher = antlr4_runtime::ParseTreePatternMatcher::new(parser_atn(), &data)?;
+        matcher.compile(pattern, rule_index, move |text: &str| {
+            antlr4_runtime::lex_pattern_chunk(text, &mut make_lexer)
+        })
+    }
+"#
+}
+
 fn render_parser_with_options(
     grammar_name: &str,
     data: &CodegenData<'_>,
@@ -9228,6 +9276,7 @@ fn render_parser_with_options(
     let empty_patterns = SemPatternFile::default();
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
+    let compile_pattern_method = render_compile_parse_tree_pattern_method();
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn()?;
     let parser_atn_data = render_u32_slice(parser_atn.packed_words());
@@ -9642,7 +9691,7 @@ where
     pub fn into_parsed_file(self, root: antlr4_runtime::NodeId) -> antlr4_runtime::ParsedFile {{
         self.base.into_parsed_file(root)
     }}
-
+{compile_pattern_method}
     #[allow(dead_code)]
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator

@@ -371,7 +371,7 @@ impl ParserAtn {
         }
     }
 
-    const fn set_count(&self) -> usize {
+    pub const fn set_count(&self) -> usize {
         self.layout.sets.len / self.layout.set_words
     }
 
