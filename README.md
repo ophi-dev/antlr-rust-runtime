@@ -456,6 +456,39 @@ inline at their ATN action/predicate coordinates. This is the mode the
 conformance harness uses after rendering descriptor grammars through
 `Rust.test.stg` (see below).
 
+### Binary and Byte-Oriented Parsing
+
+ANTLR grammars can parse binary formats, not just text. The convention the
+reference runtimes use is to treat each byte as a codepoint in
+`U+0000..=U+00FF` and write lexer rules over that range
+(`BYTE : '\u0000' .. '\u00FF';`). This runtime ships
+[`ByteStream`](src/byte_stream.rs) for exactly that: a `CharStream` backed by
+raw bytes where the stream index is the byte offset and lookahead returns the
+byte value (`0..=255`). It is generic over the
+backing store — `ByteStream::new(vec)` owns, `ByteStream::new(&buf[..])` borrows
+a network buffer zero-copy, and `ByteStream::from_reader(file)?` drains any
+`std::io::Read`. Because the bytes are not text, `text()` renders a matched span
+as lowercase hex.
+
+Length-prefixed formats ("read N, then consume N bytes") are data-dependent, so
+a pure grammar cannot frame them alone — the same constraint ANTLR's `bencoding`
+grammar solves with a lexer `superClass`. Here that role is filled by a
+[`SemanticHooks`](src/parser.rs) implementation: `LexerSemCtx`/`LexerLifecycleCtx`
+expose `push_mode`/`pop_mode`, `enqueue_token` (to synthesize framing tokens),
+and raw `la()` lookbehind, so a small hook struct can count down a declared
+chunk length and emit an end-of-chunk token. A bare `{helper();}` lexer action
+lowers to a typed hook method via a `--sem-patterns` `[[helper]]` entry with
+`kind = "lexer-action"`, `lower = "hook"`.
+
+A complete worked example — a Standard MIDI File grammar (MThd/MTrk chunks,
+variable-length delta-times, note and meta events) with a chunk-framing hook,
+parsed over a `ByteStream` from a real `.mid` fixture — lives in
+[`tests/fixtures/antlr4-rust-gen/midi-binary/`](tests/fixtures/antlr4-rust-gen/midi-binary/)
+and its integration test (`midi_binary_grammar_parses_standard_midi_file_over_byte_stream`
+in [tests/antlr4_rust_gen_cli.rs](tests/antlr4_rust_gen_cli.rs)). The grammar is
+adapted from [milnet2/midi-grammar](https://github.com/milnet2/midi-grammar)
+(Tobias Blaschke, BSD-3-Clause).
+
 ## Runtime Testsuite
 
 On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite

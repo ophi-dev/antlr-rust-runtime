@@ -1281,3 +1281,136 @@ fn unsupported_grammar_options_warn_and_exact_hooks_acknowledge_them() {
     );
     assert!(acknowledged_out.join("options_lexer.rs").is_file());
 }
+
+/// End-to-end binary-parsing example: generate the MIDI recognizer from the
+/// committed byte-oriented grammar, then parse a real Standard MIDI File
+/// through a `ByteStream`. Exercises the whole binary path — raw high bytes as
+/// codepoints, a `SemanticHooks` chunk-length superClass emitting synthesized
+/// `END_OF_CHUNK` tokens (the `bencoding` pattern), and the generated parser.
+#[test]
+fn midi_binary_grammar_parses_standard_midi_file_over_byte_stream() {
+    let temp = temporary_directory("midi-binary");
+    let dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/antlr4-rust-gen/midi-binary");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        dir.join("MidiLexer.g4").as_os_str(),
+        dir.join("MidiParser.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        dir.join("patterns.toml").as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    // The bare `{beginChunk();}` lexer action lowers to a typed hook method.
+    let lexer = fs::read_to_string(out.join("midi_lexer.rs")).expect("lexer should be emitted");
+    assert!(lexer.contains("pub trait MidiLexerHooks"), "{lexer}");
+    assert!(lexer.contains("fn begin_chunk"), "{lexer}");
+
+    let fixture = dir.join("twinkle.mid");
+    let fixture = fixture.to_str().expect("fixture path should be UTF-8");
+    let test_source = format!(
+        r####"
+#[cfg(test)]
+mod midi_tests {{
+    use super::midi_lexer::{{MidiLexer, MidiLexerHooks, END_OF_CHUNK}};
+    use super::midi_parser::MidiParser;
+    use antlr4_runtime::{{
+        ByteStream, CommonTokenStream, LexerLifecycleCtx, LexerSemCtx, Parser as _, Token as _,
+    }};
+
+    /// A minimal chunk-framing superClass: reads each MThd/MTrk chunk's declared
+    /// byte length and synthesizes END_OF_CHUNK once the body is consumed — the
+    /// "read N, then frame N bytes" pattern, in Rust, on plain `ByteStream`.
+    #[derive(Default)]
+    struct MidiHooks {{
+        end_of_chunk: Option<usize>,
+    }}
+
+    impl MidiLexerHooks for MidiHooks {{
+        fn begin_chunk<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>)
+        where
+            I: antlr4_runtime::CharStream,
+        {{
+            // The header token just matched magic(4) + big-endian length(4).
+            // Read the four length bytes RAW via lookbehind — `text_so_far()`
+            // would return `ByteStream`'s hex rendering, not the bytes.
+            let b3 = ctx.la(-4) as u32;
+            let b2 = ctx.la(-3) as u32;
+            let b1 = ctx.la(-2) as u32;
+            let b0 = ctx.la(-1) as u32;
+            let len = ((b3 << 24) | (b2 << 16) | (b1 << 8) | b0) as usize;
+            self.end_of_chunk = Some(ctx.position() + len);
+        }}
+
+        fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: antlr4_runtime::CharStream,
+        {{
+            // Fires after the previous body token was emitted and before the
+            // next match — the clean point to close the chunk so END_OF_CHUNK
+            // lands AFTER the last body token rather than inverting with it.
+            if let Some(end) = self.end_of_chunk {{
+                let pos = ctx.input_position();
+                if pos >= end {{
+                    self.end_of_chunk = None;
+                    ctx.pop_mode();
+                    ctx.enqueue_token(END_OF_CHUNK, pos.saturating_sub(1));
+                }}
+            }}
+        }}
+    }}
+
+    fn parse(bytes: Vec<u8>) -> (Vec<i32>, usize) {{
+        let lexer = MidiLexer::with_typed_hooks(ByteStream::new(bytes.clone()), MidiHooks::default());
+        let mut stream = CommonTokenStream::new(lexer);
+        stream.fill();
+        let types: Vec<i32> = stream.tokens().map(|t| t.token_type()).collect();
+
+        let lexer = MidiLexer::with_typed_hooks(ByteStream::new(bytes), MidiHooks::default());
+        let mut parser = MidiParser::new(CommonTokenStream::new(lexer));
+        parser.file().expect("well-formed MIDI parses");
+        (types, parser.number_of_syntax_errors())
+    }}
+
+    #[test]
+    fn parses_a_real_standard_midi_file() {{
+        let bytes = include_bytes!({fixture:?}).to_vec();
+        let (types, errors) = parse(bytes);
+
+        // BEGIN_HEADER, six HDR_BYTE, END_OF_CHUNK; BEGIN_TRACK, four
+        // (DELTA_TIME, event) pairs, END_OF_CHUNK; EOF (-1).
+        assert_eq!(errors, 0, "no syntax errors on a well-formed file");
+        assert_eq!(
+            types,
+            vec![
+                2, // BEGIN_HEADER
+                4, 4, 4, 4, 4, 4, // six HDR_BYTE (format, ntracks, division)
+                1, // END_OF_CHUNK (MThd body framed by its length = 6)
+                3, // BEGIN_TRACK
+                5, 7, // delta, NOTE_ON
+                5, 6, // delta, NOTE_OFF
+                5, 9, // delta, META_SET_TEMPO
+                5, 8, // delta, META_END_OF_TRACK
+                1,  // END_OF_CHUNK (MTrk body framed by its length = 19)
+                -1, // EOF
+            ],
+        );
+    }}
+}}
+"####
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["midi_lexer.rs", "midi_parser.rs"],
+        &test_source,
+    );
+}
