@@ -5767,13 +5767,16 @@ where
     /// Returns the positioned error to abort with when the configured
     /// rule-nesting depth cap is exceeded, or `None` to keep parsing.
     ///
-    /// Generated rule dispatch consults this before entering each rule body so
-    /// callers parsing untrusted input can bound CPU and tree memory
+    /// Generated rule dispatch consults this — gated on the inlined
+    /// [`Self::has_rule_depth_cap`] so uncapped parses pay one predictable
+    /// branch — before entering each rule body, letting callers parsing
+    /// untrusted input bound CPU and tree memory
     /// ([`Parser::set_max_rule_depth`]). The violation is sticky: rule-level
     /// recovery would otherwise absorb the error and keep spending the very
     /// resources the cap exists to bound, so every rule entry after the first
     /// violation fails until [`Self::take_rule_depth_error`] drains it at the
     /// top-level entry.
+    #[cold]
     pub fn rule_depth_limit_error(&mut self) -> Option<AntlrError> {
         if let Some(error) = &self.rule_depth_error {
             return Some(error.clone());

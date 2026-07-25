@@ -5229,10 +5229,14 @@ fn render_generated_rule_dispatch_with_rule_names(
         // capacity at the shared dispatch boundary so deeply nested input
         // grows onto a segmented stack instead of aborting the process. The
         // optional depth cap aborts here — fatal, so recovery cannot resume a
-        // parse that exceeded its configured resource bound.
+        // parse that exceeded its configured resource bound. The cap check is
+        // gated on the inlined `has_rule_depth_cap` load so uncapped parses
+        // (the default) skip the out-of-line depth accounting entirely.
         writeln!(
             out,
-            "        if let Some(error) = self.base.rule_depth_limit_error() {{\n            \
+            "        if self.base.has_rule_depth_cap()\n            \
+             && let Some(error) = self.base.rule_depth_limit_error()\n        \
+             {{\n            \
              return Err(GeneratedRuleError::Fatal(error));\n        \
              }}\n        \
              if self.base.generated_rule_stack_check_due() {{\n            \
@@ -6943,10 +6947,13 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     // Each operator iteration deepens the tree without a rule frame; check
     // the depth cap here so token-only operator alternatives (no nested rule
-    // dispatch) still abort promptly instead of at the top-level drain.
+    // dispatch) still abort promptly instead of at the top-level drain. The
+    // inlined `has_rule_depth_cap` gate keeps uncapped loops branch-cheap.
     writeln!(
         out,
-        "{pad}            if let Some(__depth_error) = self.base.rule_depth_limit_error() {{\n\
+        "{pad}            if self.base.has_rule_depth_cap()\n\
+         {pad}                && let Some(__depth_error) = self.base.rule_depth_limit_error()\n\
+         {pad}            {{\n\
          {pad}                return Err(__depth_error);\n\
          {pad}            }}"
     )
