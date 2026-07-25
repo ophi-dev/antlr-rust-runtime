@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.17.0...v0.18.0) (2026-07-25)
+
+
+### Features
+
+* support parse-tree pattern matching ([#192](https://github.com/ophi-dev/antlr-rust-runtime/issues/192)) ([619ebcb](https://github.com/ophi-dev/antlr-rust-runtime/commit/619ebcbe242b11080809f189f9d5935bef5294de))
+
+
+### Bug Fixes
+
+* **codegen:** support capitalized lexer command aliases ([e0f032b](https://github.com/ophi-dev/antlr-rust-runtime/commit/e0f032b590fe33f32f5a32607e2ad2589d3dba2b))
+
 ## [0.17.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.16.0...v0.17.0) (2026-07-24)
 
 
