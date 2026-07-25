@@ -1713,6 +1713,58 @@ impl ParserTransitionSpec {
             | Self::Precedence { target, .. } => target,
         }
     }
+
+    /// Returns this spec with its target redirected, preserving every other
+    /// field.
+    #[must_use]
+    pub const fn with_target(self, target: usize) -> Self {
+        match self {
+            Self::Epsilon { .. } => Self::Epsilon { target },
+            Self::Atom { label, .. } => Self::Atom { target, label },
+            Self::Range { start, stop, .. } => Self::Range {
+                target,
+                start,
+                stop,
+            },
+            Self::Set { set, .. } => Self::Set { target, set },
+            Self::NotSet { set, .. } => Self::NotSet { target, set },
+            Self::Wildcard { .. } => Self::Wildcard { target },
+            Self::Rule {
+                rule_index,
+                follow_state,
+                precedence,
+                ..
+            } => Self::Rule {
+                target,
+                rule_index,
+                follow_state,
+                precedence,
+            },
+            Self::Predicate {
+                rule_index,
+                pred_index,
+                context_dependent,
+                ..
+            } => Self::Predicate {
+                target,
+                rule_index,
+                pred_index,
+                context_dependent,
+            },
+            Self::Action {
+                rule_index,
+                action_index,
+                context_dependent,
+                ..
+            } => Self::Action {
+                target,
+                rule_index,
+                action_index,
+                context_dependent,
+            },
+            Self::Precedence { precedence, .. } => Self::Precedence { target, precedence },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

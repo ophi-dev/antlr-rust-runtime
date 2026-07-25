@@ -25,6 +25,8 @@
 //! bounds by `min..=max_token_type` — can never accidentally match an imaginary
 //! token that lives *above* the unchanged maximum.
 
+use std::collections::BTreeSet;
+
 use super::AtnStateKind;
 use super::parser_atn::{
     ParserAtn, ParserAtnBuilder, ParserAtnError, ParserIntervalSetId, ParserTransitionData,
@@ -50,6 +52,34 @@ impl ParserAtn {
     pub fn with_bypass_alternatives(&self) -> Result<Self, ParserAtnError> {
         BypassBuilder::new(self)?.build()
     }
+
+    /// The imaginary token type reserved for a rule's bypass alternative:
+    /// `max_token_type + rule_index + 1`.
+    ///
+    /// This is the single source of the formula shared by
+    /// [`Self::with_bypass_alternatives`] (which labels the bypass `Atom` edge
+    /// with it) and the pattern matcher (which stamps rule-tag tokens with it),
+    /// so the two can never disagree about a tag's token type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParserAtnError::Overflow`] when the type would exceed `i32`.
+    pub fn bypass_token_type(&self, rule_index: usize) -> Result<i32, ParserAtnError> {
+        imaginary_token_type(self.max_token_type(), rule_index)
+    }
+}
+
+/// Shared formula for a rule's imaginary bypass token type.
+fn imaginary_token_type(max_token_type: i32, rule: usize) -> Result<i32, ParserAtnError> {
+    let overflow = || ParserAtnError::Overflow {
+        field: "bypass imaginary token type",
+        value: rule,
+    };
+    let rule = i32::try_from(rule).map_err(|_| overflow())?;
+    max_token_type
+        .checked_add(rule)
+        .and_then(|value| value.checked_add(1))
+        .ok_or_else(overflow)
 }
 
 /// Mutable working copy of a parser ATN used to apply the bypass rewrite.
@@ -163,15 +193,19 @@ impl BypassBuilder {
         }
 
         // Retarget/move plan per rule, computed against the *pre-move* graph so
-        // the left-recursive exclude transition is identified correctly.
-        let mut retarget: Vec<(usize, usize)> = Vec::with_capacity(rule_count);
-        let mut excluded: Vec<(usize, usize)> = Vec::new();
+        // the left-recursive exclude transition is identified correctly. End
+        // states are captured here and reused below — recomputing them after
+        // the move/retarget passes would scan a mutated graph.
+        let mut end_states: Vec<usize> = Vec::with_capacity(rule_count);
+        let mut bypass_stop_for_end: Vec<Option<usize>> = vec![None; self.kinds.len()];
+        let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
         for rule in 0..rule_count {
             let bypass_stop = new_state_base + rule * 3 + 1;
             let (end_state, exclude) = self.rule_end_state(rule)?;
-            retarget.push((end_state, bypass_stop));
+            end_states.push(end_state);
+            bypass_stop_for_end[end_state] = Some(bypass_stop);
             if let Some(exclude) = exclude {
-                excluded.push(exclude);
+                excluded.insert(exclude);
             }
         }
 
@@ -190,22 +224,19 @@ impl BypassBuilder {
                 if excluded.contains(&(source, index)) {
                     continue;
                 }
-                if let Some(&(_, bypass_stop)) =
-                    retarget.iter().find(|(end, _)| *end == spec.target())
-                {
-                    *spec = with_target(*spec, bypass_stop);
+                if let Some(bypass_stop) = bypass_stop_for_end[spec.target()] {
+                    *spec = spec.with_target(bypass_stop);
                 }
             }
         }
 
         // Add the bypass edges last so the `bypass_stop -> end_state` link
         // (which targets an end state) is never caught by the retarget pass.
-        for rule in 0..rule_count {
+        for (rule, &end_state) in end_states.iter().enumerate() {
             let rule_start = self.rule_starts[rule];
             let bypass_start = new_state_base + rule * 3;
             let bypass_stop = bypass_start + 1;
             let match_state = bypass_start + 2;
-            let (end_state, _) = self.rule_end_state(rule)?;
             let imaginary = self.imaginary_token_type(rule)?;
 
             self.out[rule_start].push(ParserTransitionSpec::Epsilon {
@@ -301,15 +332,7 @@ impl BypassBuilder {
 
     /// Imaginary token type reserved for a rule's bypass alternative.
     fn imaginary_token_type(&self, rule: usize) -> Result<i32, ParserAtnError> {
-        let overflow = || ParserAtnError::Overflow {
-            field: "bypass imaginary token type",
-            value: rule,
-        };
-        let rule = i32::try_from(rule).map_err(|_| overflow())?;
-        self.max_token_type
-            .checked_add(rule)
-            .and_then(|value| value.checked_add(1))
-            .ok_or_else(overflow)
+        imaginary_token_type(self.max_token_type, rule)
     }
 
     /// Emits the mutable model as a validated packed [`ParserAtn`].
@@ -422,63 +445,11 @@ fn data_to_spec(data: ParserTransitionData<'_>) -> Result<ParserTransitionSpec, 
     })
 }
 
-/// Returns `spec` with its target redirected, preserving every other field.
-const fn with_target(spec: ParserTransitionSpec, target: usize) -> ParserTransitionSpec {
-    match spec {
-        ParserTransitionSpec::Epsilon { .. } => ParserTransitionSpec::Epsilon { target },
-        ParserTransitionSpec::Atom { label, .. } => ParserTransitionSpec::Atom { target, label },
-        ParserTransitionSpec::Range { start, stop, .. } => ParserTransitionSpec::Range {
-            target,
-            start,
-            stop,
-        },
-        ParserTransitionSpec::Set { set, .. } => ParserTransitionSpec::Set { target, set },
-        ParserTransitionSpec::NotSet { set, .. } => ParserTransitionSpec::NotSet { target, set },
-        ParserTransitionSpec::Wildcard { .. } => ParserTransitionSpec::Wildcard { target },
-        ParserTransitionSpec::Rule {
-            rule_index,
-            follow_state,
-            precedence,
-            ..
-        } => ParserTransitionSpec::Rule {
-            target,
-            rule_index,
-            follow_state,
-            precedence,
-        },
-        ParserTransitionSpec::Predicate {
-            rule_index,
-            pred_index,
-            context_dependent,
-            ..
-        } => ParserTransitionSpec::Predicate {
-            target,
-            rule_index,
-            pred_index,
-            context_dependent,
-        },
-        ParserTransitionSpec::Action {
-            rule_index,
-            action_index,
-            context_dependent,
-            ..
-        } => ParserTransitionSpec::Action {
-            target,
-            rule_index,
-            action_index,
-            context_dependent,
-        },
-        ParserTransitionSpec::Precedence { precedence, .. } => {
-            ParserTransitionSpec::Precedence { target, precedence }
-        }
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
-    use crate::atn::parser_atn::ParserTransitionKind;
+    use crate::atn::parser_atn::{ParserTransition, ParserTransitionKind};
     use crate::token::{Token, TokenId, TokenSink, TokenSource, TokenSpec, TokenStoreError};
     use crate::{BaseParser, CommonTokenStream, NodeKind, RecognizerData, Vocabulary};
 
@@ -574,6 +545,141 @@ mod tests {
         atn.finish().expect("valid base ATN")
     }
 
+    /// One left-recursive rule shaped like ANTLR's transformed `e : e '+' e | X`:
+    /// `RuleStart(LR) -> Basic(prefix) -> StarLoopEntry -> {StarBlockStart(body),
+    /// LoopEnd -> RuleStop}`, with the loop body returning through a
+    /// `StarLoopBack` whose sole edge re-enters the entry.
+    fn left_recursive_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (number, kind, rule) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0), // primary/prefix matcher
+            (2, AtnStateKind::StarLoopEntry, 0),
+            (3, AtnStateKind::Basic, 0), // loop body: '+' e
+            (4, AtnStateKind::StarLoopBack, 0),
+            (5, AtnStateKind::LoopEnd, 0),
+            (6, AtnStateKind::RuleStop, 0),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule)).expect("state").index(),
+                number
+            );
+        }
+        atn.set_left_recursive_rule(0).expect("LR flag");
+        atn.set_rule_to_start_state(vec![0]).expect("starts");
+        atn.set_rule_to_stop_state(vec![6]).expect("stops");
+        atn.set_loop_back_state(5, 4).expect("loop back");
+        atn.add_decision_state(2).expect("decision");
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Atom {
+                target: 1,
+                label: 1,
+            },
+        )
+        .expect("edge");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("edge");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("edge");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("edge");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 2,
+            },
+        )
+        .expect("edge");
+        // The loop-back edge that must stay pointed at the StarLoopEntry.
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("edge");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("edge");
+        atn.finish().expect("valid left-recursive ATN")
+    }
+
+    /// Pins the left-recursive branch of `rule_end_state`: the bypass block
+    /// wraps the precedence prefix (ending at the `StarLoopEntry`, not the rule
+    /// stop) and the loop-back edge is excluded from retargeting.
+    #[test]
+    fn bypass_wraps_left_recursive_prefix_and_preserves_loop_back() {
+        let base = left_recursive_atn();
+        let bypass = base.with_bypass_alternatives().expect("bypass ATN");
+
+        let star_loop_entry = 2;
+        let star_loop_back = 4;
+        let bypass_start = base.state_count();
+        let bypass_stop = bypass_start + 1;
+
+        // The prefix edge into the StarLoopEntry is retargeted to bypass stop…
+        let prefix_targets: Vec<_> = bypass
+            .state(1)
+            .expect("prefix state")
+            .transitions()
+            .iter()
+            .map(ParserTransition::target)
+            .collect();
+        assert_eq!(prefix_targets, vec![bypass_stop]);
+        // …while the loop-back edge still re-enters the StarLoopEntry.
+        let loop_back_targets: Vec<_> = bypass
+            .state(star_loop_back)
+            .expect("loop-back state")
+            .transitions()
+            .iter()
+            .map(ParserTransition::target)
+            .collect();
+        assert_eq!(loop_back_targets, vec![star_loop_entry]);
+        // The bypass stop rejoins the graph at the StarLoopEntry (the
+        // left-recursive "end state"), not at the rule stop.
+        let stop_targets: Vec<_> = bypass
+            .state(bypass_stop)
+            .expect("bypass stop")
+            .transitions()
+            .iter()
+            .map(ParserTransition::target)
+            .collect();
+        assert_eq!(stop_targets, vec![star_loop_entry]);
+    }
+
+    /// A rule flagged left-recursive whose precedence prefix boundary cannot be
+    /// identified must fail loudly instead of producing a broken bypass ATN.
+    #[test]
+    fn bypass_reports_unrecognizable_left_recursive_structure() {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::Basic),
+            (2, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(atn.add_state(kind, Some(0)).expect("state").index(), number);
+        }
+        // Flag the rule left-recursive without any StarLoopEntry structure.
+        atn.set_left_recursive_rule(0).expect("LR flag");
+        atn.set_rule_to_start_state(vec![0]).expect("starts");
+        atn.set_rule_to_stop_state(vec![2]).expect("stops");
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Atom {
+                target: 1,
+                label: 1,
+            },
+        )
+        .expect("edge");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("edge");
+        let base = atn.finish().expect("valid base ATN");
+
+        let error = base
+            .with_bypass_alternatives()
+            .expect_err("missing precedence prefix must be reported");
+        assert!(
+            error.to_string().contains("left-recursive rule 0"),
+            "unexpected error: {error}"
+        );
+    }
+
     #[test]
     fn bypass_grows_three_states_per_rule_and_keeps_max_token_type() {
         let base = two_rule_atn();
@@ -637,7 +743,7 @@ mod tests {
             .transitions()
             .iter()
             .filter(|t| t.kind() == ParserTransitionKind::Epsilon)
-            .map(super::super::parser_atn::ParserTransition::target)
+            .map(ParserTransition::target)
             .collect();
         assert!(
             epsilon_targets.contains(&bypass_start_for_rule_0),

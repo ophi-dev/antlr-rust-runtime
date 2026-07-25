@@ -23,4 +23,8 @@ expression: errors
         "<a:>",
         "empty tag in pattern: <a:>",
     ),
+    (
+        "<a<b>>",
+        "tag delimiters out of order in pattern: <a<b>>",
+    ),
 ]

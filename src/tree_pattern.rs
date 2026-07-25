@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 use crate::atn::parser_atn::ParserAtn;
-use crate::recognizer::RecognizerData;
+use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{Token, TokenId, TokenSink, TokenSource, TokenSpec, TokenStoreError};
 use crate::tree::{Node, NodeKind};
 use crate::{BaseParser, CommonTokenStream, TOKEN_EOF};
@@ -108,6 +108,13 @@ pub enum ParseTreePatternError {
     /// Interpreting the pattern token stream failed.
     #[error("could not interpret pattern as rule {rule_index}: {message}")]
     CannotInvokeStartRule { rule_index: usize, message: String },
+    /// The rule-bypass transform of the grammar ATN failed.
+    #[error("could not build rule-bypass ATN: {message}")]
+    BypassAtn { message: String },
+    /// [`ParseTreePatternMatcher::set_delimiters`] was given an empty start or
+    /// stop delimiter.
+    #[error("{which} delimiter cannot be empty")]
+    EmptyDelimiter { which: &'static str },
 }
 
 /// Tag delimiters and escape string used to split a pattern.
@@ -181,6 +188,17 @@ fn split(pattern: &str, delimiters: &Delimiters) -> Result<Vec<Chunk>, ParseTree
     }
     for (open, close) in starts.iter().zip(&stops) {
         if open >= close {
+            return Err(ParseTreePatternError::DelimitersOutOfOrder {
+                pattern: pattern.to_owned(),
+            });
+        }
+    }
+    // Tags must also not overlap each other (e.g. `<a<b>>` pairs 0/4 and 2/5):
+    // each close must come before the next open, or the inter-tag text slice
+    // below would be an inverted range. Upstream reaches the same shape and
+    // throws from `String.substring`; returning the structured error is safer.
+    for (close, next_open) in stops.iter().zip(starts.iter().skip(1)) {
+        if close + stop.len() > *next_open {
             return Err(ParseTreePatternError::DelimitersOutOfOrder {
                 pattern: pattern.to_owned(),
             });
@@ -260,12 +278,14 @@ fn parse_tag(tag: &str, pattern: &str) -> Result<Chunk, ParseTreePatternError> {
 ///
 /// The matcher owns all split/tag/interpret logic; this trait is the single
 /// grammar-specific hook, supplying the real lexer's output for a run of
-/// concrete input text. Off-default-channel tokens (whitespace, comments) and
-/// the trailing EOF must be excluded, matching ANTLR's `tokenize`. Implemented
-/// for `FnMut(&str) -> Result<Vec<TokenSpec>, ParseTreePatternError>` so a
-/// closure suffices.
+/// concrete input text. The trailing EOF must be excluded; off-default-channel
+/// tokens (whitespace, comments) may be returned on their own channel and are
+/// skipped by the interpreter exactly as in a normal parse, matching ANTLR's
+/// `tokenize`. Implemented for
+/// `FnMut(&str) -> Result<Vec<TokenSpec>, ParseTreePatternError>` so a closure
+/// suffices.
 pub trait PatternLexer {
-    /// Tokenizes `text` into default-channel token specs (no EOF).
+    /// Tokenizes `text` into token specs (no EOF), each on its original channel.
     ///
     /// # Errors
     ///
@@ -353,16 +373,15 @@ impl<'a> ParseTreePatternMatcher<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`ParseTreePatternError::CannotInvokeStartRule`] if the
-    /// rule-bypass transform of `atn` fails (e.g. an unrecognizable
-    /// left-recursive precedence prefix).
+    /// Returns [`ParseTreePatternError::BypassAtn`] if the rule-bypass
+    /// transform of `atn` fails (e.g. an unrecognizable left-recursive
+    /// precedence prefix).
     pub fn new(atn: &ParserAtn, data: &'a RecognizerData) -> Result<Self, ParseTreePatternError> {
-        let bypass_atn = atn.with_bypass_alternatives().map_err(|error| {
-            ParseTreePatternError::CannotInvokeStartRule {
-                rule_index: usize::MAX,
-                message: format!("could not build rule-bypass ATN: {error}"),
-            }
-        })?;
+        let bypass_atn =
+            atn.with_bypass_alternatives()
+                .map_err(|error| ParseTreePatternError::BypassAtn {
+                    message: error.to_string(),
+                })?;
         Ok(Self {
             bypass_atn,
             data,
@@ -372,18 +391,35 @@ impl<'a> ParseTreePatternMatcher<'a> {
 
     /// Overrides the tag delimiters and escape string (defaults `<`, `>`, `\`).
     ///
-    /// Useful for grammars whose concrete syntax already uses `<...>`.
+    /// Useful for grammars whose concrete syntax already uses `<...>`. Unlike
+    /// upstream, an empty `escape` is accepted and simply disables escaping
+    /// (Java's `indexOf`-based scan misbehaves on an empty escape string).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseTreePatternError::EmptyDelimiter`] when `start` or `stop`
+    /// is empty, mirroring upstream's `IllegalArgumentException` — an empty
+    /// delimiter would silently collapse every pattern into one text chunk.
     pub fn set_delimiters(
         &mut self,
         start: impl Into<String>,
         stop: impl Into<String>,
         escape: impl Into<String>,
-    ) {
+    ) -> Result<(), ParseTreePatternError> {
+        let start = start.into();
+        let stop = stop.into();
+        if start.is_empty() {
+            return Err(ParseTreePatternError::EmptyDelimiter { which: "start" });
+        }
+        if stop.is_empty() {
+            return Err(ParseTreePatternError::EmptyDelimiter { which: "stop" });
+        }
         self.delimiters = Delimiters {
-            start: start.into(),
-            stop: stop.into(),
+            start,
+            stop,
             escape: escape.into(),
         };
+        Ok(())
     }
 
     /// Compiles `pattern`, rooted at parser rule `rule_index`, into a reusable
@@ -437,6 +473,25 @@ impl<'a> ParseTreePatternMatcher<'a> {
                 }
             }
         }
+        // An EOF-typed token (an `<EOF>` tag, or a stray EOF from a custom
+        // lexer) terminates the buffered token stream, so anything after it
+        // would be dropped before the full-consumption check could see it.
+        // A trailing EOF is legitimate for rules that end in `EOF`; anywhere
+        // else the pattern is broken and must fail loudly instead of silently
+        // truncating (upstream ANTLR silently ignores the suffix here).
+        if let Some(at) = specs
+            .iter()
+            .position(|spec| spec.token_type == TOKEN_EOF)
+            .filter(|at| at + 1 < specs.len())
+        {
+            return Err(ParseTreePatternError::Tokenization {
+                message: format!(
+                    "EOF at pattern token {at} terminates the stream; {} following token(s) \
+                     would be ignored",
+                    specs.len() - at - 1
+                ),
+            });
+        }
         Ok((specs, tags_by_index))
     }
 
@@ -480,7 +535,14 @@ impl<'a> ParseTreePatternMatcher<'a> {
                         name: name.to_owned(),
                         pattern: pattern.to_owned(),
                     })?;
-            let bypass_type = self.bypass_token_type(rule_index);
+            // The bypass ATN owns the imaginary-type formula, so the matcher
+            // and the ATN's bypass `Atom` edges can never disagree.
+            let bypass_type = self
+                .bypass_atn
+                .bypass_token_type(rule_index)
+                .map_err(|error| ParseTreePatternError::BypassAtn {
+                    message: error.to_string(),
+                })?;
             let spec = TokenSpec::explicit(bypass_type, display);
             let tag = TagInfo {
                 kind: TagKind::Rule {
@@ -505,12 +567,6 @@ impl<'a> ParseTreePatternMatcher<'a> {
         self.data.rule_names().iter().rposition(|rule| rule == name)
     }
 
-    /// Imaginary bypass token type reserved for a rule: `max_token_type + i + 1`,
-    /// matching [`ParserAtn::with_bypass_alternatives`].
-    fn bypass_token_type(&self, rule_index: usize) -> i32 {
-        self.bypass_atn.max_token_type() + i32::try_from(rule_index).unwrap_or(i32::MAX - 1) + 1
-    }
-
     /// Interprets the hybrid token specs over the bypass ATN, producing the
     /// pattern tree and re-keying the tag table by the tokens' final store IDs.
     fn interpret(
@@ -522,12 +578,28 @@ impl<'a> ParseTreePatternMatcher<'a> {
     ) -> Result<PatternTree, ParseTreePatternError> {
         let source = PatternTokenSource { specs, index: 0 };
         let mut parser = BaseParser::new(CommonTokenStream::new(source), self.data.clone());
+        // ANTLR installs a BailErrorStrategy for the pattern parse: a pattern
+        // the grammar only accepts through error recovery must fail loudly, not
+        // bake `<missing ...>` error nodes into the pattern tree (which would
+        // then match nothing). Recovery diagnostics are checked below; the
+        // default console listener is removed so a rejected pattern does not
+        // also print to stderr.
+        parser.remove_error_listeners();
         let root = parser
             .parse_atn_rule(&self.bypass_atn, rule_index)
             .map_err(|error| ParseTreePatternError::CannotInvokeStartRule {
                 rule_index,
                 message: error.to_string(),
             })?;
+        if parser.number_of_syntax_errors() > 0 {
+            return Err(ParseTreePatternError::CannotInvokeStartRule {
+                rule_index,
+                message: format!(
+                    "pattern is not valid for the rule: {} syntax error(s) during pattern parse",
+                    parser.number_of_syntax_errors()
+                ),
+            });
+        }
 
         // The start rule must consume the whole pattern (ANTLR issue #413):
         // the next visible token after the parse must be EOF.
@@ -649,6 +721,34 @@ impl ParseTreePattern {
     pub fn matches(&self, tree: Node<'_>) -> bool {
         self.match_tree(tree).succeeded()
     }
+
+    /// Finds nodes under `tree` with an `XPath` expression, then returns the
+    /// successful matches of this pattern against those subtrees.
+    ///
+    /// Mirrors ANTLR's `ParseTreePattern.findAll`: unsuccessful matches are
+    /// omitted, whatever the reason for the failure. `recognizer` resolves the
+    /// rule and token names in `xpath`, exactly as in
+    /// [`XPath::find_all`](crate::XPath::find_all).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XPathError`](crate::XPathError) when `xpath` is not a valid
+    /// parse-tree path expression.
+    pub fn find_all<'subject, R>(
+        &self,
+        tree: Node<'subject>,
+        xpath: &str,
+        recognizer: &R,
+    ) -> Result<Vec<ParseTreeMatch<'subject>>, crate::XPathError>
+    where
+        R: Recognizer + ?Sized,
+    {
+        Ok(crate::XPath::find_all(tree, xpath, recognizer)?
+            .into_iter()
+            .map(|subtree| self.match_tree(subtree))
+            .filter(ParseTreeMatch::succeeded)
+            .collect())
+    }
 }
 
 /// The result of matching a subject tree against a [`ParseTreePattern`].
@@ -769,12 +869,15 @@ fn match_rules<'subject>(
     tags: &BTreeMap<TokenId, TagInfo>,
     labels: &mut BTreeMap<String, Vec<Node<'subject>>>,
 ) -> Option<Node<'subject>> {
-    let tree_rule = tree.as_rule()?;
-    let pattern_rule = pattern.as_rule()?;
+    // `match_impl` only routes rule-kinded nodes here, so a failed view is a
+    // structural inconsistency; fail the match rather than fail open.
+    let (Some(tree_rule), Some(pattern_rule)) = (tree.as_rule(), pattern.as_rule()) else {
+        return Some(tree);
+    };
 
     // (expr ...) matched against a `<expr>` rule-tag subtree.
-    if let Some(tag) = rule_tag_of(pattern, tags) {
-        return if tree_rule.rule_index() == tag_rule_index(tag) {
+    if let Some((tag_rule_index, tag)) = rule_tag_of(pattern, tags) {
+        return if tree_rule.rule_index() == tag_rule_index {
             bind(labels, tag, tree);
             None
         } else {
@@ -803,9 +906,13 @@ fn pattern_token_tag<'a>(
     matches!(tag.kind, TagKind::Token { .. }).then_some(tag)
 }
 
-/// Detects a `<rule>` tag subtree: a rule node with exactly one terminal child
-/// whose symbol is a rule tag. Mirrors ANTLR's `getRuleTagToken`.
-fn rule_tag_of<'a>(pattern: Node<'_>, tags: &'a BTreeMap<TokenId, TagInfo>) -> Option<&'a TagInfo> {
+/// Detects a `<rule>` tag subtree — a rule node with exactly one terminal child
+/// whose symbol is a rule tag — returning the referenced rule index alongside
+/// the tag. Mirrors ANTLR's `getRuleTagToken`.
+fn rule_tag_of<'a>(
+    pattern: Node<'_>,
+    tags: &'a BTreeMap<TokenId, TagInfo>,
+) -> Option<(usize, &'a TagInfo)> {
     let rule = pattern.as_rule()?;
     if rule.child_count() != 1 {
         return None;
@@ -813,13 +920,9 @@ fn rule_tag_of<'a>(pattern: Node<'_>, tags: &'a BTreeMap<TokenId, TagInfo>) -> O
     let child = pattern.children().next()?;
     let token_id = child.as_terminal()?.token_id();
     let tag = tags.get(&token_id)?;
-    matches!(tag.kind, TagKind::Rule { .. }).then_some(tag)
-}
-
-const fn tag_rule_index(tag: &TagInfo) -> usize {
     match tag.kind {
-        TagKind::Rule { rule_index, .. } => rule_index,
-        TagKind::Token { .. } => usize::MAX,
+        TagKind::Rule { rule_index, .. } => Some((rule_index, tag)),
+        TagKind::Token { .. } => None,
     }
 }
 
@@ -856,8 +959,8 @@ mod tests {
     const SEMI: i32 = 2;
     const ID: i32 = 3;
     const INT: i32 = 4;
-    // Imaginary bypass token types live above max_token_type (=4).
-    const BYPASS_STAT: i32 = 5;
+    // Imaginary bypass token types live above max_token_type (=4); rule 0's
+    // would be 5, rule 1's is 6.
     const BYPASS_EXPR: i32 = 6;
 
     // ---- chunk splitting -------------------------------------------------
@@ -888,12 +991,12 @@ mod tests {
     #[test]
     fn split_no_tags_is_single_text_chunk() {
         let chunks = split_default("a = 3 ;").expect("valid pattern");
-        assert_eq!(chunks, vec![Chunk::Text("a = 3 ;".to_owned())]);
+        insta::assert_debug_snapshot!("split_no_tags", chunks);
     }
 
     #[test]
     fn split_rejects_malformed_patterns() {
-        let cases = ["<ID", "ID>", "><", "<>", "<a:>"];
+        let cases = ["<ID", "ID>", "><", "<>", "<a:>", "<a<b>>"];
         let errors: Vec<_> = cases
             .into_iter()
             .map(|pattern| {
@@ -1208,13 +1311,6 @@ mod tests {
         assert_eq!(result.get_all("expr").len(), 2);
     }
 
-    #[test]
-    fn ignore_the_unused_bypass_stat() {
-        // Keep BYPASS_STAT referenced so the fixture constant documents both
-        // rules' imaginary types without a dead-code warning.
-        assert_eq!(BYPASS_STAT, 5);
-    }
-
     // ---- end-to-end compile() against a real ATN ------------------------
 
     use crate::atn::AtnStateKind;
@@ -1386,6 +1482,55 @@ mod tests {
     }
 
     #[test]
+    fn compile_rejects_patterns_that_only_parse_via_recovery() {
+        // Upstream installs a BailErrorStrategy for the pattern parse. Without
+        // the syntax-error gate these all "compile" by error recovery, baking
+        // `<missing ...>` error nodes into pattern trees that then match
+        // nothing: missing '=', missing expr, missing leading ID.
+        let (atn, data) = stat_expr_matcher_and_data();
+        let matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
+        for pattern in ["<ID> <e:expr> ;", "<ID> = ;", "= <expr> ;", "x 3 ;"] {
+            let error = matcher
+                .compile(pattern, RULE_STAT, stat_expr_chunk_lexer)
+                .expect_err("recovered pattern parse must be rejected");
+            assert!(
+                matches!(error, ParseTreePatternError::CannotInvokeStartRule { .. }),
+                "unexpected error for {pattern:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_rejects_overlapping_tags_without_panicking() {
+        // `<a<b>>` pairs starts [0, 2] with stops [4, 5]; the inter-tag text
+        // slice would be inverted (5..2). Must surface as an error, not a panic.
+        let error = split_default("<a<b>>").expect_err("overlapping tags");
+        assert!(matches!(
+            error,
+            ParseTreePatternError::DelimitersOutOfOrder { .. }
+        ));
+    }
+
+    #[test]
+    fn compile_rejects_tokens_after_an_eof_tag() {
+        // An EOF-typed token terminates the buffered stream, so a suffix after
+        // `<EOF>` would silently vanish before the full-consumption check.
+        let (atn, data) = stat_expr_matcher_and_data();
+        let matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
+        let error = matcher
+            .compile(
+                "<ID> = <expr> ; <EOF> garbage",
+                RULE_STAT,
+                stat_expr_chunk_lexer,
+            )
+            .expect_err("tokens after an EOF tag must be rejected");
+        assert!(
+            matches!(error, ParseTreePatternError::Tokenization { .. }),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
     fn compile_rejects_partial_pattern() {
         // ANTLR issue #413: the start rule must consume the whole pattern. A
         // pattern that stops short of `;` leaves an unconsumed token.
@@ -1424,6 +1569,34 @@ mod tests {
     }
 
     #[test]
+    fn set_delimiters_validates_and_switches_tag_syntax() {
+        let (atn, data) = stat_expr_matcher_and_data();
+        let mut matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
+
+        // Empty start/stop are rejected like upstream's IllegalArgumentException.
+        assert!(matches!(
+            matcher.set_delimiters("", ">", "\\"),
+            Err(ParseTreePatternError::EmptyDelimiter { which: "start" })
+        ));
+        assert!(matches!(
+            matcher.set_delimiters("<", "", "\\"),
+            Err(ParseTreePatternError::EmptyDelimiter { which: "stop" })
+        ));
+
+        // Custom delimiters compile end-to-end; the old `<...>` is now literal
+        // text the chunk lexer rejects.
+        matcher
+            .set_delimiters("[[", "]]", "%")
+            .expect("valid delimiters");
+        matcher
+            .compile("[[ID]] = [[e:expr]] ;", RULE_STAT, stat_expr_chunk_lexer)
+            .expect("custom-delimiter pattern compiles");
+        matcher
+            .compile("<ID> = <expr> ;", RULE_STAT, stat_expr_chunk_lexer)
+            .expect_err("old delimiters are literal text now");
+    }
+
+    #[test]
     fn compiled_pattern_does_not_match_different_structure() {
         let (atn, data) = stat_expr_matcher_and_data();
         let matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
@@ -1453,5 +1626,52 @@ mod tests {
     fn stat_expr_subject(input: &str) -> PatternTokenSource {
         let specs = stat_expr_chunk_lexer(input).expect("valid subject input");
         PatternTokenSource { specs, index: 0 }
+    }
+
+    #[derive(Debug)]
+    struct StatExprRecognizer {
+        data: RecognizerData,
+    }
+
+    impl Recognizer for StatExprRecognizer {
+        fn data(&self) -> &RecognizerData {
+            &self.data
+        }
+
+        fn data_mut(&mut self) -> &mut RecognizerData {
+            &mut self.data
+        }
+    }
+
+    #[test]
+    fn find_all_pairs_xpath_selection_with_pattern_matching() {
+        let (atn, data) = stat_expr_matcher_and_data();
+        let matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
+        // Matches only integer expressions.
+        let pattern = matcher
+            .compile("<INT>", RULE_EXPR, stat_expr_chunk_lexer)
+            .expect("compiles");
+
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(stat_expr_subject("x = 3 ;")),
+            data.clone(),
+        );
+        let root = parser
+            .parse_atn_rule(&atn, RULE_STAT)
+            .expect("subject parse");
+        let subject = parser.into_parsed_file(root);
+        let recognizer = StatExprRecognizer { data };
+
+        // `//expr` selects the one expr subtree; the `<INT>` pattern matches it.
+        let matches = pattern
+            .find_all(subject.tree(), "//expr", &recognizer)
+            .expect("valid xpath");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].tree().text(), "3");
+        // A path selecting nothing that matches yields no results.
+        let none = pattern
+            .find_all(subject.tree(), "//stat", &recognizer)
+            .expect("valid xpath");
+        assert!(none.is_empty());
     }
 }

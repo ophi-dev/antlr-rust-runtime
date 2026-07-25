@@ -98,6 +98,7 @@ impl RecognizerData {
     }
 
     /// The token vocabulary for literal/symbolic name resolution.
+    #[must_use]
     pub const fn vocabulary(&self) -> &Vocabulary {
         &self.vocabulary
     }

@@ -7090,6 +7090,7 @@ const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
     "into_token_stream",
     "into_token_store",
     "into_parsed_file",
+    "compile_parse_tree_pattern",
 ];
 
 fn parser_public_rule_method_names(rule_names: &[String]) -> Vec<String> {
@@ -9254,13 +9255,29 @@ const fn render_compile_parse_tree_pattern_method() -> &'static str {
     where
         PL: antlr4_runtime::TokenSource,
     {
-        let grammar_metadata = metadata();
-        let data = antlr4_runtime::RecognizerData::new(
-            grammar_metadata.grammar_file_name(),
-            grammar_metadata.vocabulary(),
-        )
-        .with_rule_names(grammar_metadata.rule_names().iter().copied());
-        let matcher = antlr4_runtime::ParseTreePatternMatcher::new(parser_atn(), &data)?;
+        // The rule-bypass ATN derivation inside `ParseTreePatternMatcher::new`
+        // is O(states + transitions), so — like ANTLR's
+        // `Parser.bypassAltsAtnCache` — the matcher is built once per process
+        // and shared by every subsequent compile. A failed build is not cached
+        // and is retried (and re-reported) on the next call.
+        static PATTERN_DATA: OnceLock<RecognizerData> = OnceLock::new();
+        static PATTERN_MATCHER: OnceLock<antlr4_runtime::ParseTreePatternMatcher<'static>> =
+            OnceLock::new();
+        let matcher = match PATTERN_MATCHER.get() {
+            Some(matcher) => matcher,
+            None => {
+                let data = PATTERN_DATA.get_or_init(|| {
+                    let grammar_metadata = metadata();
+                    RecognizerData::new(
+                        grammar_metadata.grammar_file_name(),
+                        grammar_metadata.vocabulary(),
+                    )
+                    .with_rule_names(grammar_metadata.rule_names().iter().copied())
+                });
+                let matcher = antlr4_runtime::ParseTreePatternMatcher::new(parser_atn(), data)?;
+                PATTERN_MATCHER.get_or_init(|| matcher)
+            }
+        };
         matcher.compile(pattern, rule_index, move |text: &str| {
             antlr4_runtime::lex_pattern_chunk(text, &mut make_lexer)
         })
@@ -11970,6 +11987,7 @@ mod tests {
             "clearDfa".to_owned(),
             "addErrorListener".to_owned(),
             "removeErrorListeners".to_owned(),
+            "compileParseTreePattern".to_owned(),
             "regularRule".to_owned(),
         ];
 
@@ -11984,6 +12002,7 @@ mod tests {
                 "clear_dfa_rule",
                 "add_error_listener_rule",
                 "remove_error_listeners_rule",
+                "compile_parse_tree_pattern_rule",
                 "regular_rule"
             ]
         );
