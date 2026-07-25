@@ -268,9 +268,10 @@ if m.succeeded() {
 
 Compilation interprets the pattern over a rule-bypass ATN
 (`ParserAtn::with_bypass_alternatives`), the same mechanism the reference
-runtimes use; matching walks the subject and pattern trees in lockstep. To reuse
-one compiler across many patterns or change the `<`/`>`/`\` delimiters, use
-`ParseTreePatternMatcher` directly.
+runtimes use; matching walks the subject and pattern trees in lockstep. The
+generated method caches the compiler per process, so compiling many patterns is
+cheap; to change the `<`/`>`/`\` delimiters, use `ParseTreePatternMatcher`
+directly.
 
 ## Technical Notes
 

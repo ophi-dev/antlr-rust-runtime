@@ -28,6 +28,9 @@ use crate::token::{Token, TokenId, TokenSink, TokenSource, TokenSpec, TokenStore
 use crate::tree::{Node, NodeKind};
 use crate::{BaseParser, CommonTokenStream, TOKEN_EOF};
 
+const MATCH_STACK_RED_ZONE: usize = 1024 * 1024;
+const MATCH_STACK_SIZE: usize = 4 * 1024 * 1024;
+
 /// A tag's disposition: a reference to a parser rule or to a token type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TagKind {
@@ -702,6 +705,18 @@ impl ParseTreePattern {
         self.pattern_rule_index
     }
 
+    /// The compiled pattern as a parse tree, with tags present as terminal
+    /// leaves (a rule tag is a rule node whose single child carries the
+    /// imaginary bypass token).
+    ///
+    /// Mirrors ANTLR's `ParseTreePattern.getPatternTree`; useful for inspecting
+    /// why a pattern that compiled does not match a subject —
+    /// `pattern_tree().text()` renders the tag placeholders inline.
+    #[must_use]
+    pub fn pattern_tree(&self) -> Node<'_> {
+        self.tree.file.tree()
+    }
+
     /// Matches `tree` against this pattern, returning the full result including
     /// bound labels and the first mismatched node (if any).
     #[must_use]
@@ -822,12 +837,17 @@ fn match_impl<'subject>(
     tags: &BTreeMap<TokenId, TagInfo>,
     labels: &mut BTreeMap<String, Vec<Node<'subject>>>,
 ) -> Option<Node<'subject>> {
-    match (leaf_kind(tree), leaf_kind(pattern)) {
-        (Some(_), Some(_)) => match_terminals(tree, pattern, tags, labels),
-        (None, None) => match_rules(tree, pattern, tags, labels),
-        // One is a leaf and the other a rule: shape mismatch.
-        _ => Some(tree),
-    }
+    // Grown like the runtime's other recursive tree descents
+    // (`ParseTreeVisitor::visit_children`) so a deep subject/pattern pair
+    // cannot overflow the native stack.
+    stacker::maybe_grow(MATCH_STACK_RED_ZONE, MATCH_STACK_SIZE, || {
+        match (leaf_kind(tree), leaf_kind(pattern)) {
+            (Some(_), Some(_)) => match_terminals(tree, pattern, tags, labels),
+            (None, None) => match_rules(tree, pattern, tags, labels),
+            // One is a leaf and the other a rule: shape mismatch.
+            _ => Some(tree),
+        }
+    })
 }
 
 /// Returns the token type of a leaf (terminal or error node), or `None` for a

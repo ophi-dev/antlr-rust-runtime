@@ -306,10 +306,16 @@ impl BypassBuilder {
             if self.kinds.get(loop_end).copied() != Some(AtnStateKind::LoopEnd) {
                 continue;
             }
+            // Upstream additionally requires the loop end to be epsilon-only
+            // before trusting its first edge (`maybeLoopEndState
+            // .epsilonOnlyTransitions && ... instanceof RuleStopState`).
+            let epsilon_only = self.out[loop_end]
+                .iter()
+                .all(|edge| matches!(edge, ParserTransitionSpec::Epsilon { .. }));
             let reaches_stop = self.out[loop_end]
                 .first()
                 .is_some_and(|edge| self.kinds.get(edge.target()) == Some(&AtnStateKind::RuleStop));
-            if !reaches_stop {
+            if !epsilon_only || !reaches_stop {
                 continue;
             }
             let Some(loop_back) = self.loop_back_states[loop_end] else {

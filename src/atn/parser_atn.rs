@@ -371,7 +371,7 @@ impl ParserAtn {
         }
     }
 
-    pub const fn set_count(&self) -> usize {
+    pub(crate) const fn set_count(&self) -> usize {
         self.layout.sets.len / self.layout.set_words
     }
 
@@ -1717,7 +1717,7 @@ impl ParserTransitionSpec {
     /// Returns this spec with its target redirected, preserving every other
     /// field.
     #[must_use]
-    pub const fn with_target(self, target: usize) -> Self {
+    pub(crate) const fn with_target(self, target: usize) -> Self {
         match self {
             Self::Epsilon { .. } => Self::Epsilon { target },
             Self::Atom { label, .. } => Self::Atom { target, label },

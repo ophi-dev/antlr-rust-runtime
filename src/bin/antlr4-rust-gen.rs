@@ -9239,13 +9239,14 @@ const fn render_compile_parse_tree_pattern_method() -> &'static str {
     ///
     /// Takes `&self` only to mirror ANTLR's instance method; the ATN and
     /// grammar metadata come from this module, so the parser's own state is
-    /// untouched.
+    /// untouched. The pattern compiler (and its rule-bypass ATN) is built once
+    /// per process and shared by every call.
     ///
     /// # Errors
     ///
     /// Returns a [`antlr4_runtime::ParseTreePatternError`] for a malformed
     /// pattern, an unknown tag, a lexer failure, or a pattern the start rule
-    /// does not fully consume.
+    /// does not parse cleanly and fully consume.
     pub fn compile_parse_tree_pattern<PL>(
         &self,
         pattern: &str,

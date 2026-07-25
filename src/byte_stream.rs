@@ -54,8 +54,8 @@
 //! Because the bytes are not text, [`CharStream::text`] renders the matched
 //! span as a lowercase hex string with no separators (`[0xDE, 0xAD]` becomes
 //! `"dead"`). Token *positions* are still exact byte offsets; use
-//! [`IntStream::index`](crate::IntStream::index) or a token's byte span when you
-//! need to slice the original bytes.
+//! [`crate::IntStream::index`] or a token's byte span when you need to slice
+//! the original bytes.
 
 use std::io;
 
