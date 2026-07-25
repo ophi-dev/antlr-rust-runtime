@@ -558,6 +558,36 @@ mod tree_pattern_tests {
         // Addition must not match a multiplication pattern.
         assert!(!pattern.match_tree(top_expression(&parsed)).succeeded());
     }
+
+    #[test]
+    fn trailing_eof_tag_requires_a_rule_that_consumes_it() {
+        let lexer = CalculatorLexer::new(InputStream::new(""));
+        let parser = CalculatorParser::new(CommonTokenStream::new(lexer));
+        // `start : expression EOF ;` consumes the tag: the pattern matches a
+        // whole parse.
+        let pattern = parser
+            .compile_parse_tree_pattern(
+                "<expression> <EOF>",
+                RULE_START,
+                CalculatorLexer::new,
+            )
+            .expect("EOF-consuming rule accepts a trailing <EOF> tag");
+        let parsed = parse_top_expression("2 + 8");
+        assert!(pattern.match_tree(parsed.tree()).succeeded());
+
+        // `expression` never consumes EOF, so the tag would be silently
+        // dropped from the pattern tree; that must be rejected.
+        assert!(
+            parser
+                .compile_parse_tree_pattern(
+                    "<expression> + <expression> <EOF>",
+                    RULE_EXPRESSION,
+                    CalculatorLexer::new,
+                )
+                .is_err(),
+            "unconsumed trailing <EOF> tag must not compile"
+        );
+    }
 }
 "#,
     );

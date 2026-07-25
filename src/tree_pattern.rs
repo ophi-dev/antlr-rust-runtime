@@ -579,6 +579,9 @@ impl<'a> ParseTreePatternMatcher<'a> {
         rule_index: usize,
         pattern: &str,
     ) -> Result<PatternTree, ParseTreePatternError> {
+        let trailing_eof = specs
+            .last()
+            .is_some_and(|spec| spec.token_type == TOKEN_EOF);
         let source = PatternTokenSource { specs, index: 0 };
         let mut parser = BaseParser::new(CommonTokenStream::new(source), self.data.clone());
         // ANTLR installs a BailErrorStrategy for the pattern parse: a pattern
@@ -613,6 +616,21 @@ impl<'a> ParseTreePatternMatcher<'a> {
         }
 
         let file = parser.into_parsed_file(root);
+        // A trailing `<EOF>` tag doubles as the stream terminator, so the
+        // lookahead check above cannot tell "the rule matched EOF" from "the
+        // tag was silently ignored". Rules that end in `EOF` put an EOF
+        // terminal in the tree; require it, and reject the pattern otherwise
+        // (upstream silently drops the tag here).
+        if trailing_eof
+            && !file.tree().descendants().any(|node| {
+                node.as_terminal()
+                    .is_some_and(|terminal| terminal.symbol().token_type() == TOKEN_EOF)
+            })
+        {
+            return Err(ParseTreePatternError::StartRuleDoesNotConsumeFullPattern {
+                pattern: pattern.to_owned(),
+            });
+        }
         let tags = rekey_tags_by_token_id(tags_by_index);
         Ok(PatternTree { file, tags })
     }
@@ -1546,6 +1564,26 @@ mod tests {
             .expect_err("tokens after an EOF tag must be rejected");
         assert!(
             matches!(error, ParseTreePatternError::Tokenization { .. }),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn compile_rejects_unconsumed_trailing_eof_tag() {
+        // `stat` does not end in EOF, so a trailing `<EOF>` tag can never be
+        // consumed by the rule — it only terminates the token stream, and the
+        // resulting tree is identical to the pattern without the tag. That
+        // must be an error, not a silently dropped tag.
+        let (atn, data) = stat_expr_matcher_and_data();
+        let matcher = ParseTreePatternMatcher::new(&atn, &data).expect("matcher");
+        let error = matcher
+            .compile("<ID> = <expr> ; <EOF>", RULE_STAT, stat_expr_chunk_lexer)
+            .expect_err("unconsumed trailing EOF tag must be rejected");
+        assert!(
+            matches!(
+                error,
+                ParseTreePatternError::StartRuleDoesNotConsumeFullPattern { .. }
+            ),
             "unexpected error: {error}"
         );
     }
