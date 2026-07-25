@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use crate::errors::{AntlrError, ConsoleErrorListener, ErrorListener};
+use crate::token::TokenView;
 use crate::vocabulary::Vocabulary;
 
 #[derive(Clone)]
@@ -15,9 +16,11 @@ impl ErrorListenerSlot {
         Self(Arc::new(Mutex::new(listener)))
     }
 
+    #[allow(clippy::too_many_arguments)] // mirrors ANTLR's canonical syntaxError signature
     fn syntax_error(
         &self,
         recognizer: &(dyn Recognizer + '_),
+        offending: Option<TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,
@@ -26,7 +29,7 @@ impl ErrorListenerSlot {
         self.0
             .lock()
             .expect("error listener lock poisoned")
-            .syntax_error(recognizer, line, column, message, error);
+            .syntax_error(recognizer, offending, line, column, message, error);
     }
 }
 
@@ -122,16 +125,18 @@ impl RecognizerData {
         self.error_listeners.clear();
     }
 
+    #[allow(clippy::too_many_arguments)] // mirrors ANTLR's canonical syntaxError signature
     fn notify_error_listeners(
         &self,
         recognizer: &dyn Recognizer,
+        offending: Option<TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,
         error: Option<&AntlrError>,
     ) {
         for listener in &self.error_listeners {
-            listener.syntax_error(recognizer, line, column, message, error);
+            listener.syntax_error(recognizer, offending, line, column, message, error);
         }
     }
 }
@@ -187,8 +192,13 @@ pub trait Recognizer {
     }
 
     /// Sends one diagnostic to every registered error listener.
+    ///
+    /// `offending` is the token the diagnostic is anchored to, when one
+    /// exists — parser diagnostics resolve it from the token store; lexer
+    /// diagnostics pass `None` because no token was produced.
     fn notify_error_listeners(
         &self,
+        offending: Option<TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,
@@ -197,7 +207,7 @@ pub trait Recognizer {
         Self: Sized,
     {
         self.data()
-            .notify_error_listeners(self, line, column, message, error);
+            .notify_error_listeners(self, offending, line, column, message, error);
     }
 
     fn sempred(&mut self, _rule_index: usize, _pred_index: usize) -> bool {
@@ -215,6 +225,7 @@ mod tests {
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct RecordedError {
         grammar_file_name: String,
+        offending_text: Option<String>,
         line: usize,
         column: usize,
         message: String,
@@ -233,6 +244,7 @@ mod tests {
         fn syntax_error(
             &mut self,
             recognizer: &R,
+            offending: Option<TokenView<'_>>,
             line: usize,
             column: usize,
             message: &str,
@@ -243,6 +255,7 @@ mod tests {
                 .expect("recorded errors lock")
                 .push(RecordedError {
                     grammar_file_name: recognizer.grammar_file_name().to_owned(),
+                    offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
                     line,
                     column,
                     message: message.to_owned(),
@@ -295,8 +308,9 @@ mod tests {
             line: 3,
             column: 5,
             message: "unexpected token".to_owned(),
+            offending: None,
         };
-        recognizer.notify_error_listeners(3, 5, "unexpected token", Some(&error));
+        recognizer.notify_error_listeners(None, 3, 5, "unexpected token", Some(&error));
 
         insta::assert_debug_snapshot!(
             "recognizers_replace_the_default_console_error_listener",
