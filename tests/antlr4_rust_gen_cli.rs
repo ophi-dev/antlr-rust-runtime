@@ -1585,16 +1585,136 @@ fn deeply_nested_input_parses_without_native_stack_overflow() {
 mod deep_nesting_tests {
     use super::nest_lexer::NestLexer;
     use super::nest_parser::{parse, NestParser};
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn nested(depth: usize) -> String {
+        format!("{}a{}", "[".repeat(depth), "]".repeat(depth))
+    }
 
     #[test]
     fn ten_thousand_levels_parse_on_the_default_test_stack() {
         // Rust test threads default to a 2 MiB stack; without segmented-stack
         // growth this depth aborted the process (issue #193).
-        let depth = 10_000;
-        let source = format!("{}a{}", "[".repeat(depth), "]".repeat(depth));
-        let parsed = parse(&source, NestLexer::new, NestParser::s)
+        let parsed = parse(&nested(10_000), NestLexer::new, NestParser::s)
             .expect("deeply nested input should parse");
         assert!(parsed.tree().as_rule().is_some());
+    }
+
+    #[test]
+    fn max_rule_depth_bounds_adversarial_nesting() {
+        // Callers parsing untrusted input can cap rule nesting (issue #198):
+        // shallow input parses, input past the cap fails with a positioned
+        // error even though rule-level recovery would produce a tree, and the
+        // violation does not leak into the parser's next parse. (No Nest rule
+        // is ATN-preferred — the cap-overrides-ATN-preference guard is pinned
+        // by the generator's dispatch-rendering unit test.)
+        let lexer = NestLexer::new(InputStream::new(&nested(4)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        assert!(parser.s().is_ok(), "shallow input parses under the cap");
+
+        let lexer = NestLexer::new(InputStream::new(&nested(1_000)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        let error = parser.s().expect_err("cap must reject deep nesting");
+        assert!(
+            error.to_string().contains("rule nesting depth limit of 64"),
+            "unexpected error: {error}"
+        );
+
+        let lexer = NestLexer::new(InputStream::new(&nested(4)));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        assert!(
+            parser.s().is_ok(),
+            "reused parser starts clean after a depth violation"
+        );
+    }
+
+    #[test]
+    fn max_rule_depth_counts_left_recursive_expansions() {
+        // `a+a+a+...` deepens the tree one level per operator without pushing
+        // a rule frame. Upstream ANTLR fires a rule-entry listener event for
+        // each expansion, so listener-based depth counters reject it — the
+        // cap must too, or a 2000-term chain builds a 2000-deep tree under
+        // any configured bound.
+        let chain = vec!["a"; 2_000].join("+");
+        let lexer = NestLexer::new(InputStream::new(&chain));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        let error = parser
+            .s()
+            .expect_err("operator expansions must count toward the cap");
+        assert!(
+            error.to_string().contains("rule nesting depth limit of 64"),
+            "unexpected error: {error}"
+        );
+
+        // The same chain parses when uncapped, and a short chain fits.
+        let lexer = NestLexer::new(InputStream::new(&chain));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.s().is_ok(), "uncapped operator chain parses");
+        let lexer = NestLexer::new(InputStream::new("a+a+a"));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        assert!(parser.s().is_ok(), "short operator chain fits the cap");
+    }
+
+    #[test]
+    fn max_rule_depth_expansion_boundary_matches_frame_boundary() {
+        // The expansion check runs BEFORE the expansion push, mirroring the
+        // dispatch site's check before its rule-frame push: each extra
+        // operator costs exactly one depth level. Pin that alignment by
+        // finding the minimal cap admitting an N-operator chain and asserting
+        // one more operator needs exactly one more level.
+        fn parses_at(cap: usize, operators: usize) -> bool {
+            let chain = vec!["a"; operators + 1].join("+");
+            let lexer = NestLexer::new(InputStream::new(&chain));
+            let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+            parser.set_max_rule_depth(Some(cap));
+            parser.s().is_ok()
+        }
+
+        let minimal_cap = (1..128)
+            .find(|cap| parses_at(*cap, 4))
+            .expect("some cap admits a 4-operator chain");
+        assert!(
+            !parses_at(minimal_cap - 1, 4),
+            "minimal cap should be exact"
+        );
+        assert!(
+            !parses_at(minimal_cap, 5),
+            "one more operator must exceed the same cap"
+        );
+        assert!(
+            parses_at(minimal_cap + 1, 5),
+            "one more operator must need exactly one more level"
+        );
+    }
+
+    #[test]
+    fn depth_violation_survives_recovery_and_does_not_poison_reuse() {
+        // A violation absorbed by mid-tree recovery must still fail the parse
+        // (the resource bound was hit), the reported error must be the depth
+        // cap rather than a derived syntax error, and a second entry-rule
+        // call on the same parser instance must not inherit the violation.
+        let source = format!("{}a", "[".repeat(200));
+        let lexer = NestLexer::new(InputStream::new(&source));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        let error = parser
+            .s()
+            .expect_err("depth violation must fail the parse even after recovery");
+        assert!(
+            error.to_string().contains("rule nesting depth limit of 64"),
+            "depth cap must win over derived syntax errors: {error}"
+        );
+
+        let lexer = NestLexer::new(InputStream::new("a"));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        assert!(
+            parser.expr().is_ok(),
+            "a different entry rule on the same instance starts clean"
+        );
     }
 }
 "#,

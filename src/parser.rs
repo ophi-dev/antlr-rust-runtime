@@ -1135,6 +1135,29 @@ pub trait Parser: Recognizer {
 
     /// Sets the prediction strategy for subsequent rule calls.
     fn set_prediction_mode(&mut self, _mode: PredictionMode) {}
+
+    /// Maximum rule-nesting depth accepted before the parse aborts, or `None`
+    /// for unlimited (the default).
+    fn max_rule_depth(&self) -> Option<usize> {
+        None
+    }
+
+    /// Bounds the rule-nesting depth for subsequent rule calls.
+    ///
+    /// Deeply nested input is parsed safely regardless (rule recursion grows
+    /// onto a segmented stack), but each nesting level still costs CPU and
+    /// tree memory. Callers parsing untrusted input can cap that work: when
+    /// the limit is exceeded the parse stops with a positioned syntax error
+    /// instead of consuming unbounded resources. The measure counts rule
+    /// frames plus left-recursive operator expansions, matching what an
+    /// upstream-ANTLR rule-entry listener observes.
+    ///
+    /// The cap is enforced by generated recursive-descent rule bodies. When
+    /// one is set, generated dispatch routes ATN-preferred rules through
+    /// their generated bodies too, trading that fast path for enforcement.
+    /// Rules the generator emitted no body for (interpreter-only fallback)
+    /// do not check the cap.
+    fn set_max_rule_depth(&mut self, _depth: Option<usize>) {}
 }
 
 #[derive(Debug)]
@@ -1180,6 +1203,25 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// recovering (ANTLR's `BailErrorStrategy`). Generated recognizers set it
     /// through `set_error_handler(BailErrorStrategy::new())`.
     bail_on_error: bool,
+    /// Optional cap on rule-nesting depth for adversarial-input hardening.
+    /// `None` (default) parses unbounded nesting; `Some(n)` aborts the parse
+    /// with a positioned syntax error once `n` rule frames are exceeded.
+    max_rule_depth: Option<usize>,
+    /// Sticky depth-cap violation. Rule-level recovery would otherwise absorb
+    /// the error and keep parsing; once set, every subsequent rule entry fails
+    /// immediately and the top-level entry returns this error even when
+    /// recovery produced a tree.
+    rule_depth_error: Option<AntlrError>,
+    /// Left-recursive expansions currently deepening the parse tree. Each
+    /// operator iteration wraps the previous context one level deeper without
+    /// pushing a rule frame, so the depth cap must count these separately —
+    /// upstream ANTLR fires a rule-entry listener event for exactly this case
+    /// (`Parser.pushNewRecursionContext` → `triggerEnterRuleEvent`).
+    recursion_expansions: usize,
+    /// Per-invocation snapshots of [`Self::recursion_expansions`], pushed by
+    /// `enter_recursion_rule` and restored by `unroll_recursion_context`, so a
+    /// finished left-recursive rule releases the depth its expansions added.
+    recursion_expansion_marks: Vec<usize>,
     /// How to evaluate predicate coordinates missing from the active
     /// predicate table. Set from [`ParserRuntimeOptions`] at each parse entry.
     unknown_predicate_policy: UnknownSemanticPolicy,
@@ -4793,6 +4835,10 @@ where
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
             bail_on_error: false,
+            max_rule_depth: None,
+            rule_depth_error: None,
+            recursion_expansions: 0,
+            recursion_expansion_marks: Vec::new(),
             unknown_predicate_policy: UnknownSemanticPolicy::default(),
             unknown_predicate_hits: Vec::new(),
             unhandled_action_hits: Vec::new(),
@@ -4852,6 +4898,9 @@ where
         self.decision_override_generation = 0;
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
+        self.rule_depth_error = None;
+        self.recursion_expansions = 0;
+        self.recursion_expansion_marks.clear();
         self.reset_per_parse_caches();
         self.fast_first_set_prefilter = true;
         self.fast_recovery_enabled = true;
@@ -5715,6 +5764,75 @@ where
             .is_multiple_of(GENERATED_RULE_STACK_CHECK_INTERVAL)
     }
 
+    /// Returns the positioned error to abort with when the configured
+    /// rule-nesting depth cap would be exceeded by one more level, or `None`
+    /// to keep parsing.
+    ///
+    /// Generated rule dispatch calls this before deepening — ahead of the
+    /// rule-frame push at the dispatch boundary and ahead of each
+    /// left-recursive expansion — letting callers parsing untrusted input
+    /// bound CPU and tree memory ([`Parser::set_max_rule_depth`]). The
+    /// inline fast path is one `Option` check when no cap is set (the
+    /// default) and one addition plus compare when one is; only an actual
+    /// violation leaves the inline path.
+    ///
+    /// The violation is sticky: rule-level recovery absorbs the returned
+    /// error like any other rule failure and would otherwise keep spending
+    /// the very resources the cap exists to bound, so every check after the
+    /// first violation fails until [`Self::take_rule_depth_error`] drains it
+    /// at the top-level entry.
+    #[inline]
+    pub fn rule_depth_cap_violation(&mut self) -> Option<AntlrError> {
+        let max = self.max_rule_depth?;
+        // Left-recursive operator iterations deepen the tree without pushing
+        // a rule frame, so they count alongside the rule-context stack.
+        if self.rule_depth_error.is_none()
+            && self.rule_context_stack.len() + self.recursion_expansions < max
+        {
+            return None;
+        }
+        Some(self.rule_depth_cap_violation_cold(max))
+    }
+
+    #[cold]
+    fn rule_depth_cap_violation_cold(&mut self, max: usize) -> AntlrError {
+        if let Some(error) = &self.rule_depth_error {
+            return error.clone();
+        }
+        let (line, column) = self
+            .input
+            .lt(1)
+            .map_or((0, 0), |token| (token.line(), token.column()));
+        let error = AntlrError::ParserError {
+            line,
+            column,
+            message: format!("rule nesting depth limit of {max} exceeded"),
+        };
+        self.rule_depth_error = Some(error.clone());
+        error
+    }
+
+    /// Drains the sticky depth-cap violation recorded by
+    /// [`Self::rule_depth_cap_violation`], if any.
+    ///
+    /// Generated top-level rule entries call this after recognition so a
+    /// recovered parse that crossed the cap still fails, and so a reused
+    /// parser starts its next parse clean.
+    pub const fn take_rule_depth_error(&mut self) -> Option<AntlrError> {
+        self.rule_depth_error.take()
+    }
+
+    /// Reports whether a rule-nesting depth cap is configured.
+    ///
+    /// Generated dispatch consults this when selecting between the guarded
+    /// recursive-descent body and the ATN-preferred interpreted fast path:
+    /// only the generated body enforces the cap, so a configured bound
+    /// overrides the performance preference.
+    #[must_use]
+    pub const fn has_rule_depth_cap(&self) -> bool {
+        self.max_rule_depth.is_some()
+    }
+
     /// Enters a generated parser rule and returns the context object the
     /// generated method should populate.
     pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
@@ -5945,6 +6063,8 @@ where
         precedence: i32,
     ) -> ParserRuleContext {
         self.precedence_stack.push(precedence);
+        self.recursion_expansion_marks
+            .push(self.recursion_expansions);
         self.enter_rule(state, rule_index)
     }
 
@@ -5955,6 +6075,9 @@ where
         rule_index: usize,
     ) -> ParserRuleContext {
         self.set_state(state);
+        // Counts toward the depth cap: upstream treats this as rule entry
+        // (`Parser.pushNewRecursionContext` fires `triggerEnterRuleEvent`).
+        self.recursion_expansions += 1;
         ParserRuleContext::new(rule_index, state)
     }
 
@@ -5967,6 +6090,10 @@ where
         current: &mut ParserRuleContext,
     ) {
         self.set_state(state);
+        // Counts toward the depth cap: each operator iteration deepens the
+        // parse tree one level without pushing a rule frame, and upstream
+        // fires a rule-entry listener event for it.
+        self.recursion_expansions += 1;
         if let Some(stop) = self
             .rule_stop_token_index(self.input.index(), false)
             .and_then(|index| self.token_id_at(index))
@@ -5990,6 +6117,9 @@ where
     pub fn unroll_recursion_context(&mut self) {
         if self.precedence_stack.len() > 1 {
             self.precedence_stack.pop();
+        }
+        if let Some(mark) = self.recursion_expansion_marks.pop() {
+            self.recursion_expansions = mark;
         }
         self.exit_rule();
     }
@@ -12511,6 +12641,14 @@ where
 
     fn set_prediction_mode(&mut self, mode: PredictionMode) {
         self.prediction_mode = mode;
+    }
+
+    fn max_rule_depth(&self) -> Option<usize> {
+        self.max_rule_depth
+    }
+
+    fn set_max_rule_depth(&mut self, depth: Option<usize>) {
+        self.max_rule_depth = depth;
     }
 }
 
