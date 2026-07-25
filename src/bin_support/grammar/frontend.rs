@@ -959,6 +959,7 @@ where
     fn syntax_error(
         &mut self,
         _recognizer: &R,
+        _offending: Option<antlr4_runtime::TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,

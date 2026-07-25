@@ -1,4 +1,5 @@
 use crate::recognizer::Recognizer;
+use crate::token::TokenView;
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
@@ -30,9 +31,15 @@ pub enum AntlrError {
 /// generically, as [`ConsoleErrorListener`] does, when a listener will be
 /// registered.
 pub trait ErrorListener<R: Recognizer + ?Sized> {
+    /// `offending` carries the token the diagnostic points at, matching
+    /// ANTLR's `syntaxError(recognizer, offendingSymbol, ...)`. It is `None`
+    /// for lexer errors (no token was produced) and for diagnostics that are
+    /// not anchored to a specific token.
+    #[allow(clippy::too_many_arguments)] // mirrors ANTLR's canonical syntaxError signature
     fn syntax_error(
         &mut self,
         recognizer: &R,
+        offending: Option<TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,
@@ -48,6 +55,7 @@ impl<R: Recognizer + ?Sized> ErrorListener<R> for ConsoleErrorListener {
     fn syntax_error(
         &mut self,
         _recognizer: &R,
+        _offending: Option<TokenView<'_>>,
         line: usize,
         column: usize,
         message: &str,

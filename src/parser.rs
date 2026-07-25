@@ -2143,6 +2143,10 @@ struct ParserDiagnostic {
     line: usize,
     column: usize,
     message: String,
+    /// Token the diagnostic is anchored to, resolved to a view when the
+    /// diagnostic is dispatched to error listeners. `None` when no token
+    /// exists (synthetic positions, lexer-originated messages).
+    offending: Option<TokenId>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -5017,7 +5021,11 @@ where
     }
 
     fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
+        let offending = diagnostic
+            .offending
+            .and_then(|token| self.token_store().view(token));
         self.notify_error_listeners(
+            offending,
             diagnostic.line,
             diagnostic.column,
             &diagnostic.message,
@@ -5038,7 +5046,10 @@ where
         if self.input.token_source().report_error(source_error) {
             return;
         }
+        // Lexer errors have no offending token: the failure is that no token
+        // could be produced, matching ANTLR's null offendingSymbol.
         self.notify_error_listeners(
+            None,
             source_error.line,
             source_error.column,
             &source_error.message,
@@ -5539,6 +5550,7 @@ where
                 line: current_line,
                 column: current_column,
                 message,
+                offending: Some(current),
             });
             self.record_syntax_errors(1);
             self.generated_sync_expected = None;
@@ -5580,6 +5592,7 @@ where
                 line: current_line,
                 column: current_column,
                 message,
+                offending: Some(current),
             });
             self.record_syntax_errors(1);
             self.generated_sync_expected = None;
@@ -5899,6 +5912,7 @@ where
                 line,
                 column,
                 message,
+                offending: None,
             },
             AntlrError::MismatchedInput { expected, found } => diagnostic_for_token(
                 self.input.lt(1),
@@ -5916,6 +5930,7 @@ where
                 line,
                 column,
                 message,
+                offending: None,
             },
             AntlrError::Unsupported(message) => diagnostic_for_token(self.input.lt(1), message),
         }
@@ -11829,11 +11844,14 @@ fn display_input_text(text: &str) -> String {
 }
 
 fn diagnostic_for_token<T: Token>(token: Option<T>, message: String) -> ParserDiagnostic {
-    let (line, column) = token.map_or((0, 0), |token| (token.line(), token.column()));
+    let (line, column, offending) = token.map_or((0, 0, None), |token| {
+        (token.line(), token.column(), Some(token.token_id()))
+    });
     ParserDiagnostic {
         line,
         column,
         message,
+        offending,
     }
 }
 
@@ -12522,7 +12540,9 @@ mod tests {
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
+    use crate::token::{
+        HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError, TokenView,
+    };
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
@@ -12682,6 +12702,7 @@ mod tests {
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct RecordedDiagnostic {
         grammar_file_name: String,
+        offending_text: Option<String>,
         line: usize,
         column: usize,
         message: String,
@@ -12700,6 +12721,7 @@ mod tests {
         fn syntax_error(
             &mut self,
             recognizer: &R,
+            offending: Option<TokenView<'_>>,
             line: usize,
             column: usize,
             message: &str,
@@ -12710,6 +12732,7 @@ mod tests {
                 .expect("recorded diagnostics lock")
                 .push(RecordedDiagnostic {
                     grammar_file_name: recognizer.grammar_file_name().to_owned(),
+                    offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
                     line,
                     column,
                     message: message.to_owned(),
@@ -12783,6 +12806,7 @@ mod tests {
             line: 1,
             column: 2,
             message: "missing 'x' at 'y'".to_owned(),
+            offending: None,
         }];
         let token_errors = [
             TokenSourceError::new(1, 1, "token recognition error at: '@'"),
@@ -12804,6 +12828,42 @@ mod tests {
             diagnostics.lock().expect("recorded diagnostics lock").len(),
             3
         );
+    }
+
+    #[test]
+    fn recovery_diagnostics_expose_the_offending_token_to_listeners() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(7)
+                .with_text("oops")
+                .with_span(0, 3)
+                .with_position(1, 2),
+            TestToken::eof("parser-test", 4, 1, 6),
+        ]);
+        parser.remove_error_listeners();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+        let offending = parser.input.lt_id(1);
+        assert!(offending.is_some(), "current token should be buffered");
+        let parser_diagnostics = [ParserDiagnostic {
+            line: 1,
+            column: 2,
+            message: "extraneous input 'oops'".to_owned(),
+            offending,
+        }];
+
+        parser.dispatch_generated_diagnostics(&parser_diagnostics, &[]);
+
+        // Listeners receive a resolvable view of the offending token — the
+        // ANTLR offendingSymbol contract downstream span-building error
+        // reporters (miette-style byte-offset underlines) rely on.
+        let recorded = diagnostics
+            .lock()
+            .expect("recorded diagnostics lock")
+            .clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].offending_text.as_deref(), Some("oops"));
     }
 
     #[test]
@@ -15441,6 +15501,7 @@ mod tests {
                 line: 1,
                 column: 3,
                 message: "missing 'Y' at '<EOF>'".to_owned(),
+                offending: parser.input.lt_id(1),
             }]
         );
     }
@@ -15669,6 +15730,7 @@ mod tests {
                 line: 1,
                 column: 1,
                 message: "missing {} at '<EOF>'".to_owned(),
+                offending: parser.input.lt_id(1),
             }]
         );
     }
@@ -15717,6 +15779,7 @@ mod tests {
                 line: 1,
                 column: 1,
                 message: "missing 'x' at '<EOF>'".to_owned(),
+                offending: parser.input.lt_id(1),
             }]
         );
     }
@@ -15770,6 +15833,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+                offending: None,
             }]
         );
         parser.exit_rule();
@@ -17570,6 +17634,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
+                offending: None,
             }]),
             deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
@@ -17628,6 +17693,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x' expecting 'a'".to_owned(),
+                offending: None,
             }]),
             deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
@@ -17639,6 +17705,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x' expecting 'b'".to_owned(),
+                offending: None,
             }]),
             deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
@@ -17650,6 +17717,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "missing 'a' at 'x'".to_owned(),
+                offending: None,
             }]),
             deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
@@ -18019,11 +18087,13 @@ mod tests {
             line: 1,
             column: 0,
             message: "missing X".to_owned(),
+            offending: None,
         }]);
         let _discarded_diagnostics = arena.diagnostic_sequence([ParserDiagnostic {
             line: 1,
             column: 1,
             message: "discarded".to_owned(),
+            offending: None,
         }]);
         let deferred_children = arena.deferred_fragment(live);
         let _deferred_rule = arena.deferred_rule_node(FastDeferredRule {
@@ -18139,17 +18209,20 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "first".to_owned(),
+                offending: None,
             },
             ParserDiagnostic {
                 line: 1,
                 column: 1,
                 message: "second".to_owned(),
+                offending: None,
             },
         ]);
         let suffix = arena.diagnostic_sequence([ParserDiagnostic {
             line: 1,
             column: 2,
             message: "third".to_owned(),
+            offending: None,
         }]);
         let extras_before = arena.extras.len();
 
@@ -18307,6 +18380,7 @@ mod tests {
             line: 1,
             column: 3,
             message: "missing 'Y' at '<EOF>'".to_owned(),
+            offending: None,
         }]);
         let first_alt = RecognizeOutcome {
             index: 2,
