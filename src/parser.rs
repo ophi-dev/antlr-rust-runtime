@@ -5821,14 +5821,15 @@ where
         if let Some(error) = &self.rule_depth_error {
             return error.clone();
         }
-        let (line, column) = self
-            .input
-            .lt(1)
+        let current = self.input.lt(1);
+        let (line, column) = current
+            .as_ref()
             .map_or((0, 0), |token| (token.line(), token.column()));
         let error = AntlrError::ParserError {
             line,
             column,
             message: format!("rule nesting depth limit of {max} exceeded"),
+            offending: current.as_ref().map(Token::token_id),
         };
         self.rule_depth_error = Some(error.clone());
         error
