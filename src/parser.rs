@@ -130,7 +130,8 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 }
 
 /// Receives committed rule enter/exit events during recognition, matching
-/// ANTLR's `addParseListener` contract ([`Parser::add_parse_listener`]).
+/// ANTLR's `addParseListener` contract ([`Parser::add_parse_listener`],
+/// also inherent on [`BaseParser`] and generated parsers).
 ///
 /// Events fire on the generated recursive-descent path as rules are entered
 /// and exited, including one simulated entry per left-recursive operator
@@ -138,10 +139,15 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 /// `triggerEnterRuleEvent` for exactly that case). Enter events fire in
 /// registration order and exit events in reverse registration order,
 /// matching upstream. Enter/exit calls balance on every completed path,
-/// including error recovery — with one exception shared with Java: the
-/// enter that returns `Err` (or whose Java analog throws) receives no
-/// matching exit, so listener state shared across parses via `Arc` must be
-/// reset after an abort.
+/// including error recovery — with one exception shared with Java: an
+/// ordinary rule's enter that returns `Err` receives no matching exit
+/// (upstream calls `enterRule` outside the generated `try`/`finally`, so a
+/// throwing listener skips `exitRule` the same way). Left-recursive
+/// expansion enters DO receive their exit even on abort — the expansion is
+/// already pushed when the probe fires, and the unroll emits its exit,
+/// mirroring Java's `finally`-driven `unrollRecursionContexts`. Listener
+/// state shared across parses via `Arc` should still be reset after an
+/// abort (the unmatched ordinary-rule enter leaves counters one high).
 ///
 /// Divergence from Java to know about: upstream generated rule methods run
 /// only on the committed parse, while this runtime may re-enter a rule while
@@ -1233,6 +1239,18 @@ pub trait Parser: Recognizer {
     /// Rules the generator emitted no body for (interpreter-only fallback)
     /// do not check the cap.
     fn set_max_rule_depth(&mut self, _depth: Option<usize>) {}
+
+    /// Registers a listener for committed rule enter/exit events during
+    /// recognition (ANTLR's `addParseListener`). See [`ParseListener`] for
+    /// the delivery contract. The default implementation drops the listener;
+    /// [`BaseParser`] and generated parsers deliver events.
+    fn add_parse_listener(&mut self, _listener: Box<dyn ParseListener>) {}
+
+    /// Removes every registered parse listener and returns them, dropping
+    /// any sticky abort a removed listener had requested.
+    fn remove_parse_listeners(&mut self) -> Vec<Box<dyn ParseListener>> {
+        Vec::new()
+    }
 }
 
 #[derive(Debug)]
@@ -12909,6 +12927,14 @@ where
 
     fn set_max_rule_depth(&mut self, depth: Option<usize>) {
         self.max_rule_depth = depth;
+    }
+
+    fn add_parse_listener(&mut self, listener: Box<dyn ParseListener>) {
+        self.parse_listeners.push(ParseListenerSlot(listener));
+    }
+
+    fn remove_parse_listeners(&mut self) -> Vec<Box<dyn ParseListener>> {
+        Self::remove_parse_listeners(self)
     }
 }
 

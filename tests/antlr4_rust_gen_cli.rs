@@ -1905,6 +1905,33 @@ mod deep_nesting_tests {
             count("exitR:"),
             "recovery keeps pairs balanced: {trace:?}"
         );
+
+        // Successful left-recursive operator chain: each expansion fires a
+        // simulated enter (upstream triggerEnterRuleEvent parity) and the
+        // unroll fires the matching exits. `a+a+a+a` yields exactly 7
+        // RULE_EXPR pairs: 1 rule dispatch + 3 expansions + 3 right-operand
+        // dispatches.
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let lexer = NestLexer::new(InputStream::new("a+a+a+a"));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(TracingListener {
+            tag: "L",
+            events: Arc::clone(&events),
+        });
+        assert!(parser.s().is_ok(), "operator chain parses");
+        let trace = events.lock().expect("trace lock").clone();
+        let expr_rule = super::nest_parser::RULE_EXPR;
+        let count = |needle: String| trace.iter().filter(|event| **event == needle).count();
+        assert_eq!(
+            count(format!("enterL:{expr_rule}")),
+            7,
+            "expr enters = dispatch + expansions + operands: {trace:?}"
+        );
+        assert_eq!(
+            count(format!("enterL:{expr_rule}")),
+            count(format!("exitL:{expr_rule}")),
+            "successful LR unroll balances expansion exits: {trace:?}"
+        );
     }
 
     #[test]

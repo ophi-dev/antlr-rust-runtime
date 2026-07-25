@@ -5857,11 +5857,12 @@ fn render_generated_step(
             {
                 // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
                 // The rule's `parse_generated_rule` dispatch arm is guarded by
-                // `generated_only() || has_rule_depth_cap()`: in normal uncapped
-                // mode the generated probe returns `None` and the wrapper parses
-                // the child on the INTERPRETED path (preserving the ATN-preferred
-                // optimization); a configured depth cap flips it to the generated
-                // body, which is the only path that enforces the cap.
+                // `generated_only() || has_rule_depth_cap() || has_parse_listeners()`:
+                // in the default configuration the generated probe returns `None`
+                // and the wrapper parses the child on the INTERPRETED path
+                // (preserving the ATN-preferred optimization); a configured depth
+                // cap or a registered parse listener flips it to the generated
+                // body, the only path that enforces the cap and fires events.
                 from_generated_call
             } else {
                 generated_child_call
@@ -6952,26 +6953,34 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
     }
     // Each operator iteration deepens the tree without a rule frame; probe
-    // the depth cap and the parse-listener enter event BEFORE the expansion
-    // push so the boundary matches the dispatch site (which checks before
-    // its rule-frame push): frames and expansions are both admitted up to
-    // the cap, listeners see the simulated rule entry upstream fires for
-    // pushNewRecursionContext, and token-only operator alternatives (no
-    // nested rule dispatch) still abort promptly instead of at the
-    // top-level drain. The matching exit events fire as the rule unrolls.
+    // the depth cap BEFORE the expansion push so the boundary matches the
+    // dispatch site (which checks before its rule-frame push): frames and
+    // expansions are both admitted up to the cap, and token-only operator
+    // alternatives (no nested rule dispatch) still abort promptly instead
+    // of at the top-level drain.
     writeln!(
         out,
         "{pad}            if let Some(__depth_error) = self.base.rule_depth_cap_violation() {{\n\
          {pad}                return Err(__depth_error);\n\
-         {pad}            }}\n\
-         {pad}            if let Some(__listener_error) = self.base.parse_listener_enter_rule({rule_index}) {{\n\
-         {pad}                return Err(__listener_error);\n\
          {pad}            }}"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
+    )
+    .expect("writing to a string cannot fail");
+    // The listener enter probe fires AFTER the expansion push, mirroring
+    // upstream (`pushNewRecursionContext` assigns `_ctx` before
+    // `triggerEnterRuleEvent`): an abort here propagates through the rule's
+    // error paths, whose `unroll_recursion_context` fires the matching exit
+    // for the already-counted expansion — Java's `finally` unroll does the
+    // same, so aborting expansions stay enter/exit balanced.
+    writeln!(
+        out,
+        "{pad}            if let Some(__listener_error) = self.base.parse_listener_enter_rule({rule_index}) {{\n\
+         {pad}                return Err(__listener_error);\n\
+         {pad}            }}"
     )
     .expect("writing to a string cannot fail");
     render_generated_steps(out, body, indent + 3, render_context);
