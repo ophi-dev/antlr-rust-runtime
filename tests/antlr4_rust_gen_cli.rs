@@ -1549,3 +1549,54 @@ mod midi_tests {{
         &test_source,
     );
 }
+
+#[test]
+fn deeply_nested_input_parses_without_native_stack_overflow() {
+    let temp = temporary_directory("deep-nesting");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/deep-nesting/Nest.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    // Every generated dispatch method must carry the stack guard; the rule
+    // chain here multiplies each `[` into ~6 native rule frames (issue #193).
+    let parser = fs::read_to_string(out.join("nest_parser.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("antlr4_runtime::grow_generated_rule_stack("),
+        "generated dispatch must guard native stack growth\n{parser}"
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["nest_lexer.rs", "nest_parser.rs"],
+        r#"
+#[cfg(test)]
+mod deep_nesting_tests {
+    use super::nest_lexer::NestLexer;
+    use super::nest_parser::{parse, NestParser};
+
+    #[test]
+    fn ten_thousand_levels_parse_on_the_default_test_stack() {
+        // Rust test threads default to a 2 MiB stack; without segmented-stack
+        // growth this depth aborted the process (issue #193).
+        let depth = 10_000;
+        let source = format!("{}a{}", "[".repeat(depth), "]".repeat(depth));
+        let parsed = parse(&source, NestLexer::new, NestParser::s)
+            .expect("deeply nested input should parse");
+        assert!(parsed.tree().as_rule().is_some());
+    }
+}
+"#,
+    );
+}

@@ -5216,20 +5216,22 @@ fn render_generated_rule_dispatch_with_rule_names(
             "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
         )
         .expect("writing to a string cannot fail");
-        if rule.left_recursive {
-            writeln!(
-                out,
-                "        self.parse_generated_rule_{index}_precedence(precedence, allow_fallback)"
-            )
-            .expect("writing to a string cannot fail");
+        let target_call = if rule.left_recursive {
+            format!("self.parse_generated_rule_{index}_precedence(precedence, allow_fallback)")
         } else {
             writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "        self.parse_generated_rule_{index}(precedence, allow_fallback)"
-            )
-            .expect("writing to a string cannot fail");
-        }
+            format!("self.parse_generated_rule_{index}(precedence, allow_fallback)")
+        };
+        // Rule nesting maps onto native call depth; sample remaining stack
+        // capacity at the shared dispatch boundary so deeply nested input
+        // grows onto a segmented stack instead of aborting the process.
+        writeln!(
+            out,
+            "        if self.base.generated_rule_stack_check_due() {{\n            \
+             antlr4_runtime::grow_generated_rule_stack(|| {target_call})\n        \
+             }} else {{\n            {target_call}\n        }}"
+        )
+        .expect("writing to a string cannot fail");
         writeln!(out, "    }}").expect("writing to a string cannot fail");
         render_generated_rule_method(&mut out, rule, step_render_context);
     }
