@@ -1,5 +1,5 @@
 use crate::recognizer::Recognizer;
-use crate::token::TokenView;
+use crate::token::{TokenId, TokenView};
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
@@ -19,6 +19,12 @@ pub enum AntlrError {
         line: usize,
         column: usize,
         message: String,
+        /// Token the error is anchored to, when one exists. The anchor must
+        /// be captured where the error is built: prediction restores the
+        /// input cursor, so the current lookahead at reporting time is not
+        /// necessarily the offending token (`no viable alternative` anchors
+        /// at the error index while the cursor sits at the decision start).
+        offending: Option<TokenId>,
     },
     #[error("unsupported runtime feature: {0}")]
     Unsupported(String),

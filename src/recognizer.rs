@@ -308,6 +308,7 @@ mod tests {
             line: 3,
             column: 5,
             message: "unexpected token".to_owned(),
+            offending: None,
         };
         recognizer.notify_error_listeners(None, 3, 5, "unexpected token", Some(&error));
 

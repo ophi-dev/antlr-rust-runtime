@@ -5321,6 +5321,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if current_type == token_type {
@@ -5348,6 +5349,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if current_type == token_type {
@@ -5381,6 +5383,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if interval_set_contains(intervals, current_type) {
@@ -5413,6 +5416,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if set.contains(current_type) {
@@ -5446,6 +5450,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if (min_vocabulary..=max_vocabulary).contains(&current_type)
@@ -5486,6 +5491,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if (min_vocabulary..=max_vocabulary).contains(&current_type) && !set.contains(current_type)
@@ -5538,6 +5544,7 @@ where
                 line: current_line,
                 column: current_column,
                 message: format!("mismatched input {current_display} expecting {expected_display}"),
+                offending: Some(current),
             });
         }
         if current_type != TOKEN_EOF
@@ -5625,6 +5632,7 @@ where
             message: format!(
                 "mismatched input {current_display} expecting {mismatch_expected_display}"
             ),
+            offending: Some(current),
         })
     }
 
@@ -5672,6 +5680,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         let current_type = self.token_type_for_id(current);
         if matches(current_type) {
@@ -5904,15 +5913,19 @@ where
 
     fn generated_rule_error_diagnostic(&self, error: AntlrError) -> ParserDiagnostic {
         match error {
+            // The anchor recorded where the error was built wins over the
+            // current lookahead: prediction restores the cursor, so lt(1)
+            // here can point at the decision start rather than the error.
             AntlrError::ParserError {
                 line,
                 column,
                 message,
+                offending,
             } => ParserDiagnostic {
                 line,
                 column,
                 message,
-                offending: None,
+                offending,
             },
             AntlrError::MismatchedInput { expected, found } => diagnostic_for_token(
                 self.input.lt(1),
@@ -6244,6 +6257,7 @@ where
             line: 0,
             column: 0,
             message: "missing current token".to_owned(),
+            offending: None,
         })?;
         if self.token_type_for_id(current) == TOKEN_EOF {
             return Err(AntlrError::MismatchedInput {
@@ -6425,6 +6439,7 @@ where
                     .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
                 self.expected_symbols_display(&expected_symbols)
             ),
+            offending: current.as_ref().map(Token::token_id),
         })
     }
 
@@ -6559,6 +6574,7 @@ where
             line: diagnostic.line,
             column: diagnostic.column,
             message: diagnostic.message,
+            offending: diagnostic.offending,
         }
     }
 
@@ -6569,6 +6585,7 @@ where
             line: current.as_ref().map(Token::line).unwrap_or_default(),
             column: current.as_ref().map(Token::column).unwrap_or_default(),
             message: format!("rule failed predicate: {}", message.into()),
+            offending: current.as_ref().map(Token::token_id),
         }
     }
 
@@ -6588,6 +6605,7 @@ where
             line: current.as_ref().map(Token::line).unwrap_or_default(),
             column: current.as_ref().map(Token::column).unwrap_or_default(),
             message: format!("rule {rule_name} {}", message.into()),
+            offending: current.as_ref().map(Token::token_id),
         }
     }
 
@@ -7191,6 +7209,7 @@ where
                     line: 0,
                     column: 0,
                     message: format!("missing token at index {index}"),
+                    offending: None,
                 })?;
             let is_eof = self.token_type_for_id(token) == TOKEN_EOF;
             let child = self.terminal_tree(token);
@@ -7523,6 +7542,7 @@ where
             line,
             column,
             message,
+            offending: current.as_ref().map(Token::token_id),
         }
     }
 
@@ -12862,8 +12882,10 @@ mod tests {
             .lock()
             .expect("recorded diagnostics lock")
             .clone();
-        assert_eq!(recorded.len(), 1);
-        assert_eq!(recorded[0].offending_text.as_deref(), Some("oops"));
+        insta::assert_debug_snapshot!(
+            "recovery_diagnostics_expose_the_offending_token_to_listeners",
+            recorded
+        );
     }
 
     #[test]
@@ -15810,6 +15832,10 @@ mod tests {
         let mut child = parser.enter_rule(4, 1);
         parser.discard_invoking_state(marker);
 
+        // The anchor recorded where the error was built must survive into the
+        // dispatched diagnostic even though recovery consumes past it below.
+        let offending = parser.input.lt_id(1);
+        assert!(offending.is_some(), "the 'z' token should be buffered");
         parser.recover_generated_rule(
             &mut child,
             &atn,
@@ -15817,6 +15843,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+                offending,
             },
         );
         let tree = parser.finish_rule(child, false);
@@ -15833,7 +15860,7 @@ mod tests {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
-                offending: None,
+                offending,
             }]
         );
         parser.exit_rule();
