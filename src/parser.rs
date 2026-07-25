@@ -1135,6 +1135,21 @@ pub trait Parser: Recognizer {
 
     /// Sets the prediction strategy for subsequent rule calls.
     fn set_prediction_mode(&mut self, _mode: PredictionMode) {}
+
+    /// Maximum rule-nesting depth accepted before the parse aborts, or `None`
+    /// for unlimited (the default).
+    fn max_rule_depth(&self) -> Option<usize> {
+        None
+    }
+
+    /// Bounds the rule-nesting depth for subsequent rule calls.
+    ///
+    /// Deeply nested input is parsed safely regardless (rule recursion grows
+    /// onto a segmented stack), but each nesting level still costs CPU and
+    /// tree memory. Callers parsing untrusted input can cap that work: when
+    /// the limit is exceeded the parse stops with a positioned syntax error
+    /// instead of consuming unbounded resources.
+    fn set_max_rule_depth(&mut self, _depth: Option<usize>) {}
 }
 
 #[derive(Debug)]
@@ -1180,6 +1195,15 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// recovering (ANTLR's `BailErrorStrategy`). Generated recognizers set it
     /// through `set_error_handler(BailErrorStrategy::new())`.
     bail_on_error: bool,
+    /// Optional cap on rule-nesting depth for adversarial-input hardening.
+    /// `None` (default) parses unbounded nesting; `Some(n)` aborts the parse
+    /// with a positioned syntax error once `n` rule frames are exceeded.
+    max_rule_depth: Option<usize>,
+    /// Sticky depth-cap violation. Rule-level recovery would otherwise absorb
+    /// the error and keep parsing; once set, every subsequent rule entry fails
+    /// immediately and the top-level entry returns this error even when
+    /// recovery produced a tree.
+    rule_depth_error: Option<AntlrError>,
     /// How to evaluate predicate coordinates missing from the active
     /// predicate table. Set from [`ParserRuntimeOptions`] at each parse entry.
     unknown_predicate_policy: UnknownSemanticPolicy,
@@ -4793,6 +4817,8 @@ where
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
             bail_on_error: false,
+            max_rule_depth: None,
+            rule_depth_error: None,
             unknown_predicate_policy: UnknownSemanticPolicy::default(),
             unknown_predicate_hits: Vec::new(),
             unhandled_action_hits: Vec::new(),
@@ -4852,6 +4878,7 @@ where
         self.decision_override_generation = 0;
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
+        self.rule_depth_error = None;
         self.reset_per_parse_caches();
         self.fast_first_set_prefilter = true;
         self.fast_recovery_enabled = true;
@@ -5713,6 +5740,47 @@ where
         self.rule_context_stack
             .len()
             .is_multiple_of(GENERATED_RULE_STACK_CHECK_INTERVAL)
+    }
+
+    /// Returns the positioned error to abort with when the configured
+    /// rule-nesting depth cap is exceeded, or `None` to keep parsing.
+    ///
+    /// Generated rule dispatch consults this before entering each rule body so
+    /// callers parsing untrusted input can bound CPU and tree memory
+    /// ([`Parser::set_max_rule_depth`]). The violation is sticky: rule-level
+    /// recovery would otherwise absorb the error and keep spending the very
+    /// resources the cap exists to bound, so every rule entry after the first
+    /// violation fails until [`Self::take_rule_depth_error`] drains it at the
+    /// top-level entry.
+    pub fn rule_depth_limit_error(&mut self) -> Option<AntlrError> {
+        if let Some(error) = &self.rule_depth_error {
+            return Some(error.clone());
+        }
+        let max = self.max_rule_depth?;
+        if self.rule_context_stack.len() < max {
+            return None;
+        }
+        let (line, column) = self
+            .input
+            .lt(1)
+            .map_or((0, 0), |token| (token.line(), token.column()));
+        let error = AntlrError::ParserError {
+            line,
+            column,
+            message: format!("rule nesting depth limit of {max} exceeded"),
+        };
+        self.rule_depth_error = Some(error.clone());
+        Some(error)
+    }
+
+    /// Drains the sticky depth-cap violation recorded by
+    /// [`Self::rule_depth_limit_error`], if any.
+    ///
+    /// Generated top-level rule entries call this after recognition so a
+    /// recovered parse that crossed the cap still fails, and so a reused
+    /// parser starts its next parse clean.
+    pub const fn take_rule_depth_error(&mut self) -> Option<AntlrError> {
+        self.rule_depth_error.take()
     }
 
     /// Enters a generated parser rule and returns the context object the
@@ -12511,6 +12579,14 @@ where
 
     fn set_prediction_mode(&mut self, mode: PredictionMode) {
         self.prediction_mode = mode;
+    }
+
+    fn max_rule_depth(&self) -> Option<usize> {
+        self.max_rule_depth
+    }
+
+    fn set_max_rule_depth(&mut self, depth: Option<usize>) {
+        self.max_rule_depth = depth;
     }
 }
 

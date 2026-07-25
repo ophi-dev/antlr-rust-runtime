@@ -1585,16 +1585,47 @@ fn deeply_nested_input_parses_without_native_stack_overflow() {
 mod deep_nesting_tests {
     use super::nest_lexer::NestLexer;
     use super::nest_parser::{parse, NestParser};
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn nested(depth: usize) -> String {
+        format!("{}a{}", "[".repeat(depth), "]".repeat(depth))
+    }
 
     #[test]
     fn ten_thousand_levels_parse_on_the_default_test_stack() {
         // Rust test threads default to a 2 MiB stack; without segmented-stack
         // growth this depth aborted the process (issue #193).
-        let depth = 10_000;
-        let source = format!("{}a{}", "[".repeat(depth), "]".repeat(depth));
-        let parsed = parse(&source, NestLexer::new, NestParser::s)
+        let parsed = parse(&nested(10_000), NestLexer::new, NestParser::s)
             .expect("deeply nested input should parse");
         assert!(parsed.tree().as_rule().is_some());
+    }
+
+    #[test]
+    fn max_rule_depth_bounds_adversarial_nesting() {
+        // Callers parsing untrusted input can cap rule nesting (issue #198):
+        // shallow input parses, input past the cap fails with a positioned
+        // error even though rule-level recovery would produce a tree, and the
+        // violation does not leak into the parser's next parse.
+        let lexer = NestLexer::new(InputStream::new(&nested(4)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        assert!(parser.s().is_ok(), "shallow input parses under the cap");
+
+        let lexer = NestLexer::new(InputStream::new(&nested(1_000)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        let error = parser.s().expect_err("cap must reject deep nesting");
+        assert!(
+            error.to_string().contains("rule nesting depth limit of 64"),
+            "unexpected error: {error}"
+        );
+
+        let lexer = NestLexer::new(InputStream::new(&nested(4)));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        assert!(
+            parser.s().is_ok(),
+            "reused parser starts clean after a depth violation"
+        );
     }
 }
 "#,

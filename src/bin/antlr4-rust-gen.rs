@@ -5224,10 +5224,15 @@ fn render_generated_rule_dispatch_with_rule_names(
         };
         // Rule nesting maps onto native call depth; sample remaining stack
         // capacity at the shared dispatch boundary so deeply nested input
-        // grows onto a segmented stack instead of aborting the process.
+        // grows onto a segmented stack instead of aborting the process. The
+        // optional depth cap aborts here — fatal, so recovery cannot resume a
+        // parse that exceeded its configured resource bound.
         writeln!(
             out,
-            "        if self.base.generated_rule_stack_check_due() {{\n            \
+            "        if let Some(error) = self.base.rule_depth_limit_error() {{\n            \
+             return Err(GeneratedRuleError::Fatal(error));\n        \
+             }}\n        \
+             if self.base.generated_rule_stack_check_due() {{\n            \
              antlr4_runtime::grow_generated_rule_stack(|| {target_call})\n        \
              }} else {{\n            {target_call}\n        }}"
         )
@@ -9790,6 +9795,12 @@ where
             if let Some(error) = self.base.take_unknown_semantic_error() {{
                 return Err(error);
             }}
+            // A depth-cap violation is a resource bound, not a syntax error:
+            // rule-level recovery may have produced a tree anyway, but the
+            // parse must still fail (and a reused parser must start clean).
+            if let Some(error) = self.base.take_rule_depth_error() {{
+                return Err(error);
+            }}
         }}
         Ok(__tree)
     }}
@@ -9862,6 +9873,8 @@ where
     fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
     fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
     fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
+    fn max_rule_depth(&self) -> Option<usize> {{ self.base.max_rule_depth() }}
+    fn set_max_rule_depth(&mut self, depth: Option<usize>) {{ self.base.set_max_rule_depth(depth); }}
 }}
 {generated_footer}"#
     ))
