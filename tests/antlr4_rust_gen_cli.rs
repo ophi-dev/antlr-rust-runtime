@@ -1716,6 +1716,112 @@ mod deep_nesting_tests {
             "a different entry rule on the same instance starts clean"
         );
     }
+
+    /// The cel-rust `RecursionListener` shape: count `expr` nesting live,
+    /// abort the parse past a limit — ported verbatim onto
+    /// `add_parse_listener` (issue #202).
+    struct RecursionListener {
+        max: u16,
+        depth: u16,
+        high_water: std::sync::Arc<std::sync::atomic::AtomicU16>,
+    }
+
+    impl antlr4_runtime::ParseListener for RecursionListener {
+        fn enter_every_rule(
+            &mut self,
+            rule_index: usize,
+            current: Option<antlr4_runtime::TokenView<'_>>,
+        ) -> Result<(), antlr4_runtime::AntlrError> {
+            if rule_index == super::nest_parser::RULE_EXPR {
+                self.depth += 1;
+                self.high_water
+                    .fetch_max(self.depth, std::sync::atomic::Ordering::Relaxed);
+            }
+            if self.depth > self.max {
+                use antlr4_runtime::Token as _;
+                let (line, column) = current
+                    .as_ref()
+                    .map_or((0, 0), |token| (token.line(), token.column()));
+                return Err(antlr4_runtime::AntlrError::ParserError {
+                    line,
+                    column,
+                    message: format!("Recursion limit of {} exceeded", self.max),
+                    offending: current.as_ref().map(antlr4_runtime::Token::token_id),
+                });
+            }
+            Ok(())
+        }
+
+        fn exit_every_rule(&mut self, rule_index: usize) {
+            if rule_index == super::nest_parser::RULE_EXPR {
+                self.depth -= 1;
+            }
+        }
+    }
+
+    #[test]
+    fn parse_listener_counts_rules_and_aborts_past_a_limit() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU16, Ordering};
+
+        // Under the limit: events fire, parse succeeds, enter/exit balance
+        // (depth returns to zero, so high-water == max nesting seen).
+        let high_water = Arc::new(AtomicU16::new(0));
+        let lexer = NestLexer::new(InputStream::new(&nested(3)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(RecursionListener {
+            max: 32,
+            depth: 0,
+            high_water: Arc::clone(&high_water),
+        });
+        assert!(parser.s().is_ok(), "shallow input parses under the limit");
+        assert_eq!(
+            high_water.load(Ordering::Relaxed),
+            4,
+            "one expr per bracket level plus the outermost expr"
+        );
+
+        // Past the limit: the listener aborts with its own positioned error,
+        // sticky through recovery.
+        let lexer = NestLexer::new(InputStream::new(&nested(64)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(RecursionListener {
+            max: 8,
+            depth: 0,
+            high_water: Arc::new(AtomicU16::new(0)),
+        });
+        let error = parser.s().expect_err("listener abort must fail the parse");
+        assert!(
+            error.to_string().contains("Recursion limit of 8 exceeded"),
+            "unexpected error: {error}"
+        );
+
+        // Left-recursive operator expansions fire simulated rule entries
+        // (upstream triggerEnterRuleEvent parity): a 40-term `a+a+...` chain
+        // exceeds an expr limit of 8 even though rule frames barely nest.
+        let chain = vec!["a"; 40].join("+");
+        let lexer = NestLexer::new(InputStream::new(&chain));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(RecursionListener {
+            max: 8,
+            depth: 0,
+            high_water: Arc::new(AtomicU16::new(0)),
+        });
+        let error = parser
+            .s()
+            .expect_err("operator expansions must count as rule entries");
+        assert!(
+            error.to_string().contains("Recursion limit of 8 exceeded"),
+            "unexpected error: {error}"
+        );
+
+        // The abort does not poison the instance: clearing listeners and
+        // reusing the parser parses clean input.
+        let lexer = NestLexer::new(InputStream::new("a"));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        parser.remove_parse_listeners();
+        assert!(parser.s().is_ok(), "reused parser starts clean");
+    }
 }
 "#,
     );

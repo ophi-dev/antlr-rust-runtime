@@ -128,6 +128,59 @@ const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
 pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(FAST_RECOGNIZE_RED_ZONE, FAST_RECOGNIZE_STACK_SIZE, body)
 }
+
+/// Receives committed rule enter/exit events during recognition, matching
+/// ANTLR's `addParseListener` contract ([`Parser::add_parse_listener`]).
+///
+/// Events fire on the generated recursive-descent path as rules are entered
+/// and exited, including one simulated entry per left-recursive operator
+/// expansion (upstream `Parser.pushNewRecursionContext` fires
+/// `triggerEnterRuleEvent` for exactly that case). Enter/exit calls are
+/// always balanced, including on error-recovery paths.
+///
+/// Divergence from Java to know about: upstream generated rule methods run
+/// only on the committed parse, while this runtime may re-enter a rule while
+/// recovering from a syntax error — such retries deliver additional balanced
+/// enter/exit pairs. Depth counters and resource bounds (the primary use
+/// case) are unaffected; exact once-per-node collectors should prefer the
+/// post-parse tree walker.
+///
+/// `enter_every_rule` is fallible: returning `Err` aborts the parse with
+/// that error. The abort is sticky through rule-level recovery — the parse
+/// fails even when recovery could have produced a tree, mirroring how a
+/// thrown exception escapes ANTLR's `triggerEnterRuleEvent`. Rules the
+/// generator emitted no body for (interpreter-only fallback) do not fire
+/// events; when any parse listener is registered, generated dispatch routes
+/// ATN-preferred rules through their generated bodies so real grammars
+/// observe every rule.
+pub trait ParseListener: Send {
+    /// Called when a generated rule is entered, before its body runs, and
+    /// once per left-recursive operator expansion. `current` is the lookahead
+    /// token the rule starts at (its line/column/offsets anchor listener
+    /// diagnostics), or `None` at end of input.
+    ///
+    /// Returning `Err` aborts the parse with the given error.
+    fn enter_every_rule(
+        &mut self,
+        rule_index: usize,
+        current: Option<TokenView<'_>>,
+    ) -> Result<(), AntlrError>;
+
+    /// Called when a generated rule exits, after its body (and any rule-level
+    /// error recovery) finished, and once per left-recursive operator
+    /// expansion as the rule unrolls.
+    fn exit_every_rule(&mut self, rule_index: usize) {
+        let _ = rule_index;
+    }
+}
+
+struct ParseListenerSlot(Box<dyn ParseListener>);
+
+impl std::fmt::Debug for ParseListenerSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ParseListener")
+    }
+}
 /// Probe window for deciding whether clean-pass memo entries are reusable
 /// enough to keep caching. High-cardinality parses mostly produce one-shot
 /// entries; compact ambiguous loops repeatedly hit the same keys.
@@ -1203,6 +1256,16 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// recovering (ANTLR's `BailErrorStrategy`). Generated recognizers set it
     /// through `set_error_handler(BailErrorStrategy::new())`.
     bail_on_error: bool,
+    /// Parse listeners receiving committed rule enter/exit events during
+    /// recognition (ANTLR's `addParseListener`). Empty in the default
+    /// configuration, and every dispatch site is gated on emptiness so the
+    /// unused feature costs one predictable branch per rule boundary.
+    parse_listeners: Vec<ParseListenerSlot>,
+    /// Sticky abort requested by a parse listener's `enter_every_rule`.
+    /// Mirrors `rule_depth_error`: rule-level recovery absorbs the error like
+    /// any rule failure, so the flag stays set until the top-level entry
+    /// drains it and fails the parse.
+    parse_listener_abort: Option<AntlrError>,
     /// Optional cap on rule-nesting depth for adversarial-input hardening.
     /// `None` (default) parses unbounded nesting; `Some(n)` aborts the parse
     /// with a positioned syntax error once `n` rule frames are exceeded.
@@ -4839,6 +4902,8 @@ where
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
             bail_on_error: false,
+            parse_listeners: Vec::new(),
+            parse_listener_abort: None,
             max_rule_depth: None,
             rule_depth_error: None,
             recursion_expansions: 0,
@@ -4902,6 +4967,7 @@ where
         self.decision_override_generation = 0;
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
+        self.parse_listener_abort = None;
         self.rule_depth_error = None;
         self.recursion_expansions = 0;
         self.recursion_expansion_marks.clear();
@@ -5856,6 +5922,115 @@ where
         self.max_rule_depth.is_some()
     }
 
+    /// Registers a listener for committed rule enter/exit events during
+    /// recognition (ANTLR's `addParseListener`). See [`ParseListener`] for
+    /// the delivery contract.
+    pub fn add_parse_listener<L>(&mut self, listener: L)
+    where
+        L: ParseListener + 'static,
+    {
+        self.parse_listeners
+            .push(ParseListenerSlot(Box::new(listener)));
+    }
+
+    /// Removes every registered parse listener.
+    pub fn remove_parse_listeners(&mut self) {
+        self.parse_listeners.clear();
+    }
+
+    /// Reports whether any parse listener is registered.
+    ///
+    /// Generated dispatch consults this alongside [`Self::has_rule_depth_cap`]
+    /// when choosing between the generated body (which fires events) and the
+    /// ATN-preferred interpreted fast path (which does not).
+    #[must_use]
+    pub const fn has_parse_listeners(&self) -> bool {
+        !self.parse_listeners.is_empty()
+    }
+
+    /// Fires `enter_every_rule` on registered parse listeners, returning the
+    /// abort error if any listener requested one.
+    ///
+    /// Generated rule dispatch calls this after the depth-cap probe and
+    /// before the rule body runs; the generated left-recursive loop calls it
+    /// once per operator expansion, mirroring upstream ANTLR's simulated
+    /// rule-entry event for `pushNewRecursionContext`. A listener abort is
+    /// sticky exactly like a depth-cap violation: rule-level recovery absorbs
+    /// the returned error, so the flag holds until the top-level entry drains
+    /// it via [`Self::take_parse_listener_abort`] and fails the parse.
+    pub fn parse_listener_enter_rule(&mut self, rule_index: usize) -> Option<AntlrError> {
+        if self.parse_listeners.is_empty() {
+            return None;
+        }
+        self.parse_listener_enter_rule_cold(rule_index)
+    }
+
+    #[cold]
+    fn parse_listener_enter_rule_cold(&mut self, rule_index: usize) -> Option<AntlrError> {
+        if let Some(error) = &self.parse_listener_abort {
+            return Some(error.clone());
+        }
+        let current = self.input.lt(1);
+        // Split borrows: the token view borrows the input while listeners
+        // need `&mut`, so listeners are taken out for the dispatch. Listener
+        // methods have no parser access and cannot observe the absence.
+        let mut listeners = std::mem::take(&mut self.parse_listeners);
+        let mut abort = None;
+        for slot in &mut listeners {
+            if let Err(error) = slot.0.enter_every_rule(rule_index, current) {
+                abort = Some(error);
+                break;
+            }
+        }
+        self.parse_listeners = listeners;
+        if let Some(error) = abort {
+            self.parse_listener_abort = Some(error.clone());
+            return Some(error);
+        }
+        None
+    }
+
+    /// Fires `exit_every_rule` on registered parse listeners.
+    ///
+    /// Generated rule bodies call this on every exit path — success and
+    /// recovery alike — keeping enter/exit pairs balanced, and the generated
+    /// left-recursive loop calls it once per operator expansion when the rule
+    /// finishes unrolling.
+    pub fn parse_listener_exit_rule(&mut self, rule_index: usize) {
+        if self.parse_listeners.is_empty() {
+            return;
+        }
+        for slot in &mut self.parse_listeners {
+            slot.0.exit_every_rule(rule_index);
+        }
+    }
+
+    /// Drains the sticky parse-listener abort recorded by
+    /// [`Self::parse_listener_enter_rule`], if any.
+    ///
+    /// Generated top-level rule entries call this after recognition so an
+    /// aborted parse fails even when recovery produced a tree, and so a
+    /// reused parser starts its next parse clean.
+    pub const fn take_parse_listener_abort(&mut self) -> Option<AntlrError> {
+        self.parse_listener_abort.take()
+    }
+
+    /// Drains every sticky parse abort — the depth-cap violation and the
+    /// parse-listener abort — returning the depth error preferentially.
+    ///
+    /// Generated top-level rule entries call this on both exit paths: the
+    /// recorded abort wins over errors derived from it (recovery may have
+    /// absorbed the aborted rule and failed differently later), a recovered
+    /// `Ok` tree still fails when an abort was recorded, and draining leaves
+    /// the instance clean for the next entry-rule call.
+    pub fn take_parse_abort(&mut self) -> Option<AntlrError> {
+        if let Some(error) = self.rule_depth_error.take() {
+            self.parse_listener_abort = None;
+            return Some(error);
+        }
+        self.parse_listener_abort.take()
+    }
+
     /// Enters a generated parser rule and returns the context object the
     /// generated method should populate.
     pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
@@ -6121,7 +6296,9 @@ where
         self.set_state(state);
         // Counts toward the depth cap: each operator iteration deepens the
         // parse tree one level without pushing a rule frame, and upstream
-        // fires a rule-entry listener event for it.
+        // fires a rule-entry listener event for it. The parse-listener enter
+        // event for this expansion fires from the generated loop's probe
+        // just before this call, where a listener abort can propagate.
         self.recursion_expansions += 1;
         if let Some(stop) = self
             .rule_stop_token_index(self.input.index(), false)
@@ -6148,6 +6325,18 @@ where
             self.precedence_stack.pop();
         }
         if let Some(mark) = self.recursion_expansion_marks.pop() {
+            // Each expansion fired a simulated rule-entry event; fire the
+            // matching exits as the rule unrolls so parse listeners see
+            // balanced pairs (upstream unrolls via exitRule per context).
+            if !self.parse_listeners.is_empty() {
+                let rule_index = self
+                    .rule_context_stack
+                    .last()
+                    .map_or(usize::MAX, |frame| frame.rule_index);
+                for _ in mark..self.recursion_expansions {
+                    self.parse_listener_exit_rule(rule_index);
+                }
+            }
             self.recursion_expansions = mark;
         }
         self.exit_rule();
