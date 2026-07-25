@@ -459,6 +459,141 @@ mod grouped_token_tests {
 }
 
 #[test]
+fn compile_parse_tree_pattern_matches_and_binds_against_generated_parser() {
+    let temp = temporary_directory("tree-pattern-compile");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/typed-tree-walkers/Calculator.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser =
+        fs::read_to_string(out.join("calculator_parser.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("pub fn compile_parse_tree_pattern<PL>("),
+        "generated parser must expose compile_parse_tree_pattern\n{parser}"
+    );
+
+    // End-to-end: compile a pattern rooted at the (left-recursive) `expression`
+    // rule and match it against a real parse. Exercises the rule-bypass ATN's
+    // left-recursive path through a genuinely generated grammar.
+    assert_generated_project(
+        temp.path(),
+        &["calculator_lexer.rs", "calculator_parser.rs"],
+        r#"
+#[cfg(test)]
+mod tree_pattern_tests {
+    use super::calculator_lexer::CalculatorLexer;
+    use super::calculator_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Node, Parser as _};
+
+    /// Parses `input` and returns the owned tree plus the top-level expression
+    /// node id, for matching against a pattern.
+    fn parse_top_expression(input: &'static str) -> antlr4_runtime::ParsedFile {
+        let lexer = CalculatorLexer::new(InputStream::new(input));
+        let mut parser = CalculatorParser::new(CommonTokenStream::new(lexer));
+        let root = parser.start().expect("input parses");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        parser.into_parsed_file(root)
+    }
+
+    fn top_expression(parsed: &antlr4_runtime::ParsedFile) -> Node<'_> {
+        parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .child_rule(RULE_EXPRESSION)
+            .expect("top-level expression")
+            .node()
+    }
+
+    #[test]
+    fn compiles_and_matches_expression_pattern() {
+        let lexer = CalculatorLexer::new(InputStream::new(""));
+        let parser = CalculatorParser::new(CommonTokenStream::new(lexer));
+        // `<expr> + <expr>` rooted at the expression rule.
+        let pattern = parser
+            .compile_parse_tree_pattern(
+                "<expression> + <expression>",
+                RULE_EXPRESSION,
+                CalculatorLexer::new,
+            )
+            .expect("pattern compiles");
+
+        let parsed = parse_top_expression("2 + 8");
+        let result = pattern.match_tree(top_expression(&parsed));
+        assert!(result.succeeded(), "2 + 8 should match `<expr> + <expr>`");
+        // Both operands bind under the rule name `expression`.
+        let operands: Vec<_> = result
+            .get_all("expression")
+            .iter()
+            .map(|node| node.text())
+            .collect();
+        assert_eq!(operands, vec!["2".to_owned(), "8".to_owned()]);
+    }
+
+    #[test]
+    fn rejects_non_matching_structure() {
+        let lexer = CalculatorLexer::new(InputStream::new(""));
+        let parser = CalculatorParser::new(CommonTokenStream::new(lexer));
+        let pattern = parser
+            .compile_parse_tree_pattern(
+                "<expression> * <expression>",
+                RULE_EXPRESSION,
+                CalculatorLexer::new,
+            )
+            .expect("pattern compiles");
+
+        let parsed = parse_top_expression("2 + 8");
+        // Addition must not match a multiplication pattern.
+        assert!(!pattern.match_tree(top_expression(&parsed)).succeeded());
+    }
+
+    #[test]
+    fn trailing_eof_tag_requires_a_rule_that_consumes_it() {
+        let lexer = CalculatorLexer::new(InputStream::new(""));
+        let parser = CalculatorParser::new(CommonTokenStream::new(lexer));
+        // `start : expression EOF ;` consumes the tag: the pattern matches a
+        // whole parse.
+        let pattern = parser
+            .compile_parse_tree_pattern(
+                "<expression> <EOF>",
+                RULE_START,
+                CalculatorLexer::new,
+            )
+            .expect("EOF-consuming rule accepts a trailing <EOF> tag");
+        let parsed = parse_top_expression("2 + 8");
+        assert!(pattern.match_tree(parsed.tree()).succeeded());
+
+        // `expression` never consumes EOF, so the tag would be silently
+        // dropped from the pattern tree; that must be rejected.
+        assert!(
+            parser
+                .compile_parse_tree_pattern(
+                    "<expression> + <expression> <EOF>",
+                    RULE_EXPRESSION,
+                    CalculatorLexer::new,
+                )
+                .is_err(),
+            "unconsumed trailing <EOF> tag must not compile"
+        );
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
     let temp = temporary_directory("typed-tree-walkers");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

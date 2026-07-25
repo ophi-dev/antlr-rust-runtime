@@ -10,6 +10,7 @@
 #![allow(clippy::inline_always)]
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::iter::FusedIterator;
 
@@ -371,7 +372,7 @@ impl ParserAtn {
         }
     }
 
-    const fn set_count(&self) -> usize {
+    pub(crate) const fn set_count(&self) -> usize {
         self.layout.sets.len / self.layout.set_words
     }
 
@@ -1188,6 +1189,10 @@ pub struct ParserAtnBuilder {
     max_token_type: i32,
     states: Vec<StateBuild>,
     transitions: Vec<TransitionBuild>,
+    /// Per-source transition indices in insertion order, so duplicate
+    /// detection scans one state's out-edges instead of every transition
+    /// added so far (which made re-emitting a whole ATN quadratic).
+    transitions_by_source: BTreeMap<AtnStateId, Vec<usize>>,
     interval_sets: Vec<TokenSetBuild>,
     interval_ranges: Vec<(i32, i32)>,
     token_bit_words: Vec<u64>,
@@ -1202,6 +1207,7 @@ impl ParserAtnBuilder {
             max_token_type,
             states: Vec::new(),
             transitions: Vec::new(),
+            transitions_by_source: BTreeMap::new(),
             interval_sets: Vec::new(),
             interval_ranges: Vec::new(),
             token_bit_words: Vec::new(),
@@ -1288,17 +1294,22 @@ impl ParserAtnBuilder {
         transition: ParserTransitionSpec,
     ) -> Result<TransitionId, ParserAtnError> {
         let source = self.checked_state(source, "transition source")?;
-        if let Some((index, _)) = self
-            .transitions
-            .iter()
-            .enumerate()
-            .find(|(_, existing)| existing.source == source && existing.spec() == transition)
-        {
-            return TransitionId::try_from(index);
+        if let Some(existing) = self.transitions_by_source.get(&source) {
+            if let Some(&index) = existing
+                .iter()
+                .find(|&&index| self.transitions[index].spec() == transition)
+            {
+                return TransitionId::try_from(index);
+            }
         }
         let record = self.transition_record(source, transition)?;
-        let id = TransitionId::try_from(self.transitions.len())?;
+        let index = self.transitions.len();
+        let id = TransitionId::try_from(index)?;
         self.transitions.push(record);
+        self.transitions_by_source
+            .entry(source)
+            .or_default()
+            .push(index);
         Ok(id)
     }
 
@@ -1711,6 +1722,58 @@ impl ParserTransitionSpec {
             | Self::Predicate { target, .. }
             | Self::Action { target, .. }
             | Self::Precedence { target, .. } => target,
+        }
+    }
+
+    /// Returns this spec with its target redirected, preserving every other
+    /// field.
+    #[must_use]
+    pub(crate) const fn with_target(self, target: usize) -> Self {
+        match self {
+            Self::Epsilon { .. } => Self::Epsilon { target },
+            Self::Atom { label, .. } => Self::Atom { target, label },
+            Self::Range { start, stop, .. } => Self::Range {
+                target,
+                start,
+                stop,
+            },
+            Self::Set { set, .. } => Self::Set { target, set },
+            Self::NotSet { set, .. } => Self::NotSet { target, set },
+            Self::Wildcard { .. } => Self::Wildcard { target },
+            Self::Rule {
+                rule_index,
+                follow_state,
+                precedence,
+                ..
+            } => Self::Rule {
+                target,
+                rule_index,
+                follow_state,
+                precedence,
+            },
+            Self::Predicate {
+                rule_index,
+                pred_index,
+                context_dependent,
+                ..
+            } => Self::Predicate {
+                target,
+                rule_index,
+                pred_index,
+                context_dependent,
+            },
+            Self::Action {
+                rule_index,
+                action_index,
+                context_dependent,
+                ..
+            } => Self::Action {
+                target,
+                rule_index,
+                action_index,
+                context_dependent,
+            },
+            Self::Precedence { precedence, .. } => Self::Precedence { target, precedence },
         }
     }
 }

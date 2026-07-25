@@ -6,6 +6,7 @@
 //! index-addressed [`parser_atn::ParserAtn`] representation instead.
 
 pub(crate) mod ascii_range;
+mod bypass;
 pub mod lexer;
 pub mod lexer_dfa;
 pub mod parser;

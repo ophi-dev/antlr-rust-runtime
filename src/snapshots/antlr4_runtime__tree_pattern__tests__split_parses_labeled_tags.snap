@@ -1,0 +1,21 @@
+---
+source: src/tree_pattern.rs
+expression: chunks
+---
+[
+    Tag {
+        name: "ID",
+        label: Some(
+            "lhs",
+        ),
+    },
+    Text(
+        " = ",
+    ),
+    Tag {
+        name: "expr",
+        label: Some(
+            "e",
+        ),
+    },
+]

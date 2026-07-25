@@ -246,6 +246,33 @@ grammar's documentation. Calling the wrong rule can still recover and return a
 parse tree with error nodes, so check parser diagnostics when adding a new input
 form.
 
+### Parse-Tree Pattern Matching
+
+Generated parsers expose `compile_parse_tree_pattern`, the analog of ANTLR's
+`Parser.compileParseTreePattern`. A *tree pattern* is grammar input with `<tag>`
+placeholders: literals must match exactly, `<expr>` matches any `expr` subtree,
+`<ID>` matches any `ID` token, and `<lhs:expr>` binds the match to a label.
+
+```rust
+let pattern = parser.compile_parse_tree_pattern(
+    "<ID> = <expr>;",
+    RULE_STAT,
+    MyGrammarLexer::new, // lexes the pattern's literal chunks
+)?;
+
+let m = pattern.match_tree(subtree);
+if m.succeeded() {
+    println!("assigns to {}", m.get("ID").unwrap().text());
+}
+```
+
+Compilation interprets the pattern over a rule-bypass ATN
+(`ParserAtn::with_bypass_alternatives`), the same mechanism the reference
+runtimes use; matching walks the subject and pattern trees in lockstep. The
+generated method caches the compiler per process, so compiling many patterns is
+cheap; to change the `<`/`>`/`\` delimiters, use `ParseTreePatternMatcher`
+directly.
+
 ## Technical Notes
 
 - Pure Rust runtime implementation.
@@ -270,6 +297,8 @@ The runtime contains:
 - recognizer metadata and error listener plumbing
 - parse tree node types, rule contexts, terminal nodes, error nodes, and walkers
 - parse-tree XPath queries on par with the official ANTLR runtimes
+- parse-tree pattern matching (`compileParseTreePattern` / `ParseTreePattern` /
+  `ParseTreeMatch`) with rule/token tags, labels, and rule-bypass ATNs
 - ANTLR v4 serialized lexer ATN deserialization
 - lexer ATN recognition with longest-match/rule-priority behavior and lexer
   actions

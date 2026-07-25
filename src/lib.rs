@@ -19,6 +19,7 @@ pub mod semir;
 pub mod token;
 pub mod token_stream;
 pub mod tree;
+pub mod tree_pattern;
 pub mod vocabulary;
 pub mod xpath;
 
@@ -53,6 +54,10 @@ pub use tree::{
     NodeId, NodeKind, ParseTree, ParseTreeDescendants, ParseTreeListener, ParseTreeStats,
     ParseTreeStorage, ParseTreeVisitor, ParseTreeWalker, ParsedFile, ParserRuleContext,
     RuleNodeView, TerminalNodeView,
+};
+pub use tree_pattern::{
+    ParseTreeMatch, ParseTreePattern, ParseTreePatternError, ParseTreePatternMatcher, PatternLexer,
+    lex_pattern_chunk,
 };
 pub use vocabulary::Vocabulary;
 pub use xpath::{XPath, XPathError};
