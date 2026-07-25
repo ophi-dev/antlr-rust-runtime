@@ -1605,9 +1605,9 @@ mod deep_nesting_tests {
         // Callers parsing untrusted input can cap rule nesting (issue #198):
         // shallow input parses, input past the cap fails with a positioned
         // error even though rule-level recovery would produce a tree, and the
-        // violation does not leak into the parser's next parse. The grammar's
-        // 8-rule leading-call chain makes these rules ATN-preferred, so this
-        // also pins that a configured cap overrides the interpreted fast path.
+        // violation does not leak into the parser's next parse. (No Nest rule
+        // is ATN-preferred — the cap-overrides-ATN-preference guard is pinned
+        // by the generator's dispatch-rendering unit test.)
         let lexer = NestLexer::new(InputStream::new(&nested(4)));
         let mut parser = NestParser::new(CommonTokenStream::new(lexer));
         parser.set_max_rule_depth(Some(64));
@@ -1657,6 +1657,38 @@ mod deep_nesting_tests {
         let mut parser = NestParser::new(CommonTokenStream::new(lexer));
         parser.set_max_rule_depth(Some(64));
         assert!(parser.s().is_ok(), "short operator chain fits the cap");
+    }
+
+    #[test]
+    fn max_rule_depth_expansion_boundary_matches_frame_boundary() {
+        // The expansion check runs BEFORE the expansion push, mirroring the
+        // dispatch site's check before its rule-frame push: each extra
+        // operator costs exactly one depth level. Pin that alignment by
+        // finding the minimal cap admitting an N-operator chain and asserting
+        // one more operator needs exactly one more level.
+        fn parses_at(cap: usize, operators: usize) -> bool {
+            let chain = vec!["a"; operators + 1].join("+");
+            let lexer = NestLexer::new(InputStream::new(&chain));
+            let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+            parser.set_max_rule_depth(Some(cap));
+            parser.s().is_ok()
+        }
+
+        let minimal_cap = (1..128)
+            .find(|cap| parses_at(*cap, 4))
+            .expect("some cap admits a 4-operator chain");
+        assert!(
+            !parses_at(minimal_cap - 1, 4),
+            "minimal cap should be exact"
+        );
+        assert!(
+            !parses_at(minimal_cap, 5),
+            "one more operator must exceed the same cap"
+        );
+        assert!(
+            parses_at(minimal_cap + 1, 5),
+            "one more operator must need exactly one more level"
+        );
     }
 
     #[test]

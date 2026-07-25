@@ -5765,27 +5765,39 @@ where
     }
 
     /// Returns the positioned error to abort with when the configured
-    /// rule-nesting depth cap is exceeded, or `None` to keep parsing.
+    /// rule-nesting depth cap would be exceeded by one more level, or `None`
+    /// to keep parsing.
     ///
-    /// Generated rule dispatch consults this — gated on the inlined
-    /// [`Self::has_rule_depth_cap`] so uncapped parses pay one predictable
-    /// branch — before entering each rule body, letting callers parsing
-    /// untrusted input bound CPU and tree memory
-    /// ([`Parser::set_max_rule_depth`]). The violation is sticky: rule-level
-    /// recovery would otherwise absorb the error and keep spending the very
-    /// resources the cap exists to bound, so every rule entry after the first
-    /// violation fails until [`Self::take_rule_depth_error`] drains it at the
-    /// top-level entry.
-    #[cold]
-    pub fn rule_depth_limit_error(&mut self) -> Option<AntlrError> {
-        if let Some(error) = &self.rule_depth_error {
-            return Some(error.clone());
-        }
+    /// Generated rule dispatch calls this before deepening — ahead of the
+    /// rule-frame push at the dispatch boundary and ahead of each
+    /// left-recursive expansion — letting callers parsing untrusted input
+    /// bound CPU and tree memory ([`Parser::set_max_rule_depth`]). The
+    /// inline fast path is one `Option` check when no cap is set (the
+    /// default) and one addition plus compare when one is; only an actual
+    /// violation leaves the inline path.
+    ///
+    /// The violation is sticky: rule-level recovery absorbs the returned
+    /// error like any other rule failure and would otherwise keep spending
+    /// the very resources the cap exists to bound, so every check after the
+    /// first violation fails until [`Self::take_rule_depth_error`] drains it
+    /// at the top-level entry.
+    #[inline]
+    pub fn rule_depth_cap_violation(&mut self) -> Option<AntlrError> {
         let max = self.max_rule_depth?;
         // Left-recursive operator iterations deepen the tree without pushing
         // a rule frame, so they count alongside the rule-context stack.
-        if self.rule_context_stack.len() + self.recursion_expansions < max {
+        if self.rule_depth_error.is_none()
+            && self.rule_context_stack.len() + self.recursion_expansions < max
+        {
             return None;
+        }
+        Some(self.rule_depth_cap_violation_cold(max))
+    }
+
+    #[cold]
+    fn rule_depth_cap_violation_cold(&mut self, max: usize) -> AntlrError {
+        if let Some(error) = &self.rule_depth_error {
+            return error.clone();
         }
         let (line, column) = self
             .input
@@ -5797,11 +5809,11 @@ where
             message: format!("rule nesting depth limit of {max} exceeded"),
         };
         self.rule_depth_error = Some(error.clone());
-        Some(error)
+        error
     }
 
     /// Drains the sticky depth-cap violation recorded by
-    /// [`Self::rule_depth_limit_error`], if any.
+    /// [`Self::rule_depth_cap_violation`], if any.
     ///
     /// Generated top-level rule entries call this after recognition so a
     /// recovered parse that crossed the cap still fails, and so a reused

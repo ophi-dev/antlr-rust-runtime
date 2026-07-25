@@ -5228,15 +5228,14 @@ fn render_generated_rule_dispatch_with_rule_names(
         // Rule nesting maps onto native call depth; sample remaining stack
         // capacity at the shared dispatch boundary so deeply nested input
         // grows onto a segmented stack instead of aborting the process. The
-        // optional depth cap aborts here — fatal, so recovery cannot resume a
-        // parse that exceeded its configured resource bound. The cap check is
-        // gated on the inlined `has_rule_depth_cap` load so uncapped parses
-        // (the default) skip the out-of-line depth accounting entirely.
+        // optional depth-cap probe stays inline-cheap (one `Option` check
+        // when unset) and its error, while absorbed by rule-level recovery
+        // like any rule failure, stays sticky until the top-level entry
+        // drains it — that pairing is what actually enforces the abort.
+        // Plain `if let` keeps generated output edition-2021 compatible.
         writeln!(
             out,
-            "        if self.base.has_rule_depth_cap()\n            \
-             && let Some(error) = self.base.rule_depth_limit_error()\n        \
-             {{\n            \
+            "        if let Some(error) = self.base.rule_depth_cap_violation() {{\n            \
              return Err(GeneratedRuleError::Fatal(error));\n        \
              }}\n        \
              if self.base.generated_rule_stack_check_due() {{\n            \
@@ -5848,9 +5847,11 @@ fn render_generated_step(
             {
                 // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
                 // The rule's `parse_generated_rule` dispatch arm is guarded by
-                // `generated_only()`, so in normal mode the generated probe returns
-                // `None` and the wrapper parses the child on the INTERPRETED path
-                // (preserving the ATN-preferred optimization).
+                // `generated_only() || has_rule_depth_cap()`: in normal uncapped
+                // mode the generated probe returns `None` and the wrapper parses
+                // the child on the INTERPRETED path (preserving the ATN-preferred
+                // optimization); a configured depth cap flips it to the generated
+                // body, which is the only path that enforces the cap.
                 from_generated_call
             } else {
                 generated_child_call
@@ -6940,22 +6941,22 @@ fn render_generated_left_recursive_loop(
         )
         .expect("writing to a string cannot fail");
     }
+    // Each operator iteration deepens the tree without a rule frame; probe
+    // the depth cap BEFORE the expansion push so the boundary matches the
+    // dispatch site (which checks before its rule-frame push): frames and
+    // expansions are both admitted up to the cap, and token-only operator
+    // alternatives (no nested rule dispatch) still abort promptly instead of
+    // at the top-level drain.
+    writeln!(
+        out,
+        "{pad}            if let Some(__depth_error) = self.base.rule_depth_cap_violation() {{\n\
+         {pad}                return Err(__depth_error);\n\
+         {pad}            }}"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
-    )
-    .expect("writing to a string cannot fail");
-    // Each operator iteration deepens the tree without a rule frame; check
-    // the depth cap here so token-only operator alternatives (no nested rule
-    // dispatch) still abort promptly instead of at the top-level drain. The
-    // inlined `has_rule_depth_cap` gate keeps uncapped loops branch-cheap.
-    writeln!(
-        out,
-        "{pad}            if self.base.has_rule_depth_cap()\n\
-         {pad}                && let Some(__depth_error) = self.base.rule_depth_limit_error()\n\
-         {pad}            {{\n\
-         {pad}                return Err(__depth_error);\n\
-         {pad}            }}"
     )
     .expect("writing to a string cannot fail");
     render_generated_steps(out, body, indent + 3, render_context);
