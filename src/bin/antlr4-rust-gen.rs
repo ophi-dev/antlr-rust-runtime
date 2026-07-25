@@ -7129,6 +7129,8 @@ const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
     "clear_dfa",
     "add_error_listener",
     "remove_error_listeners",
+    "add_parse_listener",
+    "remove_parse_listeners",
     "node",
     "into_token_stream",
     "into_token_store",
@@ -9285,9 +9287,10 @@ const fn render_parse_listener_facade() -> &'static str {
         self.base.add_parse_listener(listener);
     }
 
-    /// Removes every registered parse listener.
-    pub fn remove_parse_listeners(&mut self) {
-        self.base.remove_parse_listeners();
+    /// Removes every registered parse listener and returns them, dropping
+    /// any sticky abort a removed listener had requested.
+    pub fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {
+        self.base.remove_parse_listeners()
     }
 "
 }
@@ -12078,6 +12081,8 @@ mod tests {
             "clearDfa".to_owned(),
             "addErrorListener".to_owned(),
             "removeErrorListeners".to_owned(),
+            "addParseListener".to_owned(),
+            "removeParseListeners".to_owned(),
             "compileParseTreePattern".to_owned(),
             "regularRule".to_owned(),
         ];
@@ -12093,6 +12098,8 @@ mod tests {
                 "clear_dfa_rule",
                 "add_error_listener_rule",
                 "remove_error_listeners_rule",
+                "add_parse_listener_rule",
+                "remove_parse_listeners_rule",
                 "compile_parse_tree_pattern_rule",
                 "regular_rule"
             ]

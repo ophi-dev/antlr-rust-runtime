@@ -1729,24 +1729,24 @@ mod deep_nesting_tests {
     impl antlr4_runtime::ParseListener for RecursionListener {
         fn enter_every_rule(
             &mut self,
-            rule_index: usize,
-            current: Option<antlr4_runtime::TokenView<'_>>,
+            event: &antlr4_runtime::EnterRuleEvent<'_>,
         ) -> Result<(), antlr4_runtime::AntlrError> {
-            if rule_index == super::nest_parser::RULE_EXPR {
+            if event.rule_index == super::nest_parser::RULE_EXPR {
                 self.depth += 1;
                 self.high_water
                     .fetch_max(self.depth, std::sync::atomic::Ordering::Relaxed);
             }
             if self.depth > self.max {
                 use antlr4_runtime::Token as _;
-                let (line, column) = current
+                let (line, column) = event
+                    .current
                     .as_ref()
                     .map_or((0, 0), |token| (token.line(), token.column()));
                 return Err(antlr4_runtime::AntlrError::ParserError {
                     line,
                     column,
                     message: format!("Recursion limit of {} exceeded", self.max),
-                    offending: current.as_ref().map(antlr4_runtime::Token::token_id),
+                    offending: event.current.as_ref().map(antlr4_runtime::Token::token_id),
                 });
             }
             Ok(())
@@ -1756,6 +1756,32 @@ mod deep_nesting_tests {
             if rule_index == super::nest_parser::RULE_EXPR {
                 self.depth -= 1;
             }
+        }
+    }
+
+    /// Records the event stream for order/balance assertions.
+    struct TracingListener {
+        tag: &'static str,
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl antlr4_runtime::ParseListener for TracingListener {
+        fn enter_every_rule(
+            &mut self,
+            event: &antlr4_runtime::EnterRuleEvent<'_>,
+        ) -> Result<(), antlr4_runtime::AntlrError> {
+            self.events
+                .lock()
+                .expect("trace lock")
+                .push(format!("enter{}:{}", self.tag, event.rule_index));
+            Ok(())
+        }
+
+        fn exit_every_rule(&mut self, rule_index: usize) {
+            self.events
+                .lock()
+                .expect("trace lock")
+                .push(format!("exit{}:{}", self.tag, rule_index));
         }
     }
 
@@ -1815,12 +1841,111 @@ mod deep_nesting_tests {
             "unexpected error: {error}"
         );
 
-        // The abort does not poison the instance: clearing listeners and
-        // reusing the parser parses clean input.
+        // The abort does not poison the instance: clearing listeners (which
+        // also returns them and drops the sticky abort) and reusing the
+        // parser parses clean input.
         let lexer = NestLexer::new(InputStream::new("a"));
         parser.set_token_stream(CommonTokenStream::new(lexer));
-        parser.remove_parse_listeners();
+        let removed = parser.remove_parse_listeners();
+        assert_eq!(removed.len(), 1, "removed listeners are handed back");
         assert!(parser.s().is_ok(), "reused parser starts clean");
+    }
+
+    #[test]
+    fn parse_listener_event_order_matches_upstream() {
+        use std::sync::{Arc, Mutex};
+
+        // Two listeners: enters fire in registration order, exits in reverse
+        // (upstream Parser.triggerExitRuleEvent walks back to front), and
+        // pairs balance across recovery on malformed input.
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let lexer = NestLexer::new(InputStream::new("[a]"));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(TracingListener {
+            tag: "A",
+            events: Arc::clone(&events),
+        });
+        parser.add_parse_listener(TracingListener {
+            tag: "B",
+            events: Arc::clone(&events),
+        });
+        assert!(parser.s().is_ok());
+        let trace = events.lock().expect("trace lock").clone();
+        let s_rule = super::nest_parser::RULE_S;
+        assert_eq!(trace.first().map(String::as_str), Some(format!("enterA:{s_rule}").as_str()));
+        assert_eq!(trace.get(1).map(String::as_str), Some(format!("enterB:{s_rule}").as_str()));
+        // Last two events close the entry rule: B exits before A.
+        assert_eq!(
+            trace.last().map(String::as_str),
+            Some(format!("exitA:{s_rule}").as_str())
+        );
+        assert_eq!(
+            trace.get(trace.len() - 2).map(String::as_str),
+            Some(format!("exitB:{s_rule}").as_str())
+        );
+        // Balance: every rule index enters exactly as often as it exits,
+        // for both listeners.
+        let count = |needle: &str| trace.iter().filter(|event| event.starts_with(needle)).count();
+        assert_eq!(count("enterA:"), count("exitA:"));
+        assert_eq!(count("enterB:"), count("exitB:"));
+
+        // Recovery path: malformed input still balances.
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let lexer = NestLexer::new(InputStream::new("[a"));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(TracingListener {
+            tag: "R",
+            events: Arc::clone(&events),
+        });
+        let _ = parser.s();
+        let trace = events.lock().expect("trace lock").clone();
+        let count = |needle: &str| trace.iter().filter(|event| event.starts_with(needle)).count();
+        assert_eq!(
+            count("enterR:"),
+            count("exitR:"),
+            "recovery keeps pairs balanced: {trace:?}"
+        );
+    }
+
+    #[test]
+    fn depth_cap_and_listener_abort_coexist() {
+        // Whichever bound trips first surfaces; the other never fires because
+        // the sticky abort stops rule entries (and thus stack growth). With a
+        // tight listener limit the listener error wins the race...
+        let lexer = NestLexer::new(InputStream::new(&nested(64)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(64));
+        parser.add_parse_listener(RecursionListener {
+            max: 1,
+            depth: 0,
+            high_water: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(0)),
+        });
+        let error = parser.s().expect_err("listener limit must fail the parse");
+        assert!(
+            error.to_string().contains("Recursion limit of 1 exceeded"),
+            "listener abort surfaces when it trips first: {error}"
+        );
+
+        // ...and with a tight cap the depth violation wins the race.
+        let lexer = NestLexer::new(InputStream::new(&nested(64)));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(8));
+        parser.add_parse_listener(RecursionListener {
+            max: 1_000,
+            depth: 0,
+            high_water: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(0)),
+        });
+        let error = parser.s().expect_err("depth cap must fail the parse");
+        assert!(
+            error.to_string().contains("rule nesting depth limit of 8"),
+            "depth-cap violation surfaces when it trips first: {error}"
+        );
+
+        let lexer = NestLexer::new(InputStream::new("a"));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(None);
+        let _ = parser.remove_parse_listeners();
+        assert!(parser.s().is_ok(), "instance is clean after either abort");
     }
 }
 "#,

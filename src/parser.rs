@@ -135,8 +135,13 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 /// Events fire on the generated recursive-descent path as rules are entered
 /// and exited, including one simulated entry per left-recursive operator
 /// expansion (upstream `Parser.pushNewRecursionContext` fires
-/// `triggerEnterRuleEvent` for exactly that case). Enter/exit calls are
-/// always balanced, including on error-recovery paths.
+/// `triggerEnterRuleEvent` for exactly that case). Enter events fire in
+/// registration order and exit events in reverse registration order,
+/// matching upstream. Enter/exit calls balance on every completed path,
+/// including error recovery — with one exception shared with Java: the
+/// enter that returns `Err` (or whose Java analog throws) receives no
+/// matching exit, so listener state shared across parses via `Arc` must be
+/// reset after an abort.
 ///
 /// Divergence from Java to know about: upstream generated rule methods run
 /// only on the committed parse, while this runtime may re-enter a rule while
@@ -153,18 +158,20 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 /// events; when any parse listener is registered, generated dispatch routes
 /// ATN-preferred rules through their generated bodies so real grammars
 /// observe every rule.
+///
+/// Cost: with no listener registered, dispatch pays one emptiness check per
+/// rule boundary (benchmarked at baseline). With one registered, dispatch
+/// itself is a few percent; on grammars where the generator classified rules
+/// ATN-preferred, the dominant cost is the routing override above — the same
+/// one [`Parser::set_max_rule_depth`] takes — which trades that fast path
+/// for observability. Grammars without ATN-preferred rules (most small DSLs)
+/// pay only the dispatch.
 pub trait ParseListener: Send {
     /// Called when a generated rule is entered, before its body runs, and
-    /// once per left-recursive operator expansion. `current` is the lookahead
-    /// token the rule starts at (its line/column/offsets anchor listener
-    /// diagnostics), or `None` at end of input.
+    /// once per left-recursive operator expansion.
     ///
     /// Returning `Err` aborts the parse with the given error.
-    fn enter_every_rule(
-        &mut self,
-        rule_index: usize,
-        current: Option<TokenView<'_>>,
-    ) -> Result<(), AntlrError>;
+    fn enter_every_rule(&mut self, event: &EnterRuleEvent<'_>) -> Result<(), AntlrError>;
 
     /// Called when a generated rule exits, after its body (and any rule-level
     /// error recovery) finished, and once per left-recursive operator
@@ -172,6 +179,21 @@ pub trait ParseListener: Send {
     fn exit_every_rule(&mut self, rule_index: usize) {
         let _ = rule_index;
     }
+}
+
+/// A rule-entry event delivered to [`ParseListener::enter_every_rule`].
+///
+/// Non-exhaustive so future fields (alt number, invoking state, a context
+/// handle) extend the event without breaking implementors.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct EnterRuleEvent<'a> {
+    /// Index of the rule being entered (compare against the generated
+    /// `RULE_*` constants).
+    pub rule_index: usize,
+    /// The lookahead token the rule starts at — its line/column/offsets
+    /// anchor listener diagnostics — or `None` at end of input.
+    pub current: Option<TokenView<'a>>,
 }
 
 struct ParseListenerSlot(Box<dyn ParseListener>);
@@ -5933,9 +5955,15 @@ where
             .push(ParseListenerSlot(Box::new(listener)));
     }
 
-    /// Removes every registered parse listener.
-    pub fn remove_parse_listeners(&mut self) {
-        self.parse_listeners.clear();
+    /// Removes every registered parse listener and returns them, dropping any
+    /// sticky abort a removed listener had requested.
+    ///
+    /// Returning the boxed listeners gives callers back the state they
+    /// accumulated (depth counters, collected events) without threading
+    /// shared handles through the listener.
+    pub fn remove_parse_listeners(&mut self) -> Vec<Box<dyn ParseListener>> {
+        self.parse_listener_abort = None;
+        self.parse_listeners.drain(..).map(|slot| slot.0).collect()
     }
 
     /// Reports whether any parse listener is registered.
@@ -5962,22 +5990,24 @@ where
         if self.parse_listeners.is_empty() {
             return None;
         }
-        self.parse_listener_enter_rule_cold(rule_index)
+        self.parse_listener_enter_rule_dispatch(rule_index)
     }
 
-    #[cold]
-    fn parse_listener_enter_rule_cold(&mut self, rule_index: usize) -> Option<AntlrError> {
+    fn parse_listener_enter_rule_dispatch(&mut self, rule_index: usize) -> Option<AntlrError> {
         if let Some(error) = &self.parse_listener_abort {
             return Some(error.clone());
         }
-        let current = self.input.lt(1);
+        let event = EnterRuleEvent {
+            rule_index,
+            current: self.input.lt(1),
+        };
         // Split borrows: the token view borrows the input while listeners
         // need `&mut`, so listeners are taken out for the dispatch. Listener
         // methods have no parser access and cannot observe the absence.
         let mut listeners = std::mem::take(&mut self.parse_listeners);
         let mut abort = None;
         for slot in &mut listeners {
-            if let Err(error) = slot.0.enter_every_rule(rule_index, current) {
+            if let Err(error) = slot.0.enter_every_rule(&event) {
                 abort = Some(error);
                 break;
             }
@@ -6000,7 +6030,9 @@ where
         if self.parse_listeners.is_empty() {
             return;
         }
-        for slot in &mut self.parse_listeners {
+        // Reverse registration order, matching upstream ANTLR
+        // (`Parser.triggerExitRuleEvent` walks listeners back to front).
+        for slot in self.parse_listeners.iter_mut().rev() {
             slot.0.exit_every_rule(rule_index);
         }
     }

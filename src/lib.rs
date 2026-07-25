@@ -34,11 +34,11 @@ pub use lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerLifecycleCtx, LexerMode, LexerPredicate, LexerSemCtx,
 };
 pub use parser::{
-    BailErrorStrategy, BaseParser, ExpectedTokenSet, NoSemanticHooks, ParseListener, Parser,
-    ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction, ParserRuleArg,
-    ParserRuntimeOptions, ParserSemCtx, ParserSemanticAction, ParserSemanticPredicate,
-    ParserSemantics, PredictionMode, RecognitionArenaStats, SemanticHooks, UnknownSemanticPolicy,
-    grow_generated_rule_stack,
+    BailErrorStrategy, BaseParser, EnterRuleEvent, ExpectedTokenSet, NoSemanticHooks,
+    ParseListener, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction,
+    ParserRuleArg, ParserRuntimeOptions, ParserSemCtx, ParserSemanticAction,
+    ParserSemanticPredicate, ParserSemantics, PredictionMode, RecognitionArenaStats, SemanticHooks,
+    UnknownSemanticPolicy, grow_generated_rule_stack,
 };
 #[cfg(feature = "perf-counters")]
 pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};
