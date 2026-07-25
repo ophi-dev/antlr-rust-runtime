@@ -1148,7 +1148,15 @@ pub trait Parser: Recognizer {
     /// onto a segmented stack), but each nesting level still costs CPU and
     /// tree memory. Callers parsing untrusted input can cap that work: when
     /// the limit is exceeded the parse stops with a positioned syntax error
-    /// instead of consuming unbounded resources.
+    /// instead of consuming unbounded resources. The measure counts rule
+    /// frames plus left-recursive operator expansions, matching what an
+    /// upstream-ANTLR rule-entry listener observes.
+    ///
+    /// The cap is enforced by generated recursive-descent rule bodies. When
+    /// one is set, generated dispatch routes ATN-preferred rules through
+    /// their generated bodies too, trading that fast path for enforcement.
+    /// Rules the generator emitted no body for (interpreter-only fallback)
+    /// do not check the cap.
     fn set_max_rule_depth(&mut self, _depth: Option<usize>) {}
 }
 
@@ -1204,6 +1212,16 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// immediately and the top-level entry returns this error even when
     /// recovery produced a tree.
     rule_depth_error: Option<AntlrError>,
+    /// Left-recursive expansions currently deepening the parse tree. Each
+    /// operator iteration wraps the previous context one level deeper without
+    /// pushing a rule frame, so the depth cap must count these separately —
+    /// upstream ANTLR fires a rule-entry listener event for exactly this case
+    /// (`Parser.pushNewRecursionContext` → `triggerEnterRuleEvent`).
+    recursion_expansions: usize,
+    /// Per-invocation snapshots of [`Self::recursion_expansions`], pushed by
+    /// `enter_recursion_rule` and restored by `unroll_recursion_context`, so a
+    /// finished left-recursive rule releases the depth its expansions added.
+    recursion_expansion_marks: Vec<usize>,
     /// How to evaluate predicate coordinates missing from the active
     /// predicate table. Set from [`ParserRuntimeOptions`] at each parse entry.
     unknown_predicate_policy: UnknownSemanticPolicy,
@@ -4819,6 +4837,8 @@ where
             bail_on_error: false,
             max_rule_depth: None,
             rule_depth_error: None,
+            recursion_expansions: 0,
+            recursion_expansion_marks: Vec::new(),
             unknown_predicate_policy: UnknownSemanticPolicy::default(),
             unknown_predicate_hits: Vec::new(),
             unhandled_action_hits: Vec::new(),
@@ -4879,6 +4899,8 @@ where
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
         self.rule_depth_error = None;
+        self.recursion_expansions = 0;
+        self.recursion_expansion_marks.clear();
         self.reset_per_parse_caches();
         self.fast_first_set_prefilter = true;
         self.fast_recovery_enabled = true;
@@ -5757,7 +5779,9 @@ where
             return Some(error.clone());
         }
         let max = self.max_rule_depth?;
-        if self.rule_context_stack.len() < max {
+        // Left-recursive operator iterations deepen the tree without pushing
+        // a rule frame, so they count alongside the rule-context stack.
+        if self.rule_context_stack.len() + self.recursion_expansions < max {
             return None;
         }
         let (line, column) = self
@@ -5781,6 +5805,17 @@ where
     /// parser starts its next parse clean.
     pub const fn take_rule_depth_error(&mut self) -> Option<AntlrError> {
         self.rule_depth_error.take()
+    }
+
+    /// Reports whether a rule-nesting depth cap is configured.
+    ///
+    /// Generated dispatch consults this when selecting between the guarded
+    /// recursive-descent body and the ATN-preferred interpreted fast path:
+    /// only the generated body enforces the cap, so a configured bound
+    /// overrides the performance preference.
+    #[must_use]
+    pub const fn has_rule_depth_cap(&self) -> bool {
+        self.max_rule_depth.is_some()
     }
 
     /// Enters a generated parser rule and returns the context object the
@@ -6013,6 +6048,8 @@ where
         precedence: i32,
     ) -> ParserRuleContext {
         self.precedence_stack.push(precedence);
+        self.recursion_expansion_marks
+            .push(self.recursion_expansions);
         self.enter_rule(state, rule_index)
     }
 
@@ -6023,6 +6060,9 @@ where
         rule_index: usize,
     ) -> ParserRuleContext {
         self.set_state(state);
+        // Counts toward the depth cap: upstream treats this as rule entry
+        // (`Parser.pushNewRecursionContext` fires `triggerEnterRuleEvent`).
+        self.recursion_expansions += 1;
         ParserRuleContext::new(rule_index, state)
     }
 
@@ -6035,6 +6075,10 @@ where
         current: &mut ParserRuleContext,
     ) {
         self.set_state(state);
+        // Counts toward the depth cap: each operator iteration deepens the
+        // parse tree one level without pushing a rule frame, and upstream
+        // fires a rule-entry listener event for it.
+        self.recursion_expansions += 1;
         if let Some(stop) = self
             .rule_stop_token_index(self.input.index(), false)
             .and_then(|index| self.token_id_at(index))
@@ -6058,6 +6102,9 @@ where
     pub fn unroll_recursion_context(&mut self) {
         if self.precedence_stack.len() > 1 {
             self.precedence_stack.pop();
+        }
+        if let Some(mark) = self.recursion_expansion_marks.pop() {
+            self.recursion_expansions = mark;
         }
         self.exit_rule();
     }

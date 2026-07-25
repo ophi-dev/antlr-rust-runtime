@@ -5184,9 +5184,12 @@ fn render_generated_rule_dispatch_with_rule_names(
             .copied()
             .unwrap_or_default()
         {
+            // The interpreted fast path never consults the depth cap, so a
+            // configured bound overrides the ATN preference: correctness of
+            // the resource limit beats the long-call-chain optimization.
             writeln!(
                 out,
-                "            {index} if self.generated_only() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
         } else {
@@ -6936,6 +6939,16 @@ fn render_generated_left_recursive_loop(
     writeln!(
         out,
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
+    )
+    .expect("writing to a string cannot fail");
+    // Each operator iteration deepens the tree without a rule frame; check
+    // the depth cap here so token-only operator alternatives (no nested rule
+    // dispatch) still abort promptly instead of at the top-level drain.
+    writeln!(
+        out,
+        "{pad}            if let Some(__depth_error) = self.base.rule_depth_limit_error() {{\n\
+         {pad}                return Err(__depth_error);\n\
+         {pad}            }}"
     )
     .expect("writing to a string cannot fail");
     render_generated_steps(out, body, indent + 3, render_context);
@@ -9751,6 +9764,10 @@ where
             // are preserved so a generated parent can surface a recovered child's
             // fail-loud coordinate at this boundary.
             self.base.reset_unknown_semantic_hits();
+            // Likewise drop a stale depth-cap violation: entry rules share one
+            // parser instance, and the sticky flag must not poison the next
+            // parse when the previous one exited through an error path.
+            let _ = self.base.take_rule_depth_error();
         }}
         let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
         let __generated_only = self.generated_only();
@@ -9770,6 +9787,14 @@ where
                     if allow_generated_fallback {{
                         if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
                             return Err(semantic_error);
+                        }}
+                        // The depth-cap violation wins over an error derived
+                        // from it (e.g. a sync failure after recovery absorbed
+                        // the capped rule): the caller must learn the resource
+                        // bound was hit, and draining un-poisons the instance
+                        // for the next entry-rule call.
+                        if let Some(depth_error) = self.base.take_rule_depth_error() {{
+                            return Err(depth_error);
                         }}
                     }}
                     return Err(error.into_error());
