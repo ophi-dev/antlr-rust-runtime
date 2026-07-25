@@ -12590,8 +12590,10 @@ mod tests {
             None,
         );
 
+        // A configured depth cap overrides the ATN preference: only generated
+        // bodies enforce the bound, so the guard admits either trigger.
         assert!(rendered.contains(
-            "0 if self.generated_only() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
         ));
         assert!(!rendered.contains(
             "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
