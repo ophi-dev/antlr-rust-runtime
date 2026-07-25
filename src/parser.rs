@@ -187,6 +187,19 @@ pub trait ParseListener: Send {
     }
 }
 
+/// Boxed listeners forward to their inner implementation, so the boxes
+/// returned by [`Parser::remove_parse_listeners`] can be re-registered
+/// through [`Parser::add_parse_listener`] unchanged.
+impl<T: ParseListener + ?Sized> ParseListener for Box<T> {
+    fn enter_every_rule(&mut self, event: &EnterRuleEvent<'_>) -> Result<(), AntlrError> {
+        (**self).enter_every_rule(event)
+    }
+
+    fn exit_every_rule(&mut self, rule_index: usize) {
+        (**self).exit_every_rule(rule_index);
+    }
+}
+
 /// A rule-entry event delivered to [`ParseListener::enter_every_rule`].
 ///
 /// Non-exhaustive so future fields (alt number, invoking state, a context

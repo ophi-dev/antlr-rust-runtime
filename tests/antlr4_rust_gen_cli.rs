@@ -1807,6 +1807,31 @@ mod deep_nesting_tests {
             "one expr per bracket level plus the outermost expr"
         );
 
+        // Successful left-recursive chain: the live depth counter returns to
+        // its starting value. Proven through the public API: parse the same
+        // under-limit chain twice with one listener instance — any residual
+        // depth from parse one would raise parse two's high-water mark.
+        let high_water = Arc::new(AtomicU16::new(0));
+        let chain = vec!["a"; 20].join("+");
+        let lexer = NestLexer::new(InputStream::new(&chain));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(RecursionListener {
+            max: 1_000,
+            depth: 0,
+            high_water: Arc::clone(&high_water),
+        });
+        assert!(parser.s().is_ok(), "under-limit operator chain parses");
+        let first_peak = high_water.load(Ordering::Relaxed);
+        assert!(first_peak > 0, "the chain nests expr rules");
+        let lexer = NestLexer::new(InputStream::new(&chain));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        assert!(parser.s().is_ok(), "same chain parses again");
+        assert_eq!(
+            high_water.load(Ordering::Relaxed),
+            first_peak,
+            "depth returned to zero after the successful LR parse"
+        );
+
         // Past the limit: the listener aborts with its own positioned error,
         // sticky through recovery.
         let lexer = NestLexer::new(InputStream::new(&nested(64)));
@@ -1846,9 +1871,23 @@ mod deep_nesting_tests {
         // parser parses clean input.
         let lexer = NestLexer::new(InputStream::new("a"));
         parser.set_token_stream(CommonTokenStream::new(lexer));
-        let removed = parser.remove_parse_listeners();
+        let mut removed = parser.remove_parse_listeners();
         assert_eq!(removed.len(), 1, "removed listeners are handed back");
         assert!(parser.s().is_ok(), "reused parser starts clean");
+
+        // Returned boxes re-register as-is (ParseListener is implemented for
+        // Box<dyn ParseListener>), preserving accumulated listener state.
+        let boxed = removed.pop().expect("one listener was removed");
+        let lexer = NestLexer::new(InputStream::new(&nested(64)));
+        parser.set_token_stream(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(boxed);
+        let error = parser
+            .s()
+            .expect_err("re-registered listener still enforces its limit");
+        assert!(
+            error.to_string().contains("Recursion limit of 8 exceeded"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
