@@ -108,10 +108,26 @@ const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
 const FAST_RECOGNIZE_STACK_CHECK_INTERVAL: usize = 8;
 const FAST_RECOGNIZE_RED_ZONE: usize = 1024 * 1024;
 const FAST_RECOGNIZE_STACK_SIZE: usize = 4 * 1024 * 1024;
+/// Generated recursive-descent rule methods map grammar-rule nesting onto
+/// native call depth. Their `_dispatch` boundary samples remaining stack
+/// capacity once per this many rule-context frames, so between two samples at
+/// most this many rule bodies of native growth can occur — far below the
+/// red zone.
+const GENERATED_RULE_STACK_CHECK_INTERVAL: usize = 8;
 /// Whole-rule direct adaptive execution is allowed to give up and fall back to
 /// the existing recognizer. Keep the guard at the same order of magnitude as
 /// speculative recognition so malformed cyclic ATNs cannot spin forever.
 const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
+
+/// Runs a generated rule body after ensuring native stack capacity, growing
+/// onto a segmented stack when remaining capacity enters the red zone.
+///
+/// Generated `parse_generated_rule_*_dispatch` methods call this when
+/// [`BaseParser::generated_rule_stack_check_due`] fires so deeply nested input
+/// parses (or reports a syntax error) instead of aborting the process.
+pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(FAST_RECOGNIZE_RED_ZONE, FAST_RECOGNIZE_STACK_SIZE, body)
+}
 /// Probe window for deciding whether clean-pass memo entries are reusable
 /// enough to keep caching. High-cardinality parses mostly produce one-shot
 /// entries; compact ambiguous loops repeatedly hit the same keys.
@@ -5682,6 +5698,21 @@ where
         } else {
             NodeId::placeholder()
         }
+    }
+
+    /// Reports whether the generated rule dispatch should sample native stack
+    /// capacity before descending into the next rule body.
+    ///
+    /// Generated recursive-descent methods otherwise map unbounded grammar
+    /// nesting straight onto native call depth; sampling every
+    /// [`GENERATED_RULE_STACK_CHECK_INTERVAL`] rule-context frames keeps the
+    /// hot path free of per-call probes while guaranteeing a check runs before
+    /// the red zone can be crossed.
+    #[must_use]
+    pub const fn generated_rule_stack_check_due(&self) -> bool {
+        self.rule_context_stack
+            .len()
+            .is_multiple_of(GENERATED_RULE_STACK_CHECK_INTERVAL)
     }
 
     /// Enters a generated parser rule and returns the context object the
