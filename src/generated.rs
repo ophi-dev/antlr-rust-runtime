@@ -1,8 +1,11 @@
+use std::sync::{Arc, OnceLock};
+
 use crate::atn::parser_atn::ParserAtn;
 use crate::atn::serialized::SerializedAtn;
+use crate::recognizer::{RecognizerData, RecognizerMetadata};
 use crate::vocabulary::Vocabulary;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct GrammarMetadata {
     grammar_file_name: &'static str,
     rule_names: &'static [&'static str],
@@ -12,6 +15,23 @@ pub struct GrammarMetadata {
     channel_names: &'static [&'static str],
     mode_names: &'static [&'static str],
     serialized_atn: &'static [i32],
+    recognizer_metadata: OnceLock<Arc<RecognizerMetadata>>,
+}
+
+impl Clone for GrammarMetadata {
+    fn clone(&self) -> Self {
+        Self {
+            grammar_file_name: self.grammar_file_name,
+            rule_names: self.rule_names,
+            literal_names: self.literal_names,
+            symbolic_names: self.symbolic_names,
+            display_names: self.display_names,
+            channel_names: self.channel_names,
+            mode_names: self.mode_names,
+            serialized_atn: self.serialized_atn,
+            recognizer_metadata: OnceLock::from(Arc::clone(self.cached_recognizer_metadata())),
+        }
+    }
 }
 
 impl GrammarMetadata {
@@ -36,6 +56,7 @@ impl GrammarMetadata {
             channel_names,
             mode_names,
             serialized_atn,
+            recognizer_metadata: OnceLock::new(),
         }
     }
 
@@ -61,6 +82,24 @@ impl GrammarMetadata {
             self.symbolic_names.iter().copied(),
             self.display_names.iter().copied(),
         )
+    }
+
+    /// Creates per-instance recognizer state backed by this grammar's cached
+    /// immutable metadata.
+    pub fn recognizer_data(&self) -> RecognizerData {
+        RecognizerData::from_shared(Arc::clone(self.cached_recognizer_metadata()))
+    }
+
+    fn cached_recognizer_metadata(&self) -> &Arc<RecognizerMetadata> {
+        self.recognizer_metadata.get_or_init(|| {
+            Arc::new(RecognizerMetadata::from_static(
+                self.grammar_file_name,
+                self.rule_names,
+                self.channel_names,
+                self.mode_names,
+                self.vocabulary(),
+            ))
+        })
     }
 
     /// Borrows the serialized ATN values for deserialization by the runtime
@@ -100,5 +139,25 @@ mod tests {
     fn metadata_builds_vocabulary() {
         assert_eq!(META.grammar_file_name(), "Mini.g4");
         assert_eq!(META.vocabulary().display_name(1), "'x'");
+    }
+
+    #[test]
+    fn cloned_metadata_shares_the_cache_before_explicit_initialization() {
+        let original = GrammarMetadata::new(
+            "Clone.g4",
+            &["start"],
+            &[None, Some("'x'")],
+            &[None, Some("X")],
+            &[None, None],
+            &["DEFAULT_TOKEN_CHANNEL"],
+            &["DEFAULT_MODE"],
+            &[],
+        );
+        let cloned = original.clone();
+        let first = original.recognizer_data();
+        let second = cloned.recognizer_data();
+
+        assert!(std::ptr::eq(first.rule_names(), second.rule_names()));
+        assert!(std::ptr::eq(first.vocabulary(), second.vocabulary()));
     }
 }

@@ -1,0 +1,38 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: recognizer_construction
+---
+Lexer::with_hooks
+    pub fn with_hooks(input: I, hooks: H) -> Self {
+        let grammar_metadata = metadata();
+        let data = grammar_metadata.recognizer_data();
+        Self { base: BaseLexer::new(input, data).with_shared_dfa(atn()), hooks }
+    }
+
+Parser::with_hooks
+    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {
+        let grammar_metadata = metadata();
+        let data = grammar_metadata.recognizer_data();
+        let base = BaseParser::with_semantic_hooks(input, data, hooks);
+        Self {
+            base,
+            simulator: None,
+            generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
+        }
+    }
+
+Pattern recognizer cache
+        static PATTERN_DATA: OnceLock<RecognizerData> = OnceLock::new();
+        static PATTERN_MATCHER: OnceLock<antlr4_runtime::ParseTreePatternMatcher<'static>> =
+            OnceLock::new();
+        let matcher = match PATTERN_MATCHER.get() {
+            Some(matcher) => matcher,
+            None => {
+                let data = PATTERN_DATA.get_or_init(|| {
+                    let grammar_metadata = metadata();
+                    grammar_metadata.recognizer_data()
+                });
+                let matcher = antlr4_runtime::ParseTreePatternMatcher::new(parser_atn(), data)?;
+                PATTERN_MATCHER.get_or_init(|| matcher)
+            }
+        };
