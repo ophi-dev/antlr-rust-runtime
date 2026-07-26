@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.19.0...v0.19.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **codegen:** union token sets for a group label shared across alternatives ([#211](https://github.com/ophi-dev/antlr-rust-runtime/issues/211)) ([d55e447](https://github.com/ophi-dev/antlr-rust-runtime/commit/d55e447cba54ecbe4e8b434422e7ba49cbe3b40a))
+* **frontend:** accept a UTF-8 BOM in grammar sources ([#215](https://github.com/ophi-dev/antlr-rust-runtime/issues/215)) ([c987350](https://github.com/ophi-dev/antlr-rust-runtime/commit/c987350d1a26390bdbdc8b9d0527537359f229cd)), closes [#212](https://github.com/ophi-dev/antlr-rust-runtime/issues/212)
+
+
+### Performance Improvements
+
+* **prediction:** memoize full-context LL resolutions by interned caller context ([#208](https://github.com/ophi-dev/antlr-rust-runtime/issues/208)) ([7eb9307](https://github.com/ophi-dev/antlr-rust-runtime/commit/7eb93072c4fd551db8ce7550e43c35f080f197c8))
+
 ## [0.19.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.18.0...v0.19.0) (2026-07-26)
 
 
