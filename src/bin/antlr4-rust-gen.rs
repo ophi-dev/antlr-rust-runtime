@@ -13624,7 +13624,7 @@ mod tests {
             &SemPatternFile::default(),
         )
         .expect("templates should collect");
-        assert_eq!(templates, [((0, 0), PredicateTemplate::Unknown)]);
+        insta::assert_debug_snapshot!("untranslated_parser_predicate_templates", templates);
 
         let rendered =
             render_parser("SParser", &predicate_parser_data()).expect("parser should render");
