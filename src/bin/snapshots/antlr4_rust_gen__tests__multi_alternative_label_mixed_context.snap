@@ -1,0 +1,66 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: "context(\"MixedContext\")"
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
+        __rule_children(self.__node, 4)
+            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
+    pub fn param_children(&self) -> impl Iterator<Item = ParamContext<'a>> + '_ {
+        __rule_children(self.__node, 8)
+            .map(move |node| ParamContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
+    pub fn in_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 7)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 15).map(TerminalNode::new)
+    }
+    pub fn lparen_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, 16)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("MixedContext", "LPAREN"))
+    }
+    pub fn rparen_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, 17)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("MixedContext", "RPAREN"))
+    }
+    pub fn errors(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
+        __rule_children(self.__node, 4)
+            .skip(1)
+            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
+    pub fn name(&self) -> Result<UnaryContext<'a>, MissingChildError> {
+        __rule_children(self.__node, 4)
+            .nth(0)
+            .map(|node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
+            .ok_or_else(|| MissingChildError::new("MixedContext", "name"))
+    }
+}

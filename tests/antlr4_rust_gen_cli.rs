@@ -914,10 +914,19 @@ mod multi_alternative_label_tests {
     use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
 
     fn parse(input: &str) -> antlr4_runtime::ParsedFile {
+        parse_rule(input, TParser::expr)
+    }
+
+    fn parse_rule(
+        input: &str,
+        entry: impl FnOnce(
+            &mut TParser<TLexer<antlr4_runtime::InputStream>>,
+        ) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+    ) -> antlr4_runtime::ParsedFile {
         let lexer = TLexer::new(InputStream::new(input));
         let tokens = CommonTokenStream::new(lexer);
         let mut parser = TParser::new(tokens);
-        let root = parser.expr().expect("input should parse");
+        let root = entry(&mut parser).expect("input should parse");
         assert_eq!(parser.number_of_syntax_errors(), 0);
         parser.into_parsed_file(root)
     }
@@ -950,6 +959,78 @@ mod multi_alternative_label_tests {
 
         let leaf = product.calc_children().next().expect("leaf calc");
         assert!(leaf.op().is_none(), "primary alternative carries no operator");
+    }
+
+    // Issue #201: labels nested inside an unlabeled grouping block reach the
+    // typed surface, and reading them agrees with the parsed text.
+    #[test]
+    fn labels_inside_grouping_blocks_read_their_own_children() {
+        let parsed = parse_rule("doc in a, b 7", TParser::grouped);
+        let grouped = parsed
+            .tree()
+            .as_rule()
+            .expect("grouped rule")
+            .downcast_ref::<GroupedContext>()
+            .expect("typed grouped context");
+        assert_eq!(grouped.doc().expect("doc token").to_string(), "doc");
+        assert!(
+            grouped.oneway().is_none(),
+            "the throws branch carries no oneway token"
+        );
+        assert_eq!(
+            grouped
+                .errors()
+                .map(|error| error.text())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+
+        // The other branch of the same block, and both optionals absent.
+        let parsed = parse_rule("* 7", TParser::grouped);
+        let grouped = parsed
+            .tree()
+            .as_rule()
+            .expect("grouped rule")
+            .downcast_ref::<GroupedContext>()
+            .expect("typed grouped context");
+        assert!(grouped.doc().is_none(), "absent optional reads as None");
+        assert_eq!(grouped.oneway().expect("oneway token").to_string(), "*");
+        assert_eq!(grouped.errors().count(), 0);
+    }
+
+    // Issue #201: a single and a list label on the same rule must each resolve
+    // past the other's children rather than by caller-side positional guessing.
+    #[test]
+    fn single_and_list_labels_on_one_rule_stay_disjoint() {
+        let parsed = parse_rule("f ( x y ) in a, b", TParser::mixed);
+        let mixed = parsed
+            .tree()
+            .as_rule()
+            .expect("mixed rule")
+            .downcast_ref::<MixedContext>()
+            .expect("typed mixed context");
+        assert_eq!(mixed.name().expect("name label").text(), "f");
+        assert_eq!(
+            mixed.errors().map(|error| error.text()).collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        // `name` is the sole unary outside the throws list, so the list accessor
+        // must not include it and the two must partition `unary_children`.
+        assert_eq!(mixed.unary_children().count(), 3);
+
+        let parsed = parse_rule("f ( ) ", TParser::mixed);
+        let mixed = parsed
+            .tree()
+            .as_rule()
+            .expect("mixed rule")
+            .downcast_ref::<MixedContext>()
+            .expect("typed mixed context");
+        assert_eq!(mixed.name().expect("name label").text(), "f");
+        assert_eq!(
+            mixed.errors().count(),
+            0,
+            "the absent throws clause contributes no errors"
+        );
     }
 }
 "#,

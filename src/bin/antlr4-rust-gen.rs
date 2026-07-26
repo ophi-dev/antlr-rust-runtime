@@ -2702,7 +2702,15 @@ fn collect_structural_context_refs_with_cardinality(
             }
             ElementKind::Block(block) => {
                 let token_types = structural_block_token_types(block, vocabulary);
-                if !token_types.is_empty() {
+                // A token-only block collapses into a single group ref, which is
+                // what makes `typeName=(Boolean | Int)` one labeled token child.
+                // That only holds when the label sits *on* the group: when the
+                // block is unlabeled and the labels sit inside it
+                // (`(doc=DocComment)?`), collapsing would swallow them, so
+                // descend and let the inner refs carry their own labels.
+                if !token_types.is_empty()
+                    && (label.is_some() || !structural_block_labels_inside(block))
+                {
                     refs.push(embedded::ElementRef {
                         label,
                         target: String::new(),
@@ -2725,13 +2733,27 @@ fn collect_structural_context_refs_with_cardinality(
                         stable_accessor: false,
                     });
                 }
-                let nested_stable = stable_accessor && block.alternatives.len() == 1;
+                // Refs from one alternative of a *choice* are present only when
+                // the parse took that branch, and the flattened CST does not
+                // record which. Clearing the lower bound states that honestly:
+                // a sibling alternative matching the same target then reads as
+                // inexact, so the occurrence-lookup guards in
+                // `context_label_accessor` reject exactly the layouts where
+                // positional access could resolve to another branch's child.
+                let branch_cardinality = if block.alternatives.len() > 1 {
+                    embedded::ChildCardinality {
+                        min: 0,
+                        max: cardinality.max,
+                    }
+                } else {
+                    cardinality
+                };
                 for alternative in &block.alternatives {
                     collect_structural_context_refs_with_cardinality(
                         &alternative.elements,
                         refs,
-                        nested_stable,
-                        cardinality,
+                        stable_accessor,
+                        branch_cardinality,
                         vocabulary,
                     );
                 }
@@ -2857,6 +2879,17 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
         token_types.extend(alternative_types);
     }
     token_types.into_iter().collect()
+}
+
+/// Whether any element directly inside `block` carries a label, i.e. the block
+/// is a grouping wrapper around labeled elements (`(doc=DocComment)?`) rather
+/// than a labeled token group (`typeName=(Boolean | Int)`).
+fn structural_block_labels_inside(block: &Block) -> bool {
+    block
+        .alternatives
+        .iter()
+        .flat_map(|alternative| &alternative.elements)
+        .any(|element| element.label.is_some())
 }
 
 fn structural_terminal_child_target(
@@ -14770,6 +14803,68 @@ mod tests {
             "optional labeled token shadowed by a following union match must drop its accessor\n{shadowed_context}"
         );
         insta::assert_snapshot!("multi_alternative_label_shadowed_context", shadowed_context);
+    }
+
+    /// Issue #201: labels nested inside an unlabeled grouping block, and a
+    /// single/list label pair on one rule, both reach the typed surface — while
+    /// layouts where positional lookup could resolve to another choice branch's
+    /// child still decline.
+    #[test]
+    fn grouped_and_mixed_same_rule_labels_emit_accessors_without_crossing_branches() {
+        let data = parser_fixture_data("multi-alternative-label/T.g4");
+        let rendered = render_parser("TParser", &data).expect("parser should render");
+
+        let context = |name: &str| {
+            rendered
+                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+                .unwrap_or_else(|| panic!("{name} impl"))
+                .1
+                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+                .unwrap_or_else(|| panic!("{name} display impl"))
+                .0
+                .to_owned()
+        };
+
+        // `(doc = IDENT)? (oneway = STAR | IN errors += unary ...)?`: the labels
+        // sit inside unlabeled grouping blocks, so collapsing each block into
+        // one token-group ref would swallow them.
+        insta::assert_snapshot!(
+            "multi_alternative_label_grouped_context",
+            context("GroupedContext")
+        );
+
+        // `name = unary ... errors += unary`: a single and a list label on the
+        // same rule must each resolve past the other's children.
+        insta::assert_snapshot!(
+            "multi_alternative_label_mixed_context",
+            context("MixedContext")
+        );
+
+        // A variable count of the label's own target ahead of it leaves no
+        // fixed `.skip(N)`.
+        let unbounded = context("MixedUnboundedContext");
+        assert!(
+            !unbounded.contains("pub fn errors("),
+            "a list label behind an unbounded run of its own target has no fixed skip\n{unbounded}"
+        );
+
+        // Only one branch supplies the label while its sibling matches the same
+        // target unlabeled, so `.nth(0)` could read the sibling's child.
+        let hazard = context("BranchHazardContext");
+        assert!(
+            !hazard.contains("pub fn pick("),
+            "a label whose sibling branch matches the same target unlabeled must decline\n{hazard}"
+        );
+
+        // Rival labels on the same target across branches must not read each
+        // other's child.
+        let rival = context("BranchRivalContext");
+        for label in ["pub fn left(", "pub fn right("] {
+            assert!(
+                !rival.contains(label),
+                "rival same-target labels across branches must decline {label}\n{rival}"
+            );
+        }
     }
 
     #[test]
