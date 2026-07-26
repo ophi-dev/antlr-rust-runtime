@@ -8455,7 +8455,7 @@ fn render_rule_label_accessor(
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
         );
         return;
     }
@@ -8467,13 +8467,13 @@ fn render_rule_label_accessor(
     if label.cardinality.is_required_single() {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+            "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
             label.source_name
         );
     } else {
         let _ = writeln!(
             out,
-            "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+            "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
         );
     }
 }
@@ -8559,18 +8559,18 @@ fn render_context_child_accessors(
         if cardinality.is_repeated() {
             let _ = writeln!(
                 out,
-                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
             );
         } else if cardinality.is_required_single() {
             let _ = writeln!(
                 out,
-                "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+                "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
                 child.name
             );
         } else {
             let _ = writeln!(
                 out,
-                "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+                "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
             );
         }
     }
@@ -8839,6 +8839,20 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     T::__from_active(context, invocation_states, storage, tokens)
 }
 
+#[allow(dead_code)]
+fn __write_invocation_states(
+    f: &mut std::fmt::Formatter<'_>,
+    states: impl Iterator<Item = isize>,
+) -> std::fmt::Result {
+    f.write_str("[")?;
+    let mut separator = "";
+    for state in states {
+        write!(f, "{separator}{state}")?;
+        separator = " ";
+    }
+    f.write_str("]")
+}
+
 "#,
     );
     if options.generate_visitor {
@@ -8874,18 +8888,29 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
             let _ = writeln!(fields, "    pub {name}: {ty},", ty = attr.ty);
             let _ = writeln!(field_inits, "            {name}: __attrs.{name}.clone(),");
         }
+        let attrs_bindings = |source: &str| {
+            if rule.attrs.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "        let __default = {attrs_struct}::default();\n        let __attrs = {source}.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n"
+                )
+            }
+        };
+        let active_attrs_bindings = attrs_bindings("context");
+        let stored_attrs_bindings = attrs_bindings("node");
         let _ = writeln!(
             out,
-            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a, State = StoredTreeContext> {{\n    __node: __GeneratedRuleContext<'a>,\n    __invocation_states: Vec<isize>,\n    __state: std::marker::PhantomData<State>,\n{fields}}}\n"
+            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a, State = StoredTreeContext> {{\n    __node: __GeneratedRuleContext<'a>,\n    __invocation_states: Option<Vec<isize>>,\n    __state: std::marker::PhantomData<State>,\n{fields}}}\n"
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.rule_node() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn rule_node(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.rule_node() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn rule_node(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n{active_attrs_bindings}        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: Some(invocation_states),\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
         let _ = writeln!(
             accessors,
-            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        let invocation_states = node.invocation_states().collect();\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {{\n        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);\n        invocation_states.push(node.invoking_state());\n        invocation_states.extend_from_slice(parent_invocation_states);\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        invocation_states.map_or_else(\n            || Self::__from_node(node),\n            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {{\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n"
+            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        Self::__from_node_with_invocation_states(node, None)\n    }}\n\n    fn __from_child_node(\n        node: RuleNodeView<'a>,\n        parent_invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        let invocation_states = parent_invocation_states.map(|states| {{\n            let mut invocation_states = Vec::with_capacity(states.len() + 1);\n            invocation_states.push(node.invoking_state());\n            invocation_states.extend_from_slice(states);\n            invocation_states\n        }});\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        Self::__from_node_with_invocation_states(\n            node,\n            invocation_states.map(|states| states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<Vec<isize>>,\n    ) -> Self {{\n{stored_attrs_bindings}        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n"
         );
         let common_accessors = render_context_child_accessors(
             view_name,
@@ -8909,7 +8934,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
             out,
-            "impl<State> std::fmt::Display for {view_name}<'_, State> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+            "impl<State> std::fmt::Display for {view_name}<'_, State> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match &self.__invocation_states {{\n            Some(states) => __write_invocation_states(f, states.iter().copied()),\n            None => match self.__node {{\n                __GeneratedRuleContext::Stored(node) => {{\n                    __write_invocation_states(f, node.invocation_states())\n                }}\n                __GeneratedRuleContext::Active {{ .. }} => {{\n                    unreachable!(\"active context is missing invocation states\")\n                }}\n            }},\n        }}\n    }}\n}}\n"
         );
     }
 
@@ -13376,7 +13401,7 @@ mod tests {
     }
 
     #[test]
-    fn embedded_active_context_preserves_invocation_states() {
+    fn embedded_contexts_derive_stored_invocation_states_lazily() {
         let rendered = render_parser_with_options(
             "TParser",
             &parser_fixture_data("left-recursive-labels/T.g4"),
@@ -13388,13 +13413,45 @@ mod tests {
         .expect("embedded parser should render");
 
         assert!(rendered.contains("invocation_states: Vec<isize>"));
-        assert!(rendered.contains("__invocation_states: invocation_states"));
-        assert!(rendered.contains("::__from_child_node(node, &self.__invocation_states)"));
+        assert!(rendered.contains("__invocation_states: Option<Vec<isize>>"));
+        assert!(rendered.contains("__invocation_states: Some(invocation_states)"));
+        assert!(rendered.contains("Self::__from_node_with_invocation_states(node, None)"));
+        assert!(
+            rendered.contains("::__from_child_node(node, self.__invocation_states.as_deref())")
+        );
         assert!(rendered.contains("::__from_listener_node(context, invocation_states.as_deref())"));
         assert!(rendered.contains("pub fn walk_with_invocation_states"));
         assert!(
+            !rendered.contains("node.invocation_states().collect"),
+            "stored contexts must leave the derivable invocation-state chain lazy"
+        );
+        assert!(
             !rendered.contains("__GeneratedRuleContext::Active { .. } => Vec::new()"),
             "active contexts must preserve their invoking-state chain"
+        );
+    }
+
+    #[test]
+    fn attrless_contexts_skip_generated_attrs_lookup() {
+        let attrless =
+            render_parser("TParser", &minimal_parser_data()).expect("parser should render");
+        assert!(
+            !attrless.contains("generated_attrs::<__RuleAttrs0>"),
+            "attr-less context construction must not perform an Any downcast"
+        );
+
+        let attributed = render_parser_with_options(
+            "TParser",
+            &parser_fixture_data("left-recursive-labels/T.g4"),
+            ParserRenderOptions {
+                embedded: true,
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("embedded parser should render");
+        assert!(
+            attributed.contains("generated_attrs::<__RuleAttrs1>"),
+            "rules with declared attributes must still populate public context fields"
         );
     }
 

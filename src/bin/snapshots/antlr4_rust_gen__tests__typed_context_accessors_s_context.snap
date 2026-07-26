@@ -27,13 +27,13 @@ expression: s_context
     pub fn e(&self) -> Result<EContext<'a>, MissingChildError> {
         __rule_children(self.__node, 1)
             .next()
-            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
             .ok_or_else(|| MissingChildError::new("SContext", "e"))
     }
     pub fn value(&self) -> Result<EContext<'a>, MissingChildError> {
         __rule_children(self.__node, 1)
             .nth(0)
-            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
             .ok_or_else(|| MissingChildError::new("SContext", "value"))
     }
 }

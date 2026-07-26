@@ -27,12 +27,12 @@ ExpressionContext
     }
     pub fn expression_children(&self) -> impl Iterator<Item = ExpressionContext<'a>> + '_ {
         __rule_children(self.__node, 1)
-            .map(move |node| ExpressionContext::__from_child_node(node, &self.__invocation_states))
+            .map(move |node| ExpressionContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
         __rule_children(self.__node, 4)
             .next()
-            .map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| IdentifierContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn le_token(&self) -> Option<TerminalNode<'a>> {
         __token_children(self.__node, 1)

@@ -26,12 +26,12 @@ expression: latest_context
     }
     pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
         __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::__from_child_node(node, &self.__invocation_states))
+            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError> {
         __rule_children(self.__node, 2)
             .skip(0).last()
-            .map(|node| AtomContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
             .ok_or_else(|| MissingChildError::new("LatestContext", "value"))
     }
 }
