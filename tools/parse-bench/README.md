@@ -72,14 +72,17 @@ Rust generation keeps the pinned `JavaParser.g4` unchanged, including its
 `JavaParserBase` option and both semantic predicates. The generated benchmark
 parser uses the source compiler's historical `assume-true` policy for those
 target-language helpers, matching downstream generation while retaining the
-predicate metadata that controls runtime routing. Python and Go still use the
-equivalent portable rewrite because that grammars-v4 revision does not provide
-`JavaParserBase` implementations for those targets. The
-`issue-174-return-expression.java` fixture guards the resulting Java
-method-body performance path. JSON rows include a benchmark-variant tag, so
-the comparator skips only method changes such as this legacy-to-predicate
-transition and resumes Java regression checks once both reports use the same
-variant.
+predicate metadata that controls runtime routing; since #209 those
+untranslated coordinates lower as generatable hook-backed templates, so the
+predicate-bearing rules run generated bodies rather than the ATN interpreter.
+Python and Go still use the equivalent portable rewrite because that
+grammars-v4 revision does not provide `JavaParserBase` implementations for
+those targets. The `issue-174-return-expression.java` fixture guards the
+resulting Java method-body performance path. JSON rows include a
+benchmark-variant tag, so the comparator skips only method changes such as
+this legacy-to-predicate transition (or the #209 interpreter-to-generated
+routing change) and resumes Java regression checks once both reports use the
+same variant.
 
 Rust generation also keeps the pinned C# grammar unchanged. Its semantic
 helper names are described by `patterns/csharp.toml`, while the benchmark-owned
