@@ -35,6 +35,11 @@ env:
   # does upstream). An HTML comment is invisible in rendered markdown but comes
   # back verbatim through the API, so it is a reliable key.
   STICKY_MARKER: "<!-- claude-code-review:sticky -->"
+  # Second marker, carried only by the "reviewing…" placeholder body. The
+  # finalizer at the end of the job keys on it to tell "this run never wrote a
+  # verdict" from "a verdict is already here", without pattern-matching prose.
+  # Lives on line 2 so first-line STICKY_MARKER lookup is unaffected.
+  PROGRESS_SENTINEL: "<!-- claude-code-review:in-progress -->"
 
 jobs:
   claude-review:
@@ -73,6 +78,19 @@ jobs:
       # workflow token is read-only, so this block is load-bearing.
       actions: write
 
+    # Serialize reviews per PR. Two successful CI completions for the same PR can
+    # overlap (push twice in quick succession), and both jobs would resolve the
+    # same PR number, reuse the same sticky comment, and PATCH it — so whichever
+    # Claude run finished last would win, which is not necessarily the newest
+    # commit. Cancelling the in-flight run keeps one reviewer per PR.
+    #
+    # Keyed on the head branch rather than the PR number: `workflow_run` has no PR
+    # object, and the group must be resolvable before any step runs. One branch
+    # maps to at most one open PR here, so this is equivalent in practice.
+    concurrency:
+      group: code-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+
     steps:
       # `workflow_run` carries no PR object, so recover the number from the
       # payload, falling back to a head-SHA lookup for the case where the array
@@ -92,9 +110,13 @@ jobs:
 
           if [[ -z "$number" ]]; then
             echo "No PR in payload; searching by head SHA $HEAD_SHA (branch '$HEAD_BRANCH')."
+            # No `|| true` here: the endpoint already exits 0 with an empty array
+            # when no PR matches, so a nonzero exit means a real failure (auth,
+            # rate limit, transient 5xx). Swallowing that would report
+            # found=false and let the job go green as if the PR did not exist.
             number="$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
               --header 'Accept: application/vnd.github+json' \
-              --jq 'map(select(.state == "open")) | if length > 0 then .[0].number else empty end' || true)"
+              --jq 'map(select(.state == "open")) | if length > 0 then .[0].number else empty end')"
           fi
 
           if [[ -z "$number" ]]; then
@@ -104,7 +126,20 @@ jobs:
             exit 0
           fi
 
-          echo "Reviewing pull request #$number"
+          # Stop if this CI run is no longer the PR's tip. `workflow_run`
+          # completions can arrive out of commit order (push twice, the older CI
+          # finishes second), and the payload gives us a PR *number* with no
+          # freshness guarantee — so an older green run would review an obsolete
+          # commit and overwrite a newer verdict in the sticky comment.
+          # Concurrency alone does not cover this: the two runs may not overlap.
+          current_head="$(gh api "repos/$GH_REPO/pulls/$number" --jq '.head.sha')"
+          if [[ "$current_head" != "$HEAD_SHA" ]]; then
+            echo "PR #$number has moved on (head is ${current_head:0:7}, this run is ${HEAD_SHA:0:7}) — skipping stale review."
+            echo "found=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Reviewing pull request #$number at $HEAD_SHA"
           echo "found=true" >>"$GITHUB_OUTPUT"
           echo "number=$number" >>"$GITHUB_OUTPUT"
 
@@ -125,8 +160,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          body="$(printf '%s\n\n%s\n\n%s\n' \
+          body="$(printf '%s\n%s\n\n%s\n\n%s\n' \
             "$STICKY_MARKER" \
+            "$PROGRESS_SENTINEL" \
             "**Claude Code is reviewing this pull request…**" \
             "Reviewing \`${HEAD_SHA:0:7}\` (CI green) · [View job run]($RUN_URL)")"
 
@@ -433,3 +469,40 @@ jobs:
           # precise outcome this whole step exists to avoid. The ::warning:: plus
           # the step summary above keep it visible instead of silent.
           echo "::warning::Cancellation did not take effect within 120s; ending the job without failing the pull request."
+
+      # Never leave the comment stuck on "Claude Code is reviewing…". Several
+      # paths end the job without writing a verdict: an auth error or API 5xx, a
+      # malformed result, a crashed/timed-out runner, or a cancelled run. The
+      # review itself and the quota path both replace the placeholder, so this
+      # only fires when neither did — detected by the sentinel still being
+      # present, rather than by matching the placeholder's prose.
+      #
+      # `always()` so it also runs on failure and cancellation, and it must never
+      # fail the job itself: the comment is cosmetic next to the real outcome.
+      - name: Finalize progress comment
+        if: always() && steps.comment.outputs.id != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ steps.comment.outputs.id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+
+          current="$(gh api "repos/$GH_REPO/issues/comments/$COMMENT_ID" --jq '.body // ""')"
+
+          if [[ "$current" != *"$PROGRESS_SENTINEL"* ]]; then
+            echo "Comment already carries a verdict — leaving it alone."
+            exit 0
+          fi
+
+          echo "Comment is still the in-progress placeholder; marking it as ended (job status: $JOB_STATUS)."
+          body="$(printf '%s\n\n%s\n\n%s\n' \
+            "$STICKY_MARKER" \
+            "**Claude Code review did not complete** (job status: \`$JOB_STATUS\`)." \
+            "No review was produced. See the [job run]($RUN_URL) — the execution log is attached as an artifact. Re-run to try again.")"
+
+          gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
+            --field body="$body" --jq '.id' >/dev/null
