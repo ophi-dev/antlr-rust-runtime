@@ -12027,6 +12027,15 @@ mod tests {
             assert!(!rendered.contains("with_channel_names(grammar_metadata"));
             assert!(!rendered.contains("with_mode_names(grammar_metadata"));
         }
+
+        let pattern_data_initializer = parser
+            .split_once("let data = PATTERN_DATA.get_or_init")
+            .expect("parser should initialize pattern recognizer data")
+            .1
+            .split_once("let matcher =")
+            .expect("pattern data initialization should precede matcher construction")
+            .0;
+        assert!(pattern_data_initializer.contains("grammar_metadata.recognizer_data()"));
     }
 
     #[test]

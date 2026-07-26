@@ -5,7 +5,7 @@ use crate::atn::serialized::SerializedAtn;
 use crate::recognizer::{RecognizerData, RecognizerMetadata};
 use crate::vocabulary::Vocabulary;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct GrammarMetadata {
     grammar_file_name: &'static str,
     rule_names: &'static [&'static str],
@@ -16,6 +16,22 @@ pub struct GrammarMetadata {
     mode_names: &'static [&'static str],
     serialized_atn: &'static [i32],
     recognizer_metadata: OnceLock<Arc<RecognizerMetadata>>,
+}
+
+impl Clone for GrammarMetadata {
+    fn clone(&self) -> Self {
+        Self {
+            grammar_file_name: self.grammar_file_name,
+            rule_names: self.rule_names,
+            literal_names: self.literal_names,
+            symbolic_names: self.symbolic_names,
+            display_names: self.display_names,
+            channel_names: self.channel_names,
+            mode_names: self.mode_names,
+            serialized_atn: self.serialized_atn,
+            recognizer_metadata: OnceLock::from(Arc::clone(self.cached_recognizer_metadata())),
+        }
+    }
 }
 
 impl GrammarMetadata {
@@ -71,7 +87,11 @@ impl GrammarMetadata {
     /// Creates per-instance recognizer state backed by this grammar's cached
     /// immutable metadata.
     pub fn recognizer_data(&self) -> RecognizerData {
-        let metadata = self.recognizer_metadata.get_or_init(|| {
+        RecognizerData::from_shared(Arc::clone(self.cached_recognizer_metadata()))
+    }
+
+    fn cached_recognizer_metadata(&self) -> &Arc<RecognizerMetadata> {
+        self.recognizer_metadata.get_or_init(|| {
             Arc::new(RecognizerMetadata::from_static(
                 self.grammar_file_name,
                 self.rule_names,
@@ -79,8 +99,7 @@ impl GrammarMetadata {
                 self.mode_names,
                 self.vocabulary(),
             ))
-        });
-        RecognizerData::from_shared(Arc::clone(metadata))
+        })
     }
 
     /// Borrows the serialized ATN values for deserialization by the runtime
@@ -123,9 +142,19 @@ mod tests {
     }
 
     #[test]
-    fn cloned_metadata_retains_the_initialized_recognizer_cache() {
-        let first = META.recognizer_data();
-        let cloned = META.clone();
+    fn cloned_metadata_shares_the_cache_before_explicit_initialization() {
+        let original = GrammarMetadata::new(
+            "Clone.g4",
+            &["start"],
+            &[None, Some("'x'")],
+            &[None, Some("X")],
+            &[None, None],
+            &["DEFAULT_TOKEN_CHANNEL"],
+            &["DEFAULT_MODE"],
+            &[],
+        );
+        let cloned = original.clone();
+        let first = original.recognizer_data();
         let second = cloned.recognizer_data();
 
         assert!(std::ptr::eq(first.rule_names(), second.rule_names()));
