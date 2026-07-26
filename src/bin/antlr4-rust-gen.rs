@@ -12019,22 +12019,37 @@ mod tests {
         let parser =
             render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
-        for rendered in [&lexer, &parser] {
-            assert!(rendered.contains("let data = grammar_metadata.recognizer_data();"));
-            assert!(!rendered.contains("grammar_metadata.vocabulary()"));
-            assert!(!rendered.contains("with_rule_names(grammar_metadata"));
-            assert!(!rendered.contains("with_channel_names(grammar_metadata"));
-            assert!(!rendered.contains("with_mode_names(grammar_metadata"));
-        }
-
-        let pattern_data_initializer = parser
-            .split_once("let data = PATTERN_DATA.get_or_init")
-            .expect("parser should initialize pattern recognizer data")
+        let lexer_constructor = lexer
+            .split_once("    pub fn with_hooks(input: I, hooks: H) -> Self {")
+            .expect("lexer should render its constructor")
             .1
-            .split_once("let matcher =")
-            .expect("pattern data initialization should precede matcher construction")
+            .split_once("\n\n    pub fn metadata()")
+            .expect("lexer metadata accessor should follow its constructor")
             .0;
-        assert!(pattern_data_initializer.contains("grammar_metadata.recognizer_data()"));
+        let parser_constructor = parser
+            .split_once("    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {")
+            .expect("parser should render its constructor")
+            .1
+            .split_once("\n\n    pub fn metadata()")
+            .expect("parser metadata accessor should follow its constructor")
+            .0;
+        let pattern_cache = parser
+            .split_once("        static PATTERN_DATA")
+            .expect("parser should render its pattern recognizer cache")
+            .1
+            .split_once("        matcher.compile(")
+            .expect("pattern cache should precede pattern compilation")
+            .0;
+        let recognizer_construction = format!(
+            "Lexer::with_hooks\n    pub fn with_hooks(input: I, hooks: H) -> Self {{{lexer_constructor}\n\n\
+             Parser::with_hooks\n    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {{{parser_constructor}\n\n\
+             Pattern recognizer cache\n        static PATTERN_DATA{pattern_cache}"
+        );
+
+        insta::assert_snapshot!(
+            "generated_recognizers_reuse_cached_static_metadata",
+            recognizer_construction
+        );
     }
 
     #[test]
