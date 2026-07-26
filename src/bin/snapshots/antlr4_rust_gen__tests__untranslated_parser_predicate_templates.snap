@@ -1,0 +1,13 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: templates
+---
+[
+    (
+        (
+            0,
+            0,
+        ),
+        Unknown,
+    ),
+]

@@ -1072,7 +1072,7 @@ const fn predicate_template_disposition(
             predicate_template_disposition(Some(inner), policy)
         }
         Some(PredicateTemplate::Hook) => SemanticsDisposition::Hooked,
-        Some(PredicateTemplate::UnknownWithFailMessage { .. }) => {
+        Some(PredicateTemplate::UnknownWithFailMessage { .. } | PredicateTemplate::Unknown) => {
             policy.unknown_predicate_disposition()
         }
         Some(_) => SemanticsDisposition::Translated,
@@ -1259,7 +1259,15 @@ fn collect_parser_semantics_for_mode(
                     .predicates
                     .contains_key(&coordinate)
                     .then(|| "PortableBooleanLocal".to_owned())
-                    .or_else(|| template.map(|template| format!("{template:?}")))
+                    .or_else(|| {
+                        template
+                            // `Unknown` is an internal lowering of an
+                            // untranslated body, not a translation; the
+                            // manifest keeps reporting `template: null` so the
+                            // disposition remains the user-facing signal.
+                            .filter(|template| !matches!(template, PredicateTemplate::Unknown))
+                            .map(|template| format!("{template:?}"))
+                    })
             },
         });
     }
@@ -1399,6 +1407,15 @@ fn structural_predicate_templates(
                     coordinate,
                     PredicateTemplate::UnknownWithFailMessage { message },
                 ));
+            }
+            // An untranslated parser predicate still lowers (hook -> policy
+            // evaluator) so its rule keeps a generated body; an uncovered
+            // coordinate would cascade every calling rule onto the interpreter
+            // (issue #209). `parsed_body` keeps a `dispose = "error"` coordinate
+            // override uncovered: that override documents "no SemIR entry" and
+            // is enforced fatal before rendering.
+            (None, None) if parsed_body && kind == SemanticsKind::ParserPredicate => {
+                templates.push((coordinate, PredicateTemplate::Unknown));
             }
             (None, _) => {}
         }
@@ -10011,6 +10028,14 @@ enum PredicateTemplate {
     UnknownWithFailMessage {
         message: String,
     },
+    /// An untranslated parser predicate with no `<fail=...>` metadata.
+    /// Lowering it (instead of leaving the coordinate uncovered) keeps its
+    /// rule — and every caller of that rule — on the generated fast path
+    /// rather than cascading to the 5-6x slower interpreter (issue #209).
+    /// Evaluation follows the same hook -> unknown-policy fallback as
+    /// [`Self::UnknownWithFailMessage`], so typed/closure hooks stay
+    /// consulted and `--sem-unknown` dispositions apply unchanged.
+    Unknown,
     True,
     False,
     FalseWithMessage {
@@ -10057,6 +10082,7 @@ fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
         predicate_effective_template(predicate),
         PredicateTemplate::Hook
             | PredicateTemplate::UnknownWithFailMessage { .. }
+            | PredicateTemplate::Unknown
             | PredicateTemplate::True
             | PredicateTemplate::False
             | PredicateTemplate::FalseWithMessage { .. }
@@ -10852,6 +10878,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         }
         PredicateTemplate::Hook
         | PredicateTemplate::UnknownWithFailMessage { .. }
+        | PredicateTemplate::Unknown
         | PredicateTemplate::Invoke { .. }
         | PredicateTemplate::FalseWithMessage { .. }
         | PredicateTemplate::LocalIntEquals { .. }
@@ -11695,7 +11722,9 @@ fn render_parser_semir_predicate_expr(
         PredicateTemplate::WithFailMessage { inner, .. } => {
             render_parser_semir_predicate_expr(inner, data)
         }
-        PredicateTemplate::Hook | PredicateTemplate::UnknownWithFailMessage { .. } => Ok(
+        PredicateTemplate::Hook
+        | PredicateTemplate::UnknownWithFailMessage { .. }
+        | PredicateTemplate::Unknown => Ok(
             "ir.expr(antlr4_runtime::semir::PExpr::Hook(antlr4_runtime::semir::HookId::new(0)))"
                 .to_owned(),
         ),
@@ -11778,7 +11807,9 @@ fn render_parser_predicate_array(
         let predicate = predicate_effective_template(predicate);
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
-            PredicateTemplate::Hook | PredicateTemplate::UnknownWithFailMessage { .. } => {
+            PredicateTemplate::Hook
+            | PredicateTemplate::UnknownWithFailMessage { .. }
+            | PredicateTemplate::Unknown => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "hook predicates lower only through parser SemIR",
@@ -13611,6 +13642,32 @@ mod tests {
     }
 
     #[test]
+    fn untranslated_parser_predicate_keeps_generated_rule() {
+        // Issue #209: an untranslated predicate body must lower as a
+        // generatable `Unknown` template (hook → unknown-policy chain), not
+        // leave its coordinate uncovered — an uncovered coordinate disables
+        // the rule's generated body and the drop cascades to every calling
+        // rule, forcing the whole grammar onto the 5-6x slower interpreter.
+        let templates = structural_predicate_templates(
+            &predicate_parser_data(),
+            SemanticsKind::ParserPredicate,
+            &SemPatternFile::default(),
+        )
+        .expect("templates should collect");
+        insta::assert_debug_snapshot!("untranslated_parser_predicate_templates", templates);
+
+        let rendered =
+            render_parser("SParser", &predicate_parser_data()).expect("parser should render");
+        assert!(
+            rendered.contains("parse_generated_rule_0_dispatch"),
+            "an untranslated predicate must not disable the generated rule"
+        );
+        // The coordinate reaches SemIR as a hook node, so an attached
+        // typed/closure hook is still consulted before the policy applies.
+        assert!(rendered.contains("PExpr::Hook"));
+    }
+
+    #[test]
     fn context_superclass_does_not_disable_generated_rules() {
         let data = parser_fixture_data("context-superclass/T.g4");
         let rendered = render_parser("TParser", &data).expect("parser should render");
@@ -14491,8 +14548,9 @@ mod tests {
     fn native_comparison_predicate_falls_through_instead_of_aborting() {
         // A native target-language comparison predicate merely contains a `<`
         // operator; it is not an ANTLR `<...>` StringTemplate, so it must fall
-        // through to the unknown-predicate policy (no template) rather than
-        // aborting codegen with "unsupported target predicate template".
+        // through to the unknown-predicate policy (as a generatable `Unknown`
+        // lowering) rather than aborting codegen with "unsupported target
+        // predicate template".
         let native = parser_fixture_data("native-comparison/T.g4");
         let templates = structural_predicate_templates(
             &native,
@@ -14501,9 +14559,12 @@ mod tests {
         )
         .expect("native comparison predicate must not abort generation");
         assert!(
-            templates.is_empty(),
-            "native `<` comparison yields no template, deferring to policy: {templates:?}"
+            templates
+                .iter()
+                .all(|(_, template)| matches!(template, PredicateTemplate::Unknown)),
+            "native `<` comparison lowers as Unknown, deferring to policy: {templates:?}"
         );
+        assert!(!templates.is_empty());
 
         // A genuine untranslated `<...>` StringTemplate still errors.
         let unsupported = parser_fixture_data("unsupported-predicate-template/T.g4");

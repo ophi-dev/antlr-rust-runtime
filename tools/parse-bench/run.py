@@ -26,7 +26,13 @@ DEFAULT_GRAMMARS_V4 = Path("/tmp/antlr-cleanroom/grammars-v4")
 # whose latest published module tag is v4.13.1.
 GO_ANTLR_RUNTIME = "v4.13.1"
 DEFAULT_BENCHMARK_VARIANT = "default"
-JAVA_RUST_PREDICATE_VARIANT = "java-upstream-parser-predicates-v1"
+# v2: untranslated predicate coordinates lower as generatable Unknown
+# templates (#209), so the untouched-grammar lane routes through generated
+# rule bodies instead of the ATN interpreter. The variant bump resets the
+# Java baseline across that methodology change; the comparator skips
+# mismatched-variant rows and resumes regression checks once both reports
+# carry v2.
+JAVA_RUST_PREDICATE_VARIANT = "java-upstream-parser-predicates-v2"
 
 
 @dataclasses.dataclass(frozen=True)
