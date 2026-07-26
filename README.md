@@ -452,6 +452,11 @@ name = "interpolatedStringLevel"
 kind = "int"                       # `bool` is an alias: slots store integers
 
 [[member]]
+name = "verbatium"
+kind = "bool"
+init = true                        # the grammar's `bool verbatium = true;`
+
+[[member]]
 name = "interpolatedVerbatiums"
 kind = "stack"
 
@@ -470,6 +475,18 @@ fragments: the generator still only matches whole declared bodies, and the
 scalar and stack slots are numbered in separate namespaces. An unknown or
 mistyped slot name is a codegen error naming the slot, never a silently
 mis-numbered one.
+
+`init` carries a scalar slot's **declared initial value**. Slots otherwise start
+at 0, so a grammar writing `private bool enabled = true;` and guarding a rule
+with `{ enabled }?` would reject input it should accept — while the manifest
+still reported the coordinate as `translated`. Declaring `init` seeds the slot
+at construction and restores it on every reset. It is metadata rather than
+something parsed out of the host-language declaration; stacks cannot take one
+(their initial contents are not a single scalar) and are rejected if they try.
+
+Two `[[pattern]]` entries matching the same body is an error naming both IDs,
+for predicates and actions alike — otherwise reordering the pattern file would
+silently change runtime behavior.
 
 The `lower` DSL is a constructor syntax for the IR, not an expression language:
 `member(N)`, `member_top(N)`, `member_len(N)`, `int(N)`, `bool(b)`, `not(e)`,

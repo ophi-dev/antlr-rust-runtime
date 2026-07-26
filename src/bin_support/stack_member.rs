@@ -19,6 +19,11 @@
 //! kind = "int"
 //!
 //! [[member]]
+//! name = "verbatium"
+//! kind = "bool"
+//! init = true            # the grammar's `bool verbatium = true;`
+//!
+//! [[member]]
 //! name = "interpolatedVerbatiums"
 //! kind = "stack"
 //!
@@ -76,10 +81,18 @@ impl MemberKind {
 }
 
 /// One `[[member]]` declaration from a pattern file.
+///
+/// `init` carries a scalar slot's declared initial value. Grammars write
+/// `private bool verbatium = true;`, and dropping that initializer would leave
+/// the slot at 0 — a predicate reading it would then reject input the source
+/// grammar accepts, while still reporting itself `translated`. The initializer
+/// is metadata rather than something parsed out of the host-language
+/// declaration, keeping codegen out of that business.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct MemberDeclaration {
     pub(crate) name: String,
     pub(crate) kind: MemberKind,
+    pub(crate) init: Option<i64>,
 }
 
 /// Slot numbers assigned to the declared members of one grammar.
@@ -89,12 +102,16 @@ pub(crate) struct MemberDeclaration {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct MemberSlots {
     slots: BTreeMap<String, (MemberKind, usize)>,
+    /// Non-zero scalar initial values, by slot. Zero is the implicit default,
+    /// so recording it would emit a redundant seed.
+    scalar_inits: BTreeMap<usize, i64>,
 }
 
 impl MemberSlots {
     /// Assigns slot numbers to declarations in order, per kind.
     pub(crate) fn assign(declarations: &[MemberDeclaration]) -> io::Result<Self> {
         let mut slots = BTreeMap::new();
+        let mut scalar_inits = BTreeMap::new();
         let mut next_int = 0;
         let mut next_stack = 0;
         for declaration in declarations {
@@ -119,8 +136,25 @@ impl MemberSlots {
                     declaration.name
                 )));
             }
+            match (declaration.kind, declaration.init) {
+                // A stack's initial contents are not expressible as one scalar,
+                // and no real grammar pre-seeds one; reject rather than drop it.
+                (MemberKind::Stack, Some(_)) => {
+                    return Err(invalid_data(format!(
+                        "member slot {:?} is a stack and cannot declare an `init` value",
+                        declaration.name
+                    )));
+                }
+                (MemberKind::Int, Some(init)) if init != 0 => {
+                    scalar_inits.insert(slot, init);
+                }
+                _ => {}
+            }
         }
-        Ok(Self { slots })
+        Ok(Self {
+            slots,
+            scalar_inits,
+        })
     }
 
     /// Resolves a slot name, requiring the given kind.
@@ -138,6 +172,13 @@ impl MemberSlots {
             )));
         }
         Ok(slot)
+    }
+
+    /// Non-zero scalar initial values, as `(slot, value)` in slot order.
+    pub(crate) fn scalar_inits(&self) -> impl Iterator<Item = (usize, i64)> + '_ {
+        self.scalar_inits
+            .iter()
+            .map(|(slot, value)| (*slot, *value))
     }
 
     /// Declared slots in name order, as `(name, kind, slot)`.
@@ -395,18 +436,22 @@ mod tests {
             MemberDeclaration {
                 name: "interpolatedStringLevel".to_owned(),
                 kind: MemberKind::Int,
+                init: None,
             },
             MemberDeclaration {
                 name: "verbatium".to_owned(),
                 kind: MemberKind::Int,
+                init: None,
             },
             MemberDeclaration {
                 name: "interpolatedVerbatiums".to_owned(),
                 kind: MemberKind::Stack,
+                init: None,
             },
             MemberDeclaration {
                 name: "curlyLevels".to_owned(),
                 kind: MemberKind::Stack,
+                init: None,
             },
         ])
         .expect("declarations should assign")
@@ -427,14 +472,67 @@ mod tests {
             MemberDeclaration {
                 name: "x".to_owned(),
                 kind: MemberKind::Int,
+                init: None,
             },
             MemberDeclaration {
                 name: "x".to_owned(),
                 kind: MemberKind::Stack,
+                init: None,
             },
         ])
         .expect_err("duplicate slot must fail");
         insta::assert_snapshot!("duplicate_member_slot_error", error.to_string());
+    }
+
+    /// A declared initializer must reach the generated recognizer: a grammar's
+    /// `bool enabled = true;` read by `{enabled}?` otherwise starts at 0 and
+    /// rejects input the source grammar accepts. Only non-zero seeds are
+    /// recorded, since 0 is already the implicit default.
+    #[test]
+    fn declared_scalar_initializers_are_recorded_as_seeds() {
+        let slots = MemberSlots::assign(&[
+            MemberDeclaration {
+                name: "enabled".to_owned(),
+                kind: MemberKind::Int,
+                init: Some(1),
+            },
+            MemberDeclaration {
+                name: "level".to_owned(),
+                kind: MemberKind::Int,
+                init: Some(7),
+            },
+            MemberDeclaration {
+                name: "explicitZero".to_owned(),
+                kind: MemberKind::Int,
+                init: Some(0),
+            },
+            MemberDeclaration {
+                name: "undeclared".to_owned(),
+                kind: MemberKind::Int,
+                init: None,
+            },
+        ])
+        .expect("declarations should assign");
+        insta::assert_compact_debug_snapshot!(
+            slots.scalar_inits().collect::<Vec<_>>(),
+            @"[(0, 1), (1, 7)]"
+        );
+    }
+
+    /// A stack's initial contents are not expressible as one scalar, so an
+    /// `init` on a stack slot is rejected rather than silently dropped.
+    #[test]
+    fn stack_slots_reject_an_init_value() {
+        let error = MemberSlots::assign(&[MemberDeclaration {
+            name: "depths".to_owned(),
+            kind: MemberKind::Stack,
+            init: Some(1),
+        }])
+        .expect_err("a stack init must be rejected");
+        insta::assert_snapshot!(
+            error.to_string(),
+            @r#"member slot "depths" is a stack and cannot declare an `init` value"#
+        );
     }
 
     #[test]

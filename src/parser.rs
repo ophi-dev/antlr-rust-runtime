@@ -5480,6 +5480,16 @@ where
         self.int_members.stack_len(member)
     }
 
+    /// Seeds grammar-declared initial member values (issue #206).
+    ///
+    /// Generated parsers call this at construction for a grammar whose
+    /// `@members` declares an initializer (`private int level = 1;`). Without
+    /// it the slot would start at 0, so a predicate reading it would reject
+    /// input the source grammar accepts.
+    pub fn set_initial_members(&mut self, initial: impl IntoIterator<Item = (usize, i64)>) {
+        self.int_members = MemberEnv::with_initial_scalars(initial);
+    }
+
     /// Captures generated member state before speculative generated parser
     /// execution.
     ///

@@ -2331,3 +2331,70 @@ mod stack_member_tests {
 
     assert_generated_project(temp.path(), &["c_sharp_interpolation.rs"], test_source);
 }
+
+/// Issue #206 review: a grammar whose inline member declares a non-default
+/// initializer must honor it. `{ enabled }?` over `private bool enabled = true;`
+/// has to pass on a fresh lexer; a slot silently starting at 0 would reject
+/// input the source grammar accepts while still reporting itself `translated`.
+///
+/// The expected token stream is an ANTLR 4.13.2 **Java** lexer's output for the
+/// same grammar (`(1, a) (2, b) (-1, <EOF>)`).
+#[test]
+fn declared_member_initializers_reach_the_generated_lexer() {
+    let temp = temporary_directory("member-initializer");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/member-initializer");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        dir.join("L.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        dir.join("patterns.toml").as_os_str(),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let lexer = fs::read_to_string(out.join("l.rs")).expect("lexer should be emitted");
+    assert!(
+        lexer.contains(".with_initial_members([(0, 1)])"),
+        "the declared initializer must seed the slot: {lexer}"
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod member_initializer_tests {
+    use super::l::L;
+    use antlr4_runtime::{CommonTokenStream, InputStream, IntStream as _, Token as _};
+
+    fn lex(input: &str) -> String {
+        let lexer = L::new(InputStream::new(input));
+        let mut stream = CommonTokenStream::new(lexer);
+        stream.fill();
+        (0..stream.size())
+            .filter_map(|index| stream.get(index))
+            .map(|token| {
+                format!("({}, {})", token.token_type(), token.text().unwrap_or_default())
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Matches the ANTLR 4.13.2 Java lexer for the same grammar and input.
+    #[test]
+    fn initialized_member_admits_its_guarded_rule() {
+        assert_eq!(lex("ab"), "(1, a) (2, b) (-1, <EOF>)");
+    }
+}
+"####;
+
+    assert_generated_project(temp.path(), &["l.rs"], test_source);
+}

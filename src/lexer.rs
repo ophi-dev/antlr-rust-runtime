@@ -856,6 +856,10 @@ pub struct BaseLexer<I> {
     /// through a shared borrow, and predicate-bearing DFA states are always
     /// re-simulated rather than cached, so a read never observes a stale accept.
     members: MemberEnv,
+    /// Declared initial scalar values, so `reset()` restores the state a fresh
+    /// lexer had rather than an all-zero one. Empty for grammars whose members
+    /// have no initializer (or none at all).
+    member_inits: Vec<(usize, i64)>,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
 }
 
@@ -1155,8 +1159,22 @@ where
             semantic_error_coordinates: RefCell::new(BTreeSet::new()),
             pending_tokens: VecDeque::new(),
             members: MemberEnv::new(),
+            member_inits: Vec::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
+    }
+
+    /// Seeds grammar-declared initial member values (issue #206).
+    ///
+    /// Generated lexers call this at construction for a grammar whose
+    /// `@lexer::members` declares an initializer (`private bool verbatium =
+    /// true;`). The values are retained so every [`Self::reset`] and
+    /// [`Self::set_input_stream`] restores them instead of zeroing the slots.
+    #[must_use]
+    pub fn with_initial_members(mut self, initial: impl IntoIterator<Item = (usize, i64)>) -> Self {
+        self.member_inits = initial.into_iter().collect();
+        self.members = MemberEnv::with_initial_scalars(self.member_inits.iter().copied());
+        self
     }
 
     /// Resets runtime-owned lexer state so this instance can consume its input
@@ -1182,7 +1200,10 @@ where
         self.pending_tokens.clear();
         // A retained interpolation depth or mode-nesting stack would silently
         // mis-lex the next input, so member state is per-input, not per-lexer.
-        self.members = MemberEnv::new();
+        // It resets to the grammar's *declared* initial values, not to zero —
+        // a `bool enabled = true` member must be true again for the next input.
+        self.members
+            .reset_to_initial(self.member_inits.iter().copied());
     }
 
     /// Replaces the character stream and fully resets lexer state for reuse.
@@ -2278,6 +2299,31 @@ mod tests {
         assert!(lexer.members().is_empty(), "reset must clear member state");
         assert_eq!(lexer.members().scalar(INTERPOLATED_STRING_LEVEL), None);
         assert_eq!(lexer.members().stack_top(CURLY_LEVELS), None);
+    }
+
+    /// A grammar-declared initializer (`private bool verbatium = true;`) must
+    /// survive construction *and* every reset. Zeroing the slot instead would
+    /// make a predicate reading it reject input the source grammar accepts,
+    /// while the manifest still reported the coordinate as translated.
+    #[test]
+    fn lexer_declared_initial_members_survive_construction_and_reset() {
+        use member_slots::{CURLY_LEVELS, INTERPOLATED_STRING_LEVEL, VERBATIUM};
+
+        let mut lexer = member_state_lexer().with_initial_members([(VERBATIUM, 1)]);
+        assert_eq!(lexer.members().scalar(VERBATIUM), Some(1));
+
+        // Mutate away from the declared value, and dirty a stack too.
+        lexer.members_mut().set_scalar(VERBATIUM, 0);
+        lexer.members_mut().add_scalar(INTERPOLATED_STRING_LEVEL, 3);
+        lexer.members_mut().push_stack(CURLY_LEVELS, 1);
+
+        lexer.reset();
+
+        // The declared initializer is restored, not zeroed...
+        assert_eq!(lexer.members().scalar(VERBATIUM), Some(1));
+        // ...while undeclared slots and all stacks go back to empty.
+        assert_eq!(lexer.members().scalar(INTERPOLATED_STRING_LEVEL), None);
+        assert_eq!(lexer.members().stack_len(CURLY_LEVELS), 0);
     }
 
     /// A predicate context must not mutate lexer state: predicates run

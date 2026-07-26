@@ -1,0 +1,12 @@
+# `init` carries the declared initial value as metadata, so codegen never has to
+# parse the host-language declaration to find it.
+version = 1
+
+[[member]]
+name = "enabled"
+kind = "bool"
+init = true
+
+[[pattern]]
+match = "enabled"
+lower = "member(enabled)"

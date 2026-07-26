@@ -366,6 +366,32 @@ impl MemberEnv {
         }
     }
 
+    /// Builds an environment holding a grammar's declared initial scalar values.
+    ///
+    /// Grammars write `private bool verbatium = true;` / `private int level =
+    /// 1;`. Those initializers are part of the grammar's meaning: a predicate
+    /// reading a slot that silently started at 0 instead would reject input the
+    /// source grammar accepts. Generated recognizers seed with this so a fresh
+    /// recognizer — and every [`Self::reset_to_initial`] afterwards — starts
+    /// where the grammar says.
+    #[must_use]
+    pub fn with_initial_scalars(initial: impl IntoIterator<Item = (usize, i64)>) -> Self {
+        Self {
+            scalars: initial.into_iter().collect(),
+            stacks: BTreeMap::new(),
+        }
+    }
+
+    /// Clears all state back to the declared initial scalar values.
+    ///
+    /// This is what a recognizer reset needs: not "empty", but the state a
+    /// freshly constructed recognizer had. Stacks always reset to empty, since
+    /// a declaration cannot pre-seed one.
+    pub fn reset_to_initial(&mut self, initial: impl IntoIterator<Item = (usize, i64)>) {
+        self.scalars = initial.into_iter().collect();
+        self.stacks.clear();
+    }
+
     /// Whether no slot has been written.
     #[must_use]
     pub fn is_empty(&self) -> bool {
