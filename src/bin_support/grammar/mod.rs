@@ -13,6 +13,7 @@ mod left_recursion;
 mod lexer_adaptor;
 pub(crate) mod loader;
 pub(crate) mod model;
+mod mutual_recursion;
 pub(crate) mod provenance;
 mod semantics;
 pub(crate) mod source;

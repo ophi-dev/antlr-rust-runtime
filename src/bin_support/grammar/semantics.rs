@@ -14,6 +14,7 @@ use super::model::{
     SemanticBindings, SemanticGrammar, SetElement, Terminal, TerminalBinding, TokenDeclaration,
     TokenSymbol, TokenSymbolId, Vocabulary,
 };
+use super::mutual_recursion::eliminate_mutual_left_recursion;
 use super::provenance::ProvenanceIndex;
 use super::source::SourceSet;
 use super::transform::{
@@ -80,6 +81,16 @@ pub(crate) fn analyze(
     if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
+
+    // Reduce tractable mutual (indirect) left recursion to direct left
+    // recursion before the direct-recursion rewrite runs (issue #151). This is
+    // a no-op on grammars with no reducible left-corner cycle; anything it
+    // declines is reported later by the ATN-level G4A005 detector.
+    eliminate_mutual_left_recursion(
+        &mut integrated.grammar.units,
+        &mut integrated.ids,
+        &mut integrated.grammar.provenance,
+    );
 
     let symbol_units = integrated
         .grammar

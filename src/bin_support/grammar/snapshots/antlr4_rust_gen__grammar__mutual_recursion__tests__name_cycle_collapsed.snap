@@ -1,0 +1,9 @@
+---
+source: src/bin_support/grammar/mutual_recursion.rs
+expression: render(&unit)
+---
+name:
+  | simple_name
+  | name ''.'' simple_name
+simple_name:
+  | ID
