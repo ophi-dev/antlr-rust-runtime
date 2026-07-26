@@ -369,6 +369,72 @@ fn byte_order_mark_and_crlf_token_vocabularies_are_honored() {
     }
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn combined_literal_tokens_are_public_and_lexable() {
+    let temp = temporary_directory("combined-literal-tokens");
+    let grammar = temp.path().join("T.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar T;\n\
+         greeting : 'hello' NAME 'world' ;\n\
+         NAME : [a-zA-Z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let constants = ["t_lexer.rs", "t_parser.rs"].map(|module| {
+        let generated =
+            fs::read_to_string(out.join(module)).expect("generated module should be readable");
+        let (_, after_eof) = generated
+            .split_once("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;")
+            .expect("generated token constants should start with EOF");
+        let (after_eof, _) = after_eof
+            .split_once("\n\n")
+            .expect("generated token constants should form their own block");
+        (
+            module,
+            format!("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;{after_eof}"),
+        )
+    });
+    insta::assert_debug_snapshot!("combined_literal_token_constants", constants);
+
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod combined_literal_tests {
+    use super::t_lexer::TLexer;
+    use super::t_parser::TParser;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    #[test]
+    fn recognizes_implicit_literal_rules() {
+        let lexer = TLexer::new(InputStream::new("hello Alice world"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = TParser::new(tokens);
+        parser.greeting().expect("literal input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+}
+"#,
+    );
+}
+
 #[test]
 fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     let temp = temporary_directory("combined-contexts");
