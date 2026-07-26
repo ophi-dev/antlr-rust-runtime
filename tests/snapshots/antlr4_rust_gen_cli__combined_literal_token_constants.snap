@@ -1,0 +1,14 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: constants
+---
+[
+    (
+        "t_lexer.rs",
+        "pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\npub const T__0: i32 = 1;\npub const T__1: i32 = 2;\npub const NAME: i32 = 3;\npub const WS: i32 = 4;",
+    ),
+    (
+        "t_parser.rs",
+        "pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\npub const T__0: i32 = 1;\npub const T__1: i32 = 2;\npub const NAME: i32 = 3;\npub const WS: i32 = 4;",
+    ),
+]

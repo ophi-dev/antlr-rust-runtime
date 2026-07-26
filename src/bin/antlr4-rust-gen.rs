@@ -11099,9 +11099,7 @@ fn render_token_constants(data: &CodegenData<'_>) -> String {
             .filter(|name| name.starts_with("T__"))
         {
             let ident = sanitize_identifier(name);
-            if !seen.insert(ident.clone()) {
-                continue;
-            }
+            let _ = seen.insert(ident.clone());
             let token_type = vocabulary.by_name[name];
             writeln!(out, "pub const {ident}: i32 = {token_type};")
                 .expect("writing to a string cannot fail");

@@ -369,6 +369,7 @@ fn byte_order_mark_and_crlf_token_vocabularies_are_honored() {
     }
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn combined_literal_tokens_are_public_and_lexable() {
     let temp = temporary_directory("combined-literal-tokens");
@@ -395,18 +396,21 @@ fn combined_literal_tokens_are_public_and_lexable() {
         utf8(&output.stderr)
     );
 
-    for module in ["t_lexer.rs", "t_parser.rs"] {
+    let constants = ["t_lexer.rs", "t_parser.rs"].map(|module| {
         let generated =
             fs::read_to_string(out.join(module)).expect("generated module should be readable");
-        assert!(
-            generated.contains("pub const T__0: i32 = 1;"),
-            "{module} should expose the 'hello' token type"
-        );
-        assert!(
-            generated.contains("pub const T__1: i32 = 2;"),
-            "{module} should expose the 'world' token type"
-        );
-    }
+        let (_, after_eof) = generated
+            .split_once("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;")
+            .expect("generated token constants should start with EOF");
+        let (after_eof, _) = after_eof
+            .split_once("\n\n")
+            .expect("generated token constants should form their own block");
+        (
+            module,
+            format!("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;{after_eof}"),
+        )
+    });
+    insta::assert_debug_snapshot!("combined_literal_token_constants", constants);
 
     assert_generated_project(
         temp.path(),
