@@ -19,6 +19,12 @@ does not require Java, Node.js, the ANTLR tool jar, or an intermediate
 `.interp` file. The repository's differential tests use ANTLR `4.13.2` only as
 an explicit compatibility oracle.
 
+Grammar sources are read as UTF-8. A leading byte order mark is skipped like
+Java ANTLR's `UnicodeBOM` rule, and `\n`, `\r\n`, and lone `\r` line endings are
+all accepted, so grammars saved by Windows editors need no conversion. The byte
+order mark still occupies a column, which keeps reported positions identical to
+ANTLR's.
+
 ### 2. Install the Rust ANTLR runtime tools
 
 Each ANTLR target language needs a runtime package used by generated parsers.

@@ -321,8 +321,17 @@ ID
 // -------------------------
 // Whitespace
 
+// \uFEFF lets grammars be written in UTF-8 with a byte order mark. Java ANTLR
+// spends a dedicated `UnicodeBOM : '\uFEFF' -> skip;` rule on it. Folding it
+// into WS instead keeps the mark off the default channel without allocating a
+// token type, so the Argument and LexerCharSet modes keep the token numbering
+// the pinned antlr-ng oracles are recorded against. NameStartChar excludes
+// \uFEFF, so ID cannot out-match this rule, and the mark still spans its own
+// bytes, so reported columns stay identical to ANTLR's. Usage inside a
+// LEXER_CHAR_SET or STRING_LITERAL keeps working because those rules match it
+// as content.
 WS
-    : [ \t\r\n\f]+ -> channel (OFF_CHANNEL)
+    : [ \t\r\n\f\uFEFF]+ -> channel (OFF_CHANNEL)
     ;
 
 // ======================================================
@@ -428,6 +437,9 @@ fragment NameStartChar
     | '\u2C00' .. '\u2FEF'
     | '\u3001' .. '\uD7FF'
     | '\uF900' .. '\uFDCF'
-    | '\uFDF0' .. '\uFFFD'
+    // Split to exclude '\uFEFF', so a UTF-8 byte order mark cannot start an
+    // identifier and WS matches it instead. Matches Java ANTLR's ANTLRLexer.g.
+    | '\uFDF0' .. '\uFEFE'
+    | '\uFF00' .. '\uFFFD'
     // ignores | ['\u10000-'\uEFFFF]
     ;
