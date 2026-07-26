@@ -1,5 +1,8 @@
+use std::sync::{Arc, OnceLock};
+
 use crate::atn::parser_atn::ParserAtn;
 use crate::atn::serialized::SerializedAtn;
+use crate::recognizer::{RecognizerData, RecognizerMetadata};
 use crate::vocabulary::Vocabulary;
 
 #[derive(Clone, Debug)]
@@ -12,6 +15,7 @@ pub struct GrammarMetadata {
     channel_names: &'static [&'static str],
     mode_names: &'static [&'static str],
     serialized_atn: &'static [i32],
+    recognizer_metadata: OnceLock<Arc<RecognizerMetadata>>,
 }
 
 impl GrammarMetadata {
@@ -36,6 +40,7 @@ impl GrammarMetadata {
             channel_names,
             mode_names,
             serialized_atn,
+            recognizer_metadata: OnceLock::new(),
         }
     }
 
@@ -61,6 +66,21 @@ impl GrammarMetadata {
             self.symbolic_names.iter().copied(),
             self.display_names.iter().copied(),
         )
+    }
+
+    /// Creates per-instance recognizer state backed by this grammar's cached
+    /// immutable metadata.
+    pub fn recognizer_data(&self) -> RecognizerData {
+        let metadata = self.recognizer_metadata.get_or_init(|| {
+            Arc::new(RecognizerMetadata::from_static(
+                self.grammar_file_name,
+                self.rule_names,
+                self.channel_names,
+                self.mode_names,
+                self.vocabulary(),
+            ))
+        });
+        RecognizerData::from_shared(Arc::clone(metadata))
     }
 
     /// Borrows the serialized ATN values for deserialization by the runtime
@@ -100,5 +120,15 @@ mod tests {
     fn metadata_builds_vocabulary() {
         assert_eq!(META.grammar_file_name(), "Mini.g4");
         assert_eq!(META.vocabulary().display_name(1), "'x'");
+    }
+
+    #[test]
+    fn cloned_metadata_retains_the_initialized_recognizer_cache() {
+        let first = META.recognizer_data();
+        let cloned = META.clone();
+        let second = cloned.recognizer_data();
+
+        assert!(std::ptr::eq(first.rule_names(), second.rule_names()));
+        assert!(std::ptr::eq(first.vocabulary(), second.vocabulary()));
     }
 }

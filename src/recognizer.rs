@@ -40,26 +40,65 @@ impl fmt::Debug for ErrorListenerSlot {
 }
 
 #[derive(Clone, Debug)]
-pub struct RecognizerData {
+pub(crate) struct RecognizerMetadata {
     grammar_file_name: String,
     rule_names: Vec<String>,
     channel_names: Vec<String>,
     mode_names: Vec<String>,
     vocabulary: Vocabulary,
+}
+
+impl RecognizerMetadata {
+    pub(crate) fn from_static(
+        grammar_file_name: &'static str,
+        rule_names: &'static [&'static str],
+        channel_names: &'static [&'static str],
+        mode_names: &'static [&'static str],
+        vocabulary: Vocabulary,
+    ) -> Self {
+        Self {
+            grammar_file_name: grammar_file_name.to_owned(),
+            rule_names: rule_names.iter().map(|name| (*name).to_owned()).collect(),
+            channel_names: channel_names
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect(),
+            mode_names: mode_names.iter().map(|name| (*name).to_owned()).collect(),
+            vocabulary,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RecognizerData {
+    metadata: Arc<RecognizerMetadata>,
     state: isize,
+    console_error_listener: bool,
     error_listeners: Vec<ErrorListenerSlot>,
 }
 
 impl RecognizerData {
     pub fn new(grammar_file_name: impl Into<String>, vocabulary: Vocabulary) -> Self {
         Self {
-            grammar_file_name: grammar_file_name.into(),
-            rule_names: Vec::new(),
-            channel_names: Vec::new(),
-            mode_names: Vec::new(),
-            vocabulary,
+            metadata: Arc::new(RecognizerMetadata {
+                grammar_file_name: grammar_file_name.into(),
+                rule_names: Vec::new(),
+                channel_names: Vec::new(),
+                mode_names: Vec::new(),
+                vocabulary,
+            }),
             state: -1,
-            error_listeners: vec![ErrorListenerSlot::new(ConsoleErrorListener)],
+            console_error_listener: true,
+            error_listeners: Vec::new(),
+        }
+    }
+
+    pub(crate) const fn from_shared(metadata: Arc<RecognizerMetadata>) -> Self {
+        Self {
+            metadata,
+            state: -1,
+            console_error_listener: true,
+            error_listeners: Vec::new(),
         }
     }
 
@@ -68,7 +107,8 @@ impl RecognizerData {
         mut self,
         rule_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.rule_names = rule_names.into_iter().map(Into::into).collect();
+        Arc::make_mut(&mut self.metadata).rule_names =
+            rule_names.into_iter().map(Into::into).collect();
         self
     }
 
@@ -77,7 +117,8 @@ impl RecognizerData {
         mut self,
         channel_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.channel_names = channel_names.into_iter().map(Into::into).collect();
+        Arc::make_mut(&mut self.metadata).channel_names =
+            channel_names.into_iter().map(Into::into).collect();
         self
     }
 
@@ -86,7 +127,8 @@ impl RecognizerData {
         mut self,
         mode_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.mode_names = mode_names.into_iter().map(Into::into).collect();
+        Arc::make_mut(&mut self.metadata).mode_names =
+            mode_names.into_iter().map(Into::into).collect();
         self
     }
 
@@ -97,13 +139,13 @@ impl RecognizerData {
     /// borrow rule names without borrowing the whole recognizer.
     #[must_use]
     pub fn rule_names(&self) -> &[String] {
-        &self.rule_names
+        &self.metadata.rule_names
     }
 
     /// The token vocabulary for literal/symbolic name resolution.
     #[must_use]
-    pub const fn vocabulary(&self) -> &Vocabulary {
-        &self.vocabulary
+    pub fn vocabulary(&self) -> &Vocabulary {
+        &self.metadata.vocabulary
     }
 
     pub const fn state(&self) -> isize {
@@ -122,6 +164,7 @@ impl RecognizerData {
     }
 
     fn remove_error_listeners(&mut self) {
+        self.console_error_listener = false;
         self.error_listeners.clear();
     }
 
@@ -135,6 +178,9 @@ impl RecognizerData {
         message: &str,
         error: Option<&AntlrError>,
     ) {
+        if self.console_error_listener {
+            ConsoleErrorListener.syntax_error(recognizer, offending, line, column, message, error);
+        }
         for listener in &self.error_listeners {
             listener.syntax_error(recognizer, offending, line, column, message, error);
         }
@@ -146,23 +192,23 @@ pub trait Recognizer {
     fn data_mut(&mut self) -> &mut RecognizerData;
 
     fn grammar_file_name(&self) -> &str {
-        &self.data().grammar_file_name
+        &self.data().metadata.grammar_file_name
     }
 
     fn rule_names(&self) -> &[String] {
-        &self.data().rule_names
+        &self.data().metadata.rule_names
     }
 
     fn channel_names(&self) -> &[String] {
-        &self.data().channel_names
+        &self.data().metadata.channel_names
     }
 
     fn mode_names(&self) -> &[String] {
-        &self.data().mode_names
+        &self.data().metadata.mode_names
     }
 
     fn vocabulary(&self) -> &Vocabulary {
-        &self.data().vocabulary
+        &self.data().metadata.vocabulary
     }
 
     fn state(&self) -> isize {
@@ -220,7 +266,21 @@ pub trait Recognizer {
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
+    use std::mem::size_of;
+
     use super::*;
+    use crate::generated::GrammarMetadata;
+
+    static SHARED_METADATA: GrammarMetadata = GrammarMetadata::new(
+        "Shared.g4",
+        &["start"],
+        &[None, Some("'x'")],
+        &[None, Some("X")],
+        &[None, None],
+        &["DEFAULT_TOKEN_CHANNEL", "HIDDEN"],
+        &["DEFAULT_MODE"],
+        &[],
+    );
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct RecordedError {
@@ -295,9 +355,11 @@ mod tests {
     #[test]
     fn recognizers_replace_the_default_console_error_listener() {
         let mut recognizer = test_recognizer();
-        assert_eq!(recognizer.data.error_listeners.len(), 1);
+        assert!(recognizer.data.console_error_listener);
+        assert!(recognizer.data.error_listeners.is_empty());
 
         recognizer.remove_error_listeners();
+        assert!(!recognizer.data.console_error_listener);
         assert!(recognizer.data.error_listeners.is_empty());
 
         let errors = Arc::new(Mutex::new(Vec::new()));
@@ -326,13 +388,53 @@ mod tests {
     }
 
     #[test]
+    fn recognizer_data_keeps_shared_metadata_out_of_line() {
+        assert!(size_of::<RecognizerData>() < size_of::<RecognizerMetadata>());
+    }
+
+    #[test]
     fn cloned_recognizers_can_reconfigure_their_listener_lists_independently() {
         let mut original = test_recognizer();
         let clone = original.clone();
 
         original.remove_error_listeners();
 
+        assert!(!original.data.console_error_listener);
         assert!(original.data.error_listeners.is_empty());
-        assert_eq!(clone.data.error_listeners.len(), 1);
+        assert!(clone.data.console_error_listener);
+        assert!(clone.data.error_listeners.is_empty());
+    }
+
+    #[test]
+    fn generated_recognizers_share_metadata_but_not_instance_state() {
+        let mut first = SHARED_METADATA.recognizer_data();
+        let second = SHARED_METADATA.recognizer_data();
+
+        assert!(std::ptr::eq(first.rule_names(), second.rule_names()));
+        assert!(std::ptr::eq(first.vocabulary(), second.vocabulary()));
+        assert!(first.console_error_listener);
+        assert!(second.console_error_listener);
+
+        first.set_state(7);
+        first.remove_error_listeners();
+
+        assert_eq!(first.state(), 7);
+        assert_eq!(second.state(), -1);
+        assert!(!first.console_error_listener);
+        assert!(first.error_listeners.is_empty());
+        assert!(second.console_error_listener);
+        assert!(second.error_listeners.is_empty());
+    }
+
+    #[test]
+    fn customizing_shared_metadata_detaches_only_that_recognizer() {
+        let customized = SHARED_METADATA
+            .recognizer_data()
+            .with_rule_names(["replacement"]);
+        let shared = SHARED_METADATA.recognizer_data();
+
+        assert_eq!(customized.rule_names(), ["replacement"]);
+        assert_eq!(shared.rule_names(), ["start"]);
+        assert!(!std::ptr::eq(customized.rule_names(), shared.rule_names()));
     }
 }

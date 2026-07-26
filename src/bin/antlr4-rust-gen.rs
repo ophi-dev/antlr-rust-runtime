@@ -3182,13 +3182,7 @@ where
 {{
     pub fn with_hooks(input: I, hooks: H) -> Self {{
         let grammar_metadata = metadata();
-        let data = RecognizerData::new(
-            grammar_metadata.grammar_file_name(),
-            grammar_metadata.vocabulary(),
-        )
-        .with_rule_names(grammar_metadata.rule_names().iter().copied())
-        .with_channel_names(grammar_metadata.channel_names().iter().copied())
-        .with_mode_names(grammar_metadata.mode_names().iter().copied());
+        let data = grammar_metadata.recognizer_data();
         Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()), hooks }}
     }}
 
@@ -9389,11 +9383,7 @@ const fn render_compile_parse_tree_pattern_method() -> &'static str {
             None => {
                 let data = PATTERN_DATA.get_or_init(|| {
                     let grammar_metadata = metadata();
-                    RecognizerData::new(
-                        grammar_metadata.grammar_file_name(),
-                        grammar_metadata.vocabulary(),
-                    )
-                    .with_rule_names(grammar_metadata.rule_names().iter().copied())
+                    grammar_metadata.recognizer_data()
                 });
                 let matcher = antlr4_runtime::ParseTreePatternMatcher::new(parser_atn(), data)?;
                 PATTERN_MATCHER.get_or_init(|| matcher)
@@ -9718,13 +9708,7 @@ where
 {{
     pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {{
         let grammar_metadata = metadata();
-        let data = RecognizerData::new(
-            grammar_metadata.grammar_file_name(),
-            grammar_metadata.vocabulary(),
-        )
-        .with_rule_names(grammar_metadata.rule_names().iter().copied())
-        .with_channel_names(grammar_metadata.channel_names().iter().copied())
-        .with_mode_names(grammar_metadata.mode_names().iter().copied());
+        let data = grammar_metadata.recognizer_data();
 {base_initialization}
         Self {{
             base,
@@ -12020,6 +12004,29 @@ mod tests {
         assert!(rendered.contains(
             "pub fn rule_names() -> &'static [&'static str] {\n    METADATA.rule_names()\n}"
         ));
+    }
+
+    #[test]
+    fn generated_recognizers_reuse_cached_static_metadata() {
+        let lexer = render_lexer(
+            "TLexer",
+            &predicate_lexer_data(),
+            false,
+            SemUnknownPolicy::default(),
+            &SemPatternFile::default(),
+            false,
+        )
+        .expect("lexer should render");
+        let parser =
+            render_parser("TParser", &minimal_parser_data()).expect("parser should render");
+
+        for rendered in [&lexer, &parser] {
+            assert!(rendered.contains("let data = grammar_metadata.recognizer_data();"));
+            assert!(!rendered.contains("grammar_metadata.vocabulary()"));
+            assert!(!rendered.contains("with_rule_names(grammar_metadata"));
+            assert!(!rendered.contains("with_channel_names(grammar_metadata"));
+            assert!(!rendered.contains("with_mode_names(grammar_metadata"));
+        }
     }
 
     #[test]
