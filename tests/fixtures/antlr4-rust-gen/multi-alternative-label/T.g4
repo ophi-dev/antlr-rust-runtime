@@ -15,6 +15,13 @@ calc
     | calc op = ('+' | '-') calc
     ;
 
+// The optional labeled PLUS is followed by an unlabeled PLUS that would slide
+// into `.nth(0)` whenever the labeled one is absent — the accessor must be
+// omitted (`shadowed_when_absent` in context_label_selector).
+shadowed
+    : lead = PLUS? PLUS unary
+    ;
+
 unary
     : IDENT
     | NUM
