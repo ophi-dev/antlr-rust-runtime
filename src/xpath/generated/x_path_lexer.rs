@@ -5,7 +5,6 @@
 mod __antlr4_rust_generated {
 
 use antlr4_runtime::char_stream::CharStream;
-use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::{TokenId, TokenSink, TokenSource, TokenStoreError};
 use antlr4_runtime::atn::LexerAtn;
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
