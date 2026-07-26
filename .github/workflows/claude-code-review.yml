@@ -24,6 +24,13 @@ name: Claude Code Review
 # event-shape validation — it installs Claude Code, runs a prompt, and reports a
 # `conclusion` output — so the sticky/progress comment is re-implemented here
 # with a few `gh api` calls against the PR number resolved below.
+#
+# The wrapper's GitHub *identity* had to be re-implemented too. Before running
+# anything, `claude-code-action` trades the job's OIDC token for a Claude GitHub
+# App installation token, so every comment it writes is attributed to
+# `claude[bot]` rather than to `github-actions[bot]`. That exchange lives in the
+# wrapper (`src/github/token.ts`), not in the base action, so it is not an input
+# this workflow can set — see "Mint a Claude GitHub App token" below.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -171,6 +178,126 @@ jobs:
           echo "found=true" >>"$GITHUB_OUTPUT"
           echo "number=$number" >>"$GITHUB_OUTPUT"
 
+      # Restore the `claude[bot]` authorship the wrapper action gave us for free.
+      #
+      # Two hops, both of which the wrapper does internally:
+      #   1. Mint a GitHub OIDC token for this job. The audience is not the
+      #      default (`https://github.com/<owner>`) but the literal string
+      #      `claude-code-github-action` — Anthropic validates that `aud` claim,
+      #      so a default-audience token is rejected.
+      #   2. POST it as a bearer to Anthropic's exchange endpoint, which replies
+      #      with a GitHub App *installation* token for the Claude GitHub App
+      #      installed on this repo. Any `gh`/API call carrying it is attributed
+      #      to `claude[bot]`.
+      #
+      # The optional JSON body narrows the token's permissions; omitting it takes
+      # the upstream default of contents/pull-requests/issues: write. That is
+      # exactly what the comment steps need, and deliberately *not* a superset of
+      # the job's own grants — note it carries no `actions: write`, so the quota
+      # path's `gh run cancel` keeps using `github.token` below.
+      #
+      # `continue-on-error` plus the `||` fallbacks make identity strictly
+      # cosmetic: if the App is uninstalled, the endpoint changes, or the network
+      # blips, every later step falls back to `github.token` and the review still
+      # publishes as `github-actions[bot]`. Losing the avatar must never cost a
+      # review. Requires `id-token: write` (already granted).
+      - name: Mint a Claude GitHub App token
+        id: app-token
+        if: steps.pr.outputs.found == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          # `ACTIONS_ID_TOKEN_REQUEST_{URL,TOKEN}` are injected into the step's
+          # process environment by the runner when `id-token: write` is granted.
+          # They are read here as plain shell variables, deliberately NOT mapped
+          # in through the `env` expression context: that context exposes only
+          # variables declared in the workflow, job, or step, so mapping these
+          # would expand to the empty string and the exchange would never even be
+          # attempted. `@actions/core`'s `getIDToken` reads them from
+          # `process.env` for the same reason.
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "::warning::No OIDC request context; falling back to the workflow token."
+            exit 0
+          fi
+
+          # Both calls write their body to a file and are judged by curl's exit
+          # code. Two things this avoids, both verified against curl 8.7:
+          #   * Never pipe curl's stdout into jq. Under `-sS --retry` curl writes
+          #     "Warning: Transient problem … will retry" to *stderr*, so a
+          #     `2>&1` capture splices that prose into the JSON and breaks the
+          #     parse of a call that actually succeeded on its second attempt.
+          #   * Never use `-w '%{http_code}'` as the success signal. On a
+          #     connection-teardown retry curl emits the write-out template once
+          #     *per attempt*, so the capture reads "000200" rather than "200"
+          #     and no plain status comparison matches — a single transient blip
+          #     would silently cost us the identity.
+          # `--fail-with-body` makes a 4xx/5xx a nonzero exit *and* still saves
+          # the error JSON, so the diagnostics below survive.
+          #
+          # `--retry-connrefused` rather than `--retry-all-errors`: retries cover
+          # transient transport faults (curl already retries 5xx/429 by default),
+          # while an auth or workflow-validation 401 is permanent — retrying it
+          # four times only delays the fallback and fills the log with the same
+          # error. Retries here are also why the body must be re-read after each
+          # call rather than cached.
+          body="$(mktemp)"
+
+          # The audience must be `claude-code-github-action`, not the default
+          # `https://github.com/<owner>` — Anthropic validates the `aud` claim.
+          # The runner's URL already carries a query string (`?api-version=2.0`),
+          # hence `&` rather than `?`.
+          if ! curl --fail-with-body -sS --retry 3 --retry-connrefused \
+              --connect-timeout 5 --max-time 30 \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              -o "$body" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=claude-code-github-action"; then
+            echo "::warning::Could not mint an OIDC token; falling back to the workflow token."
+            rm -f "$body"
+            exit 0
+          fi
+
+          oidc="$(jq -r '.value // empty' <"$body" 2>/dev/null || true)"
+
+          if [[ -z "$oidc" ]]; then
+            echo "::warning::OIDC response carried no token; falling back to the workflow token."
+            rm -f "$body"
+            exit 0
+          fi
+
+          if ! curl --fail-with-body -sS --retry 3 --retry-connrefused \
+              --connect-timeout 5 --max-time 30 \
+              -X POST \
+              -H "Authorization: Bearer $oidc" \
+              -o "$body" \
+              https://api.anthropic.com/api/github/github-app-token-exchange; then
+            # The failure worth naming: the exchange only issues a token for a
+            # workflow that exists on the default branch, so a PR that adds or
+            # edits this file cannot mint one until it merges (reported as
+            # `workflow_not_found_on_default_branch`, or a 401 "workflow
+            # validation failed").
+            echo "::warning::App token exchange failed; falling back to the workflow token. $(jq -r '.error.message // .message // "no message"' <"$body" 2>/dev/null || true)"
+            rm -f "$body"
+            exit 0
+          fi
+
+          # Upstream accepts either key, so mirror that rather than guessing.
+          token="$(jq -r '.token // .app_token // empty' <"$body" 2>/dev/null || true)"
+
+          if [[ -z "$token" ]]; then
+            echo "::warning::Exchange returned no token; falling back to the workflow token."
+            rm -f "$body"
+            exit 0
+          fi
+
+          # Mask before anything else can echo it, then hand it to later steps as
+          # an output. Masking is what makes the step output safe to use: it is
+          # applied to the whole job's log stream, not just this step.
+          echo "::add-mask::$token"
+          echo "token=$token" >>"$GITHUB_OUTPUT"
+          rm -f "$body"
+          echo "Minted a Claude GitHub App token; comments will post as claude[bot]."
+
       # The sticky/progress comment, re-implemented. Upstream's tracking comment
       # is just a short markdown body with a spinner and a job-run link; the
       # "sticky" behavior is a list-comments scan that updates a previous comment
@@ -180,7 +307,7 @@ jobs:
         id: comment
         if: steps.pr.outputs.found == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -323,7 +450,9 @@ jobs:
         env:
           CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
           # Available to the reviewer's `gh` calls for editing its own comment.
-          GH_TOKEN: ${{ github.token }}
+          # The Claude App token when the exchange succeeded, so the published
+          # review is attributed to `claude[bot]`; the workflow token otherwise.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
@@ -418,7 +547,7 @@ jobs:
           steps.claude-review.outputs.conclusion == 'success'
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           COMMENT_ID: ${{ steps.comment.outputs.id }}
@@ -463,7 +592,12 @@ jobs:
           (steps.claude-review.outputs.conclusion == 'failure' ||
            steps.claude-review.outcome == 'failure')
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Comment edits go out as `claude[bot]` when available…
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # …but `gh run cancel` needs `actions: write`, which the App token does
+          # not carry (its grants are contents/pull-requests/issues), so that one
+          # call is passed the workflow token explicitly below.
+          WORKFLOW_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -530,7 +664,7 @@ jobs:
           # runner is torn down shortly after. Block afterwards so this step does
           # not exit 0 and let the job report a misleading green check while the
           # cancel is still in flight.
-          gh run cancel "$RUN_ID" --repo "$GH_REPO" || \
+          GH_TOKEN="$WORKFLOW_TOKEN" gh run cancel "$RUN_ID" --repo "$GH_REPO" || \
             echo "::warning::gh run cancel returned non-zero; relying on the queued cancellation."
 
           echo "Cancellation requested; waiting for the runner to stop."
@@ -555,7 +689,7 @@ jobs:
         if: always() && steps.comment.outputs.id != ''
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           GH_REPO: ${{ github.repository }}
           COMMENT_ID: ${{ steps.comment.outputs.id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -578,3 +712,28 @@ jobs:
 
           gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
             --field body="$body" --jq '.id' >/dev/null
+
+      # Hand the App token back once the job is done with it, as the wrapper
+      # action does. Installation tokens stay valid for about an hour while this
+      # job runs 10–20 minutes, so revoking closes the remaining window instead
+      # of leaving a live credential to expire on its own.
+      #
+      # Must be the LAST step: every comment-writing step above authenticates
+      # with this token, and revoking before them would make their `gh` calls
+      # fail. `always()` so failed and cancelled runs revoke too, and
+      # `continue-on-error` so cleanup never turns a good review red.
+      - name: Revoke the Claude GitHub App token
+        if: always() && steps.app-token.outputs.token != ''
+        continue-on-error: true
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          curl -sS -X DELETE \
+            --connect-timeout 5 --max-time 10 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $APP_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL:-https://api.github.com}/installation/token" >/dev/null || \
+            echo "::warning::Could not revoke the app token; it expires on its own within the hour."
