@@ -370,6 +370,68 @@ fn byte_order_mark_and_crlf_token_vocabularies_are_honored() {
 }
 
 #[test]
+fn combined_literal_tokens_are_public_and_lexable() {
+    let temp = temporary_directory("combined-literal-tokens");
+    let grammar = temp.path().join("T.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar T;\n\
+         greeting : 'hello' NAME 'world' ;\n\
+         NAME : [a-zA-Z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    for module in ["t_lexer.rs", "t_parser.rs"] {
+        let generated =
+            fs::read_to_string(out.join(module)).expect("generated module should be readable");
+        assert!(
+            generated.contains("pub const T__0: i32 = 1;"),
+            "{module} should expose the 'hello' token type"
+        );
+        assert!(
+            generated.contains("pub const T__1: i32 = 2;"),
+            "{module} should expose the 'world' token type"
+        );
+    }
+
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod combined_literal_tests {
+    use super::t_lexer::TLexer;
+    use super::t_parser::TParser;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    #[test]
+    fn recognizes_implicit_literal_rules() {
+        let lexer = TLexer::new(InputStream::new("hello Alice world"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = TParser::new(tokens);
+        parser.greeting().expect("literal input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     let temp = temporary_directory("combined-contexts");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

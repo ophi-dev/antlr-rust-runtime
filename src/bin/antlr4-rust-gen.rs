@@ -11091,6 +11091,22 @@ fn render_metadata_with_atn(
 fn render_token_constants(data: &CodegenData<'_>) -> String {
     let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
     let mut seen = BTreeSet::new();
+    if let Some(semantic) = data.semantic {
+        let vocabulary = &semantic.recognizer.vocabulary;
+        for name in vocabulary
+            .name_order
+            .iter()
+            .filter(|name| name.starts_with("T__"))
+        {
+            let ident = sanitize_identifier(name);
+            if !seen.insert(ident.clone()) {
+                continue;
+            }
+            let token_type = vocabulary.by_name[name];
+            writeln!(out, "pub const {ident}: i32 = {token_type};")
+                .expect("writing to a string cannot fail");
+        }
+    }
     for (index, name) in data.symbolic_names.iter().enumerate() {
         let Some(name) = name else { continue };
         let ident = rust_const_name(name);
