@@ -272,6 +272,103 @@ fn positional_lexer_root_emits_rust_and_manifest() {
     assert!(manifest.contains("\"kind\": \"lexer\""), "{manifest}");
 }
 
+/// Editors on Windows commonly save `.g4` sources with a UTF-8 byte order mark
+/// and CRLF line endings. Both must generate exactly like the plain spelling.
+#[test]
+fn byte_order_mark_and_crlf_grammars_generate_like_plain_sources() {
+    let temp = temporary_directory("bom-crlf");
+    let plain = "lexer grammar Letters;\nA: 'a';\nWS: [ \\t\\r\\n]+ -> skip;\n";
+    let crlf = "lexer grammar Letters;\r\nA: 'a';\r\nWS: [ \\t\\r\\n]+ -> skip;\r\n";
+    let cases = [
+        ("plain", plain.to_owned()),
+        ("bom", format!("\u{feff}{plain}")),
+        ("crlf", crlf.to_owned()),
+        ("bom-crlf", format!("\u{feff}{crlf}")),
+    ];
+
+    let mut generated = Vec::new();
+    for (name, text) in cases {
+        let case = temp.path().join(name);
+        let grammar = case.join("Letters.g4");
+        let out = case.join("generated");
+        fs::create_dir_all(&case).expect("case directory should be writable");
+        fs::write(&grammar, &text).expect("grammar should be writable");
+
+        let output = run_antlr4_rust_gen(&[
+            grammar.as_os_str(),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ]);
+        assert!(
+            output.status.success(),
+            "{name}: stdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+        generated.push((
+            name,
+            fs::read_to_string(out.join("letters.rs")).expect("lexer should be emitted"),
+        ));
+    }
+
+    let (_, expected) = &generated[0];
+    for (name, actual) in &generated[1..] {
+        assert_eq!(
+            actual, expected,
+            "{name} output differs from the plain source"
+        );
+    }
+    assert!(
+        !expected.contains('\r'),
+        "generated code should not carry carriage returns"
+    );
+}
+
+/// A `.tokens` vocabulary is a generated sidecar parsed line by line, so it
+/// never reaches the grammar lexer's byte order mark handling. Both a marked
+/// and a CRLF sidecar must still supply the recorded token numbers.
+#[test]
+fn byte_order_mark_and_crlf_token_vocabularies_are_honored() {
+    for (name, vocabulary) in [
+        ("plain", "ID=1\nNUM=2\n".to_owned()),
+        ("bom", "\u{feff}ID=1\nNUM=2\n".to_owned()),
+        ("crlf", "ID=1\r\nNUM=2\r\n".to_owned()),
+        ("bom-crlf", "\u{feff}ID=1\r\nNUM=2\r\n".to_owned()),
+    ] {
+        let temp = temporary_directory("vocab-bom");
+        let grammar = temp.path().join("P.g4");
+        let out = temp.path().join("generated");
+        fs::write(temp.path().join("V.tokens"), &vocabulary)
+            .expect("vocabulary should be writable");
+        fs::write(
+            &grammar,
+            "parser grammar P;\n\
+             options { tokenVocab=V; }\n\
+             r: ID NUM;\n",
+        )
+        .expect("grammar should be writable");
+
+        let output = run_antlr4_rust_gen(&[
+            grammar.as_os_str(),
+            OsStr::new("--lib"),
+            temp.path().as_os_str(),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ]);
+        assert!(
+            output.status.success(),
+            "{name}: stdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+        let parser = fs::read_to_string(out.join("p.rs")).expect("parser should be emitted");
+        assert!(
+            parser.contains("ID: i32 = 1;") && parser.contains("NUM: i32 = 2;"),
+            "{name}: vocabulary numbers were not imported"
+        );
+    }
+}
+
 #[test]
 fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     let temp = temporary_directory("combined-contexts");

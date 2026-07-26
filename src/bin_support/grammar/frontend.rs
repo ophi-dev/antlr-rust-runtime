@@ -1072,6 +1072,101 @@ mod tests {
         }
     }
 
+    /// A UTF-8 byte order mark is skipped rather than stripped, so it keeps
+    /// occupying a column exactly as Java ANTLR's `UnicodeBOM` rule leaves it.
+    #[test]
+    fn utf8_byte_order_mark_is_skipped_without_shifting_spans() {
+        let with_bom = "\u{feff}grammar A; a: 'x';";
+        let file = parse_source(SourceId::new(0), "memory:bom", with_bom)
+            .expect("a byte order mark must not fail the frontend");
+        assert_eq!(
+            file.tokens()
+                .iter()
+                .filter(
+                    |token| token.channel == antlr4_runtime::token::DEFAULT_CHANNEL
+                        && token.token_type != RUNTIME_TOKEN_EOF
+                )
+                .map(|token| file.token_text(token))
+                .collect::<Vec<_>>(),
+            ["grammar", "A", ";", "a", ":", "'x'", ";"],
+        );
+        // The mark keeps its own byte span, so later spans stay anchored to the
+        // real file offsets and Java ANTLR's column numbers are reproduced.
+        assert_eq!(file.line_column(with_bom.len() as u32 - 1), Some((1, 18)));
+
+        let without_bom = "grammar A; a: 'x';";
+        let plain = parse_source(SourceId::new(1), "memory:no-bom", without_bom)
+            .expect("the control grammar should parse");
+        assert_eq!(
+            plain.line_column(without_bom.len() as u32 - 1),
+            Some((1, 17))
+        );
+    }
+
+    /// A byte order mark is only whitespace outside literals; inside a string
+    /// literal or a character set it stays ordinary content.
+    #[test]
+    fn byte_order_mark_inside_literals_remains_content() {
+        let text = "lexer grammar A; A: '\u{feff}'; B: [\u{feff}a-z]+;";
+        let file = parse_source(SourceId::new(0), "memory:bom-literal", text)
+            .expect("a byte order mark inside literals should parse");
+        let literals = file
+            .tokens()
+            .iter()
+            .filter(|token| {
+                matches!(
+                    token.token_type,
+                    STRING_LITERAL | super::super::generated::antlr_v4_lexer::LEXER_CHAR_SET
+                )
+            })
+            .map(|token| file.token_text(token))
+            .collect::<Vec<_>>();
+        assert_eq!(literals, ["'\u{feff}'", "[\u{feff}a-z]"]);
+    }
+
+    /// Windows and classic-Mac line endings are plain whitespace, and the line
+    /// map counts them the way Java ANTLR does.
+    #[test]
+    fn carriage_returns_are_whitespace_and_end_lines() {
+        for (name, text) in [
+            ("crlf", "grammar A;\r\na: 'x';\r\n"),
+            ("cr", "grammar A;\ra: 'x';\r"),
+        ] {
+            let file = parse_source(SourceId::new(0), name, text)
+                .unwrap_or_else(|error| panic!("{name}: {:?}", error.diagnostics()));
+            assert_eq!(
+                file.tokens()
+                    .iter()
+                    .filter(
+                        |token| token.channel == antlr4_runtime::token::DEFAULT_CHANNEL
+                            && token.token_type != RUNTIME_TOKEN_EOF
+                    )
+                    .map(|token| file.token_text(token))
+                    .collect::<Vec<_>>(),
+                ["grammar", "A", ";", "a", ":", "'x'", ";"],
+                "{name}",
+            );
+        }
+
+        // A CRLF pair must advance the line once, not twice, so diagnostics on
+        // the second line report the same column as the LF-only spelling.
+        let crlf = parse_source(SourceId::new(0), "crlf-lines", "grammar A;\r\na: 'x';\r\n")
+            .expect("CRLF grammar should parse");
+        let lf = parse_source(SourceId::new(1), "lf-lines", "grammar A;\na: 'x';\n")
+            .expect("LF grammar should parse");
+        let semicolon = |file: &SourceFile| {
+            let token = file
+                .tokens()
+                .iter()
+                .filter(|token| token.token_type == SEMI)
+                .nth(1)
+                .expect("both grammars have two semicolons");
+            file.line_column(token.span.bytes.start)
+        };
+        assert_eq!(semicolon(&crlf), Some((2, 6)));
+        assert_eq!(semicolon(&crlf), semicolon(&lf));
+    }
+
     #[test]
     fn tparser_preserves_named_action_rule_and_argument_spans() {
         const ACTION_BLOCK_RULE: usize = 14;

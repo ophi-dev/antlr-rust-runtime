@@ -819,6 +819,11 @@ fn import_dependency(
                     return;
                 }
             };
+            // `.tokens` files are generated sidecars rather than grammar
+            // source, so the frontend's byte order mark handling never sees
+            // them. Drop a leading mark here: U+FEFF is not `char::is_whitespace`,
+            // so `trim` would otherwise leave it glued to the first token name.
+            let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
             for (line_index, line) in text.lines().enumerate() {
                 let line = line.trim();
                 if line.is_empty() {
