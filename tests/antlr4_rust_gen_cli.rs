@@ -1847,28 +1847,45 @@ mod deep_nesting_tests {
             "unexpected error: {error}"
         );
 
-        // Left-recursive operator expansions fire simulated rule entries
-        // (upstream triggerEnterRuleEvent parity): a 40-term `a+a+...` chain
-        // exceeds an expr limit of 8 even though rule frames barely nest.
+        // Flat operator chains do NOT accumulate live listener depth: each
+        // loop pass exits the outgoing iteration before the next expansion
+        // enters (upstream recRuleSetPrevCtx), so a 40-term `a+a+...` chain
+        // peaks at expr depth 2 in every ANTLR target — including this one —
+        // and parses fine under a limit of 8.
         let chain = vec!["a"; 40].join("+");
+        let high_water = Arc::new(AtomicU16::new(0));
         let lexer = NestLexer::new(InputStream::new(&chain));
+        let mut parser = NestParser::new(CommonTokenStream::new(lexer));
+        parser.add_parse_listener(RecursionListener {
+            max: 8,
+            depth: 0,
+            high_water: Arc::clone(&high_water),
+        });
+        assert!(
+            parser.s().is_ok(),
+            "flat operator chain stays at Java's live depth"
+        );
+        assert_eq!(
+            high_water.load(Ordering::Relaxed),
+            2,
+            "operator chain peaks at depth 2, matching the Java oracle"
+        );
+
+        // The abort does not poison the instance: clearing listeners (which
+        // also returns them and drops the sticky abort) and reusing the
+        // parser parses clean input.
+        let lexer = NestLexer::new(InputStream::new(&nested(64)));
         let mut parser = NestParser::new(CommonTokenStream::new(lexer));
         parser.add_parse_listener(RecursionListener {
             max: 8,
             depth: 0,
             high_water: Arc::new(AtomicU16::new(0)),
         });
-        let error = parser
-            .s()
-            .expect_err("operator expansions must count as rule entries");
+        let error = parser.s().expect_err("nested input exceeds the limit");
         assert!(
             error.to_string().contains("Recursion limit of 8 exceeded"),
             "unexpected error: {error}"
         );
-
-        // The abort does not poison the instance: clearing listeners (which
-        // also returns them and drops the sticky abort) and reusing the
-        // parser parses clean input.
         let lexer = NestLexer::new(InputStream::new("a"));
         parser.set_token_stream(CommonTokenStream::new(lexer));
         let mut removed = parser.remove_parse_listeners();

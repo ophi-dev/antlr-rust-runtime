@@ -6952,6 +6952,17 @@ fn render_generated_left_recursive_loop(
         )
         .expect("writing to a string cannot fail");
     }
+    // Upstream fires `triggerExitRuleEvent` at the TOP of each operator-loop
+    // pass (`recRuleSetPrevCtx`, a StarBlock iteration op) — the outgoing
+    // iteration's context exits before the next expansion enters, so live
+    // listener depth never accumulates across a flat operator chain. The
+    // dispatch wrapper's single exit then plays `unrollRecursionContexts`'
+    // one-link walk when the rule finishes.
+    writeln!(
+        out,
+        "{pad}            self.base.parse_listener_exit_rule({rule_index});"
+    )
+    .expect("writing to a string cannot fail");
     // Each operator iteration deepens the tree without a rule frame; probe
     // the depth cap BEFORE the expansion push so the boundary matches the
     // dispatch site (which checks before its rule-frame push): frames and
@@ -6973,9 +6984,7 @@ fn render_generated_left_recursive_loop(
     // The listener enter probe fires AFTER the expansion push, mirroring
     // upstream (`pushNewRecursionContext` assigns `_ctx` before
     // `triggerEnterRuleEvent`): an abort here propagates through the rule's
-    // error paths, whose `unroll_recursion_context` fires the matching exit
-    // for the already-counted expansion — Java's `finally` unroll does the
-    // same, so aborting expansions stay enter/exit balanced.
+    // error paths, and the dispatch wrapper's exit keeps the pair balanced.
     writeln!(
         out,
         "{pad}            if let Some(__listener_error) = self.base.parse_listener_enter_rule({rule_index}) {{\n\
@@ -9962,6 +9971,10 @@ where
     fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
     fn max_rule_depth(&self) -> Option<usize> {{ self.base.max_rule_depth() }}
     fn set_max_rule_depth(&mut self, depth: Option<usize>) {{ self.base.set_max_rule_depth(depth); }}
+    // Route through the trait impl: BaseParser's inherent generic method
+    // would re-box the already-boxed listener.
+    fn add_parse_listener(&mut self, listener: Box<dyn antlr4_runtime::ParseListener>) {{ antlr4_runtime::Parser::add_parse_listener(&mut self.base, listener); }}
+    fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {{ self.base.remove_parse_listeners() }}
 }}
 {generated_footer}"#
     ))

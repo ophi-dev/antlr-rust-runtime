@@ -134,20 +134,24 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 /// also inherent on [`BaseParser`] and generated parsers).
 ///
 /// Events fire on the generated recursive-descent path as rules are entered
-/// and exited, including one simulated entry per left-recursive operator
-/// expansion (upstream `Parser.pushNewRecursionContext` fires
-/// `triggerEnterRuleEvent` for exactly that case). Enter events fire in
-/// registration order and exit events in reverse registration order,
-/// matching upstream. Enter/exit calls balance on every completed path,
-/// including error recovery — with one exception shared with Java: an
+/// and exited, with left-recursive operator loops following upstream's
+/// timing exactly: each loop pass first exits the outgoing iteration
+/// (`recRuleSetPrevCtx`) and then enters the new expansion
+/// (`pushNewRecursionContext` firing `triggerEnterRuleEvent`), so live
+/// listener depth never accumulates across a flat operator chain —
+/// `a + a + … + a` peaks at depth 2 like every ANTLR target. On expansion
+/// events, [`EnterRuleEvent::current`] anchors at the operator-side
+/// lookahead (the token the expansion starts at), whereas Java's
+/// `ctx.start` reaches back to the whole expression's first token — anchor
+/// diagnostics accordingly. Enter events fire in registration order and
+/// exit events in reverse registration order, matching upstream. Enter/exit
+/// calls balance on every completed path, including error recovery and
+/// aborts inside operator loops — with one exception shared with Java: an
 /// ordinary rule's enter that returns `Err` receives no matching exit
 /// (upstream calls `enterRule` outside the generated `try`/`finally`, so a
-/// throwing listener skips `exitRule` the same way). Left-recursive
-/// expansion enters DO receive their exit even on abort — the expansion is
-/// already pushed when the probe fires, and the unroll emits its exit,
-/// mirroring Java's `finally`-driven `unrollRecursionContexts`. Listener
-/// state shared across parses via `Arc` should still be reset after an
-/// abort (the unmatched ordinary-rule enter leaves counters one high).
+/// throwing listener skips `exitRule` the same way). Listener state shared
+/// across parses via `Arc` should be reset after an abort (the unmatched
+/// ordinary-rule enter leaves counters one high).
 ///
 /// Divergence from Java to know about: upstream generated rule methods run
 /// only on the committed parse, while this runtime may re-enter a rule while
@@ -6387,19 +6391,12 @@ where
         if self.precedence_stack.len() > 1 {
             self.precedence_stack.pop();
         }
+        // Parse-listener exits for expansions fire inside the generated
+        // operator loop (top of each pass, upstream's `recRuleSetPrevCtx`),
+        // and the dispatch wrapper's exit covers the final live context —
+        // upstream's `unrollRecursionContexts` walks exactly one link, so no
+        // batched exits happen here. Only the depth-cap accounting rewinds.
         if let Some(mark) = self.recursion_expansion_marks.pop() {
-            // Each expansion fired a simulated rule-entry event; fire the
-            // matching exits as the rule unrolls so parse listeners see
-            // balanced pairs (upstream unrolls via exitRule per context).
-            if !self.parse_listeners.is_empty() {
-                let rule_index = self
-                    .rule_context_stack
-                    .last()
-                    .map_or(usize::MAX, |frame| frame.rule_index);
-                for _ in mark..self.recursion_expansions {
-                    self.parse_listener_exit_rule(rule_index);
-                }
-            }
             self.recursion_expansions = mark;
         }
         self.exit_rule();
