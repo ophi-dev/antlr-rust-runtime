@@ -70,6 +70,12 @@ struct CachedOuterContext {
 ///
 /// The first window token joins the key so a probe is one hash lookup in
 /// the common case (distinct keyword per resolution) instead of a scan.
+///
+/// `outer_context` is the interned FULL caller stack, which bounds the hit
+/// rate: the same construct at rule-nesting depth 3 and depth 4 has
+/// different `ContextId`s and misses. Flat-ish grammars (Avro IDL: ~155
+/// unique contexts against 2,100 retries) hit almost always; deeply
+/// recursive grammars re-derive once per distinct nesting shape.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct FullContextMemoKey {
     decision: usize,
@@ -1225,7 +1231,7 @@ impl<'a> ParserAtnSimulator<'a> {
     ) {
         if self.full_context_memo_len >= FULL_CONTEXT_MEMO_MAX_ENTRIES {
             #[cfg(feature = "perf-counters")]
-            crate::perf::record_full_context_memo_declined();
+            crate::perf::record_full_context_memo_declined(key.decision);
             return;
         }
         let current = input.index();
@@ -1242,7 +1248,7 @@ impl<'a> ParserAtnSimulator<'a> {
         input.seek(current);
         if !complete {
             #[cfg(feature = "perf-counters")]
-            crate::perf::record_full_context_memo_declined();
+            crate::perf::record_full_context_memo_declined(key.decision);
             return;
         }
         self.full_context_memo

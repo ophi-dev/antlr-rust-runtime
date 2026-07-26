@@ -92,6 +92,7 @@ struct DecisionCounters {
     forced_full_context_calls: u64,
     full_context_retries: u64,
     full_context_memo_hits: u64,
+    full_context_memo_declined: u64,
     sll_conflicts: u64,
 }
 
@@ -147,9 +148,13 @@ pub(crate) fn record_full_context_memo_hit(decision: usize) {
     });
 }
 
-pub(crate) fn record_full_context_memo_declined() {
+pub(crate) fn record_full_context_memo_declined(decision: usize) {
     with_counters(|counters| {
         counters.full_context_memo_declined = counters.full_context_memo_declined.saturating_add(1);
+        let decision_counters = counters.decisions.entry(decision).or_default();
+        decision_counters.full_context_memo_declined = decision_counters
+            .full_context_memo_declined
+            .saturating_add(1);
     });
 }
 
@@ -562,6 +567,11 @@ fn dump_decisions(counters: &Counters) {
             *decision,
             "full_context_memo_hits",
             counters.full_context_memo_hits,
+        );
+        print_decision_counter(
+            *decision,
+            "full_context_memo_declined",
+            counters.full_context_memo_declined,
         );
         print_decision_counter(*decision, "sll_conflicts", counters.sll_conflicts);
     }
