@@ -5185,12 +5185,13 @@ fn render_generated_rule_dispatch_with_rule_names(
             .copied()
             .unwrap_or_default()
         {
-            // The interpreted fast path never consults the depth cap, so a
-            // configured bound overrides the ATN preference: correctness of
-            // the resource limit beats the long-call-chain optimization.
+            // The interpreted fast path never consults the depth cap nor
+            // fires parse-listener events, so either feature overrides the
+            // ATN preference: correctness of the resource limit and listener
+            // coverage beat the long-call-chain optimization.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
         } else {
@@ -5229,19 +5230,27 @@ fn render_generated_rule_dispatch_with_rule_names(
         // Rule nesting maps onto native call depth; sample remaining stack
         // capacity at the shared dispatch boundary so deeply nested input
         // grows onto a segmented stack instead of aborting the process. The
-        // optional depth-cap probe stays inline-cheap (one `Option` check
-        // when unset) and its error, while absorbed by rule-level recovery
-        // like any rule failure, stays sticky until the top-level entry
-        // drains it — that pairing is what actually enforces the abort.
-        // Plain `if let` keeps generated output edition-2021 compatible.
+        // optional depth-cap and parse-listener probes stay inline-cheap
+        // (one `Option`/emptiness check each when unused) and their errors,
+        // while absorbed by rule-level recovery like any rule failure, stay
+        // sticky until the top-level entry drains them — that pairing is
+        // what actually enforces the abort. The matching listener exit event
+        // fires from the rule body's exit paths (`finish_rule`/recovery), so
+        // enter/exit stay balanced. Plain `if let` keeps generated output
+        // edition-2021 compatible.
         writeln!(
             out,
             "        if let Some(error) = self.base.rule_depth_cap_violation() {{\n            \
              return Err(GeneratedRuleError::Fatal(error));\n        \
              }}\n        \
-             if self.base.generated_rule_stack_check_due() {{\n            \
+             if let Some(error) = self.base.parse_listener_enter_rule({index}) {{\n            \
+             return Err(GeneratedRuleError::Fatal(error));\n        \
+             }}\n        \
+             let __listener_result = if self.base.generated_rule_stack_check_due() {{\n            \
              antlr4_runtime::grow_generated_rule_stack(|| {target_call})\n        \
-             }} else {{\n            {target_call}\n        }}"
+             }} else {{\n            {target_call}\n        }};\n        \
+             self.base.parse_listener_exit_rule({index});\n        \
+             __listener_result"
         )
         .expect("writing to a string cannot fail");
         writeln!(out, "    }}").expect("writing to a string cannot fail");
@@ -5848,11 +5857,12 @@ fn render_generated_step(
             {
                 // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
                 // The rule's `parse_generated_rule` dispatch arm is guarded by
-                // `generated_only() || has_rule_depth_cap()`: in normal uncapped
-                // mode the generated probe returns `None` and the wrapper parses
-                // the child on the INTERPRETED path (preserving the ATN-preferred
-                // optimization); a configured depth cap flips it to the generated
-                // body, which is the only path that enforces the cap.
+                // `generated_only() || has_rule_depth_cap() || has_parse_listeners()`:
+                // in the default configuration the generated probe returns `None`
+                // and the wrapper parses the child on the INTERPRETED path
+                // (preserving the ATN-preferred optimization); a configured depth
+                // cap or a registered parse listener flips it to the generated
+                // body, the only path that enforces the cap and fires events.
                 from_generated_call
             } else {
                 generated_child_call
@@ -6942,12 +6952,23 @@ fn render_generated_left_recursive_loop(
         )
         .expect("writing to a string cannot fail");
     }
+    // Upstream fires `triggerExitRuleEvent` at the TOP of each operator-loop
+    // pass (`recRuleSetPrevCtx`, a StarBlock iteration op) — the outgoing
+    // iteration's context exits before the next expansion enters, so live
+    // listener depth never accumulates across a flat operator chain. The
+    // dispatch wrapper's single exit then plays `unrollRecursionContexts`'
+    // one-link walk when the rule finishes.
+    writeln!(
+        out,
+        "{pad}            self.base.parse_listener_exit_rule({rule_index});"
+    )
+    .expect("writing to a string cannot fail");
     // Each operator iteration deepens the tree without a rule frame; probe
     // the depth cap BEFORE the expansion push so the boundary matches the
     // dispatch site (which checks before its rule-frame push): frames and
     // expansions are both admitted up to the cap, and token-only operator
-    // alternatives (no nested rule dispatch) still abort promptly instead of
-    // at the top-level drain.
+    // alternatives (no nested rule dispatch) still abort promptly instead
+    // of at the top-level drain.
     writeln!(
         out,
         "{pad}            if let Some(__depth_error) = self.base.rule_depth_cap_violation() {{\n\
@@ -6958,6 +6979,17 @@ fn render_generated_left_recursive_loop(
     writeln!(
         out,
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
+    )
+    .expect("writing to a string cannot fail");
+    // The listener enter probe fires AFTER the expansion push, mirroring
+    // upstream (`pushNewRecursionContext` assigns `_ctx` before
+    // `triggerEnterRuleEvent`): an abort here propagates through the rule's
+    // error paths, and the dispatch wrapper's exit keeps the pair balanced.
+    writeln!(
+        out,
+        "{pad}            if let Some(__listener_error) = self.base.parse_listener_enter_rule({rule_index}) {{\n\
+         {pad}                return Err(__listener_error);\n\
+         {pad}            }}"
     )
     .expect("writing to a string cannot fail");
     render_generated_steps(out, body, indent + 3, render_context);
@@ -7115,6 +7147,8 @@ const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
     "clear_dfa",
     "add_error_listener",
     "remove_error_listeners",
+    "add_parse_listener",
+    "remove_parse_listeners",
     "node",
     "into_token_stream",
     "into_token_store",
@@ -9255,6 +9289,30 @@ fn embedded_render_slots(
 /// Kept as a standalone literal (single braces, no format placeholders) so the
 /// large parser template stays under the line-length lint and this ANTLR
 /// `Parser.compileParseTreePattern` analog reads as ordinary code.
+/// Renders the parse-listener registration facade on the generated parser.
+///
+/// Kept as a standalone literal (single braces, no format placeholders) so the
+/// large parser template stays under the line-length lint.
+const fn render_parse_listener_facade() -> &'static str {
+    r"
+    /// Registers a listener for committed rule enter/exit events during
+    /// recognition (ANTLR's `addParseListener`). See
+    /// [`antlr4_runtime::ParseListener`] for the delivery contract.
+    pub fn add_parse_listener<T>(&mut self, listener: T)
+    where
+        T: antlr4_runtime::ParseListener + 'static,
+    {
+        self.base.add_parse_listener(listener);
+    }
+
+    /// Removes every registered parse listener and returns them, dropping
+    /// any sticky abort a removed listener had requested.
+    pub fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {
+        self.base.remove_parse_listeners()
+    }
+"
+}
+
 const fn render_compile_parse_tree_pattern_method() -> &'static str {
     r#"
     /// Compiles a tree pattern rooted at parser rule `rule_index`.
@@ -9324,6 +9382,7 @@ fn render_parser_with_options(
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
     let compile_pattern_method = render_compile_parse_tree_pattern_method();
+    let parse_listener_facade = render_parse_listener_facade();
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn()?;
     let parser_atn_data = render_u32_slice(parser_atn.packed_words());
@@ -9658,6 +9717,7 @@ where
         self.base.remove_error_listeners();
     }}
 
+{parse_listener_facade}
     /// Fully resets parser-owned state and rewinds the current token stream.
     pub fn reset(&mut self) {{
         self.base.reset();
@@ -9773,10 +9833,11 @@ where
             // are preserved so a generated parent can surface a recovered child's
             // fail-loud coordinate at this boundary.
             self.base.reset_unknown_semantic_hits();
-            // Likewise drop a stale depth-cap violation: entry rules share one
-            // parser instance, and the sticky flag must not poison the next
-            // parse when the previous one exited through an error path.
-            let _ = self.base.take_rule_depth_error();
+            // Likewise drop stale sticky aborts (depth-cap violation,
+            // parse-listener abort): entry rules share one parser instance,
+            // and the flags must not poison the next parse when the previous
+            // one exited through an error path.
+            let _ = self.base.take_parse_abort();
         }}
         let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
         let __generated_only = self.generated_only();
@@ -9797,13 +9858,13 @@ where
                         if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
                             return Err(semantic_error);
                         }}
-                        // The depth-cap violation wins over an error derived
-                        // from it (e.g. a sync failure after recovery absorbed
-                        // the capped rule): the caller must learn the resource
-                        // bound was hit, and draining un-poisons the instance
-                        // for the next entry-rule call.
-                        if let Some(depth_error) = self.base.take_rule_depth_error() {{
-                            return Err(depth_error);
+                        // A sticky abort (depth cap, listener) wins over an
+                        // error derived from it (e.g. a sync failure after
+                        // recovery absorbed the aborted rule): the caller must
+                        // learn the real cause, and draining un-poisons the
+                        // instance for the next entry-rule call.
+                        if let Some(abort) = self.base.take_parse_abort() {{
+                            return Err(abort);
                         }}
                     }}
                     return Err(error.into_error());
@@ -9829,10 +9890,11 @@ where
             if let Some(error) = self.base.take_unknown_semantic_error() {{
                 return Err(error);
             }}
-            // A depth-cap violation is a resource bound, not a syntax error:
-            // rule-level recovery may have produced a tree anyway, but the
-            // parse must still fail (and a reused parser must start clean).
-            if let Some(error) = self.base.take_rule_depth_error() {{
+            // A sticky abort (depth-cap violation, listener abort) is not a
+            // syntax error: rule-level recovery may have produced a tree
+            // anyway, but the parse must still fail (and a reused parser
+            // must start clean).
+            if let Some(error) = self.base.take_parse_abort() {{
                 return Err(error);
             }}
         }}
@@ -9909,6 +9971,10 @@ where
     fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
     fn max_rule_depth(&self) -> Option<usize> {{ self.base.max_rule_depth() }}
     fn set_max_rule_depth(&mut self, depth: Option<usize>) {{ self.base.set_max_rule_depth(depth); }}
+    // Route through the trait impl: BaseParser's inherent generic method
+    // would re-box the already-boxed listener.
+    fn add_parse_listener(&mut self, listener: Box<dyn antlr4_runtime::ParseListener>) {{ antlr4_runtime::Parser::add_parse_listener(&mut self.base, listener); }}
+    fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {{ self.base.remove_parse_listeners() }}
 }}
 {generated_footer}"#
     ))
@@ -12037,6 +12103,8 @@ mod tests {
             "clearDfa".to_owned(),
             "addErrorListener".to_owned(),
             "removeErrorListeners".to_owned(),
+            "addParseListener".to_owned(),
+            "removeParseListeners".to_owned(),
             "compileParseTreePattern".to_owned(),
             "regularRule".to_owned(),
         ];
@@ -12052,6 +12120,8 @@ mod tests {
                 "clear_dfa_rule",
                 "add_error_listener_rule",
                 "remove_error_listeners_rule",
+                "add_parse_listener_rule",
+                "remove_parse_listeners_rule",
                 "compile_parse_tree_pattern_rule",
                 "regular_rule"
             ]
@@ -12602,7 +12672,7 @@ mod tests {
         // A configured depth cap overrides the ATN preference: only generated
         // bodies enforce the bound, so the guard admits either trigger.
         assert!(rendered.contains(
-            "0 if self.generated_only() || self.base.has_rule_depth_cap() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
         ));
         assert!(!rendered.contains(
             "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
