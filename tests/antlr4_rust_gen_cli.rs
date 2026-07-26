@@ -2398,3 +2398,77 @@ mod member_initializer_tests {
 
     assert_generated_project(temp.path(), &["l.rs"], test_source);
 }
+
+/// Issue #206 review: a combined grammar's **parser** members need the same
+/// initializer seeding the lexer got, and lexer/parser inventories must be
+/// independent — a combined grammar may legally declare same-named members with
+/// different kinds in each recognizer.
+///
+/// Expectations come from an ANTLR 4.13.2 **Java** parser built from the same
+/// grammar: `"a"` parses with 0 syntax errors, `"b"` with 1.
+#[test]
+fn declared_parser_member_initializers_reach_the_generated_parser() {
+    let temp = temporary_directory("parser-member-initializer");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/parser-member-initializer");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        dir.join("P.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        dir.join("patterns.toml").as_os_str(),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    // Each recognizer seeds its own slot 0 from its own inventory: the lexer's
+    // `bool level = true` and the parser's `int level = 2`.
+    let lexer = fs::read_to_string(out.join("p_lexer.rs")).expect("lexer should be emitted");
+    assert!(
+        lexer.contains(".with_initial_members([(0, 1)])"),
+        "lexer must seed its own member: {lexer}"
+    );
+    let parser = fs::read_to_string(out.join("p_parser.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("base.set_initial_members([(0, 2)]);"),
+        "parser must seed its own member: {parser}"
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod parser_member_initializer_tests {
+    use super::p_lexer::PLexer;
+    use super::p_parser::PParser;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn syntax_errors(input: &str) -> usize {
+        let lexer = PLexer::new(InputStream::new(input));
+        let mut parser = PParser::new(CommonTokenStream::new(lexer));
+        let _ = parser.s();
+        parser.number_of_syntax_errors()
+    }
+
+    /// Matches the ANTLR 4.13.2 Java parser for the same grammar.
+    ///
+    /// `"a"` needs *both* declared initializers: the lexer's `level = true`
+    /// admits `A`, and the parser's `level = 2` satisfies `{ level == 2 }?`.
+    /// A slot silently starting at 0 on either side would fail it.
+    #[test]
+    fn both_recognizers_observe_their_own_declared_initial_values() {
+        assert_eq!(syntax_errors("a"), 0);
+        assert_eq!(syntax_errors("b"), 1);
+    }
+}
+"####;
+
+    assert_generated_project(temp.path(), &["p_lexer.rs", "p_parser.rs"], test_source);
+}

@@ -480,9 +480,17 @@ mis-numbered one.
 at 0, so a grammar writing `private bool enabled = true;` and guarding a rule
 with `{ enabled }?` would reject input it should accept — while the manifest
 still reported the coordinate as `translated`. Declaring `init` seeds the slot
-at construction and restores it on every reset. It is metadata rather than
-something parsed out of the host-language declaration; stacks cannot take one
-(their initial contents are not a single scalar) and are rejected if they try.
+at construction (on the lexer *and* the parser) and restores it on every reset.
+It is metadata rather than something parsed out of the host-language
+declaration; stacks cannot take one (their initial contents are not a single
+scalar) and are rejected if they try.
+
+`scope = "lexer" | "parser" | "both"` (default `both`) selects which
+recognizer's inventory a declaration joins. A combined grammar may legally
+declare independent `@lexer::members` and `@parser::members`, including
+same-named ones with different kinds and initializers; each recognizer numbers
+its own slots and holds its own member state at runtime, so the two never
+collide. Duplicates are still rejected *within* one recognizer's inventory.
 
 Two `[[pattern]]` entries matching the same body is an error naming both IDs,
 for predicates and actions alike — otherwise reordering the pattern file would

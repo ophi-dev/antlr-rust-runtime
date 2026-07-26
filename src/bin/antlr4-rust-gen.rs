@@ -511,9 +511,18 @@ struct SemPatternFile {
 }
 
 impl SemPatternFile {
-    /// Slot numbers for the declared members, or an error naming a duplicate.
-    fn member_slots(&self) -> io::Result<stack_member::MemberSlots> {
-        stack_member::MemberSlots::assign(&self.members)
+    /// Slot numbers for the members visible to one recognizer, or an error
+    /// naming a duplicate.
+    ///
+    /// Lexer and parser inventories are separate: a combined grammar may
+    /// declare independent `@lexer::members` and `@parser::members`, including
+    /// same-named ones with different kinds or initial values, and the two
+    /// recognizers hold separate member environments at runtime.
+    fn member_slots_for(
+        &self,
+        recognizer: stack_member::MemberScope,
+    ) -> io::Result<stack_member::MemberSlots> {
+        stack_member::MemberSlots::assign_scoped(&self.members, recognizer)
     }
 }
 
@@ -606,8 +615,9 @@ impl SemPatternFile {
             return Ok(None);
         };
         // Member lowerings resolve slot names against the `[[member]]`
-        // inventory, so they are tried before the slot-free built-in shapes.
-        let slots = self.member_slots()?;
+        // inventory for *this* recognizer, so they are tried before the
+        // slot-free built-in shapes.
+        let slots = self.member_slots_for(member_scope_for_kind(kind))?;
         if let Some(expr) = stack_member::parse_member_expr(lower, &slots) {
             return Ok(Some(PredicateTemplate::MemberExpr(expr?)));
         }
@@ -623,7 +633,11 @@ impl SemPatternFile {
     /// lower to different mutations, so silently taking the first would make
     /// merely reordering the pattern file change runtime behavior. This mirrors
     /// [`Self::predicate_template`]'s ambiguity check.
-    fn member_action_stmt(&self, body: &str) -> io::Result<Option<stack_member::MemberStmt>> {
+    fn member_action_stmt(
+        &self,
+        kind: SemanticsKind,
+        body: &str,
+    ) -> io::Result<Option<stack_member::MemberStmt>> {
         let body = normalize_action_match_body(body);
         let matches = self
             .patterns
@@ -646,7 +660,7 @@ impl SemPatternFile {
         let Some(pattern) = matches.first() else {
             return Ok(None);
         };
-        let slots = self.member_slots()?;
+        let slots = self.member_slots_for(member_scope_for_kind(kind))?;
         stack_member::parse_member_stmt(&pattern.lower, &slots).transpose()
     }
 
@@ -727,6 +741,21 @@ impl SemPatternFile {
     }
 }
 
+/// Which member inventory a coordinate kind reads.
+///
+/// A combined grammar's lexer and parser members are independent, so each
+/// recognizer's coordinates resolve slot names against its own inventory.
+const fn member_scope_for_kind(kind: SemanticsKind) -> stack_member::MemberScope {
+    match kind {
+        SemanticsKind::LexerPredicate | SemanticsKind::LexerAction => {
+            stack_member::MemberScope::Lexer
+        }
+        SemanticsKind::ParserPredicate | SemanticsKind::ParserAction => {
+            stack_member::MemberScope::Parser
+        }
+    }
+}
+
 /// Parses a `[[member]]` `init` value. Booleans are accepted because grammars
 /// declare `bool` members; slots store integers, so `true` seeds 1.
 fn parse_member_init_field(value: &str) -> io::Result<i64> {
@@ -742,10 +771,20 @@ fn parse_member_init_field(value: &str) -> io::Result<i64> {
     }
 }
 
-/// Canonical form of an action `match` body, so a trailing `;` in either the
-/// grammar or the pattern file does not change whether they match.
+/// Canonical form of an action `match` body.
+///
+/// Actions carry the grammar's statement terminator, so one optional trailing
+/// `;` is not part of the body — this matches what
+/// [`parse_semantic_helper_call`] has always done for action bodies, so the two
+/// matchers agree on whether a pattern applies.
+///
+/// Exactly one `;` is removed, not a run of them: stripping repeatedly would
+/// collapse `x;` and `x;;` onto one body, merging two distinct declared
+/// patterns (or manufacturing an ambiguity error between them). Any other
+/// spelling difference stays significant, so matching remains whole-body.
 fn normalize_action_match_body(body: &str) -> &str {
-    body.trim().trim_end_matches(';').trim_end()
+    let body = body.trim();
+    body.strip_suffix(';').unwrap_or(body).trim_end()
 }
 
 fn semantic_helper_kind_matches(helper: &SemHelperRule, kind: SemanticsKind) -> bool {
@@ -1425,18 +1464,20 @@ fn structural_lexer_action_templates(
                 Some(template) => template,
                 // A `stack_member` pattern lowers the body into SemIR, so the
                 // grammar needs no hand-written hook for it.
-                None => match patterns.member_action_stmt(&action.body)? {
-                    Some(stmt) => ActionTemplate::MemberStmt(stmt),
-                    None => patterns
-                        .hook_helper_call(SemanticsKind::LexerAction, &action.body)?
-                        .map_or_else(
-                            || ActionTemplate::UnsupportedLexerAction {
-                                rule_name: rule_name.to_owned(),
-                                body: one_line_action_body(&action.body),
-                            },
-                            ActionTemplate::Hook,
-                        ),
-                },
+                None => {
+                    match patterns.member_action_stmt(SemanticsKind::LexerAction, &action.body)? {
+                        Some(stmt) => ActionTemplate::MemberStmt(stmt),
+                        None => patterns
+                            .hook_helper_call(SemanticsKind::LexerAction, &action.body)?
+                            .map_or_else(
+                                || ActionTemplate::UnsupportedLexerAction {
+                                    rule_name: rule_name.to_owned(),
+                                    body: one_line_action_body(&action.body),
+                                },
+                                ActionTemplate::Hook,
+                            ),
+                    }
+                }
             };
             Ok((
                 (
@@ -1828,6 +1869,13 @@ fn flush_pattern_section(
             file.members.push(stack_member::MemberDeclaration {
                 name: take_required_field(fields, "name")?,
                 kind: stack_member::MemberKind::parse(&take_required_field(fields, "kind")?)?,
+                // Defaults to `both`, so single-recognizer grammars (and every
+                // pattern file written before scoping existed) need no `scope`.
+                scope: fields
+                    .remove("scope")
+                    .map_or(Ok(stack_member::MemberScope::Both), |value| {
+                        stack_member::MemberScope::parse(&value)
+                    })?,
                 // A grammar's declared initializer (`bool verbatium = true;`)
                 // is metadata here rather than something parsed out of the
                 // host-language declaration.
@@ -3189,11 +3237,11 @@ fn render_lexer(
     // seed its slot, or a predicate reading it would reject input the source
     // grammar accepts. `with_initial_members` also retains the values so every
     // reset restores them instead of zeroing.
-    let lexer_member_inits = if embedded {
-        String::new()
-    } else {
-        render_member_init_seed(patterns)?
-    };
+    let lexer_member_inits =
+        match render_member_init_seeds(patterns, stack_member::MemberScope::Lexer)? {
+            seeds if embedded || seeds.is_empty() => String::new(),
+            seeds => format!(".with_initial_members({seeds})"),
+        };
     let has_predicate_dispatch = if embedded {
         !embedded_lexer_predicates.is_empty()
     } else {
@@ -9747,7 +9795,16 @@ fn render_parser_with_options(
         },
     );
     let parse_convenience = render_parser_parse_convenience(&type_name);
-    let base_initialization = render_parser_base_initialization(unknown_policy_literal);
+    // A grammar-declared `@members` initializer must seed the parser too, or a
+    // predicate reading the slot would observe 0 and reject input the source
+    // grammar accepts (issue #206 review).
+    let parser_member_seeds = if options.embedded {
+        String::new()
+    } else {
+        render_member_init_seeds(patterns, stack_member::MemberScope::Parser)?
+    };
+    let base_initialization =
+        render_parser_base_initialization(unknown_policy_literal, &parser_member_seeds);
     let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
     let entry_rule_indices = likely_parser_entry_rule_indices(data)?;
     let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
@@ -11369,11 +11426,20 @@ fn render_parser_semantics_function(
     ))
 }
 
-/// Renders the `.with_initial_members(...)` builder call for a grammar whose
-/// `[[member]]` inventory declares non-zero initial values, or an empty string
-/// when there are none (keeping every other grammar's output byte-identical).
-fn render_member_init_seed(patterns: &SemPatternFile) -> io::Result<String> {
-    let slots = patterns.member_slots()?;
+/// Renders the declared member initial values as a `[(slot, value), ...]`
+/// literal, or an empty string when the inventory declares none (which keeps
+/// every other grammar's generated output byte-identical).
+///
+/// Both recognizers seed from this: the lexer through
+/// `BaseLexer::with_initial_members`, the parser through
+/// `BaseParser::set_initial_members`. A parser predicate reading a slot that
+/// silently started at 0 would reject input the source grammar accepts, exactly
+/// as on the lexer side.
+fn render_member_init_seeds(
+    patterns: &SemPatternFile,
+    recognizer: stack_member::MemberScope,
+) -> io::Result<String> {
+    let slots = patterns.member_slots_for(recognizer)?;
     let seeds = slots
         .scalar_inits()
         .map(|(slot, value)| format!("({slot}, {value})"))
@@ -11381,7 +11447,7 @@ fn render_member_init_seed(patterns: &SemPatternFile) -> io::Result<String> {
     if seeds.is_empty() {
         return Ok(String::new());
     }
-    Ok(format!(".with_initial_members([{}])", seeds.join(", ")))
+    Ok(format!("[{}]", seeds.join(", ")))
 }
 
 /// Whether any coordinate lowered into the lexer `SemIR` table.
@@ -12160,8 +12226,16 @@ fn render_parser_rule_arg_array(args: &[(usize, usize, RuleArgTemplate)]) -> Str
 /// installs it on the `BaseParser` so the generated recursive-descent path
 /// (which evaluates predicates without going through `ParserRuntimeOptions`)
 /// honors `--sem-unknown` too, rather than leaving the field at `AssumeTrue`.
-fn render_parser_base_initialization(unknown_policy_literal: Option<&str>) -> String {
-    let needs_mut = unknown_policy_literal.is_some();
+///
+/// `member_seeds` carries a grammar's declared `@members` initial values
+/// (issue #206). Parsers need this for the same reason lexers do: a predicate
+/// reading a slot that silently started at 0 would reject input the source
+/// grammar accepts.
+fn render_parser_base_initialization(
+    unknown_policy_literal: Option<&str>,
+    member_seeds: &str,
+) -> String {
+    let needs_mut = unknown_policy_literal.is_some() || !member_seeds.is_empty();
     let mut out = if needs_mut {
         "        let mut base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     } else {
@@ -12173,6 +12247,10 @@ fn render_parser_base_initialization(unknown_policy_literal: Option<&str>) -> St
             "\n        base.set_unknown_predicate_policy({policy});"
         )
         .expect("writing to a string cannot fail");
+    }
+    if !member_seeds.is_empty() {
+        write!(out, "\n        base.set_initial_members({member_seeds});")
+            .expect("writing to a string cannot fail");
     }
     out
 }
@@ -15901,7 +15979,7 @@ lower = "push_member(other, int(99))"
         .expect("pattern file parses");
 
         let error = patterns
-            .member_action_stmt("depths.Push(1);")
+            .member_action_stmt(SemanticsKind::LexerAction, "depths.Push(1);")
             .expect_err("an ambiguous action body must fail");
         insta::assert_snapshot!(
             error.to_string(),
@@ -15909,9 +15987,13 @@ lower = "push_member(other, int(99))"
         );
     }
 
-    /// A trailing `;` on either side must not decide whether a body matches.
+    /// One optional trailing `;` is the grammar's statement terminator, not part
+    /// of the body — the same rule `parse_semantic_helper_call` has always
+    /// applied to action bodies, so both matchers agree. Everything else stays
+    /// significant: a *run* of semicolons must not collapse, or two distinct
+    /// declared patterns would merge onto one lowering.
     #[test]
-    fn member_action_match_ignores_a_trailing_semicolon() {
+    fn member_action_match_normalizes_one_trailing_semicolon_only() {
         let patterns = parse_sem_patterns(
             r#"
 [[member]]
@@ -15928,12 +16010,21 @@ lower = "pop_member(depths)"
         for body in ["depths.Pop()", "depths.Pop();", "  depths.Pop() ; "] {
             assert!(
                 patterns
-                    .member_action_stmt(body)
+                    .member_action_stmt(SemanticsKind::LexerAction, body)
                     .expect("lookup should not fail")
                     .is_some(),
                 "body {body:?} should match"
             );
         }
+
+        // A second `;` is a different body, not the same one.
+        assert!(
+            patterns
+                .member_action_stmt(SemanticsKind::LexerAction, "depths.Pop();;")
+                .expect("lookup should not fail")
+                .is_none(),
+            "a run of semicolons must not collapse onto the declared body"
+        );
     }
 
     #[test]

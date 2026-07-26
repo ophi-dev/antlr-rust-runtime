@@ -1,0 +1,26 @@
+# `scope` keeps the lexer and parser inventories separate, so the same member
+# name can mean different things in each recognizer — which a combined grammar
+# may legally declare. Both slots are 0 in their own environment.
+version = 1
+
+[[member]]
+name = "level"
+kind = "int"
+scope = "parser"
+init = 2
+
+[[member]]
+name = "level"
+kind = "bool"
+scope = "lexer"
+init = true
+
+[[pattern]]
+id = "parser-level"
+match = "level == 2"
+lower = "member(level)"
+
+[[pattern]]
+id = "lexer-level"
+match = "level"
+lower = "member(level)"

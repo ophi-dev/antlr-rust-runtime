@@ -80,6 +80,40 @@ impl MemberKind {
     }
 }
 
+/// Which recognizer a `[[member]]` declaration belongs to.
+///
+/// A combined grammar may legally declare independent `@lexer::members` and
+/// `@parser::members` — including same-named ones with different kinds or
+/// initial values. Each recognizer therefore gets its own inventory, and a
+/// declaration says which one(s) it belongs to. [`Self::Both`] is the default
+/// so single-recognizer grammars (and every pattern file written before scoping
+/// existed) need no `scope` key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MemberScope {
+    Lexer,
+    Parser,
+    Both,
+}
+
+impl MemberScope {
+    pub(crate) fn parse(value: &str) -> io::Result<Self> {
+        match value {
+            "lexer" => Ok(Self::Lexer),
+            "parser" => Ok(Self::Parser),
+            "both" => Ok(Self::Both),
+            other => Err(invalid_data(format!("unknown member slot scope {other:?}"))),
+        }
+    }
+
+    /// Whether a declaration with this scope is visible to `recognizer`.
+    const fn covers(self, recognizer: Self) -> bool {
+        matches!(
+            (self, recognizer),
+            (Self::Both, _) | (Self::Lexer, Self::Lexer) | (Self::Parser, Self::Parser)
+        )
+    }
+}
+
 /// One `[[member]]` declaration from a pattern file.
 ///
 /// `init` carries a scalar slot's declared initial value. Grammars write
@@ -92,6 +126,7 @@ impl MemberKind {
 pub(crate) struct MemberDeclaration {
     pub(crate) name: String,
     pub(crate) kind: MemberKind,
+    pub(crate) scope: MemberScope,
     pub(crate) init: Option<i64>,
 }
 
@@ -108,13 +143,25 @@ pub(crate) struct MemberSlots {
 }
 
 impl MemberSlots {
-    /// Assigns slot numbers to declarations in order, per kind.
-    pub(crate) fn assign(declarations: &[MemberDeclaration]) -> io::Result<Self> {
+    /// Assigns slot numbers to the declarations visible to `recognizer`, in
+    /// declaration order, per kind.
+    ///
+    /// Each recognizer gets its own inventory, so a combined grammar can
+    /// declare independent same-named lexer and parser members. Numbering is
+    /// per-inventory, which is correct because the two recognizers hold separate
+    /// [`crate::semir::MemberEnv`]s.
+    pub(crate) fn assign_scoped(
+        declarations: &[MemberDeclaration],
+        recognizer: MemberScope,
+    ) -> io::Result<Self> {
         let mut slots = BTreeMap::new();
         let mut scalar_inits = BTreeMap::new();
         let mut next_int = 0;
         let mut next_stack = 0;
-        for declaration in declarations {
+        for declaration in declarations
+            .iter()
+            .filter(|declaration| declaration.scope.covers(recognizer))
+        {
             let slot = match declaration.kind {
                 MemberKind::Int => {
                     let slot = next_int;
@@ -426,34 +473,41 @@ fn invalid_data(message: String) -> io::Error {
 #[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
     use super::{
-        MemberDeclaration, MemberKind, MemberSlots, parse_member_expr, parse_member_stmt,
-        render_member_stmt,
+        MemberDeclaration, MemberKind, MemberScope, MemberSlots, parse_member_expr,
+        parse_member_stmt, render_member_stmt,
     };
 
     /// The C# interpolation lexer's declared state.
     fn csharp_slots() -> MemberSlots {
-        MemberSlots::assign(&[
-            MemberDeclaration {
-                name: "interpolatedStringLevel".to_owned(),
-                kind: MemberKind::Int,
-                init: None,
-            },
-            MemberDeclaration {
-                name: "verbatium".to_owned(),
-                kind: MemberKind::Int,
-                init: None,
-            },
-            MemberDeclaration {
-                name: "interpolatedVerbatiums".to_owned(),
-                kind: MemberKind::Stack,
-                init: None,
-            },
-            MemberDeclaration {
-                name: "curlyLevels".to_owned(),
-                kind: MemberKind::Stack,
-                init: None,
-            },
-        ])
+        MemberSlots::assign_scoped(
+            &[
+                MemberDeclaration {
+                    name: "interpolatedStringLevel".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+                MemberDeclaration {
+                    name: "verbatium".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+                MemberDeclaration {
+                    name: "interpolatedVerbatiums".to_owned(),
+                    kind: MemberKind::Stack,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+                MemberDeclaration {
+                    name: "curlyLevels".to_owned(),
+                    kind: MemberKind::Stack,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+            ],
+            MemberScope::Lexer,
+        )
         .expect("declarations should assign")
     }
 
@@ -468,18 +522,23 @@ mod tests {
 
     #[test]
     fn duplicate_slot_declaration_is_rejected() {
-        let error = MemberSlots::assign(&[
-            MemberDeclaration {
-                name: "x".to_owned(),
-                kind: MemberKind::Int,
-                init: None,
-            },
-            MemberDeclaration {
-                name: "x".to_owned(),
-                kind: MemberKind::Stack,
-                init: None,
-            },
-        ])
+        let error = MemberSlots::assign_scoped(
+            &[
+                MemberDeclaration {
+                    name: "x".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+                MemberDeclaration {
+                    name: "x".to_owned(),
+                    kind: MemberKind::Stack,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+            ],
+            MemberScope::Lexer,
+        )
         .expect_err("duplicate slot must fail");
         insta::assert_snapshot!("duplicate_member_slot_error", error.to_string());
     }
@@ -490,28 +549,35 @@ mod tests {
     /// recorded, since 0 is already the implicit default.
     #[test]
     fn declared_scalar_initializers_are_recorded_as_seeds() {
-        let slots = MemberSlots::assign(&[
-            MemberDeclaration {
-                name: "enabled".to_owned(),
-                kind: MemberKind::Int,
-                init: Some(1),
-            },
-            MemberDeclaration {
-                name: "level".to_owned(),
-                kind: MemberKind::Int,
-                init: Some(7),
-            },
-            MemberDeclaration {
-                name: "explicitZero".to_owned(),
-                kind: MemberKind::Int,
-                init: Some(0),
-            },
-            MemberDeclaration {
-                name: "undeclared".to_owned(),
-                kind: MemberKind::Int,
-                init: None,
-            },
-        ])
+        let slots = MemberSlots::assign_scoped(
+            &[
+                MemberDeclaration {
+                    name: "enabled".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: Some(1),
+                },
+                MemberDeclaration {
+                    name: "level".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: Some(7),
+                },
+                MemberDeclaration {
+                    name: "explicitZero".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: Some(0),
+                },
+                MemberDeclaration {
+                    name: "undeclared".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+            ],
+            MemberScope::Lexer,
+        )
         .expect("declarations should assign");
         insta::assert_compact_debug_snapshot!(
             slots.scalar_inits().collect::<Vec<_>>(),
@@ -519,15 +585,98 @@ mod tests {
         );
     }
 
+    /// A combined grammar may declare independent same-named lexer and parser
+    /// members with different kinds and initial values. Each recognizer gets its
+    /// own inventory, so both resolve to their own slot 0 without colliding —
+    /// correct because the two recognizers hold separate `MemberEnv`s.
+    #[test]
+    fn lexer_and_parser_inventories_are_independent() {
+        let declarations = [
+            MemberDeclaration {
+                name: "level".to_owned(),
+                kind: MemberKind::Int,
+                scope: MemberScope::Parser,
+                init: Some(2),
+            },
+            MemberDeclaration {
+                name: "level".to_owned(),
+                kind: MemberKind::Stack,
+                scope: MemberScope::Lexer,
+                init: None,
+            },
+            MemberDeclaration {
+                name: "shared".to_owned(),
+                kind: MemberKind::Int,
+                scope: MemberScope::Both,
+                init: Some(9),
+            },
+        ];
+
+        let lexer = MemberSlots::assign_scoped(&declarations, MemberScope::Lexer)
+            .expect("lexer inventory should assign");
+        let parser = MemberSlots::assign_scoped(&declarations, MemberScope::Parser)
+            .expect("parser inventory should assign");
+
+        // Same name, different kind per recognizer — neither is a duplicate.
+        insta::assert_compact_debug_snapshot!(
+            lexer.entries().collect::<Vec<_>>(),
+            @r#"[("level", Stack, 0), ("shared", Int, 0)]"#
+        );
+        insta::assert_compact_debug_snapshot!(
+            parser.entries().collect::<Vec<_>>(),
+            @r#"[("level", Int, 0), ("shared", Int, 1)]"#
+        );
+        // Only the parser's `level` carries an initializer; `shared` reaches both.
+        insta::assert_compact_debug_snapshot!(
+            lexer.scalar_inits().collect::<Vec<_>>(),
+            @"[(0, 9)]"
+        );
+        insta::assert_compact_debug_snapshot!(
+            parser.scalar_inits().collect::<Vec<_>>(),
+            @"[(0, 2), (1, 9)]"
+        );
+    }
+
+    /// Duplicates are still rejected *within* one recognizer's inventory.
+    #[test]
+    fn duplicate_within_one_scope_is_still_rejected() {
+        let error = MemberSlots::assign_scoped(
+            &[
+                MemberDeclaration {
+                    name: "x".to_owned(),
+                    kind: MemberKind::Int,
+                    scope: MemberScope::Lexer,
+                    init: None,
+                },
+                MemberDeclaration {
+                    name: "x".to_owned(),
+                    kind: MemberKind::Stack,
+                    scope: MemberScope::Both,
+                    init: None,
+                },
+            ],
+            MemberScope::Lexer,
+        )
+        .expect_err("two declarations visible to one recognizer must collide");
+        insta::assert_snapshot!(
+            error.to_string(),
+            @r#"duplicate member slot declaration "x""#
+        );
+    }
+
     /// A stack's initial contents are not expressible as one scalar, so an
     /// `init` on a stack slot is rejected rather than silently dropped.
     #[test]
     fn stack_slots_reject_an_init_value() {
-        let error = MemberSlots::assign(&[MemberDeclaration {
-            name: "depths".to_owned(),
-            kind: MemberKind::Stack,
-            init: Some(1),
-        }])
+        let error = MemberSlots::assign_scoped(
+            &[MemberDeclaration {
+                name: "depths".to_owned(),
+                kind: MemberKind::Stack,
+                scope: MemberScope::Both,
+                init: Some(1),
+            }],
+            MemberScope::Lexer,
+        )
         .expect_err("a stack init must be rejected");
         insta::assert_snapshot!(
             error.to_string(),
