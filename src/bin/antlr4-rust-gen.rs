@@ -3234,9 +3234,7 @@ fn lexer_dfa() -> &'static CompiledLexerDfa {{
             .unwrap_or_else(|| CompiledLexerDfa::compile(atn()))
     }})
 }}
-
 {lexer_semantics_function}
-
 #[derive(Clone, Debug)]
 pub struct {type_name}<I, H = antlr4_runtime::NoSemanticHooks>
 where
@@ -11355,8 +11353,11 @@ fn render_lexer_semantics_function(
         )
         .expect("writing to a string cannot fail");
     }
+    // Owns its surrounding blank lines so an empty render leaves the module
+    // byte-identical to one generated before this table existed.
     format!(
-        r#"fn lexer_semantics() -> &'static antlr4_runtime::LexerSemantics {{
+        r#"
+fn lexer_semantics() -> &'static antlr4_runtime::LexerSemantics {{
     static SEMANTICS_CELL: OnceLock<antlr4_runtime::LexerSemantics> = OnceLock::new();
     SEMANTICS_CELL.get_or_init(|| {{
         let mut ir = antlr4_runtime::semir::SemIr::new();
