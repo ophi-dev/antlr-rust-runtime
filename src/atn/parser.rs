@@ -41,10 +41,13 @@ pub struct ParserAtnSimulator<'a> {
     /// Memoized full-context resolutions. Upstream re-runs the LL simulation
     /// on every visit to a `requires_full_context` DFA state; grammars with
     /// keyword/identifier-style true ambiguities (Avro IDL's `nullableType`,
-    /// SQL non-reserved keywords) pay that on every occurrence. The LL result
-    /// is a pure function of the decision, precedence, interned caller
-    /// context, and the token window the loop read, so identical occurrences
-    /// replay the recorded resolution.
+    /// SQL non-reserved keywords) pay that on every occurrence. Under the
+    /// memo gate — no predicate transitions in the ATN — the LL result is a
+    /// pure function of the decision, precedence, interned caller context,
+    /// and the token window the loop read, so identical occurrences replay
+    /// the recorded resolution. The gate carries that purity claim: general
+    /// ANTLR full-context closure can also consult parser state through
+    /// `predTransition`, which is exactly what the gate excludes.
     full_context_memo: HashMap<
         FullContextMemoKey,
         Vec<FullContextMemoEntry>,
@@ -81,6 +84,10 @@ struct FullContextMemoKey {
 /// after the keyed first symbol, so a hit replays only when the upcoming
 /// input matches token-for-token — identical decision + precedence +
 /// interned caller context + read window is literally the same computation.
+///
+/// `prediction.stop_index` holds the RECORDING run's absolute index and is
+/// stale for any other occurrence — the probe unconditionally overwrites it
+/// from the live cursor before returning a replay. Do not read it directly.
 #[derive(Clone, Debug)]
 struct FullContextMemoEntry {
     window_tail: Vec<i32>,
@@ -95,6 +102,33 @@ const FULL_CONTEXT_MEMO_MAX_WINDOW: usize = 16;
 /// real grammars produce a few hundred; the bound only guards adversarial
 /// context churn.
 const FULL_CONTEXT_MEMO_MAX_ENTRIES: usize = 4096;
+
+/// ATN-static memo gate, cached per thread by ATN identity.
+///
+/// The gate is a property of the ATN alone, but generated parsers build a
+/// simulator per parser instance, so a per-simulator cache would rescan the
+/// ATN on the first LL retry of every parse — pure cost for grammars the
+/// gate turns off. Keyed like `SHARED_PREDICTION_STORES`.
+fn atn_has_predicate_transition(atn: &Atn) -> bool {
+    thread_local! {
+        static GATES: RefCell<HashMap<usize, bool, BuildHasherDefault<PredictionFxHasher>>> =
+            RefCell::new(HashMap::default());
+    }
+    let ptr: *const Atn = atn;
+    let key = ptr as usize;
+    GATES.with(|gates| {
+        *gates.borrow_mut().entry(key).or_insert_with(|| {
+            (0..atn.state_count()).any(|state_number| {
+                atn.state(state_number).is_some_and(|state| {
+                    state
+                        .transitions()
+                        .into_iter()
+                        .any(|transition| transition.kind() == ParserTransitionKind::Predicate)
+                })
+            })
+        })
+    })
+}
 
 #[derive(Debug, Default)]
 struct PredictionStore {
@@ -1108,21 +1142,27 @@ impl<'a> ParserAtnSimulator<'a> {
     /// Whether full-context memoization is sound for this ATN.
     ///
     /// Predicates make prediction outcomes depend on caller-side evaluation
-    /// state, so any semantic transition disables the memo. Exact-ambiguity
-    /// detection changes how far the LL loop consumes, so entries recorded
-    /// under one mode must not replay under the other — rather than key the
-    /// mode, the memo simply stays off in the diagnostic mode.
+    /// state, so any predicate transition disables the memo. Action and
+    /// precedence transitions do NOT: upstream `ActionTransition.isEpsilon()`
+    /// is true ("we are to be ignored by analysis 'cept for predicates") and
+    /// never contributes to an LL outcome, and a precedence transition in
+    /// full-context mode resolves immediately against the passed precedence
+    /// (see the `!full_context` guard in `epsilon_target_config`) — which is
+    /// already part of the memo key. Gating on all semantic transitions would
+    /// turn the memo off for every grammar with a left-recursive rule.
+    ///
+    /// Exact-ambiguity detection changes how far the LL loop consumes, so
+    /// entries recorded under one mode must not replay under the other —
+    /// rather than key the mode, the memo simply stays off in the diagnostic
+    /// mode.
     fn full_context_memo_allowed(&mut self) -> bool {
         if self.exact_ambig_detection {
             return false;
         }
         let atn = self.atn;
-        *self.full_context_memo_gate.get_or_insert_with(|| {
-            !(0..atn.state_count()).any(|state_number| {
-                atn.state(state_number)
-                    .is_some_and(AtnState::has_semantic_transition)
-            })
-        })
+        *self
+            .full_context_memo_gate
+            .get_or_insert_with(|| !atn_has_predicate_transition(atn))
     }
 
     /// Returns the memoized LL resolution whose recorded token window matches
@@ -1146,8 +1186,15 @@ impl<'a> ParserAtnSimulator<'a> {
         let start_index = input.index();
         key.first_symbol = input.la(1);
         let entries = self.full_context_memo.get(&key)?;
-        // Entries share a slot only on true first-symbol collisions, so this
-        // scan is almost always a single candidate.
+        // For the keyword-vs-identifier ambiguity shape, occurrences of the
+        // same keyword share `first_symbol`, so a hot decision's entries can
+        // funnel into one bucket — distinguished only by their windows. The
+        // scan is first-match-wins, which is correct because windows under a
+        // key are prefix-free: the LL loop's stop position is a function of
+        // key + consumed prefix, so no recorded window can be a strict prefix
+        // of another. Each rejected candidate costs its matched-prefix length
+        // in `consume`/`la` calls before the cursor restore; the global entry
+        // cap bounds the worst case.
         'candidates: for entry in entries {
             for &expected in &entry.window_tail {
                 input.consume();
@@ -1177,6 +1224,8 @@ impl<'a> ParserAtnSimulator<'a> {
         full_context: &FullContextPrediction,
     ) {
         if self.full_context_memo_len >= FULL_CONTEXT_MEMO_MAX_ENTRIES {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_full_context_memo_declined();
             return;
         }
         let current = input.index();
@@ -1192,6 +1241,8 @@ impl<'a> ParserAtnSimulator<'a> {
         let complete = input.index() >= full_context.stop_index;
         input.seek(current);
         if !complete {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_full_context_memo_declined();
             return;
         }
         self.full_context_memo
@@ -2409,6 +2460,54 @@ mod tests {
     }
 
     #[test]
+    fn full_context_memo_walks_multi_token_windows() {
+        let atn = ambiguous_three_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        // Fresh LL run consumes the three-token window before resolving; the
+        // recorded entry carries a non-empty window tail.
+        let mut input = VecIntStream::new(vec![1, 2, 3, TOKEN_EOF]);
+        let fresh = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("fresh prediction");
+        assert_eq!(simulator.full_context_memo_len, 1);
+        let recorded_window_len = simulator
+            .full_context_memo
+            .values()
+            .next()
+            .and_then(|entries| entries.first())
+            .map(|entry| entry.window_tail.len())
+            .expect("one recorded entry");
+        assert!(
+            recorded_window_len >= 1,
+            "the LL loop consumed tokens, so the window tail must be non-empty"
+        );
+
+        // Identical occurrence replays through the token-for-token compare,
+        // byte-identical (stop_index recomputed from the live cursor).
+        let replayed = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("memoized prediction");
+        assert_eq!(replayed, fresh);
+        assert_eq!(input.index(), 0, "cursor restored by the caller wrapper");
+
+        // Same first symbol, diverging mid-window: the compare must reject
+        // the entry and restore the cursor to the decision start before the
+        // fresh LL run happens. Token 9 has no viable alternative, so a
+        // (wrong) replay would have returned Ok — the Err proves the miss;
+        // the memo also records nothing for the failed occurrence.
+        let mut diverging = VecIntStream::new(vec![1, 9, 9, TOKEN_EOF]);
+        let result = simulator.adaptive_predict_stream_info_with_context(
+            0,
+            0,
+            &mut diverging,
+            EMPTY_CONTEXT,
+        );
+        assert!(result.is_err(), "mid-window divergence must not replay");
+        assert_eq!(simulator.full_context_memo_len, 1);
+    }
+
+    #[test]
     fn full_context_memo_stays_off_for_predicated_atns_and_exact_mode() {
         // Exact-ambiguity detection changes how far the LL loop consumes, so
         // the memo must not record or replay in that mode.
@@ -2443,6 +2542,44 @@ mod tests {
         let atn = finish_atn(atn);
         let mut simulator = ParserAtnSimulator::new(&atn);
         assert!(!simulator.full_context_memo_allowed());
+    }
+
+    #[test]
+    fn full_context_memo_allows_action_and_precedence_transitions() {
+        // Actions never affect prediction (upstream ActionTransition is
+        // epsilon for analysis), and precedence transitions resolve against
+        // the precedence already in the memo key — neither disables the memo.
+        // Gating on them would turn the memo off for every grammar with a
+        // left-recursive rule.
+        let mut atn = ParserAtnBuilder::new(1);
+        add_state(&mut atn, 0, AtnStateKind::Basic);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Action {
+                target: 1,
+                rule_index: 0,
+                action_index: Some(0),
+                context_dependent: false,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Precedence {
+                target: 2,
+                precedence: 1,
+            },
+        )
+        .expect("transition");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![2])
+            .expect("rule stop states");
+        let atn = finish_atn(atn);
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        assert!(simulator.full_context_memo_allowed());
     }
 
     #[test]
@@ -2939,6 +3076,57 @@ mod tests {
             },
         )
         .expect("transition");
+        finish_atn(atn)
+    }
+
+    /// `s : A B C | A B C ;` — both alternatives match the same THREE-token
+    /// sequence, so the SLL conflict's full-context retry consumes multiple
+    /// tokens before resolving, exercising the memo's window walk (record and
+    /// probe) rather than the empty-window fast case.
+    fn ambiguous_three_token_decision_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(3);
+        add_state(&mut atn, 0, AtnStateKind::RuleStart);
+        add_state(&mut atn, 1, AtnStateKind::BlockStart);
+        // Alternative 1: states 2 -A-> 3 -B-> 4 -C-> 5
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        add_state(&mut atn, 3, AtnStateKind::Basic);
+        add_state(&mut atn, 4, AtnStateKind::Basic);
+        add_state(&mut atn, 5, AtnStateKind::Basic);
+        // Alternative 2: states 6 -A-> 7 -B-> 8 -C-> 9
+        add_state(&mut atn, 6, AtnStateKind::Basic);
+        add_state(&mut atn, 7, AtnStateKind::Basic);
+        add_state(&mut atn, 8, AtnStateKind::Basic);
+        add_state(&mut atn, 9, AtnStateKind::Basic);
+        add_state(&mut atn, 10, AtnStateKind::BlockEnd);
+        add_state(&mut atn, 11, AtnStateKind::RuleStop);
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![11])
+            .expect("rule stop states");
+        atn.add_decision_state(1).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        for (source, target, label) in [
+            (2, 3, 1),
+            (3, 4, 2),
+            (4, 5, 3),
+            (6, 7, 1),
+            (7, 8, 2),
+            (8, 9, 3),
+        ] {
+            atn.add_transition(source, ParserTransitionSpec::Atom { target, label })
+                .expect("transition");
+        }
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 10 })
+            .expect("transition");
+        atn.add_transition(9, ParserTransitionSpec::Epsilon { target: 10 })
+            .expect("transition");
+        atn.add_transition(10, ParserTransitionSpec::Epsilon { target: 11 })
+            .expect("transition");
         finish_atn(atn)
     }
 

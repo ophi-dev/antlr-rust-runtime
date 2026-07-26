@@ -11,6 +11,7 @@ struct Counters {
     forced_full_context_calls: u64,
     full_context_retries: u64,
     full_context_memo_hits: u64,
+    full_context_memo_declined: u64,
     sll_conflicts: u64,
     reach_sll_calls: u64,
     reach_full_context_calls: u64,
@@ -143,6 +144,12 @@ pub(crate) fn record_full_context_memo_hit(decision: usize) {
         let decision_counters = counters.decisions.entry(decision).or_default();
         decision_counters.full_context_memo_hits =
             decision_counters.full_context_memo_hits.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_full_context_memo_declined() {
+    with_counters(|counters| {
+        counters.full_context_memo_declined = counters.full_context_memo_declined.saturating_add(1);
     });
 }
 
@@ -560,7 +567,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 81] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 82] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -574,6 +581,10 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 81] {
         (
             "prediction.full_context_memo_hits",
             counters.full_context_memo_hits,
+        ),
+        (
+            "prediction.full_context_memo_declined",
+            counters.full_context_memo_declined,
         ),
         ("prediction.sll_conflicts", counters.sll_conflicts),
         ("reach.sll_calls", counters.reach_sll_calls),
