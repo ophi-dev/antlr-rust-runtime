@@ -38,6 +38,23 @@ pub struct ParserAtnSimulator<'a> {
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
     exact_ambig_detection: bool,
+    /// Memoized full-context resolutions. Upstream re-runs the LL simulation
+    /// on every visit to a `requires_full_context` DFA state; grammars with
+    /// keyword/identifier-style true ambiguities (Avro IDL's `nullableType`,
+    /// SQL non-reserved keywords) pay that on every occurrence. The LL result
+    /// is a pure function of the decision, precedence, interned caller
+    /// context, and the token window the loop read, so identical occurrences
+    /// replay the recorded resolution.
+    full_context_memo: HashMap<
+        FullContextMemoKey,
+        Vec<FullContextMemoEntry>,
+        BuildHasherDefault<PredictionFxHasher>,
+    >,
+    full_context_memo_len: usize,
+    /// Whether the memo is sound for this ATN: predicates make prediction
+    /// outcomes depend on caller-side evaluation, so any semantic transition
+    /// disables memoization entirely. Computed lazily on first retry.
+    full_context_memo_gate: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +62,39 @@ struct CachedOuterContext {
     rule_context_version: usize,
     context: ContextId,
 }
+
+/// Lookup key for one memoized full-context resolution.
+///
+/// The first window token joins the key so a probe is one hash lookup in
+/// the common case (distinct keyword per resolution) instead of a scan.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct FullContextMemoKey {
+    decision: usize,
+    precedence: i32,
+    outer_context: ContextId,
+    first_symbol: i32,
+}
+
+/// One memoized full-context resolution.
+///
+/// `window_tail` is the visible-token sequence the recorded LL loop read
+/// after the keyed first symbol, so a hit replays only when the upcoming
+/// input matches token-for-token — identical decision + precedence +
+/// interned caller context + read window is literally the same computation.
+#[derive(Clone, Debug)]
+struct FullContextMemoEntry {
+    window_tail: Vec<i32>,
+    prediction: FullContextPrediction,
+}
+
+/// Memoized windows above this many visible tokens are not recorded: long
+/// ambiguous prefixes are rare, and verifying a hit costs a token compare
+/// per window token.
+const FULL_CONTEXT_MEMO_MAX_WINDOW: usize = 16;
+/// Total memo entries per simulator. Contexts are interned per parse and
+/// real grammars produce a few hundred; the bound only guards adversarial
+/// context churn.
+const FULL_CONTEXT_MEMO_MAX_ENTRIES: usize = 4096;
 
 #[derive(Debug, Default)]
 struct PredictionStore {
@@ -442,6 +492,9 @@ impl<'a> ParserAtnSimulator<'a> {
             shared_cache_key: None,
             shared_cache_generation: 0,
             exact_ambig_detection: false,
+            full_context_memo: HashMap::default(),
+            full_context_memo_len: 0,
+            full_context_memo_gate: None,
         }
     }
 
@@ -458,6 +511,10 @@ impl<'a> ParserAtnSimulator<'a> {
     /// an overlapping stale simulator cannot republish pre-clear states later.
     pub fn clear_dfa(&mut self) {
         self.store = PredictionStore::new(self.atn);
+        // The memo keys entries by ContextId into the store's arena the
+        // line above just replaced; stale IDs would alias fresh contexts.
+        self.full_context_memo.clear();
+        self.full_context_memo_len = 0;
         self.reset();
         if let Some(key) = self.shared_cache_key {
             self.shared_cache_generation = clear_shared_prediction_store(key);
@@ -565,6 +622,9 @@ impl<'a> ParserAtnSimulator<'a> {
             shared_cache_key: Some(key),
             shared_cache_generation: generation,
             exact_ambig_detection: false,
+            full_context_memo: HashMap::default(),
+            full_context_memo_len: 0,
+            full_context_memo_gate: None,
         }
     }
 
@@ -966,6 +1026,27 @@ impl<'a> ParserAtnSimulator<'a> {
             crate::perf::record_full_context_retry(decision);
             let sll_stop_index = input.index();
             input.seek(start_index);
+            let memo_allowed = self.full_context_memo_allowed();
+            let memo_key = FullContextMemoKey {
+                decision,
+                precedence,
+                outer_context,
+                first_symbol: 0,
+            };
+            // A memo hit leaves the cursor at the replayed stop index —
+            // exactly where the fresh LL loop below would have left it.
+            if memo_allowed
+                && let Some(full_context) = self.probe_full_context_memo(memo_key, input)
+            {
+                #[cfg(feature = "perf-counters")]
+                crate::perf::record_full_context_memo_hit(decision);
+                return Ok(Some(Self::full_context_retry_prediction(
+                    full_context,
+                    info.conflicting_alts,
+                    start_index,
+                    sll_stop_index,
+                )));
+            }
             let full_context = self.adaptive_predict_full_context(
                 decision_state,
                 input,
@@ -973,35 +1054,154 @@ impl<'a> ParserAtnSimulator<'a> {
                 outer_context,
                 merge_cache,
             )?;
-            let (kind, exact, conflicting_alts) = match full_context.resolution {
-                FullContextResolution::Ambiguous { exact, ref alts } => (
-                    ParserAtnPredictionDiagnosticKind::Ambiguity,
-                    exact,
-                    alts.clone(),
-                ),
-                // A unique full-context alt after an SLL conflict is Java's
-                // reportContextSensitivity; the SLL state's conflicting alts
-                // describe the conflict that forced the retry.
-                FullContextResolution::Unique => (
-                    ParserAtnPredictionDiagnosticKind::ContextSensitivity,
-                    false,
-                    info.conflicting_alts,
-                ),
-            };
-            let mut prediction = full_context.prediction;
-            if conflicting_alts.len() > 1 {
-                prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
-                    kind,
-                    start_index,
-                    sll_stop_index,
-                    ll_stop_index: full_context.stop_index,
-                    conflicting_alts,
-                    exact,
-                });
+            if memo_allowed {
+                self.record_full_context_memo(memo_key, start_index, input, &full_context);
             }
-            return Ok(Some(prediction));
+            return Ok(Some(Self::full_context_retry_prediction(
+                full_context,
+                info.conflicting_alts,
+                start_index,
+                sll_stop_index,
+            )));
         }
         Ok(Some(prediction))
+    }
+
+    /// Builds the prediction (and diagnostic) a full-context retry reports,
+    /// shared by the fresh LL run and the memoized replay so both produce
+    /// byte-identical diagnostics.
+    fn full_context_retry_prediction(
+        full_context: FullContextPrediction,
+        sll_conflicting_alts: Vec<usize>,
+        start_index: usize,
+        sll_stop_index: usize,
+    ) -> ParserAtnPrediction {
+        let (kind, exact, conflicting_alts) = match full_context.resolution {
+            FullContextResolution::Ambiguous { exact, ref alts } => (
+                ParserAtnPredictionDiagnosticKind::Ambiguity,
+                exact,
+                alts.clone(),
+            ),
+            // A unique full-context alt after an SLL conflict is Java's
+            // reportContextSensitivity; the SLL state's conflicting alts
+            // describe the conflict that forced the retry.
+            FullContextResolution::Unique => (
+                ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                false,
+                sll_conflicting_alts,
+            ),
+        };
+        let mut prediction = full_context.prediction;
+        if conflicting_alts.len() > 1 {
+            prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
+                kind,
+                start_index,
+                sll_stop_index,
+                ll_stop_index: full_context.stop_index,
+                conflicting_alts,
+                exact,
+            });
+        }
+        prediction
+    }
+
+    /// Whether full-context memoization is sound for this ATN.
+    ///
+    /// Predicates make prediction outcomes depend on caller-side evaluation
+    /// state, so any semantic transition disables the memo. Exact-ambiguity
+    /// detection changes how far the LL loop consumes, so entries recorded
+    /// under one mode must not replay under the other — rather than key the
+    /// mode, the memo simply stays off in the diagnostic mode.
+    fn full_context_memo_allowed(&mut self) -> bool {
+        if self.exact_ambig_detection {
+            return false;
+        }
+        let atn = self.atn;
+        *self.full_context_memo_gate.get_or_insert_with(|| {
+            !(0..atn.state_count()).any(|state_number| {
+                atn.state(state_number)
+                    .is_some_and(AtnState::has_semantic_transition)
+            })
+        })
+    }
+
+    /// Returns the memoized LL resolution whose recorded token window matches
+    /// the upcoming input exactly, if any. The caller must have positioned
+    /// `input` at the decision's start index.
+    ///
+    /// The compare walks the stream exactly as the recorded LL loop did
+    /// (`la(1)` at each cursor position, `consume` between), so a hit is
+    /// literally the same computation replayed: same decision, precedence,
+    /// interned caller context, and token sequence. On a hit the cursor is
+    /// left at the replayed stop index — where the fresh LL loop would have
+    /// left it; on a miss it is restored to the start.
+    fn probe_full_context_memo<T: IntStream>(
+        &self,
+        mut key: FullContextMemoKey,
+        input: &mut T,
+    ) -> Option<FullContextPrediction> {
+        if self.full_context_memo.is_empty() {
+            return None;
+        }
+        let start_index = input.index();
+        key.first_symbol = input.la(1);
+        let entries = self.full_context_memo.get(&key)?;
+        // Entries share a slot only on true first-symbol collisions, so this
+        // scan is almost always a single candidate.
+        'candidates: for entry in entries {
+            for &expected in &entry.window_tail {
+                input.consume();
+                if input.la(1) != expected {
+                    input.seek(start_index);
+                    continue 'candidates;
+                }
+            }
+            let mut replay = entry.prediction.clone();
+            replay.stop_index = input.index();
+            return Some(replay);
+        }
+        None
+    }
+
+    /// Records a fresh full-context resolution for later replay.
+    ///
+    /// The recorded window re-walks the visible tokens the LL loop read
+    /// (`start_index..=stop_index` in cursor positions); windows longer than
+    /// [`FULL_CONTEXT_MEMO_MAX_WINDOW`] are skipped, as is everything once
+    /// the memo holds [`FULL_CONTEXT_MEMO_MAX_ENTRIES`].
+    fn record_full_context_memo<T: IntStream>(
+        &mut self,
+        mut key: FullContextMemoKey,
+        start_index: usize,
+        input: &mut T,
+        full_context: &FullContextPrediction,
+    ) {
+        if self.full_context_memo_len >= FULL_CONTEXT_MEMO_MAX_ENTRIES {
+            return;
+        }
+        let current = input.index();
+        input.seek(start_index);
+        key.first_symbol = input.la(1);
+        let mut window_tail = Vec::new();
+        while input.index() < full_context.stop_index
+            && window_tail.len() < FULL_CONTEXT_MEMO_MAX_WINDOW
+        {
+            input.consume();
+            window_tail.push(input.la(1));
+        }
+        let complete = input.index() >= full_context.stop_index;
+        input.seek(current);
+        if !complete {
+            return;
+        }
+        self.full_context_memo
+            .entry(key)
+            .or_default()
+            .push(FullContextMemoEntry {
+                window_tail,
+                prediction: full_context.clone(),
+            });
+        self.full_context_memo_len += 1;
     }
 
     fn non_greedy_exit_prediction(
@@ -2157,6 +2357,92 @@ mod tests {
             prediction
         );
         assert_eq!(input.index(), 0);
+    }
+
+    #[test]
+    fn full_context_memo_replays_identical_retries() {
+        let atn = ambiguous_single_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        // First occurrence: SLL conflicts, the LL loop runs and its
+        // resolution is recorded.
+        let mut input = VecIntStream::new(vec![1, TOKEN_EOF]);
+        let fresh = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("fresh prediction");
+        assert_eq!(simulator.full_context_memo_len, 1);
+        assert_eq!(input.index(), 0, "cursor restored after prediction");
+
+        // Second identical occurrence: the memo replays without running the
+        // LL loop, producing a byte-identical prediction (diagnostic
+        // included) and identical cursor behavior.
+        let replayed = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("memoized prediction");
+        assert_eq!(replayed, fresh);
+        assert_eq!(simulator.full_context_memo_len, 1, "no duplicate entry");
+        assert_eq!(input.index(), 0);
+
+        // A different upcoming token sequence misses the memo: a fresh LL
+        // run happens (and records its own entry) instead of a stale replay.
+        let mut other_input = VecIntStream::new(vec![2, TOKEN_EOF]);
+        let other = simulator.adaptive_predict_stream_info_with_context(
+            0,
+            0,
+            &mut other_input,
+            EMPTY_CONTEXT,
+        );
+        // Token 2 has no viable alternative in this ATN — the memo must not
+        // have answered for it.
+        assert!(other.is_err(), "different window must not replay");
+
+        // A different outer context misses the memo as well.
+        let context = simulator.store.contexts.singleton(EMPTY_CONTEXT, 6);
+        let mut input = VecIntStream::new(vec![1, TOKEN_EOF]);
+        let _ = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, context)
+            .expect("prediction under a different context");
+        assert_eq!(
+            simulator.full_context_memo_len, 2,
+            "distinct context records its own entry"
+        );
+    }
+
+    #[test]
+    fn full_context_memo_stays_off_for_predicated_atns_and_exact_mode() {
+        // Exact-ambiguity detection changes how far the LL loop consumes, so
+        // the memo must not record or replay in that mode.
+        let atn = ambiguous_single_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        simulator.set_exact_ambig_detection(true);
+        let mut input = VecIntStream::new(vec![1, TOKEN_EOF]);
+        let _ = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("prediction");
+        assert_eq!(simulator.full_context_memo_len, 0);
+
+        // Predicates make outcomes depend on caller-side evaluation: any
+        // semantic transition in the ATN disables the memo entirely.
+        let mut atn = ParserAtnBuilder::new(1);
+        add_state(&mut atn, 0, AtnStateKind::Basic);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Predicate {
+                target: 1,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            },
+        )
+        .expect("transition");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![1])
+            .expect("rule stop states");
+        let atn = finish_atn(atn);
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        assert!(!simulator.full_context_memo_allowed());
     }
 
     #[test]

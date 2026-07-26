@@ -10,6 +10,7 @@ struct Counters {
     adaptive_calls: u64,
     forced_full_context_calls: u64,
     full_context_retries: u64,
+    full_context_memo_hits: u64,
     sll_conflicts: u64,
     reach_sll_calls: u64,
     reach_full_context_calls: u64,
@@ -89,6 +90,7 @@ struct DecisionCounters {
     adaptive_calls: u64,
     forced_full_context_calls: u64,
     full_context_retries: u64,
+    full_context_memo_hits: u64,
     sll_conflicts: u64,
 }
 
@@ -132,6 +134,15 @@ pub(crate) fn record_full_context_retry(decision: usize) {
         let decision_counters = counters.decisions.entry(decision).or_default();
         decision_counters.full_context_retries =
             decision_counters.full_context_retries.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_full_context_memo_hit(decision: usize) {
+    with_counters(|counters| {
+        counters.full_context_memo_hits = counters.full_context_memo_hits.saturating_add(1);
+        let decision_counters = counters.decisions.entry(decision).or_default();
+        decision_counters.full_context_memo_hits =
+            decision_counters.full_context_memo_hits.saturating_add(1);
     });
 }
 
@@ -540,11 +551,16 @@ fn dump_decisions(counters: &Counters) {
             "full_context_retries",
             counters.full_context_retries,
         );
+        print_decision_counter(
+            *decision,
+            "full_context_memo_hits",
+            counters.full_context_memo_hits,
+        );
         print_decision_counter(*decision, "sll_conflicts", counters.sll_conflicts);
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 80] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 81] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -554,6 +570,10 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 80] {
         (
             "prediction.full_context_retries",
             counters.full_context_retries,
+        ),
+        (
+            "prediction.full_context_memo_hits",
+            counters.full_context_memo_hits,
         ),
         ("prediction.sll_conflicts", counters.sll_conflicts),
         ("reach.sll_calls", counters.reach_sll_calls),
