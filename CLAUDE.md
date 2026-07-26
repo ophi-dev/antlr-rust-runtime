@@ -284,3 +284,47 @@ Validate `.github/workflows/*.yml` with `actionlint` (not a generic YAML linter)
 it shellchecks `run:` scripts too.
 
 `AGENTS.md` mirrors this file for Codex / generic agents — keep them in sync when adding sections.
+
+## What "create a PR" means here
+
+1. **Branch from `origin/main`** (or rebase onto it) — fetch first; `main` moves.
+   The exception is explicitly stacked work, which branches from its parent PR.
+2. **Use `gh` (already authenticated)**, and write the PR body to a file
+   (`gh pr create --body-file`) rather than inlining it — heredocs and `--body`
+   turn backticks and `$` into a shell-escaping fight. There is no PR template.
+3. **Never open a draft** — the AI reviewers below only engage on ready PRs, so a
+   draft just stalls the loop.
+4. **Keep the description current.** Rewrite it (`gh pr edit --body-file`) when
+   scope grows or the implementation diverges from what you first described; a
+   stale description misleads every reviewer that reads it.
+
+Merges are **squash-only** (merge commits are disabled) and the squash body is
+built from `COMMIT_MESSAGES`, so it is the *commit message* — not the PR
+description — that becomes permanent history. Write the commit message as the
+durable explanation (what changed and why, with the non-obvious reasoning); the
+PR description can carry review scaffolding like test tables and reviewer notes.
+
+### The three AI reviewers
+
+All three run on every PR with different mechanics, so "one of them is happy" is
+not the finish line:
+
+- **CodeRabbit** — starts as soon as the PR opens; posts inline comments that
+  auto-resolve when you reply in the thread. It also posts **"outside diff
+  range" comments — treat those as gold** and never skip them: they catch what a
+  diff-local reviewer structurally cannot. Address or explicitly rebut each one.
+- **Codex** (ChatGPT-powered) — 2–3 deep insights **after every push**, so it is
+  iterative. It reacts 👀 when a review starts and **+1 when it approves**. If no
+  reaction appears, trigger it with a top-level `@codex review` comment — but if
+  👀 is already there it is mid-review, so wait rather than re-triggering.
+- **Claude Code Review** — the deep pass: it has the ANTLR upstream source
+  checked out and can build Java oracles and do comparable heavy research. It
+  starts only **after CI (clippy + unit tests) succeeds** and can take 10–20
+  minutes, then posts one large review comment. It does not set a PR status or
+  reaction, so **workflow success is not approval** — read the comment: it states
+  whether there are merge blockers or only minor items (do those too).
+
+After opening a PR, **loop**: address every reviewer's comments and push, until
+**both** Codex has reacted +1 **and** Claude Code Review's latest comment reports
+no blockers. Reply to inline comments in their own thread; reply to Claude Code
+Review as a top-level comment.
