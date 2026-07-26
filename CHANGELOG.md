@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.19.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.18.0...v0.19.0) (2026-07-26)
+
+
+### Features
+
+* **parser:** configurable max rule-nesting depth to bound adversarial input ([#199](https://github.com/ophi-dev/antlr-rust-runtime/issues/199)) ([66ebc82](https://github.com/ophi-dev/antlr-rust-runtime/commit/66ebc8228ddad1097e8ee524149dd2c29b84a597))
+* **runtime:** add_parse_listener — parse-time rule enter/exit events (ANTLR parity) ([#204](https://github.com/ophi-dev/antlr-rust-runtime/issues/204)) ([e823538](https://github.com/ophi-dev/antlr-rust-runtime/commit/e823538eed1784676ff10022221aafdf813870e2))
+* **runtime:** pass the offending token to ErrorListener::syntax_error ([#196](https://github.com/ophi-dev/antlr-rust-runtime/issues/196)) ([dde6bf0](https://github.com/ophi-dev/antlr-rust-runtime/commit/dde6bf053f9e15ffde7809b6177eead1f7b0e60b))
+
+
+### Bug Fixes
+
+* **codegen:** guard generated rule dispatch against native stack overflow ([3634641](https://github.com/ophi-dev/antlr-rust-runtime/commit/36346412fd19f89032a84536285694c932a8c5c0)), closes [#193](https://github.com/ophi-dev/antlr-rust-runtime/issues/193)
+
 ## [0.18.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.17.0...v0.18.0) (2026-07-25)
 
 
