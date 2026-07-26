@@ -10,6 +10,7 @@ use crate::prediction::{
     ContextArena, ContextId, EMPTY_CONTEXT, PredictionFxHasher, PredictionWorkspace,
 };
 use crate::recognizer::{Recognizer, RecognizerData};
+use crate::semir::MemberEnv;
 use crate::token::{
     DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenSourceError, TokenSpec,
     TokenStoreError,
@@ -381,6 +382,265 @@ where
             LexerRef::Shared(_) => None,
         }
     }
+
+    /// Reads a grammar-declared integer member slot; `None` when never written.
+    #[must_use]
+    pub fn member_int(&self, member: usize) -> Option<i64> {
+        self.lexer.get().members().scalar(member)
+    }
+
+    /// Reads the top of a grammar-declared stack member slot; `None` when the
+    /// stack is empty or was never pushed.
+    #[must_use]
+    pub fn member_stack_top(&self, member: usize) -> Option<i64> {
+        self.lexer.get().members().stack_top(member)
+    }
+
+    /// Depth of a grammar-declared stack member slot.
+    #[must_use]
+    pub fn member_stack_len(&self, member: usize) -> usize {
+        self.lexer.get().members().stack_len(member)
+    }
+
+    /// Writes a grammar-declared integer member slot. Action context only; see
+    /// [`Self::set_mode`] for the return value.
+    pub fn set_member_int(&mut self, member: usize, value: i64) -> bool {
+        self.with_members_mut(|members| members.set_scalar(member, value))
+            .is_some()
+    }
+
+    /// Adds to a grammar-declared integer member slot, returning the new value.
+    /// `None` in a predicate context, where mutation is invalid.
+    pub fn add_member_int(&mut self, member: usize, delta: i64) -> Option<i64> {
+        self.with_members_mut(|members| members.add_scalar(member, delta))
+    }
+
+    /// Pushes onto a grammar-declared stack member slot. Action context only;
+    /// see [`Self::set_mode`] for the return value.
+    pub fn push_member(&mut self, member: usize, value: i64) -> bool {
+        self.with_members_mut(|members| members.push_stack(member, value))
+            .is_some()
+    }
+
+    /// Pops a grammar-declared stack member slot, returning the removed value.
+    /// `None` when the stack is empty or this is a predicate context.
+    pub fn pop_member(&mut self, member: usize) -> Option<i64> {
+        self.with_members_mut(|members| members.pop_stack(member))
+            .flatten()
+    }
+
+    /// Runs `apply` against mutable member state, or returns `None` in a
+    /// predicate context where mutating lexer state is invalid.
+    fn with_members_mut<T>(&mut self, apply: impl FnOnce(&mut MemberEnv) -> T) -> Option<T> {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => Some(apply(lexer.members_mut())),
+            LexerRef::Shared(_) => None,
+        }
+    }
+}
+
+/// Lexer predicate coordinate lowered into [`crate::semir::SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LexerSemanticPredicate {
+    /// Serialized lexer rule index that owns this predicate.
+    pub rule_index: usize,
+    /// Predicate index inside the owning rule.
+    pub pred_index: usize,
+    /// Root expression in the associated [`LexerSemantics::ir`] arena.
+    pub expr: crate::semir::ExprId,
+}
+
+/// Lexer action coordinate lowered into [`crate::semir::SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LexerSemanticAction {
+    /// Serialized lexer rule index that owns this action.
+    pub rule_index: usize,
+    /// Action index inside the owning rule.
+    pub action_index: usize,
+    /// Root statement in the associated [`LexerSemantics::ir`] arena.
+    pub stmt: crate::semir::StmtId,
+}
+
+/// Data-driven lexer semantic tables emitted by generated lexers.
+///
+/// The lexer analog of [`crate::ParserSemantics`]. Grammars whose
+/// `@lexer::members` state and inline actions/predicates the generator could
+/// lower need no hand-written hooks at all (issue #206).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LexerSemantics {
+    pub ir: crate::semir::SemIr,
+    pub predicates: Vec<LexerSemanticPredicate>,
+    pub actions: Vec<LexerSemanticAction>,
+}
+
+impl LexerSemantics {
+    /// Evaluates a lowered predicate coordinate, or `None` when this table has
+    /// no entry for it (the caller then falls back to hooks / policy).
+    pub fn eval_predicate<I>(&self, lexer: &BaseLexer<I>, predicate: LexerPredicate) -> Option<bool>
+    where
+        I: CharStream,
+    {
+        let entry = self.predicates.iter().find(|entry| {
+            entry.rule_index == predicate.rule_index() && entry.pred_index == predicate.pred_index()
+        })?;
+        let mut ctx = LexerSemIrCtx::new(lexer, predicate);
+        Some(crate::semir::eval_pred(&self.ir, entry.expr, &mut ctx))
+    }
+
+    /// Executes a lowered action coordinate, reporting whether this table
+    /// owned it.
+    pub fn exec_action<I>(&self, lexer: &mut BaseLexer<I>, action: LexerCustomAction) -> bool
+    where
+        I: CharStream,
+    {
+        let Ok(rule_index) = usize::try_from(action.rule_index()) else {
+            return false;
+        };
+        let Ok(action_index) = usize::try_from(action.action_index()) else {
+            return false;
+        };
+        let Some(entry) = self
+            .actions
+            .iter()
+            .find(|entry| entry.rule_index == rule_index && entry.action_index == action_index)
+        else {
+            return false;
+        };
+        let stmt = entry.stmt;
+        let mut ctx = LexerSemIrCtx::new_mut(lexer, action);
+        crate::semir::exec_stmt(&self.ir, stmt, &mut ctx);
+        true
+    }
+}
+
+/// `SemIR` evaluation adapter over a lexer, for grammar predicates and actions
+/// that the generator lowered into IR instead of a hook (issue #206).
+///
+/// Predicates get a shared borrow and evaluate at their speculative ATN
+/// coordinate, so lookahead and text-so-far are relative to `position`.
+/// Actions get a mutable borrow and run on the committed path, where mutating
+/// member state matches what a generated ANTLR lexer does in its own fields.
+#[derive(Debug)]
+pub struct LexerSemIrCtx<'a, I>
+where
+    I: CharStream,
+{
+    ctx: LexerSemCtx<'a, I>,
+}
+
+impl<'a, I> LexerSemIrCtx<'a, I>
+where
+    I: CharStream,
+{
+    /// Builds a predicate-evaluation adapter at a speculative ATN coordinate.
+    pub(crate) const fn new(lexer: &'a BaseLexer<I>, predicate: LexerPredicate) -> Self {
+        Self {
+            ctx: LexerSemCtx::new(
+                lexer,
+                predicate.rule_index(),
+                predicate.pred_index(),
+                predicate.position(),
+            ),
+        }
+    }
+
+    /// Builds an action-execution adapter on the committed path.
+    pub(crate) fn new_mut(lexer: &'a mut BaseLexer<I>, action: LexerCustomAction) -> Self {
+        let rule_index = usize::try_from(action.rule_index()).unwrap_or_default();
+        let action_index = usize::try_from(action.action_index()).unwrap_or_default();
+        Self {
+            ctx: LexerSemCtx::new_mut(lexer, rule_index, action_index, action.position()),
+        }
+    }
+
+    /// The underlying hook context, for callers that also dispatch hooks.
+    pub const fn ctx_mut(&mut self) -> &mut LexerSemCtx<'a, I> {
+        &mut self.ctx
+    }
+}
+
+impl<I> crate::semir::PredContext for LexerSemIrCtx<'_, I>
+where
+    I: CharStream,
+{
+    type TokenText<'a>
+        = String
+    where
+        Self: 'a;
+
+    fn la(&mut self, offset: isize) -> i64 {
+        i64::from(self.ctx.la(offset))
+    }
+
+    /// A lexer has no lookahead *token*; text predicates use
+    /// [`crate::semir::PExpr::TokenTextSoFar`] instead.
+    fn token_text(&mut self, _offset: isize) -> Option<Self::TokenText<'_>> {
+        None
+    }
+
+    fn token_index_adjacent(&mut self) -> bool {
+        false
+    }
+
+    fn ctx_rule_text(&self, _rule_index: usize) -> Option<String> {
+        None
+    }
+
+    fn member(&self, member: usize) -> Option<i64> {
+        Some(self.ctx.member_int(member).unwrap_or_default())
+    }
+
+    fn member_top(&self, member: usize) -> Option<i64> {
+        self.ctx.member_stack_top(member)
+    }
+
+    fn member_len(&self, member: usize) -> usize {
+        self.ctx.member_stack_len(member)
+    }
+
+    fn local_arg(&self) -> Option<i64> {
+        None
+    }
+
+    fn column(&self) -> Option<i64> {
+        Some(i64::try_from(self.ctx.position_column()).unwrap_or(i64::MAX))
+    }
+
+    fn token_start_column(&self) -> Option<i64> {
+        Some(i64::try_from(self.ctx.token_start_column()).unwrap_or(i64::MAX))
+    }
+
+    fn token_text_so_far(&self) -> Option<String> {
+        Some(self.ctx.text_so_far())
+    }
+
+    /// Hooks are dispatched by the caller, which owns the `SemanticHooks`
+    /// object; an unrouted hook node declines rather than guessing.
+    fn hook(&mut self, _hook: crate::semir::HookId) -> bool {
+        false
+    }
+}
+
+impl<I> crate::semir::ActContext for LexerSemIrCtx<'_, I>
+where
+    I: CharStream,
+{
+    fn set_member(&mut self, member: usize, value: i64) {
+        self.ctx.set_member_int(member, value);
+    }
+
+    fn push_member(&mut self, member: usize, value: i64) {
+        self.ctx.push_member(member, value);
+    }
+
+    fn pop_member(&mut self, member: usize) -> Option<i64> {
+        self.ctx.pop_member(member)
+    }
+
+    /// A lexer rule has no return fields; ignore rather than inventing state.
+    fn set_return(&mut self, _name: &str, _value: i64) {}
+
+    fn action_hook(&mut self, _hook: crate::semir::HookId) {}
 }
 
 /// Mutable lexer state exposed at lifecycle boundaries that have no ATN
@@ -587,6 +847,15 @@ pub struct BaseLexer<I> {
     errors: RefCell<Vec<TokenSourceError>>,
     semantic_error_coordinates: RefCell<BTreeSet<(u8, usize, usize, usize)>>,
     pending_tokens: VecDeque<TokenSpec>,
+    /// Grammar-declared `@lexer::members` state (issue #206).
+    ///
+    /// Unlike the parser's member environment, this is not path-local and needs
+    /// no speculative snapshot: lexer actions run only after an accept position
+    /// is committed (see `atn::lexer`'s custom-action dispatch), which is where
+    /// a generated ANTLR lexer mutates its own fields too. Predicates read it
+    /// through a shared borrow, and predicate-bearing DFA states are always
+    /// re-simulated rather than cached, so a read never observes a stale accept.
+    members: MemberEnv,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
 }
 
@@ -885,6 +1154,7 @@ where
             errors: RefCell::new(Vec::new()),
             semantic_error_coordinates: RefCell::new(BTreeSet::new()),
             pending_tokens: VecDeque::new(),
+            members: MemberEnv::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
     }
@@ -894,7 +1164,7 @@ where
     ///
     /// Learned DFA tables and configuration such as forced interpretation are
     /// retained. Token-production state, diagnostics, pending tokens, modes,
-    /// and source position are cleared.
+    /// grammar-declared member state, and source position are cleared.
     pub fn reset(&mut self) {
         self.input.seek(0);
         self.mode = DEFAULT_MODE;
@@ -910,6 +1180,9 @@ where
         self.errors.get_mut().clear();
         self.semantic_error_coordinates.get_mut().clear();
         self.pending_tokens.clear();
+        // A retained interpolation depth or mode-nesting stack would silently
+        // mis-lex the next input, so member state is per-input, not per-lexer.
+        self.members = MemberEnv::new();
     }
 
     /// Replaces the character stream and fully resets lexer state for reuse.
@@ -1286,6 +1559,17 @@ where
     /// reached during prediction of the current token.
     pub fn column_at(&self, position: usize) -> usize {
         self.position_at(position).1
+    }
+
+    /// Grammar-declared `@lexer::members` state (issue #206).
+    #[must_use]
+    pub const fn members(&self) -> &MemberEnv {
+        &self.members
+    }
+
+    /// Mutable grammar-declared member state, for committed-path actions.
+    pub const fn members_mut(&mut self) -> &mut MemberEnv {
+        &mut self.members
     }
 
     fn position_at(&self, position: usize) -> (usize, usize) {
@@ -1916,5 +2200,189 @@ mod tests {
         first.clear_dfa();
         assert!(first.lexer_dfa_string().is_empty());
         assert!(second.lexer_dfa_string().is_empty());
+    }
+
+    /// Builds the `@lexer::members` state the C# interpolation lexer declares
+    /// (issue #206): a scalar depth counter, a scalar `verbatium` flag, and two
+    /// stacks. Slot numbering mirrors what the generator assigns.
+    mod member_slots {
+        pub(super) const INTERPOLATED_STRING_LEVEL: usize = 0;
+        pub(super) const VERBATIUM: usize = 1;
+        pub(super) const INTERPOLATED_VERBATIUMS: usize = 0;
+        pub(super) const CURLY_LEVELS: usize = 1;
+    }
+
+    fn member_state_lexer() -> BaseLexer<InputStream> {
+        let data = RecognizerData::new(
+            "CSharpLexer",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        BaseLexer::new(InputStream::new("$\"{x}\""), data)
+    }
+
+    /// Replays the C# lexer's interpolation bookkeeping across nested strings
+    /// and asserts the `verbatium` flag each `{ !verbatium }?` guard would see.
+    ///
+    /// `DOUBLE_QUOTE_INSIDE` restores the flag with
+    /// `Count > 0 ? Peek() : false`, which is `MemberTop` falling back to Null.
+    #[test]
+    fn lexer_stack_members_track_nested_interpolation_state() {
+        use member_slots::{INTERPOLATED_STRING_LEVEL, INTERPOLATED_VERBATIUMS};
+
+        let mut lexer = member_state_lexer();
+        let members = lexer.members_mut();
+
+        // INTERPOLATED_REGULAR_STRING_START: `$"` — verbatium = false.
+        members.add_scalar(INTERPOLATED_STRING_LEVEL, 1);
+        members.push_stack(INTERPOLATED_VERBATIUMS, 0);
+        assert_eq!(members.stack_top(INTERPOLATED_VERBATIUMS), Some(0));
+        assert_eq!(members.scalar(INTERPOLATED_STRING_LEVEL), Some(1));
+
+        // Nested INTERPOLATED_VERBATIUM_STRING_START: `$@"` — verbatium = true.
+        members.add_scalar(INTERPOLATED_STRING_LEVEL, 1);
+        members.push_stack(INTERPOLATED_VERBATIUMS, 1);
+        assert_eq!(members.stack_top(INTERPOLATED_VERBATIUMS), Some(1));
+        assert_eq!(members.stack_len(INTERPOLATED_VERBATIUMS), 2);
+
+        // DOUBLE_QUOTE_INSIDE closes the verbatim string; the enclosing
+        // regular string's `false` must come back.
+        members.add_scalar(INTERPOLATED_STRING_LEVEL, -1);
+        assert_eq!(members.pop_stack(INTERPOLATED_VERBATIUMS), Some(1));
+        assert_eq!(members.stack_top(INTERPOLATED_VERBATIUMS), Some(0));
+
+        // Closing the outer string empties the stack: `Count > 0` is false, so
+        // the grammar falls back to `false` — Null, which is falsy.
+        members.add_scalar(INTERPOLATED_STRING_LEVEL, -1);
+        assert_eq!(members.pop_stack(INTERPOLATED_VERBATIUMS), Some(0));
+        assert_eq!(members.stack_top(INTERPOLATED_VERBATIUMS), None);
+        assert_eq!(members.scalar(INTERPOLATED_STRING_LEVEL), Some(0));
+    }
+
+    /// `reset()` must clear member state: a retained interpolation depth would
+    /// silently mis-lex the next input on a reused lexer.
+    #[test]
+    fn lexer_reset_clears_member_state() {
+        use member_slots::{CURLY_LEVELS, INTERPOLATED_STRING_LEVEL};
+
+        let mut lexer = member_state_lexer();
+        lexer.members_mut().add_scalar(INTERPOLATED_STRING_LEVEL, 2);
+        lexer.members_mut().push_stack(CURLY_LEVELS, 1);
+        assert!(!lexer.members().is_empty());
+
+        lexer.reset();
+
+        assert!(lexer.members().is_empty(), "reset must clear member state");
+        assert_eq!(lexer.members().scalar(INTERPOLATED_STRING_LEVEL), None);
+        assert_eq!(lexer.members().stack_top(CURLY_LEVELS), None);
+    }
+
+    /// A predicate context must not mutate lexer state: predicates run
+    /// speculatively on paths that may be abandoned. The mutators report
+    /// `false`/`None` there instead of silently applying.
+    #[test]
+    fn lexer_predicate_context_cannot_mutate_member_state() {
+        use member_slots::{INTERPOLATED_VERBATIUMS, VERBATIUM};
+
+        let mut lexer = member_state_lexer();
+        lexer.members_mut().set_scalar(VERBATIUM, 1);
+        lexer.members_mut().push_stack(INTERPOLATED_VERBATIUMS, 1);
+
+        let mut ctx = LexerSemCtx::new(&lexer, 0, 0, 0);
+        // Reads work in a predicate context.
+        assert_eq!(ctx.member_int(VERBATIUM), Some(1));
+        assert_eq!(ctx.member_stack_top(INTERPOLATED_VERBATIUMS), Some(1));
+        assert_eq!(ctx.member_stack_len(INTERPOLATED_VERBATIUMS), 1);
+        // Writes are refused.
+        assert!(!ctx.set_member_int(VERBATIUM, 0));
+        assert!(!ctx.push_member(INTERPOLATED_VERBATIUMS, 0));
+        assert_eq!(ctx.pop_member(INTERPOLATED_VERBATIUMS), None);
+        assert_eq!(ctx.add_member_int(VERBATIUM, 5), None);
+
+        assert_eq!(lexer.members().scalar(VERBATIUM), Some(1));
+        assert_eq!(lexer.members().stack_len(INTERPOLATED_VERBATIUMS), 1);
+    }
+
+    /// End-to-end through `LexerSemantics`: the `{ !verbatium }?` and
+    /// `{ verbatium }?` guard pair lowered as pure `SemIR`, evaluated against
+    /// state that a lowered action wrote — no hooks anywhere.
+    #[test]
+    fn lexer_semantics_evaluates_stack_guards_written_by_lowered_actions() {
+        use crate::semir::{AStmt, PExpr, SemIr};
+        use member_slots::INTERPOLATED_VERBATIUMS;
+
+        let mut ir = SemIr::new();
+        // `{ verbatium }?` reading the interpolation stack's top.
+        let top = ir.expr(PExpr::MemberTop(INTERPOLATED_VERBATIUMS));
+        // `{ !verbatium }?`
+        let not_top = ir.expr(PExpr::Not(top));
+        // `interpolatedVerbatiums.Push(true)` / `.Pop()`
+        let yes = ir.expr(PExpr::Bool(true));
+        let push_verbatim = ir.stmt(AStmt::PushMember(INTERPOLATED_VERBATIUMS, yes));
+        let pop = ir.stmt(AStmt::PopMember(INTERPOLATED_VERBATIUMS));
+
+        let semantics = LexerSemantics {
+            ir,
+            predicates: vec![
+                LexerSemanticPredicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                    expr: top,
+                },
+                LexerSemanticPredicate {
+                    rule_index: 2,
+                    pred_index: 0,
+                    expr: not_top,
+                },
+            ],
+            actions: vec![
+                LexerSemanticAction {
+                    rule_index: 0,
+                    action_index: 0,
+                    stmt: push_verbatim,
+                },
+                LexerSemanticAction {
+                    rule_index: 3,
+                    action_index: 0,
+                    stmt: pop,
+                },
+            ],
+        };
+
+        let verbatim_guard = LexerPredicate::new(1, 0, 0);
+        let regular_guard = LexerPredicate::new(2, 0, 0);
+        let mut lexer = member_state_lexer();
+
+        // Before any push the stack is empty: the verbatim guard fails and the
+        // regular guard passes, matching `Count > 0 ? Peek() : false`.
+        assert_eq!(
+            semantics.eval_predicate(&lexer, verbatim_guard),
+            Some(false)
+        );
+        assert_eq!(semantics.eval_predicate(&lexer, regular_guard), Some(true));
+
+        // The lowered `$@"` action pushes `true`; the guards must flip.
+        assert!(semantics.exec_action(&mut lexer, LexerCustomAction::new(0, 0, 0)));
+        assert_eq!(semantics.eval_predicate(&lexer, verbatim_guard), Some(true));
+        assert_eq!(semantics.eval_predicate(&lexer, regular_guard), Some(false));
+
+        // The lowered closing-quote action pops it back.
+        assert!(semantics.exec_action(&mut lexer, LexerCustomAction::new(3, 0, 0)));
+        assert_eq!(
+            semantics.eval_predicate(&lexer, verbatim_guard),
+            Some(false)
+        );
+        assert_eq!(semantics.eval_predicate(&lexer, regular_guard), Some(true));
+
+        // A coordinate this table does not own is declined, so the caller can
+        // still fall back to hooks or the unknown policy.
+        assert_eq!(
+            semantics.eval_predicate(&lexer, LexerPredicate::new(9, 9, 0)),
+            None
+        );
+        assert!(!semantics.exec_action(&mut lexer, LexerCustomAction::new(9, 9, 0)));
     }
 }

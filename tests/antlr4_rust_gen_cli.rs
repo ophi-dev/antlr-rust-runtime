@@ -2202,3 +2202,132 @@ mod deep_nesting_tests {
 "#,
     );
 }
+
+/// Issue #206: a grammar keeping its interpolation state inline in
+/// `@lexer::members` — C# bodies, a nesting counter, and two stacks — generates
+/// with **zero** hand-written hooks, purely from a `stack_member` pattern file.
+///
+/// The expected token streams below are not hand-derived: they were captured
+/// from an ANTLR 4.13.2 **Java** lexer generated from the same grammar (bodies
+/// mechanically ported to Java, semantics unchanged) and match byte-for-byte.
+/// That is the differential validation the issue asks for — the stack state is
+/// load-bearing in cases 4 and 5, where a scalar-only flag would leak across
+/// adjacent strings.
+#[test]
+fn inline_lexer_member_stacks_generate_without_hooks() {
+    let temp = temporary_directory("stack-member-lexer");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/stack-member-lexer");
+    let out = temp.path().join("generated");
+
+    // `--sem-unknown error` is the real assertion: generation fails if any
+    // coordinate is left to a policy fallback or needs a hook.
+    let output = run_antlr4_rust_gen(&[
+        dir.join("CSharpInterpolation.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        dir.join("patterns.toml").as_os_str(),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let manifest = fs::read_to_string(out.join("semantics.json")).expect("manifest is emitted");
+    assert!(
+        !manifest.contains("\"hooked\""),
+        "no coordinate may need a hook: {manifest}"
+    );
+    assert!(
+        !manifest.contains("\"assume-true\"") && !manifest.contains("\"assume-false\""),
+        "no coordinate may fall back to a policy: {manifest}"
+    );
+
+    // Member state lowers into the SemIR table, not inline Rust or a hook trait.
+    let lexer =
+        fs::read_to_string(out.join("c_sharp_interpolation.rs")).expect("lexer should be emitted");
+    for expected in [
+        "fn lexer_semantics()",
+        "AStmt::PushMember",
+        "AStmt::PopMember",
+        "PExpr::MemberTop",
+    ] {
+        assert!(lexer.contains(expected), "missing {expected} in: {lexer}");
+    }
+    assert!(
+        !lexer.contains("pub trait CSharpInterpolationHooks"),
+        "grammar must need no hook trait: {lexer}"
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod stack_member_tests {
+    use super::c_sharp_interpolation::CSharpInterpolation;
+    use antlr4_runtime::{CommonTokenStream, InputStream, IntStream as _, Token as _};
+
+    fn lex(input: &str) -> String {
+        let lexer = CSharpInterpolation::new(InputStream::new(input));
+        let mut stream = CommonTokenStream::new(lexer);
+        stream.fill();
+        (0..stream.size())
+            .filter_map(|index| stream.get(index))
+            .map(|token| {
+                format!("({}, {})", token.token_type(), token.text().unwrap_or_default())
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Each expectation is the ANTLR 4.13.2 Java lexer's output for the same
+    /// grammar and input.
+    #[test]
+    fn matches_the_java_oracle_token_stream() {
+        // Regular string: `{ !verbatium }?` admits REGULAR_STRING_INSIDE (8).
+        assert_eq!(
+            lex(r#"$"abc""#),
+            r#"(1, $") (8, abc) (7, ") (-1, <EOF>)"#
+        );
+        // Verbatim string: `{ verbatium }?` admits VERBATIUM_INSIDE_STRING (9)
+        // and lets `""` lex as one token (6) instead of closing the string.
+        assert_eq!(
+            lex(r#"$@"a""b""#),
+            r#"(2, $@") (9, a) (6, "") (9, b) (7, ") (-1, <EOF>)"#
+        );
+        // Interpolation hole: `{` pushes curlyLevels and DEFAULT_MODE.
+        assert_eq!(
+            lex(r#"$"a{x}b""#),
+            r#"(1, $") (8, a) (3, x) (3, b) (-1, <EOF>)"#
+        );
+        // Verbatim then regular: popping must clear the flag, or `y` would
+        // wrongly lex as VERBATIUM_INSIDE_STRING.
+        assert_eq!(
+            lex(r#"$@"x"$"y""#),
+            r#"(2, $@") (9, x) (7, ") (1, $") (8, y) (7, ") (-1, <EOF>)"#
+        );
+        // Regular then verbatim: the second string's `""` must still be one
+        // token, so the flag has to be restored per string, not left false.
+        assert_eq!(
+            lex(r#"$"p"$@"q""r""#),
+            r#"(1, $") (8, p) (7, ") (2, $@") (9, q) (6, "") (9, r) (7, ") (-1, <EOF>)"#
+        );
+    }
+
+    /// A reused lexer must not carry interpolation state across inputs.
+    #[test]
+    fn state_does_not_leak_between_inputs() {
+        let first = lex(r#"$@"a""b""#);
+        let second = lex(r#"$"c""#);
+        assert_eq!(second, r#"(1, $") (8, c) (7, ") (-1, <EOF>)"#);
+        assert_ne!(first, second);
+    }
+}
+"####;
+
+    assert_generated_project(temp.path(), &["c_sharp_interpolation.rs"], test_source);
+}
