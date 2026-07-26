@@ -1,0 +1,64 @@
+# Stack-valued member state for the C# interpolated-string lexer (issue #206).
+#
+# The grammar keeps its interpolation bookkeeping inline in `@lexer::members`
+# with C# bodies. Codegen does not parse host-language fragments; instead this
+# file declares the slot inventory and maps each inline body to a SemIR
+# lowering. Every coordinate below becomes pure SemIR — the grammar needs no
+# hand-written hooks at all.
+version = 1
+
+# --- slot inventory -------------------------------------------------------
+# Declaration order fixes slot numbering. Scalars and stacks are numbered in
+# separate namespaces, so both start at 0.
+
+[[member]]
+name = "interpolatedStringLevel"
+kind = "int"
+
+[[member]]
+name = "verbatium"
+kind = "bool"          # alias for `int`: slots store integers, bools coerce
+
+[[member]]
+name = "interpolatedVerbatiums"
+kind = "stack"
+
+[[member]]
+name = "curlyLevels"
+kind = "stack"
+
+# --- actions --------------------------------------------------------------
+
+[[pattern]]
+id = "interpolated-regular-string-start"
+match = "interpolatedStringLevel++; interpolatedVerbatiums.Push(false); verbatium = false;"
+lower = "seq(add_member(interpolatedStringLevel, int(1)), push_member(interpolatedVerbatiums, bool(false)), set_member(verbatium, bool(false)))"
+
+[[pattern]]
+id = "interpolated-verbatium-string-start"
+match = "interpolatedStringLevel++; interpolatedVerbatiums.Push(true); verbatium = true;"
+lower = "seq(add_member(interpolatedStringLevel, int(1)), push_member(interpolatedVerbatiums, bool(true)), set_member(verbatium, bool(true)))"
+
+[[pattern]]
+id = "open-brace-inside"
+match = "curlyLevels.Push(1);"
+lower = "push_member(curlyLevels, int(1))"
+
+# `verbatium = (Count > 0 ? Peek() : false)` is exactly `member_top`, whose
+# empty-stack read is Null — and Null is falsy. The guard falls out for free.
+[[pattern]]
+id = "double-quote-inside"
+match = "interpolatedStringLevel--; interpolatedVerbatiums.Pop(); verbatium = (interpolatedVerbatiums.Count > 0 ? interpolatedVerbatiums.Peek() : false);"
+lower = "seq(add_member(interpolatedStringLevel, int(-1)), pop_member(interpolatedVerbatiums), set_member(verbatium, member_top(interpolatedVerbatiums)))"
+
+# --- predicates -----------------------------------------------------------
+
+[[pattern]]
+id = "verbatium-guard"
+match = "verbatium"
+lower = "member(verbatium)"
+
+[[pattern]]
+id = "not-verbatium-guard"
+match = "!verbatium"
+lower = "not(member(verbatium))"

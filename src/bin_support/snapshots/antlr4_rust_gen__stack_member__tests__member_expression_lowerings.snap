@@ -1,0 +1,25 @@
+---
+source: src/bin_support/stack_member.rs
+expression: parsed
+---
+[
+    Member(
+        1,
+    ),
+    MemberTop(
+        0,
+    ),
+    MemberLen(
+        1,
+    ),
+    Not(
+        MemberTop(
+            0,
+        ),
+    ),
+    Not(
+        Member(
+            1,
+        ),
+    ),
+]

@@ -37,8 +37,34 @@
 //! context-child text guards must pass when the child is absent
 //! (`Ne(Null, "text") == true`). Predicates that are non-restrictive when a
 //! value is absent (rule arguments) compose [`PExpr::IsNull`] with `Or`.
+//!
+//! # Member state
+//!
+//! Grammars declare their own state in `@members` / `@lexer::members`. The IR
+//! models it as [`MemberEnv`]: numbered slots that are either **scalar**
+//! integers ([`PExpr::Member`], [`AStmt::SetMember`], [`AStmt::AddMember`]) or
+//! **stacks** of integers ([`PExpr::MemberTop`], [`PExpr::MemberLen`],
+//! [`AStmt::PushMember`], [`AStmt::PopMember`]). Stack slots cover the nesting
+//! counters real grammars keep for string interpolation and mode tracking
+//! (issue #206).
+//!
+//! Slot values are integers, so a boolean operand is coerced by
+//! [`Value::truthy`]'s inverse — `true` is 1, `false` is 0 — and reads back
+//! with the same truthiness. Empty-stack reads and pops are **defined, not
+//! errors**:
+//!
+//! - [`PExpr::MemberTop`] on an empty (or never-pushed) stack is
+//!   [`Value::Null`], which is falsy. This is exactly the
+//!   `Count > 0 ? Peek() : false` idiom grammars write by hand.
+//! - [`PExpr::MemberLen`] on a never-pushed stack is `0`, not Null: a stack
+//!   that was never used is empty, not absent.
+//! - [`AStmt::PopMember`] on an empty stack is a no-op. An unbalanced pop is a
+//!   grammar bug the recognizer cannot diagnose, and panicking inside
+//!   prediction would turn it into a crash on input the grammar merely
+//!   mis-describes.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 /// Index of an expression node inside a [`SemIr`] arena.
@@ -166,6 +192,11 @@ pub enum PExpr {
     CtxRuleText(usize),
     /// Integer state slot declared by the grammar (`@members` counters).
     Member(usize),
+    /// Top of a stack-valued state slot; Null when the stack is empty or the
+    /// slot was never pushed. See the module's "Member state" section.
+    MemberTop(usize),
+    /// Depth of a stack-valued state slot; `0` when never pushed.
+    MemberLen(usize),
     /// Integer argument of the current rule invocation; Null when the rule
     /// was invoked without one.
     LocalArg,
@@ -208,6 +239,10 @@ pub enum AStmt {
     SetMember(usize, ExprId),
     /// `member += expr`.
     AddMember(usize, ExprId),
+    /// `member.push(expr)` on a stack-valued slot.
+    PushMember(usize, ExprId),
+    /// `member.pop()` on a stack-valued slot; a no-op when empty.
+    PopMember(usize),
     /// Assign a rule return field by name.
     SetReturn(StrId, ExprId),
     /// Execute statements in order.
@@ -259,6 +294,16 @@ pub trait PredContext {
     fn ctx_rule_text(&self, rule_index: usize) -> Option<String>;
     /// Integer member slot value.
     fn member(&self, member: usize) -> Option<i64>;
+    /// Top of a stack-valued member slot; `None` when empty or never pushed.
+    ///
+    /// Recognizers with no grammar-declared stack state keep the default.
+    fn member_top(&self, _member: usize) -> Option<i64> {
+        None
+    }
+    /// Depth of a stack-valued member slot.
+    fn member_len(&self, _member: usize) -> usize {
+        0
+    }
     /// Integer argument of the current rule invocation.
     fn local_arg(&self) -> Option<i64>;
     /// Lexer current character position within the line.
@@ -279,10 +324,133 @@ pub trait PredContext {
 pub trait ActContext: PredContext {
     /// Writes an integer member slot.
     fn set_member(&mut self, member: usize, value: i64);
+    /// Pushes onto a stack-valued member slot.
+    ///
+    /// Recognizers with no grammar-declared stack state keep the default
+    /// no-op; [`AStmt::PushMember`] is only produced for grammars that declare
+    /// a stack slot, so a silent drop here is unreachable rather than lossy.
+    fn push_member(&mut self, _member: usize, _value: i64) {}
+    /// Pops a stack-valued member slot, returning the removed value. A no-op
+    /// returning `None` when the stack is empty.
+    fn pop_member(&mut self, _member: usize) -> Option<i64> {
+        None
+    }
     /// Assigns a rule return field by name.
     fn set_return(&mut self, name: &str, value: i64);
     /// Runs an externally implemented action hook.
     fn action_hook(&mut self, hook: HookId);
+}
+
+/// Grammar-declared member state: numbered scalar and stack slots.
+///
+/// Recognition threads this by value along each speculative path (it is part
+/// of the parser's memo key), so it is ordered and compares structurally.
+/// Absent slots are not stored: a slot holding `0` is distinct from one never
+/// written, but an *emptied* stack is canonicalized back to absent so two
+/// logically identical paths stay `Eq` — and keep sharing memo entries.
+///
+/// Scalar and stack slot numbers live in separate namespaces; the generator
+/// assigns each declared member to one or the other.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct MemberEnv {
+    scalars: BTreeMap<usize, i64>,
+    stacks: BTreeMap<usize, Vec<i64>>,
+}
+
+impl MemberEnv {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            scalars: BTreeMap::new(),
+            stacks: BTreeMap::new(),
+        }
+    }
+
+    /// Builds an environment holding a grammar's declared initial scalar values.
+    ///
+    /// Grammars write `private bool verbatium = true;` / `private int level =
+    /// 1;`. Those initializers are part of the grammar's meaning: a predicate
+    /// reading a slot that silently started at 0 instead would reject input the
+    /// source grammar accepts. Generated recognizers seed with this so a fresh
+    /// recognizer — and every [`Self::reset_to_initial`] afterwards — starts
+    /// where the grammar says.
+    #[must_use]
+    pub fn with_initial_scalars(initial: impl IntoIterator<Item = (usize, i64)>) -> Self {
+        Self {
+            scalars: initial.into_iter().collect(),
+            stacks: BTreeMap::new(),
+        }
+    }
+
+    /// Clears all state back to the declared initial scalar values.
+    ///
+    /// This is what a recognizer reset needs: not "empty", but the state a
+    /// freshly constructed recognizer had. Stacks always reset to empty, since
+    /// a declaration cannot pre-seed one.
+    pub fn reset_to_initial(&mut self, initial: impl IntoIterator<Item = (usize, i64)>) {
+        self.scalars = initial.into_iter().collect();
+        self.stacks.clear();
+    }
+
+    /// Whether no slot has been written.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.scalars.is_empty() && self.stacks.is_empty()
+    }
+
+    /// Reads a scalar slot; `None` when never written.
+    #[must_use]
+    pub fn scalar(&self, member: usize) -> Option<i64> {
+        self.scalars.get(&member).copied()
+    }
+
+    /// Writes a scalar slot.
+    pub fn set_scalar(&mut self, member: usize, value: i64) {
+        self.scalars.insert(member, value);
+    }
+
+    /// Adds to a scalar slot (absent reads as `0`) and returns the new value.
+    pub fn add_scalar(&mut self, member: usize, delta: i64) -> i64 {
+        let value = self.scalars.entry(member).or_default();
+        *value = value.saturating_add(delta);
+        *value
+    }
+
+    /// Top of a stack slot; `None` when empty or never pushed.
+    #[must_use]
+    pub fn stack_top(&self, member: usize) -> Option<i64> {
+        self.stacks.get(&member)?.last().copied()
+    }
+
+    /// Depth of a stack slot; `0` when never pushed.
+    #[must_use]
+    pub fn stack_len(&self, member: usize) -> usize {
+        self.stacks.get(&member).map_or(0, Vec::len)
+    }
+
+    /// Pushes onto a stack slot.
+    pub fn push_stack(&mut self, member: usize, value: i64) {
+        self.stacks.entry(member).or_default().push(value);
+    }
+
+    /// Pops a stack slot, returning the removed value, or `None` when empty.
+    ///
+    /// An emptied stack drops its slot so it compares equal to one never
+    /// pushed — otherwise `push`-then-`pop` would produce a memo key that no
+    /// longer matches the equivalent untouched path.
+    pub fn pop_stack(&mut self, member: usize) -> Option<i64> {
+        let stack = self.stacks.get_mut(&member)?;
+        let value = stack.pop();
+        if stack.is_empty() {
+            self.stacks.remove(&member);
+        }
+        value
+    }
+
+    /// Iterates written scalar slots in slot order.
+    pub fn scalars(&self) -> impl Iterator<Item = (usize, i64)> + '_ {
+        self.scalars.iter().map(|(slot, value)| (*slot, *value))
+    }
 }
 
 /// Flat expression/statement arena with an interned string pool.
@@ -360,7 +528,16 @@ pub fn exec_stmt<C: ActContext>(ir: &SemIr, stmt: StmtId, ctx: &mut C) {
         AStmt::AddMember(member, delta) => {
             let delta = int_or_zero(eval_value(ir, *delta, ctx));
             let current = ctx.member(*member).unwrap_or_default();
-            ctx.set_member(*member, current + delta);
+            ctx.set_member(*member, current.saturating_add(delta));
+        }
+        AStmt::PushMember(member, value) => {
+            let value = int_or_zero(eval_value(ir, *value, ctx));
+            ctx.push_member(*member, value);
+        }
+        AStmt::PopMember(member) => {
+            // An unbalanced pop is a grammar bug, not a recognizer error: drop
+            // it rather than panicking inside prediction.
+            let _ = ctx.pop_member(*member);
         }
         AStmt::SetReturn(name, value) => {
             let value = int_or_zero(eval_value(ir, *value, ctx));
@@ -376,10 +553,17 @@ pub fn exec_stmt<C: ActContext>(ir: &SemIr, stmt: StmtId, ctx: &mut C) {
     }
 }
 
+/// Coerces a statement operand to the integer a member slot stores.
+///
+/// Slots are integers, so a boolean operand (`{ verbatium = false; }`,
+/// `interpolatedVerbatiums.Push(true)`) must survive the round trip through
+/// [`Value::truthy`]: `true` is 1 so reading the slot back is truthy, `false`
+/// is 0. Null has no value to store and becomes 0.
 const fn int_or_zero(value: Value) -> i64 {
     match value {
         Value::Int(value) => value,
-        Value::Null | Value::Bool(_) => 0,
+        Value::Bool(value) => value as i64,
+        Value::Null => 0,
     }
 }
 
@@ -396,6 +580,13 @@ fn eval_value<C: PredContext>(ir: &SemIr, expr: ExprId, ctx: &mut C) -> Value {
         PExpr::La(offset) => Value::Int(ctx.la(*offset)),
         PExpr::TokenIndexAdjacent => Value::Bool(ctx.token_index_adjacent()),
         PExpr::Member(member) => ctx.member(*member).map_or(Value::Null, Value::Int),
+        // An empty stack reads as Null (falsy), which is the grammar idiom
+        // `Count > 0 ? Peek() : false` without the guard.
+        PExpr::MemberTop(member) => ctx.member_top(*member).map_or(Value::Null, Value::Int),
+        // A never-pushed stack is empty, not absent, so depth is 0 not Null.
+        PExpr::MemberLen(member) => {
+            Value::Int(i64::try_from(ctx.member_len(*member)).unwrap_or(i64::MAX))
+        }
         PExpr::LocalArg => ctx.local_arg().map_or(Value::Null, Value::Int),
         PExpr::Column => ctx.column().map_or(Value::Null, Value::Int),
         PExpr::TokenStartColumn => ctx.token_start_column().map_or(Value::Null, Value::Int),
@@ -597,8 +788,8 @@ fn eval_arith<C: PredContext>(
 #[cfg(test)]
 mod tests {
     use super::{
-        AStmt, ActContext, ArithOp, CmpOp, ExprId, HookId, PExpr, PredContext, SemIr, eval_pred,
-        exec_stmt,
+        AStmt, ActContext, ArithOp, CmpOp, ExprId, HookId, MemberEnv, PExpr, PredContext, SemIr,
+        Value, eval_pred, eval_value, exec_stmt,
     };
     use std::collections::BTreeMap;
 
@@ -609,6 +800,7 @@ mod tests {
         adjacent: bool,
         ctx_rule_texts: BTreeMap<usize, String>,
         members: BTreeMap<usize, i64>,
+        stacks: MemberEnv,
         local_arg: Option<i64>,
         column: Option<i64>,
         token_start_column: Option<i64>,
@@ -646,6 +838,14 @@ mod tests {
             self.members.get(&member).copied()
         }
 
+        fn member_top(&self, member: usize) -> Option<i64> {
+            self.stacks.stack_top(member)
+        }
+
+        fn member_len(&self, member: usize) -> usize {
+            self.stacks.stack_len(member)
+        }
+
         fn local_arg(&self) -> Option<i64> {
             self.local_arg
         }
@@ -671,6 +871,14 @@ mod tests {
     impl ActContext for MockCtx {
         fn set_member(&mut self, member: usize, value: i64) {
             self.members.insert(member, value);
+        }
+
+        fn push_member(&mut self, member: usize, value: i64) {
+            self.stacks.push_stack(member, value);
+        }
+
+        fn pop_member(&mut self, member: usize) -> Option<i64> {
+            self.stacks.pop_stack(member)
         }
 
         fn set_return(&mut self, name: &str, value: i64) {
@@ -942,6 +1150,101 @@ mod tests {
 
         assert_eq!(ctx.members.get(&1), Some(&7));
         assert_eq!(ctx.returns.get("y"), Some(&7));
+    }
+
+    /// The C# interpolation idiom: `Push`/`Pop` a nesting stack and read its
+    /// top as a boolean guard. `MemberTop` on an empty stack must be falsy
+    /// rather than panic — the grammar writes
+    /// `Count > 0 ? Peek() : false` and relies on exactly that.
+    #[test]
+    fn stack_member_push_pop_and_empty_reads() {
+        let mut ir = SemIr::new();
+        let verbatium = ir.expr(PExpr::Bool(true));
+        let push_true = ir.stmt(AStmt::PushMember(0, verbatium));
+        let regular = ir.expr(PExpr::Bool(false));
+        let push_false = ir.stmt(AStmt::PushMember(0, regular));
+        let pop = ir.stmt(AStmt::PopMember(0));
+        let top = ir.expr(PExpr::MemberTop(0));
+        let depth = ir.expr(PExpr::MemberLen(0));
+
+        let mut ctx = MockCtx::default();
+
+        // Never pushed: top is Null (falsy), depth is 0.
+        assert!(!eval_pred(&ir, top, &mut ctx));
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(0));
+
+        exec_stmt(&ir, push_true, &mut ctx);
+        assert!(
+            eval_pred(&ir, top, &mut ctx),
+            "pushed true reads back truthy"
+        );
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(1));
+
+        // A `false` push must shadow the `true` beneath it, not vanish.
+        exec_stmt(&ir, push_false, &mut ctx);
+        assert!(!eval_pred(&ir, top, &mut ctx));
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(2));
+
+        // Popping restores the enclosing frame's value.
+        exec_stmt(&ir, pop, &mut ctx);
+        assert!(eval_pred(&ir, top, &mut ctx));
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(1));
+
+        exec_stmt(&ir, pop, &mut ctx);
+        assert_eq!(eval_value(&ir, top, &mut ctx), Value::Null);
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(0));
+
+        // Underflow is a defined no-op, not a panic.
+        exec_stmt(&ir, pop, &mut ctx);
+        assert_eq!(eval_value(&ir, top, &mut ctx), Value::Null);
+        assert_eq!(eval_value(&ir, depth, &mut ctx), Value::Int(0));
+    }
+
+    /// Slots hold integers, so a boolean assignment must round-trip through
+    /// truthiness — `{ verbatium = true; }` then `{ verbatium }?` passes.
+    #[test]
+    fn bool_member_assignment_round_trips_through_truthiness() {
+        let mut ir = SemIr::new();
+        let yes = ir.expr(PExpr::Bool(true));
+        let set_true = ir.stmt(AStmt::SetMember(3, yes));
+        let no = ir.expr(PExpr::Bool(false));
+        let set_false = ir.stmt(AStmt::SetMember(3, no));
+        let read = ir.expr(PExpr::Member(3));
+
+        let mut ctx = MockCtx::default();
+        exec_stmt(&ir, set_true, &mut ctx);
+        assert!(eval_pred(&ir, read, &mut ctx));
+        exec_stmt(&ir, set_false, &mut ctx);
+        assert!(!eval_pred(&ir, read, &mut ctx));
+    }
+
+    /// Emptying a stack must return the env to a state that compares equal to
+    /// one never pushed. The parser's memo key contains this env, so a
+    /// lingering empty `Vec` would silently stop matching equivalent paths.
+    #[test]
+    fn emptied_stack_slot_compares_equal_to_untouched_env() {
+        let mut env = MemberEnv::new();
+        env.push_stack(1, 7);
+        assert_ne!(env, MemberEnv::new());
+        assert_eq!(env.pop_stack(1), Some(7));
+        assert_eq!(env, MemberEnv::new(), "emptied stack must canonicalize");
+        assert!(env.is_empty());
+        // Underflow leaves it canonical too.
+        assert_eq!(env.pop_stack(1), None);
+        assert_eq!(env, MemberEnv::new());
+    }
+
+    /// Scalar and stack slots are separate namespaces: slot 0 as a counter and
+    /// slot 0 as a stack must not alias.
+    #[test]
+    fn scalar_and_stack_slots_do_not_alias() {
+        let mut env = MemberEnv::new();
+        env.set_scalar(0, 5);
+        env.push_stack(0, 9);
+        assert_eq!(env.scalar(0), Some(5));
+        assert_eq!(env.stack_top(0), Some(9));
+        assert_eq!(env.pop_stack(0), Some(9));
+        assert_eq!(env.scalar(0), Some(5), "popping a stack leaves scalars");
     }
 
     #[test]

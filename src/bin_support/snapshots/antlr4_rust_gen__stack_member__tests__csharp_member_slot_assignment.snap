@@ -1,0 +1,26 @@
+---
+source: src/bin_support/stack_member.rs
+expression: "slots.entries().collect::<Vec<_>>()"
+---
+[
+    (
+        "curlyLevels",
+        Stack,
+        1,
+    ),
+    (
+        "interpolatedStringLevel",
+        Int,
+        0,
+    ),
+    (
+        "interpolatedVerbatiums",
+        Stack,
+        0,
+    ),
+    (
+        "verbatium",
+        Int,
+        1,
+    ),
+]

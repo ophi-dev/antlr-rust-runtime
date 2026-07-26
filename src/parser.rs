@@ -87,7 +87,7 @@ use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::lexer::{LexerCustomAction, LexerLifecycleCtx, LexerSemCtx};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
+use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, MemberEnv, PExpr, SemIr, StmtId};
 use crate::token::{
     TOKEN_EOF, Token, TokenId, TokenSource, TokenSourceError, TokenSpec, TokenStore, TokenView,
 };
@@ -495,7 +495,7 @@ where
     context: Option<&'a ParserRuleContext>,
     tree: Option<ParseTree>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: &'a BTreeMap<usize, i64>,
+    member_values: &'a MemberEnv,
     action: Option<ParserAction>,
 }
 
@@ -614,7 +614,20 @@ where
     /// Integer member value observed on the current speculative path.
     #[must_use]
     pub fn member_int(&self, member: usize) -> Option<i64> {
-        self.member_values.get(&member).copied()
+        self.member_values.scalar(member)
+    }
+
+    /// Top of a stack-valued member slot on the current speculative path;
+    /// `None` when the stack is empty or was never pushed.
+    #[must_use]
+    pub fn member_stack_top(&self, member: usize) -> Option<i64> {
+        self.member_values.stack_top(member)
+    }
+
+    /// Depth of a stack-valued member slot on the current speculative path.
+    #[must_use]
+    pub fn member_stack_len(&self, member: usize) -> usize {
+        self.member_values.stack_len(member)
     }
 
     /// Parser action event being replayed, when this context belongs to an
@@ -1298,7 +1311,7 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     generated_sync_expected: Option<TokenBitSet>,
     generated_recovery_error_index: Option<usize>,
     generated_recovery_error_states: BTreeSet<isize>,
-    int_members: BTreeMap<usize, i64>,
+    int_members: MemberEnv,
     rule_context_stack: Vec<RuleContextFrame>,
     rule_context_version: usize,
     left_recursive_caller_overlap_cache:
@@ -1481,7 +1494,7 @@ struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     alt_number: usize,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     return_values: BTreeMap<String, i64>,
     diagnostics: DiagnosticSeqId,
     decisions: Vec<usize>,
@@ -3956,7 +3969,7 @@ where
 }
 
 struct ParserTableSemCtx<'a> {
-    member_values: &'a mut BTreeMap<usize, i64>,
+    member_values: &'a mut MemberEnv,
     return_values: &'a mut BTreeMap<String, i64>,
 }
 
@@ -3983,7 +3996,15 @@ impl semir::PredContext for ParserTableSemCtx<'_> {
     }
 
     fn member(&self, member: usize) -> Option<i64> {
-        Some(self.member_values.get(&member).copied().unwrap_or_default())
+        Some(self.member_values.scalar(member).unwrap_or_default())
+    }
+
+    fn member_top(&self, member: usize) -> Option<i64> {
+        self.member_values.stack_top(member)
+    }
+
+    fn member_len(&self, member: usize) -> usize {
+        self.member_values.stack_len(member)
     }
 
     fn local_arg(&self) -> Option<i64> {
@@ -4009,7 +4030,15 @@ impl semir::PredContext for ParserTableSemCtx<'_> {
 
 impl semir::ActContext for ParserTableSemCtx<'_> {
     fn set_member(&mut self, member: usize, value: i64) {
-        self.member_values.insert(member, value);
+        self.member_values.set_scalar(member, value);
+    }
+
+    fn push_member(&mut self, member: usize, value: i64) {
+        self.member_values.push_stack(member, value);
+    }
+
+    fn pop_member(&mut self, member: usize) -> Option<i64> {
+        self.member_values.pop_stack(member)
     }
 
     fn set_return(&mut self, name: &str, value: i64) {
@@ -4024,13 +4053,13 @@ fn apply_member_actions(
     source_state: usize,
     actions: &[ParserMemberAction],
     semantics: Option<&ParserSemantics>,
-    values: &mut BTreeMap<usize, i64>,
+    values: &mut MemberEnv,
 ) {
     for action in actions
         .iter()
         .filter(|action| action.source_state == source_state)
     {
-        *values.entry(action.member).or_default() += action.delta;
+        values.add_scalar(action.member, action.delta);
     }
     let Some(semantics) = semantics else {
         return;
@@ -4054,8 +4083,8 @@ fn member_values_after_action(
     source_state: usize,
     actions: &[ParserMemberAction],
     semantics: Option<&ParserSemantics>,
-    values: &BTreeMap<usize, i64>,
-) -> BTreeMap<usize, i64> {
+    values: &MemberEnv,
+) -> MemberEnv {
     let mut values = values.clone();
     apply_member_actions(source_state, actions, semantics, &mut values);
     values
@@ -4077,7 +4106,7 @@ fn return_values_after_action(
         values.insert(action.name.to_owned(), action.value);
     }
     if let Some(semantics) = semantics {
-        let mut member_values = BTreeMap::new();
+        let mut member_values = MemberEnv::new();
         let mut ctx = ParserTableSemCtx {
             member_values: &mut member_values,
             return_values: &mut values,
@@ -4119,7 +4148,7 @@ fn stop_outcome(
     index: usize,
     consumed_eof: bool,
     rule_alt_number: usize,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     return_values: BTreeMap<String, i64>,
 ) -> Vec<RecognizeOutcome> {
     vec![RecognizeOutcome {
@@ -4204,7 +4233,7 @@ struct RecognizeRequest<'a> {
     member_actions: &'a [ParserMemberAction],
     return_actions: &'a [ParserReturnAction],
     local_int_arg: Option<(usize, i64)>,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
@@ -4226,7 +4255,7 @@ struct RecognizeKey {
     rule_start_index: usize,
     decision_start_index: Option<usize>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
@@ -4282,7 +4311,7 @@ struct FastRecognizeTopRequest {
 struct FastPredicateContext<'a> {
     predicates: &'a [(usize, usize, ParserPredicate)],
     semantics: Option<&'a ParserSemantics>,
-    member_values: &'a BTreeMap<usize, i64>,
+    member_values: &'a MemberEnv,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -4577,7 +4606,7 @@ struct ChildRuleFailureRecovery<'a> {
     start_index: usize,
     follow_state: usize,
     stop_state: usize,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     expected: &'a ExpectedTokens,
 }
 
@@ -4591,7 +4620,7 @@ struct PredicateEval<'a> {
     semantics: Option<&'a ParserSemantics>,
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: &'a BTreeMap<usize, i64>,
+    member_values: &'a MemberEnv,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -4601,7 +4630,7 @@ struct ParserSemanticHookRequest<'a> {
     pred_index: usize,
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: &'a BTreeMap<usize, i64>,
+    member_values: &'a MemberEnv,
 }
 
 /// Predicate-evaluation context over the recognizer's speculative state.
@@ -4625,7 +4654,7 @@ where
     rule_name: Option<&'a str>,
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: &'a BTreeMap<usize, i64>,
+    member_values: &'a MemberEnv,
     invoked_predicates: &'a mut Vec<(usize, usize)>,
     /// Policy applied when a [`semir::PExpr::Hook`] node's user hook declines
     /// (`None`); keeps the fail-loud fallback chain identical to the legacy
@@ -4672,7 +4701,15 @@ where
     }
 
     fn member(&self, member: usize) -> Option<i64> {
-        Some(self.member_values.get(&member).copied().unwrap_or_default())
+        Some(self.member_values.scalar(member).unwrap_or_default())
+    }
+
+    fn member_top(&self, member: usize) -> Option<i64> {
+        self.member_values.stack_top(member)
+    }
+
+    fn member_len(&self, member: usize) -> usize {
+        self.member_values.stack_len(member)
     }
 
     fn local_arg(&self) -> Option<i64> {
@@ -4738,7 +4775,7 @@ struct PredicateFailureRecovery<'a> {
     rule_index: usize,
     index: usize,
     message: &'a str,
-    member_values: BTreeMap<usize, i64>,
+    member_values: MemberEnv,
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
 }
@@ -4951,7 +4988,7 @@ where
             generated_sync_expected: None,
             generated_recovery_error_index: None,
             generated_recovery_error_states: BTreeSet::new(),
-            int_members: BTreeMap::new(),
+            int_members: MemberEnv::new(),
             rule_context_stack: Vec::new(),
             rule_context_version: 0,
             left_recursive_caller_overlap_cache: std::array::from_fn(|_| None),
@@ -5411,30 +5448,66 @@ where
 
     /// Sets a generated integer member value used by target-template tests.
     pub fn set_int_member(&mut self, member: usize, value: i64) {
-        self.int_members.insert(member, value);
+        self.int_members.set_scalar(member, value);
     }
 
     /// Reads a generated integer member value.
     pub fn int_member(&self, member: usize) -> Option<i64> {
-        self.int_members.get(&member).copied()
+        self.int_members.scalar(member)
     }
 
-    /// Captures generated integer members before speculative generated parser
+    /// Pushes onto a generated stack-valued member slot (issue #206).
+    pub fn push_stack_member(&mut self, member: usize, value: i64) {
+        self.int_members.push_stack(member, value);
+    }
+
+    /// Pops a generated stack-valued member slot, returning the removed value.
+    /// `None` when the stack is empty.
+    pub fn pop_stack_member(&mut self, member: usize) -> Option<i64> {
+        self.int_members.pop_stack(member)
+    }
+
+    /// Reads the top of a generated stack-valued member slot; `None` when
+    /// empty or never pushed.
+    #[must_use]
+    pub fn stack_member_top(&self, member: usize) -> Option<i64> {
+        self.int_members.stack_top(member)
+    }
+
+    /// Depth of a generated stack-valued member slot.
+    #[must_use]
+    pub fn stack_member_len(&self, member: usize) -> usize {
+        self.int_members.stack_len(member)
+    }
+
+    /// Seeds grammar-declared initial member values (issue #206).
+    ///
+    /// Generated parsers call this at construction for a grammar whose
+    /// `@members` declares an initializer (`private int level = 1;`). Without
+    /// it the slot would start at 0, so a predicate reading it would reject
+    /// input the source grammar accepts.
+    pub fn set_initial_members(&mut self, initial: impl IntoIterator<Item = (usize, i64)>) {
+        self.int_members = MemberEnv::with_initial_scalars(initial);
+    }
+
+    /// Captures generated member state before speculative generated parser
     /// execution.
-    pub fn int_members_checkpoint(&self) -> BTreeMap<usize, i64> {
+    ///
+    /// The snapshot covers scalar *and* stack slots: restoring only scalars
+    /// would leave a rolled-back path's pushes behind.
+    #[must_use]
+    pub fn int_members_checkpoint(&self) -> MemberEnv {
         self.int_members.clone()
     }
 
-    /// Restores generated integer members after generated parser fallback.
-    pub fn restore_int_members(&mut self, members: BTreeMap<usize, i64>) {
+    /// Restores generated member state after generated parser fallback.
+    pub fn restore_int_members(&mut self, members: MemberEnv) {
         self.int_members = members;
     }
 
     /// Adds `delta` to a generated integer member and returns the new value.
     pub fn add_int_member(&mut self, member: usize, delta: i64) -> i64 {
-        let value = self.int_members.entry(member).or_default();
-        *value += delta;
-        *value
+        self.int_members.add_scalar(member, delta)
     }
 
     fn token_type_for_id(&self, id: TokenId) -> i32 {
@@ -7988,7 +8061,7 @@ where
         rule_index: usize,
         start_index: usize,
         sync_symbols: &BTreeSet<i32>,
-        member_values: BTreeMap<usize, i64>,
+        member_values: MemberEnv,
         expected: &ExpectedTokens,
     ) -> Option<RecognizeOutcome> {
         let (error_index, message) = self.expected_error_message(rule_index, start_index, expected);
@@ -11590,7 +11663,7 @@ where
                 if *modulus == 0 {
                     return false;
                 }
-                let actual = member_values.get(member).copied().unwrap_or_default() % *modulus;
+                let actual = member_values.scalar(*member).unwrap_or_default() % *modulus;
                 (actual == *value) == *equals
             }
             ParserPredicate::MemberEquals {
@@ -11598,7 +11671,7 @@ where
                 value,
                 equals,
             } => {
-                let actual = member_values.get(member).copied().unwrap_or_default();
+                let actual = member_values.scalar(*member).unwrap_or_default();
                 (actual == *value) == *equals
             }
         }
@@ -17650,6 +17723,55 @@ mod tests {
         assert_eq!(parser.node(tree).text(), "xy");
     }
 
+    /// Stack-valued member statements must execute on the parser's speculative
+    /// replay path, not just the lexer's committed one (issue #206). This drives
+    /// `apply_member_actions` -> `ParserTableSemCtx` -> `MemberEnv` directly,
+    /// which is the path a generated parser's `@members` stack state takes.
+    #[test]
+    fn parser_speculative_replay_threads_stack_member_state() {
+        let mut ir = SemIr::new();
+        let one = ir.expr(PExpr::Int(1));
+        let push = ir.stmt(AStmt::PushMember(0, one));
+        let pop = ir.stmt(AStmt::PopMember(0));
+        let semantics = ParserSemantics {
+            ir,
+            predicates: Vec::new(),
+            actions: vec![
+                ParserSemanticAction {
+                    source_state: 1,
+                    rule_index: usize::MAX,
+                    stmt: push,
+                    speculative: true,
+                },
+                ParserSemanticAction {
+                    source_state: 2,
+                    rule_index: usize::MAX,
+                    stmt: pop,
+                    speculative: true,
+                },
+            ],
+        };
+
+        // Replaying the push state must be visible to a later read...
+        let pushed = member_values_after_action(1, &[], Some(&semantics), &MemberEnv::new());
+        assert_eq!(pushed.stack_top(0), Some(1));
+        assert_eq!(pushed.stack_len(0), 1);
+
+        // ...and must not mutate the caller's env: speculative paths are
+        // path-local, so an abandoned branch cannot leak state to its sibling.
+        assert_eq!(MemberEnv::new().stack_len(0), 0);
+
+        // Replaying the pop state restores the empty, canonical env, so the
+        // resulting memo key matches an equivalent untouched path.
+        let popped = member_values_after_action(2, &[], Some(&semantics), &pushed);
+        assert_eq!(popped.stack_top(0), None);
+        assert_eq!(popped, MemberEnv::new(), "emptied stack must canonicalize");
+
+        // An unbalanced pop is a defined no-op rather than a panic.
+        let underflowed = member_values_after_action(2, &[], Some(&semantics), &MemberEnv::new());
+        assert_eq!(underflowed, MemberEnv::new());
+    }
+
     /// Hooks that decline (`None`) must fall through to the configured policy
     /// even when the coordinate carries a [`semir`] `Hook` node, matching the
     /// legacy table path. Regression for the `unwrap_or(false)` that silently
@@ -18666,7 +18788,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
@@ -18690,7 +18812,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
@@ -18717,7 +18839,7 @@ mod tests {
             index: 7,
             consumed_eof: false,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: DiagnosticSeqId::EMPTY,
             decisions: vec![1, 0],
@@ -18772,7 +18894,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
@@ -18783,7 +18905,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
@@ -18809,7 +18931,7 @@ mod tests {
             index: 2,
             consumed_eof: true,
             alt_number: 0,
-            member_values: BTreeMap::new(),
+            member_values: MemberEnv::new(),
             return_values: BTreeMap::new(),
             diagnostics: recovered_diagnostics,
             decisions: vec![0],

@@ -340,9 +340,10 @@ boundary is:
   column predicates, and the upstream testsuite's action templates) — are
   translated into SemIR by `antlr4-rust-gen`.
 - **User pattern files** — `--sem-patterns file.toml` can add exact predicate
-  rewrites, helper-call rewrites, and per-coordinate `hook` /
-  `assume-true` / `assume-false` / `error` dispositions without changing the
-  generator.
+  rewrites, helper-call rewrites, grammar-declared member state (see
+  [Inline `@members` State](#inline-members-state-scalars-and-stacks) below),
+  and per-coordinate `hook` / `assume-true` / `assume-false` / `error`
+  dispositions without changing the generator.
 - **Everything else is not silently guessed.** Each generator run writes a
   `semantics.json` manifest next to the generated modules listing every
   predicate/action coordinate with its grammar source span, body, and
@@ -433,6 +434,95 @@ checked-in Rust lexer/parser base modules and strict build commands; see
 Use `--require-full-semantics` in CI when every coordinate and target extension
 option must be either translated, metadata-backed, or explicitly hooked;
 policy fallbacks and unsupported options fail generation.
+
+#### Inline `@members` State: Scalars and Stacks
+
+Many published grammars keep their lexer state **inline** in `@lexer::members`
+rather than externalizing it into a `superClass` — a nesting counter plus a
+stack or two, mutated from inline actions and read from inline predicates. The
+C# interpolated-string lexers are the motivating case, but the shape is common
+(JavaScript/TypeScript template literals, any grammar with a mode stack).
+
+SemIR models this state directly, so such a grammar needs **no hand-written
+hooks**. A pattern file declares the slot inventory and maps each inline body:
+
+```toml
+[[member]]
+name = "interpolatedStringLevel"
+kind = "int"                       # `bool` is an alias: slots store integers
+
+[[member]]
+name = "verbatium"
+kind = "bool"
+init = true                        # the grammar's `bool verbatium = true;`
+
+[[member]]
+name = "interpolatedVerbatiums"
+kind = "stack"
+
+[[pattern]]
+match = "interpolatedStringLevel++; interpolatedVerbatiums.Push(true); verbatium = true;"
+lower = "seq(add_member(interpolatedStringLevel, int(1)), push_member(interpolatedVerbatiums, bool(true)), set_member(verbatium, bool(true)))"
+
+[[pattern]]
+match = "!verbatium"
+lower = "not(member(verbatium))"
+```
+
+Declaring the slots keeps codegen out of the business of parsing host-language
+fragments: the generator still only matches whole declared bodies, and the
+*mapping* is user-owned data. Declaration order fixes slot numbering, and
+scalar and stack slots are numbered in separate namespaces. An unknown or
+mistyped slot name is a codegen error naming the slot, never a silently
+mis-numbered one.
+
+`init` carries a scalar slot's **declared initial value**. Slots otherwise start
+at 0, so a grammar writing `private bool enabled = true;` and guarding a rule
+with `{ enabled }?` would reject input it should accept — while the manifest
+still reported the coordinate as `translated`. Declaring `init` seeds the slot
+at construction (on the lexer *and* the parser) and restores it on every reset.
+It is metadata rather than something parsed out of the host-language
+declaration; stacks cannot take one (their initial contents are not a single
+scalar) and are rejected if they try.
+
+`scope = "lexer" | "parser" | "both"` (default `both`) selects which
+recognizer's inventory a declaration joins. A combined grammar may legally
+declare independent `@lexer::members` and `@parser::members`, including
+same-named ones with different kinds and initializers; each recognizer numbers
+its own slots and holds its own member state at runtime, so the two never
+collide. Duplicates are still rejected *within* one recognizer's inventory.
+
+Two `[[pattern]]` entries matching the same body is an error naming both IDs,
+for predicates and actions alike — otherwise reordering the pattern file would
+silently change runtime behavior.
+
+The `lower` DSL is a constructor syntax for the IR, not an expression language:
+`member(N)`, `member_top(N)`, `member_len(N)`, `int(N)`, `bool(b)`, `not(e)`,
+`set_member`, `add_member`, `push_member`, `pop_member`, and `seq(...)` for the
+compound bodies real grammars write. (A bare `lower = "bool(false)"` remains the
+constant-false predicate template it has always been; literals mean member
+state only inside a member expression or statement.)
+
+**Empty-stack semantics are defined, not errors** — grammars rely on this:
+
+| Operation | On an empty or never-pushed stack |
+|---|---|
+| `member_top(s)` | `Null`, which is **falsy** — exactly the `Count > 0 ? Peek() : false` idiom, so the guard needs no explicit depth check |
+| `member_len(s)` | `0`, not Null: a never-used stack is empty, not absent |
+| `pop_member(s)` | a no-op — an unbalanced pop is a grammar bug, and panicking inside speculative prediction would turn it into a crash |
+
+Lexer member state is cleared by `reset()` and by replacing the input stream, so
+a reused lexer never carries interpolation depth into the next input. Parser
+member state is path-local and participates in the memo key, so speculative
+paths never observe each other's mutations.
+
+A worked example — the C# interpolated-string lexer, generated with
+`--sem-unknown error --require-full-semantics` (i.e. zero hooks and zero policy
+fallbacks) and validated token-for-token against an ANTLR 4.13.2 **Java** lexer
+built from the same grammar — lives in
+[`tests/fixtures/antlr4-rust-gen/stack-member-lexer/`](tests/fixtures/antlr4-rust-gen/stack-member-lexer/)
+with its integration test (`inline_lexer_member_stacks_generate_without_hooks`
+in [tests/antlr4_rust_gen_cli.rs](tests/antlr4_rust_gen_cli.rs)).
 
 #### Embedded target-language actions are not portable — including in official ANTLR
 

@@ -32,6 +32,8 @@ mod embedded;
 mod grammar;
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
+#[path = "../bin_support/stack_member.rs"]
+mod stack_member;
 #[path = "../bin_support/templates.rs"]
 mod templates;
 
@@ -503,6 +505,25 @@ struct SemPatternFile {
     patterns: Vec<SemPatternRule>,
     helpers: Vec<SemHelperRule>,
     coordinates: Vec<SemCoordinateOverride>,
+    /// `[[member]]` slot inventory backing the `stack_member` lowerings
+    /// (issue #206). Declaration order fixes slot numbering.
+    members: Vec<stack_member::MemberDeclaration>,
+}
+
+impl SemPatternFile {
+    /// Slot numbers for the members visible to one recognizer, or an error
+    /// naming a duplicate.
+    ///
+    /// Lexer and parser inventories are separate: a combined grammar may
+    /// declare independent `@lexer::members` and `@parser::members`, including
+    /// same-named ones with different kinds or initial values, and the two
+    /// recognizers hold separate member environments at runtime.
+    fn member_slots_for(
+        &self,
+        recognizer: stack_member::MemberScope,
+    ) -> io::Result<stack_member::MemberSlots> {
+        stack_member::MemberSlots::assign_scoped(&self.members, recognizer)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -590,10 +611,57 @@ impl SemPatternFile {
                 ),
             ));
         }
-        matches
-            .first()
-            .map(|(_, lower)| parse_pattern_lower(lower))
-            .transpose()
+        let Some((_, lower)) = matches.first() else {
+            return Ok(None);
+        };
+        // Member lowerings resolve slot names against the `[[member]]`
+        // inventory for *this* recognizer, so they are tried before the
+        // slot-free built-in shapes.
+        let slots = self.member_slots_for(member_scope_for_kind(kind))?;
+        if let Some(expr) = stack_member::parse_member_expr(lower, &slots) {
+            return Ok(Some(PredicateTemplate::MemberExpr(expr?)));
+        }
+        parse_pattern_lower(lower).map(Some)
+    }
+
+    /// Resolves an inline lexer-action body to a lowered member statement.
+    ///
+    /// `None` means no `[[pattern]]` entry matched this body, leaving the
+    /// caller's existing helper-hook and unsupported-action handling in place.
+    ///
+    /// Two entries matching one body is an error, not a first-wins pick: they
+    /// lower to different mutations, so silently taking the first would make
+    /// merely reordering the pattern file change runtime behavior. This mirrors
+    /// [`Self::predicate_template`]'s ambiguity check.
+    fn member_action_stmt(
+        &self,
+        kind: SemanticsKind,
+        body: &str,
+    ) -> io::Result<Option<stack_member::MemberStmt>> {
+        let body = normalize_action_match_body(body);
+        let matches = self
+            .patterns
+            .iter()
+            .filter(|pattern| normalize_action_match_body(&pattern.match_body) == body)
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "ambiguous semantic patterns for {body:?}: {}",
+                    matches
+                        .iter()
+                        .map(|pattern| pattern.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+        let Some(pattern) = matches.first() else {
+            return Ok(None);
+        };
+        let slots = self.member_slots_for(member_scope_for_kind(kind))?;
+        stack_member::parse_member_stmt(&pattern.lower, &slots).transpose()
     }
 
     fn hook_helper_call(
@@ -671,6 +739,52 @@ impl SemPatternFile {
                     .is_none_or(|expected| atn_state == Some(expected))
         })
     }
+}
+
+/// Which member inventory a coordinate kind reads.
+///
+/// A combined grammar's lexer and parser members are independent, so each
+/// recognizer's coordinates resolve slot names against its own inventory.
+const fn member_scope_for_kind(kind: SemanticsKind) -> stack_member::MemberScope {
+    match kind {
+        SemanticsKind::LexerPredicate | SemanticsKind::LexerAction => {
+            stack_member::MemberScope::Lexer
+        }
+        SemanticsKind::ParserPredicate | SemanticsKind::ParserAction => {
+            stack_member::MemberScope::Parser
+        }
+    }
+}
+
+/// Parses a `[[member]]` `init` value. Booleans are accepted because grammars
+/// declare `bool` members; slots store integers, so `true` seeds 1.
+fn parse_member_init_field(value: &str) -> io::Result<i64> {
+    match value.trim() {
+        "true" => Ok(1),
+        "false" => Ok(0),
+        other => other.parse::<i64>().map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid member init value {other:?}: {error}"),
+            )
+        }),
+    }
+}
+
+/// Canonical form of an action `match` body.
+///
+/// Actions carry the grammar's statement terminator, so one optional trailing
+/// `;` is not part of the body — this matches what
+/// [`parse_semantic_helper_call`] has always done for action bodies, so the two
+/// matchers agree on whether a pattern applies.
+///
+/// Exactly one `;` is removed, not a run of them: stripping repeatedly would
+/// collapse `x;` and `x;;` onto one body, merging two distinct declared
+/// patterns (or manufacturing an ambiguity error between them). Any other
+/// spelling difference stays significant, so matching remains whole-body.
+fn normalize_action_match_body(body: &str) -> &str {
+    let body = body.trim();
+    body.strip_suffix(';').unwrap_or(body).trim_end()
 }
 
 fn semantic_helper_kind_matches(helper: &SemHelperRule, kind: SemanticsKind) -> bool {
@@ -1137,7 +1251,12 @@ fn collect_lexer_semantics(
                     )
                     .unwrap_or_else(|| match template {
                         Some(ActionTemplate::Hook(_)) => SemanticsDisposition::Hooked,
-                        Some(ActionTemplate::LexerPopMode) => SemanticsDisposition::Translated,
+                        // A lowered member mutation is fully translated: it
+                        // becomes a `LexerSemantics` table entry, so it needs
+                        // neither a hook nor a policy fallback.
+                        Some(ActionTemplate::LexerPopMode | ActionTemplate::MemberStmt(_)) => {
+                            SemanticsDisposition::Translated
+                        }
                         Some(ActionTemplate::UnsupportedLexerAction { .. }) | None => {
                             policy.unknown_action_disposition()
                         }
@@ -1146,8 +1265,11 @@ fn collect_lexer_semantics(
             template: if embedded {
                 Some("Embedded".to_owned())
             } else {
-                matches!(template, Some(ActionTemplate::LexerPopMode))
-                    .then(|| format!("{:?}", template.expect("matched template")))
+                matches!(
+                    template,
+                    Some(ActionTemplate::LexerPopMode | ActionTemplate::MemberStmt(_))
+                )
+                .then(|| format!("{:?}", template.expect("matched template")))
             },
         });
     }
@@ -1340,15 +1462,22 @@ fn structural_lexer_action_templates(
                 .map_or("<unknown>", String::as_str);
             let template = match parse_lexer_action_block_template(&action.body) {
                 Some(template) => template,
-                None => patterns
-                    .hook_helper_call(SemanticsKind::LexerAction, &action.body)?
-                    .map_or_else(
-                        || ActionTemplate::UnsupportedLexerAction {
-                            rule_name: rule_name.to_owned(),
-                            body: one_line_action_body(&action.body),
-                        },
-                        ActionTemplate::Hook,
-                    ),
+                // A `stack_member` pattern lowers the body into SemIR, so the
+                // grammar needs no hand-written hook for it.
+                None => {
+                    match patterns.member_action_stmt(SemanticsKind::LexerAction, &action.body)? {
+                        Some(stmt) => ActionTemplate::MemberStmt(stmt),
+                        None => patterns
+                            .hook_helper_call(SemanticsKind::LexerAction, &action.body)?
+                            .map_or_else(
+                                || ActionTemplate::UnsupportedLexerAction {
+                                    rule_name: rule_name.to_owned(),
+                                    body: one_line_action_body(&action.body),
+                                },
+                                ActionTemplate::Hook,
+                            ),
+                    }
+                }
             };
             Ok((
                 (
@@ -1663,6 +1792,7 @@ enum PatternSection {
     Pattern,
     Helper,
     Coordinate,
+    Member,
 }
 
 fn parse_pattern_section(line: &str) -> Option<PatternSection> {
@@ -1670,6 +1800,7 @@ fn parse_pattern_section(line: &str) -> Option<PatternSection> {
         "[[pattern]]" => Some(PatternSection::Pattern),
         "[[helper]]" => Some(PatternSection::Helper),
         "[[coordinate]]" => Some(PatternSection::Coordinate),
+        "[[member]]" => Some(PatternSection::Member),
         _ => None,
     }
 }
@@ -1732,6 +1863,26 @@ fn flush_pattern_section(
                 name: take_required_field(fields, "name")?,
                 arguments,
                 lower: take_required_field(fields, "lower")?,
+            });
+        }
+        PatternSection::Member => {
+            file.members.push(stack_member::MemberDeclaration {
+                name: take_required_field(fields, "name")?,
+                kind: stack_member::MemberKind::parse(&take_required_field(fields, "kind")?)?,
+                // Defaults to `both`, so single-recognizer grammars (and every
+                // pattern file written before scoping existed) need no `scope`.
+                scope: fields
+                    .remove("scope")
+                    .map_or(Ok(stack_member::MemberScope::Both), |value| {
+                        stack_member::MemberScope::parse(&value)
+                    })?,
+                // A grammar's declared initializer (`bool verbatium = true;`)
+                // is metadata here rather than something parsed out of the
+                // host-language declaration.
+                init: fields
+                    .remove("init")
+                    .map(|value| parse_member_init_field(&value))
+                    .transpose()?,
             });
         }
         PatternSection::Coordinate => {
@@ -3075,6 +3226,22 @@ fn render_lexer(
     } else {
         render_lexer_predicate_method(&predicates, sem_unknown)
     };
+    // Member-state coordinates (issue #206) evaluate from a `SemIR` table
+    // rather than inline Rust, so they need no hand-written hook.
+    let lexer_semantics_function = if embedded {
+        String::new()
+    } else {
+        render_lexer_semantics_function(&predicates, &actions)
+    };
+    // A grammar-declared initializer (`private bool verbatium = true;`) must
+    // seed its slot, or a predicate reading it would reject input the source
+    // grammar accepts. `with_initial_members` also retains the values so every
+    // reset restores them instead of zeroing.
+    let lexer_member_inits =
+        match render_member_init_seeds(patterns, stack_member::MemberScope::Lexer)? {
+            seeds if embedded || seeds.is_empty() => String::new(),
+            seeds => format!(".with_initial_members({seeds})"),
+        };
     let has_predicate_dispatch = if embedded {
         !embedded_lexer_predicates.is_empty()
     } else {
@@ -3171,7 +3338,7 @@ fn lexer_dfa() -> &'static CompiledLexerDfa {{
             .unwrap_or_else(|| CompiledLexerDfa::compile(atn()))
     }})
 }}
-
+{lexer_semantics_function}
 #[derive(Clone, Debug)]
 pub struct {type_name}<I, H = antlr4_runtime::NoSemanticHooks>
 where
@@ -3199,7 +3366,7 @@ where
     pub fn with_hooks(input: I, hooks: H) -> Self {{
         let grammar_metadata = metadata();
         let data = grammar_metadata.recognizer_data();
-        Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()), hooks }}
+        Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()){lexer_member_inits}, hooks }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -9653,7 +9820,16 @@ fn render_parser_with_options(
         },
     );
     let parse_convenience = render_parser_parse_convenience(&type_name);
-    let base_initialization = render_parser_base_initialization(unknown_policy_literal);
+    // A grammar-declared `@members` initializer must seed the parser too, or a
+    // predicate reading the slot would observe 0 and reject input the source
+    // grammar accepts (issue #206 review).
+    let parser_member_seeds = if options.embedded {
+        String::new()
+    } else {
+        render_member_init_seeds(patterns, stack_member::MemberScope::Parser)?
+    };
+    let base_initialization =
+        render_parser_base_initialization(unknown_policy_literal, &parser_member_seeds);
     let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
     let entry_rule_indices = likely_parser_entry_rule_indices(data)?;
     let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
@@ -10042,7 +10218,14 @@ where
 enum ActionTemplate {
     LexerPopMode,
     Hook(SemanticHelperCall),
-    UnsupportedLexerAction { rule_name: String, body: String },
+    /// Mutation of grammar-declared member state, lowered from a
+    /// `stack_member` pattern (issue #206). Emitted as a `LexerSemantics`
+    /// table entry rather than inline Rust, so it needs no hook.
+    MemberStmt(stack_member::MemberStmt),
+    UnsupportedLexerAction {
+        rule_name: String,
+        body: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10099,6 +10282,9 @@ enum PredicateTemplate {
         rule_name: String,
         text: String,
     },
+    /// A predicate over grammar-declared member state, lowered from a
+    /// `stack_member` pattern (issue #206).
+    MemberExpr(stack_member::MemberExpr),
 }
 
 fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
@@ -10118,6 +10304,12 @@ fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
             | PredicateTemplate::LookaheadNotEquals { .. }
             | PredicateTemplate::TokenPairAdjacent
             | PredicateTemplate::ContextChildRuleTextNotEquals { .. }
+            // Member-state predicates lower into `parser_semantics()`, and the
+            // generated predicate step reads member state off the parser
+            // (`parser_semantic_ir_predicate_matches_with_context_and_local`),
+            // so they are generatable. Omitting them forced every rule holding
+            // one onto the 5-6x slower interpreter (the issue #209 cascade).
+            | PredicateTemplate::MemberExpr(_)
     )
 }
 
@@ -10817,7 +11009,9 @@ fn lexer_actions_need_dispatch(actions: &[((i32, i32), ActionTemplate)]) -> bool
 fn lexer_action_template_needs_dispatch(template: &ActionTemplate) -> bool {
     match template {
         ActionTemplate::Hook(_) | ActionTemplate::UnsupportedLexerAction { .. } => false,
-        ActionTemplate::LexerPopMode => !render_lexer_action_statement(template).is_empty(),
+        ActionTemplate::LexerPopMode | ActionTemplate::MemberStmt(_) => {
+            !render_lexer_action_statement(template).is_empty()
+        }
     }
 }
 
@@ -10825,6 +11019,11 @@ fn lexer_action_template_needs_dispatch(template: &ActionTemplate) -> bool {
 fn render_lexer_action_statement(template: &ActionTemplate) -> String {
     match template {
         ActionTemplate::LexerPopMode => "_base.pop_mode();".to_owned(),
+        // Member mutations live in the `SemIR` table, so the dispatch arm just
+        // executes the table entry for this coordinate.
+        ActionTemplate::MemberStmt(_) => {
+            "let _ = lexer_semantics().exec_action(_base, action);".to_owned()
+        }
         ActionTemplate::Hook(_) => String::new(),
         ActionTemplate::UnsupportedLexerAction { rule_name, body } => {
             render_unsupported_lexer_action_comment(rule_name, body)
@@ -10900,6 +11099,12 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         }
         PredicateTemplate::ColumnGreaterOrEqual(value) => {
             format!("_base.column_at(predicate.position()) >= {value}")
+        }
+        // Member predicates evaluate from the `SemIR` table. The coordinate is
+        // present there by construction, so `unwrap_or(false)` is unreachable
+        // rather than a silent default.
+        PredicateTemplate::MemberExpr(_) => {
+            "lexer_semantics().eval_predicate(_base, predicate).unwrap_or(false)".to_owned()
         }
         PredicateTemplate::Hook
         | PredicateTemplate::UnknownWithFailMessage { .. }
@@ -11258,6 +11463,93 @@ fn render_parser_semantics_function(
 }}
 "#
     ))
+}
+
+/// Renders the declared member initial values as a `[(slot, value), ...]`
+/// literal, or an empty string when the inventory declares none (which keeps
+/// every other grammar's generated output byte-identical).
+///
+/// Both recognizers seed from this: the lexer through
+/// `BaseLexer::with_initial_members`, the parser through
+/// `BaseParser::set_initial_members`. A parser predicate reading a slot that
+/// silently started at 0 would reject input the source grammar accepts, exactly
+/// as on the lexer side.
+fn render_member_init_seeds(
+    patterns: &SemPatternFile,
+    recognizer: stack_member::MemberScope,
+) -> io::Result<String> {
+    let slots = patterns.member_slots_for(recognizer)?;
+    let seeds = slots
+        .scalar_inits()
+        .map(|(slot, value)| format!("({slot}, {value})"))
+        .collect::<Vec<_>>();
+    if seeds.is_empty() {
+        return Ok(String::new());
+    }
+    Ok(format!("[{}]", seeds.join(", ")))
+}
+
+/// Whether any coordinate lowered into the lexer `SemIR` table.
+fn has_lexer_semantics(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    actions: &[((i32, i32), ActionTemplate)],
+) -> bool {
+    predicates
+        .iter()
+        .any(|(_, template)| matches!(template, PredicateTemplate::MemberExpr(_)))
+        || actions
+            .iter()
+            .any(|(_, template)| matches!(template, ActionTemplate::MemberStmt(_)))
+}
+
+/// Renders the generated lexer's `SemIR` table for member-state coordinates
+/// (issue #206), mirroring `parser_semantics()`.
+fn render_lexer_semantics_function(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    actions: &[((i32, i32), ActionTemplate)],
+) -> String {
+    if !has_lexer_semantics(predicates, actions) {
+        return String::new();
+    }
+    let mut body = String::new();
+    let mut next = 0;
+    for ((rule_index, pred_index), template) in predicates {
+        let PredicateTemplate::MemberExpr(expr) = template else {
+            continue;
+        };
+        let root = stack_member::render_member_expr(expr, &mut body, &mut next);
+        writeln!(
+            body,
+            "        predicates.push(antlr4_runtime::LexerSemanticPredicate {{ rule_index: {rule_index}, pred_index: {pred_index}, expr: {root} }});"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    for ((rule_index, action_index), template) in actions {
+        let ActionTemplate::MemberStmt(stmt) = template else {
+            continue;
+        };
+        let root = stack_member::render_member_stmt(stmt, &mut body, &mut next);
+        writeln!(
+            body,
+            "        actions.push(antlr4_runtime::LexerSemanticAction {{ rule_index: {rule_index}, action_index: {action_index}, stmt: {root} }});"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    // Owns its surrounding blank lines so an empty render leaves the module
+    // byte-identical to one generated before this table existed.
+    format!(
+        r#"
+fn lexer_semantics() -> &'static antlr4_runtime::LexerSemantics {{
+    static SEMANTICS_CELL: OnceLock<antlr4_runtime::LexerSemantics> = OnceLock::new();
+    SEMANTICS_CELL.get_or_init(|| {{
+        let mut ir = antlr4_runtime::semir::SemIr::new();
+        let mut predicates = Vec::new();
+        let mut actions = Vec::new();
+{body}        antlr4_runtime::LexerSemantics {{ ir, predicates, actions }}
+    }})
+}}
+"#
+    )
 }
 
 fn lexer_typed_hook_mappings(
@@ -11814,6 +12106,16 @@ fn render_parser_semir_predicate_expr(
                 rust_string(text)
             ))
         }
+        // Parsers declare `@members` too, so member-state predicates lower
+        // here as well as in the lexer (issue #206).
+        PredicateTemplate::MemberExpr(expr) => {
+            let mut body = String::new();
+            let mut next = 0;
+            let root = stack_member::render_member_expr(expr, &mut body, &mut next);
+            // The renderer emits `let` bindings, so wrap them in a block
+            // expression that evaluates to the root id.
+            Ok(format!("{{ {} {root} }}", body.trim()))
+        }
         PredicateTemplate::TextEquals(_)
         | PredicateTemplate::TokenStartColumnEquals(_)
         | PredicateTemplate::ColumnLessThan(_)
@@ -11882,6 +12184,14 @@ fn render_parser_predicate_array(
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "column predicates are only supported for lexer predicates",
+                ));
+            }
+            // The closed legacy enum has no member-expression encoding; stack
+            // members are a SemIR-only capability by design.
+            PredicateTemplate::MemberExpr(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "member-state predicates lower only through SemIR",
                 ));
             }
             PredicateTemplate::LookaheadTextEquals { offset, text } => {
@@ -11955,8 +12265,16 @@ fn render_parser_rule_arg_array(args: &[(usize, usize, RuleArgTemplate)]) -> Str
 /// installs it on the `BaseParser` so the generated recursive-descent path
 /// (which evaluates predicates without going through `ParserRuntimeOptions`)
 /// honors `--sem-unknown` too, rather than leaving the field at `AssumeTrue`.
-fn render_parser_base_initialization(unknown_policy_literal: Option<&str>) -> String {
-    let needs_mut = unknown_policy_literal.is_some();
+///
+/// `member_seeds` carries a grammar's declared `@members` initial values
+/// (issue #206). Parsers need this for the same reason lexers do: a predicate
+/// reading a slot that silently started at 0 would reject input the source
+/// grammar accepts.
+fn render_parser_base_initialization(
+    unknown_policy_literal: Option<&str>,
+    member_seeds: &str,
+) -> String {
+    let needs_mut = unknown_policy_literal.is_some() || !member_seeds.is_empty();
     let mut out = if needs_mut {
         "        let mut base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     } else {
@@ -11968,6 +12286,10 @@ fn render_parser_base_initialization(unknown_policy_literal: Option<&str>) -> St
             "\n        base.set_unknown_predicate_policy({policy});"
         )
         .expect("writing to a string cannot fail");
+    }
+    if !member_seeds.is_empty() {
+        write!(out, "\n        base.set_initial_members({member_seeds});")
+            .expect("writing to a string cannot fail");
     }
     out
 }
@@ -15696,6 +16018,84 @@ lower = "bool(false)"
             .expect("pattern lookup should not fail")
             .expect("the '#'-bearing match body must be retained");
         assert_eq!(template, PredicateTemplate::False);
+    }
+
+    /// Two `[[pattern]]` entries matching one action body must be an error, not
+    /// a first-wins pick: they lower to different mutations, so silently taking
+    /// the first would make merely reordering the pattern file change runtime
+    /// behavior. Predicate matching already rejects this; actions now match.
+    #[test]
+    fn ambiguous_member_action_patterns_are_rejected() {
+        let patterns = parse_sem_patterns(
+            r#"
+[[member]]
+name = "depths"
+kind = "stack"
+
+[[member]]
+name = "other"
+kind = "stack"
+
+[[pattern]]
+id = "first"
+match = "depths.Push(1);"
+lower = "push_member(depths, int(1))"
+
+[[pattern]]
+id = "second"
+match = "depths.Push(1);"
+lower = "push_member(other, int(99))"
+"#,
+        )
+        .expect("pattern file parses");
+
+        let error = patterns
+            .member_action_stmt(SemanticsKind::LexerAction, "depths.Push(1);")
+            .expect_err("an ambiguous action body must fail");
+        insta::assert_snapshot!(
+            error.to_string(),
+            @r#"ambiguous semantic patterns for "depths.Push(1)": first, second"#
+        );
+    }
+
+    /// One optional trailing `;` is the grammar's statement terminator, not part
+    /// of the body — the same rule `parse_semantic_helper_call` has always
+    /// applied to action bodies, so both matchers agree. Everything else stays
+    /// significant: a *run* of semicolons must not collapse, or two distinct
+    /// declared patterns would merge onto one lowering.
+    #[test]
+    fn member_action_match_normalizes_one_trailing_semicolon_only() {
+        let patterns = parse_sem_patterns(
+            r#"
+[[member]]
+name = "depths"
+kind = "stack"
+
+[[pattern]]
+match = "depths.Pop()"
+lower = "pop_member(depths)"
+"#,
+        )
+        .expect("pattern file parses");
+
+        for body in ["depths.Pop()", "depths.Pop();", "  depths.Pop() ; "] {
+            assert!(
+                patterns
+                    .member_action_stmt(SemanticsKind::LexerAction, body)
+                    .expect("lookup should not fail")
+                    .is_some(),
+                "body {body:?} should match"
+            );
+        }
+
+        // A second `;` is a different body, not the same one.
+        assert!(
+            patterns
+                .member_action_stmt(SemanticsKind::LexerAction, "depths.Pop();;")
+                .expect("lookup should not fail")
+                .is_none(),
+            "a run of semicolons must not collapse onto the declared body"
+        );
     }
 
     #[test]
