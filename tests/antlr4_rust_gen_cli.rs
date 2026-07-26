@@ -459,6 +459,77 @@ mod grouped_token_tests {
 }
 
 #[test]
+fn token_group_label_shared_across_alternatives_unions_the_sets() {
+    let temp = temporary_directory("multi-alternative-label");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/multi-alternative-label/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod multi_alternative_label_tests {
+    use super::t_lexer::TLexer;
+    use super::t_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn parse(input: &str) -> antlr4_runtime::ParsedFile {
+        let lexer = TLexer::new(InputStream::new(input));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = TParser::new(tokens);
+        let root = parser.expr().expect("input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        parser.into_parsed_file(root)
+    }
+
+    #[test]
+    fn op_label_is_available_on_every_alternative_group() {
+        let parsed = parse("a * b + c < d");
+        let expr = parsed
+            .tree()
+            .as_rule()
+            .expect("expr rule")
+            .downcast_ref::<ExprContext>()
+            .expect("typed expr context");
+        let relation = expr.relation().expect("relation child");
+        assert_eq!(relation.op().expect("relation operator").to_string(), "<");
+
+        let calc = relation
+            .relation_children()
+            .next()
+            .expect("left relation")
+            .calc()
+            .expect("calc child");
+        assert_eq!(calc.op().expect("additive operator").to_string(), "+");
+
+        let product = calc.calc_children().next().expect("left calc");
+        assert_eq!(
+            product.op().expect("multiplicative operator").to_string(),
+            "*"
+        );
+
+        let leaf = product.calc_children().next().expect("leaf calc");
+        assert!(leaf.op().is_none(), "primary alternative carries no operator");
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn compile_parse_tree_pattern_matches_and_binds_against_generated_parser() {
     let temp = temporary_directory("tree-pattern-compile");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

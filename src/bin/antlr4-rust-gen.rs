@@ -8214,19 +8214,47 @@ fn context_label_accessor(
         .filter(|element| element.label.as_deref() == Some(label.as_str()))
         .collect::<Vec<_>>();
     let first = declarations.first()?;
+    // Token-backed declarations may carry different token sets per alternative
+    // (`calc op=('*'|'/'|'%') calc | calc op=('+'|'-') calc`); ANTLR still
+    // declares a single `Token op` field, so union the sets and let the
+    // per-alternative selector checks below reject layouts where one
+    // occurrence lookup cannot serve every alternative. Rule references keep
+    // requiring one shared target.
+    let union_token_sets = declarations
+        .iter()
+        .all(|element| !element.token_types.is_empty());
     if (first.target.is_empty() && first.token_types.is_empty())
         || declarations.iter().any(|element| {
             !element.stable_accessor
-                || !same_context_ref_target(element, first)
                 || element.is_list != first.is_list
+                || !(union_token_sets || same_context_ref_target(element, first))
         })
     {
         return None;
     }
 
-    let target = first.target.clone();
-    let token_types = first.token_types.clone();
     let is_list = first.is_list;
+    let shared_target = declarations
+        .iter()
+        .all(|element| element.target == first.target);
+    let reference = embedded::ElementRef {
+        label: None,
+        target: if shared_target {
+            first.target.clone()
+        } else {
+            String::new()
+        },
+        token_types: declarations
+            .iter()
+            .flat_map(|element| element.token_types.iter().copied())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+        is_block: first.is_block,
+        is_list,
+        cardinality: embedded::ChildCardinality::ONE,
+        stable_accessor: true,
+    };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
     for alternative in alternatives {
@@ -8241,7 +8269,7 @@ fn context_label_accessor(
                 alternative
                     .refs
                     .iter()
-                    .filter(|element| context_ref_can_match_target(element, first))
+                    .filter(|element| context_ref_can_match_target(element, &reference))
                     .map(|element| element.cardinality),
             );
             if target_cardinality.max != Some(0) {
@@ -8252,7 +8280,7 @@ fn context_label_accessor(
         }
 
         let alternative_selector =
-            context_label_selector(alternative, &matching, &label, first, is_list)?;
+            context_label_selector(alternative, &matching, &label, &reference, is_list)?;
         if selector.is_some_and(|existing| existing != alternative_selector) {
             return None;
         }
@@ -8273,8 +8301,8 @@ fn context_label_accessor(
     }
     Some(ContextLabelAccessor {
         source_name: label,
-        target,
-        token_types,
+        target: reference.target,
+        token_types: reference.token_types,
         cardinality,
         selector: selector?,
     })
@@ -8302,7 +8330,17 @@ fn context_label_selector(
     }
     let element = matching[0].1;
     if !element.cardinality.is_repeated() {
-        return Some(ContextLabelSelector::Nth(start));
+        // An optional labeled occurrence (`x=A? C` with `C` in the accessor's
+        // token set) must not be shadowed by a following match sliding into
+        // its position when it is absent.
+        let shadowed_when_absent = element.cardinality.min == 0
+            && alternative.refs[first_position + 1..]
+                .iter()
+                .any(|following| {
+                    context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                });
+        return (!shadowed_when_absent).then_some(ContextLabelSelector::Nth(start));
     }
     let has_following_target = alternative.refs[first_position + 1..]
         .iter()
