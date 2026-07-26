@@ -126,13 +126,41 @@ jobs:
             exit 0
           fi
 
-          # Stop if this CI run is no longer the PR's tip. `workflow_run`
-          # completions can arrive out of commit order (push twice, the older CI
-          # finishes second), and the payload gives us a PR *number* with no
-          # freshness guarantee — so an older green run would review an obsolete
-          # commit and overwrite a newer verdict in the sticky comment.
-          # Concurrency alone does not cover this: the two runs may not overlap.
-          current_head="$(gh api "repos/$GH_REPO/pulls/$number" --jq '.head.sha')"
+          # One lookup answers three questions the payload cannot.
+          #
+          # The payload's `pull_requests[]` fast path carries only a number, so it
+          # skips the fallback's `state == "open"` filter entirely — and `head.sha`
+          # is unchanged by closing or merging, so checking the SHA alone would
+          # happily review a PR that ended while CI ran.
+          read -r current_head current_state current_draft < <(
+            gh api "repos/$GH_REPO/pulls/$number" \
+              --jq '"\(.head.sha) \(.state) \(.draft)"'
+          )
+
+          # 1. Still open? The PR may have merged or closed during CI.
+          if [[ "$current_state" != "open" ]]; then
+            echo "PR #$number is $current_state — nothing to review."
+            echo "found=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 2. Ready for review? CI's trigger is a bare `pull_request:`, which
+          #    includes drafts, so without this a work-in-progress PR burns a full
+          #    review and quota. The previous `pull_request` trigger got this from
+          #    its `types: [..., ready_for_review]` filter; `workflow_run` has no
+          #    equivalent, so it has to be checked here. Marking a draft ready
+          #    fires no CI run by itself, but any later push does.
+          if [[ "$current_draft" == "true" ]]; then
+            echo "PR #$number is a draft — deferring review until it is ready."
+            echo "found=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 3. Still the tip? `workflow_run` completions can arrive out of commit
+          #    order (push twice, the older CI finishes second), and the payload
+          #    gives a number with no freshness guarantee — so an older green run
+          #    would review an obsolete commit and overwrite a newer verdict.
+          #    Concurrency alone does not cover this: the runs may not overlap.
           if [[ "$current_head" != "$HEAD_SHA" ]]; then
             echo "PR #$number has moved on (head is ${current_head:0:7}, this run is ${HEAD_SHA:0:7}) — skipping stale review."
             echo "found=false" >>"$GITHUB_OUTPUT"
@@ -370,6 +398,50 @@ jobs:
           path: ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: warn
           retention-days: 14
+
+      # The head check in `Resolve pull request number` happens before dependency
+      # setup and a 10–20 minute review, so a push can land in between: the
+      # verdict then describes commit A while the PR is at B. Concurrency does not
+      # close this — it can only cancel this run once B's *successful* CI starts
+      # another review, so if B's CI fails or is cancelled the stale verdict
+      # silently stands as the latest word on an unreviewed B.
+      #
+      # Re-check at publish time and, when the head has moved, replace the verdict
+      # with a pointer to the run instead of leaving it to masquerade as current.
+      # The full review text stays available in the uploaded execution log.
+      #
+      # Runs before the quota classifier so a 429 (which never publishes a
+      # verdict) is left to that step, and only when the review reported success.
+      - name: Discard the verdict if the PR head moved during review
+        if: >-
+          steps.pr.outputs.found == 'true' &&
+          steps.claude-review.outputs.conclusion == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          COMMENT_ID: ${{ steps.comment.outputs.id }}
+          REVIEWED_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          current_head="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
+
+          if [[ "$current_head" == "$REVIEWED_SHA" ]]; then
+            echo "PR #$PR_NUMBER is still at ${REVIEWED_SHA:0:7} — verdict stands."
+            exit 0
+          fi
+
+          echo "PR #$PR_NUMBER moved ${REVIEWED_SHA:0:7} -> ${current_head:0:7} during the review; retracting the verdict."
+          body="$(printf '%s\n\n%s\n\n%s\n' \
+            "$STICKY_MARKER" \
+            "**Claude Code review superseded.**" \
+            "This review covered \`${REVIEWED_SHA:0:7}\`, but the pull request has since moved to \`${current_head:0:7}\`. The findings may no longer apply, so they are not shown here — see the [job run]($RUN_URL) for the full text. A new review runs once CI passes on the current head.")"
+
+          gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
+            --field body="$body" --jq '.id' >/dev/null
 
       # Distinguish "we ran out of quota" from "the review genuinely broke".
       #
