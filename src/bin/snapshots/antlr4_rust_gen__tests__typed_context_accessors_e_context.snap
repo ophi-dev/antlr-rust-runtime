@@ -26,7 +26,7 @@ expression: e_context
     }
     pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>> + '_ {
         __rule_children(self.__node, 1)
-            .map(move |node| EContext::__from_child_node(node, &self.__invocation_states))
+            .map(move |node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn int_token(&self) -> Option<TerminalNode<'a>> {
         __token_children(self.__node, 1)
@@ -46,11 +46,11 @@ expression: e_context
     pub fn left(&self) -> Option<EContext<'a>> {
         __rule_children(self.__node, 1)
             .nth(0)
-            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn right(&self) -> Option<EContext<'a>> {
         __rule_children(self.__node, 1)
             .nth(1)
-            .map(|node| EContext::__from_child_node(node, &self.__invocation_states))
+            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
 }

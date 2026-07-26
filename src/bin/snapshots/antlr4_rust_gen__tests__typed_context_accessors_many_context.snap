@@ -26,7 +26,7 @@ expression: many_context
     }
     pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
         __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::__from_child_node(node, &self.__invocation_states))
+            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 1).map(TerminalNode::new)
@@ -34,6 +34,6 @@ expression: many_context
     pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
         __rule_children(self.__node, 2)
             .skip(0)
-            .map(move |node| AtomContext::__from_child_node(node, &self.__invocation_states))
+            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
 }

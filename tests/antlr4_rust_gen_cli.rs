@@ -819,9 +819,74 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
         &["calculator_lexer.rs", "calculator_parser.rs"],
         r#"
 #[cfg(test)]
+mod allocation_tracking {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    std::thread_local! {
+        static ENABLED: Cell<bool> = const { Cell::new(false) };
+        static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub struct TrackingAllocator;
+
+    unsafe impl GlobalAlloc for TrackingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let pointer = unsafe { System.alloc(layout) };
+            record_allocation();
+            pointer
+        }
+
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            let pointer = unsafe { System.alloc_zeroed(layout) };
+            record_allocation();
+            pointer
+        }
+
+        unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+            unsafe { System.dealloc(pointer, layout) };
+        }
+
+        unsafe fn realloc(
+            &self,
+            pointer: *mut u8,
+            layout: Layout,
+            new_size: usize,
+        ) -> *mut u8 {
+            let pointer = unsafe { System.realloc(pointer, layout, new_size) };
+            record_allocation();
+            pointer
+        }
+    }
+
+    fn record_allocation() {
+        ENABLED.with(|enabled| {
+            if enabled.get() {
+                ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
+            }
+        });
+    }
+
+    pub fn count_allocations<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+        ALLOCATIONS.with(|allocations| allocations.set(0));
+        ENABLED.with(|enabled| enabled.set(true));
+        let value = operation();
+        ENABLED.with(|enabled| enabled.set(false));
+        let allocations = ALLOCATIONS.with(Cell::get);
+        (value, allocations)
+    }
+}
+
+#[cfg(test)]
+#[global_allocator]
+static ALLOCATOR: allocation_tracking::TrackingAllocator =
+    allocation_tracking::TrackingAllocator;
+
+#[cfg(test)]
 mod typed_tree_tests {
     use super::calculator_lexer::CalculatorLexer;
     use super::calculator_parser::*;
+    use super::allocation_tracking::count_allocations;
     use antlr4_runtime::{
         CommonTokenStream, InputStream, MissingChildError, Parser as _, RuleNodeView,
     };
@@ -1003,6 +1068,15 @@ mod typed_tree_tests {
             .downcast_ref::<AddLabelContext>()
             .expect("top-level expression is addition");
         assert_eq!(add.rule_node().node().id(), expression.node().id());
+        let expected_display = format!(
+            "[{}]",
+            expression
+                .invocation_states()
+                .map(|state| state.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        assert_eq!(add.to_string(), expected_display);
         assert_eq!(add.expression_children().count(), 2);
         assert!(add.plus_token().is_some());
         assert!(add.minus_token().is_none());
@@ -1016,6 +1090,24 @@ mod typed_tree_tests {
                 .id()
         );
         assert!(expression.downcast_ref::<MultiplyLabelContext>().is_none());
+
+        let (child_ids, allocations) = count_allocations(|| {
+            let add = expression
+                .downcast_ref::<AddLabelContext>()
+                .expect("top-level expression is addition");
+            let left = add.left().expect("left expression");
+            let right = add.right().expect("right expression");
+            (
+                add.rule_node().node().id(),
+                left.rule_node().node().id(),
+                right.rule_node().node().id(),
+            )
+        });
+        assert_eq!(child_ids.0, expression.node().id());
+        assert_eq!(
+            allocations, 0,
+            "stored typed contexts and child accessors must not allocate"
+        );
 
         let right = expression
             .child_rules(RULE_EXPRESSION)
