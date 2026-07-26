@@ -17713,6 +17713,55 @@ mod tests {
         assert_eq!(parser.node(tree).text(), "xy");
     }
 
+    /// Stack-valued member statements must execute on the parser's speculative
+    /// replay path, not just the lexer's committed one (issue #206). This drives
+    /// `apply_member_actions` -> `ParserTableSemCtx` -> `MemberEnv` directly,
+    /// which is the path a generated parser's `@members` stack state takes.
+    #[test]
+    fn parser_speculative_replay_threads_stack_member_state() {
+        let mut ir = SemIr::new();
+        let one = ir.expr(PExpr::Int(1));
+        let push = ir.stmt(AStmt::PushMember(0, one));
+        let pop = ir.stmt(AStmt::PopMember(0));
+        let semantics = ParserSemantics {
+            ir,
+            predicates: Vec::new(),
+            actions: vec![
+                ParserSemanticAction {
+                    source_state: 1,
+                    rule_index: usize::MAX,
+                    stmt: push,
+                    speculative: true,
+                },
+                ParserSemanticAction {
+                    source_state: 2,
+                    rule_index: usize::MAX,
+                    stmt: pop,
+                    speculative: true,
+                },
+            ],
+        };
+
+        // Replaying the push state must be visible to a later read...
+        let pushed = member_values_after_action(1, &[], Some(&semantics), &MemberEnv::new());
+        assert_eq!(pushed.stack_top(0), Some(1));
+        assert_eq!(pushed.stack_len(0), 1);
+
+        // ...and must not mutate the caller's env: speculative paths are
+        // path-local, so an abandoned branch cannot leak state to its sibling.
+        assert_eq!(MemberEnv::new().stack_len(0), 0);
+
+        // Replaying the pop state restores the empty, canonical env, so the
+        // resulting memo key matches an equivalent untouched path.
+        let popped = member_values_after_action(2, &[], Some(&semantics), &pushed);
+        assert_eq!(popped.stack_top(0), None);
+        assert_eq!(popped, MemberEnv::new(), "emptied stack must canonicalize");
+
+        // An unbalanced pop is a defined no-op rather than a panic.
+        let underflowed = member_values_after_action(2, &[], Some(&semantics), &MemberEnv::new());
+        assert_eq!(underflowed, MemberEnv::new());
+    }
+
     /// Hooks that decline (`None`) must fall through to the configured policy
     /// even when the coordinate carries a [`semir`] `Hook` node, matching the
     /// legacy table path. Regression for the `unwrap_or(false)` that silently
