@@ -8214,19 +8214,42 @@ fn context_label_accessor(
         .filter(|element| element.label.as_deref() == Some(label.as_str()))
         .collect::<Vec<_>>();
     let first = declarations.first()?;
+    // Token-backed declarations may carry different token sets per alternative
+    // (`r x=(A|B) r | r x=(C|D) r`); ANTLR still declares a single token field
+    // for the label, so union the sets and let the per-alternative selector
+    // checks below reject layouts where one occurrence lookup cannot serve
+    // every alternative. Rule references keep requiring one shared target.
+    let union_token_sets = declarations
+        .iter()
+        .all(|element| !element.token_types.is_empty());
     if (first.target.is_empty() && first.token_types.is_empty())
         || declarations.iter().any(|element| {
             !element.stable_accessor
-                || !same_context_ref_target(element, first)
                 || element.is_list != first.is_list
+                || !(union_token_sets || same_context_ref_target(element, first))
         })
     {
         return None;
     }
 
-    let target = first.target.clone();
-    let token_types = first.token_types.clone();
     let is_list = first.is_list;
+    let reference = embedded::ElementRef {
+        label: None,
+        // Only read for rule-backed labels (rendering gates on empty
+        // `token_types`), where the guard above already forced every
+        // declaration onto one shared target.
+        target: first.target.clone(),
+        token_types: declarations
+            .iter()
+            .flat_map(|element| element.token_types.iter().copied())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+        is_block: first.is_block,
+        is_list,
+        cardinality: embedded::ChildCardinality::ONE,
+        stable_accessor: true,
+    };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
     for alternative in alternatives {
@@ -8241,7 +8264,7 @@ fn context_label_accessor(
                 alternative
                     .refs
                     .iter()
-                    .filter(|element| context_ref_can_match_target(element, first))
+                    .filter(|element| context_ref_can_match_target(element, &reference))
                     .map(|element| element.cardinality),
             );
             if target_cardinality.max != Some(0) {
@@ -8252,7 +8275,7 @@ fn context_label_accessor(
         }
 
         let alternative_selector =
-            context_label_selector(alternative, &matching, &label, first, is_list)?;
+            context_label_selector(alternative, &matching, &label, &reference, is_list)?;
         if selector.is_some_and(|existing| existing != alternative_selector) {
             return None;
         }
@@ -8273,8 +8296,8 @@ fn context_label_accessor(
     }
     Some(ContextLabelAccessor {
         source_name: label,
-        target,
-        token_types,
+        target: reference.target,
+        token_types: reference.token_types,
         cardinality,
         selector: selector?,
     })
@@ -8302,7 +8325,17 @@ fn context_label_selector(
     }
     let element = matching[0].1;
     if !element.cardinality.is_repeated() {
-        return Some(ContextLabelSelector::Nth(start));
+        // An optional labeled occurrence (`x=A? C` with `C` in the accessor's
+        // token set) must not be shadowed by a following match sliding into
+        // its position when it is absent.
+        let shadowed_when_absent = element.cardinality.min == 0
+            && alternative.refs[first_position + 1..]
+                .iter()
+                .any(|following| {
+                    context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                });
+        return (!shadowed_when_absent).then_some(ContextLabelSelector::Nth(start));
     }
     let has_following_target = alternative.refs[first_position + 1..]
         .iter()
@@ -13499,6 +13532,38 @@ mod tests {
         // The single-label accessor (`.skip(0).last()` selecting the latest occurrence) is captured
         // whole rather than probed for two substrings.
         insta::assert_snapshot!("typed_context_accessors_latest_context", latest_context);
+    }
+
+    #[test]
+    fn token_group_label_across_alternatives_unions_sets_and_guards_shadowing() {
+        let data = parser_fixture_data("multi-alternative-label/T.g4");
+        let rendered = render_parser("TParser", &data).expect("parser should render");
+
+        // The `op` label spans two alternatives with different token groups;
+        // the accessor must match the union of both sets.
+        let calc_context = rendered
+            .split_once("impl<'a, State> CalcContext<'a, State> {")
+            .expect("calc context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for CalcContext")
+            .expect("calc context display impl")
+            .0;
+        insta::assert_snapshot!("multi_alternative_label_calc_context", calc_context);
+
+        // `lead = PLUS? PLUS unary`: with `lead` absent the unlabeled PLUS
+        // slides into `.nth(0)`, so no accessor may be emitted at all.
+        let shadowed_context = rendered
+            .split_once("impl<'a, State> ShadowedContext<'a, State> {")
+            .expect("shadowed context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for ShadowedContext")
+            .expect("shadowed context display impl")
+            .0;
+        assert!(
+            !shadowed_context.contains("pub fn lead("),
+            "optional labeled token shadowed by a following union match must drop its accessor\n{shadowed_context}"
+        );
+        insta::assert_snapshot!("multi_alternative_label_shadowed_context", shadowed_context);
     }
 
     #[test]
