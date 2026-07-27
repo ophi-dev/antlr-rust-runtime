@@ -66,6 +66,18 @@ branch_rival
     : (left = unary | right = unary) NUM
     ;
 
+// An *exhaustive* choice contributes exactly one `unary` however it branches, so
+// the following label is reliably the second one and keeps its accessor.
+exhaustive_prefix
+    : (first = unary | second = unary) pick = unary NUM
+    ;
+
+// A preceding token group overlaps the label's token type, so only some parses
+// put a matching child ahead of it — no fixed occurrence, so no accessor.
+overlapping_group
+    : (IDENT | NUM) tail = IDENT
+    ;
+
 // Extra grouping levels are syntactically inert, so a label buried under them
 // must still defeat the token-group collapse that would discard it.
 nested_group

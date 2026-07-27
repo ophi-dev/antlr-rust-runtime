@@ -637,14 +637,35 @@ impl TranslationCtx<'_> {
         if element.cardinality.is_repeated() {
             return None;
         }
-        // Single label: count the same-target children ahead of it, bailing as
-        // soon as one contributes an unfixed number.
+        // Single label: count the children ahead of it that the read would also
+        // select, bailing as soon as one contributes an unfixed number. A token
+        // *group* has no target yet still produces a child of the label's token
+        // type when their sets overlap (`(A | B) x=A`), so it must be counted —
+        // and since only some of its members match, its contribution is not
+        // exact and the label declines.
+        let counts_toward_occurrence = |candidate: &ElementRef| {
+            if element.token_types.is_empty() || candidate.token_types.is_empty() {
+                return candidate.target == element.target;
+            }
+            candidate
+                .token_types
+                .iter()
+                .any(|token_type| element.token_types.contains(token_type))
+        };
         let occurrence = before
             .iter()
-            .filter(|candidate| candidate.target == element.target)
+            .filter(|candidate| counts_toward_occurrence(candidate))
             .try_fold(0_usize, |total, candidate| {
                 let max = candidate.cardinality.max?;
-                (candidate.cardinality.min == max).then(|| total.saturating_add(max))
+                // A group only *sometimes* yields a matching child, so its count
+                // is exact only when every member is one the read selects.
+                let all_match = candidate
+                    .token_types
+                    .iter()
+                    .all(|token_type| element.token_types.contains(token_type));
+                (candidate.cardinality.min == max
+                    && (candidate.token_types.is_empty() || all_match))
+                    .then(|| total.saturating_add(max))
             })?;
         // An optional label is displaced by a following same-target child that can
         // slide into its position, whether that child is mandatory (`x=A? A`) or

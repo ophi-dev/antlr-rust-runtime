@@ -9089,7 +9089,21 @@ fn context_label_selector(
     is_list: bool,
 ) -> Option<ContextLabelSelector> {
     let first_position = matching[0].0;
-    let start = exact_target_cardinality(&alternative.refs[..first_position], target)?;
+    let labeled = matching[0].1;
+    // A sibling branch that matches the same target supplies a child at the very
+    // position this accessor reads, but on a parse where the label is unset —
+    // `(left=unary | right=unary)` would let `right()` return `left`'s child.
+    // Positional lookup cannot tell them apart, so decline.
+    let sibling_supplies_target = alternative.refs.iter().any(|element| {
+        !element.can_coexist_with(labeled)
+            && context_ref_can_match_target(element, target)
+            && element.cardinality.max != Some(0)
+    });
+    if sibling_supplies_target {
+        return None;
+    }
+    let start =
+        exact_target_cardinality_on_path(&alternative.refs[..first_position], target, labeled)?;
     if is_list {
         let has_unlabeled_target = alternative.refs[first_position..].iter().any(|element| {
             context_ref_can_match_target(element, target)
@@ -9144,13 +9158,37 @@ fn context_ref_can_match_target(
         .any(|token_type| target.token_types.contains(token_type))
 }
 
+/// Number of `target`-matching children that precede a ref *on the same parse
+/// path* as `path`, or `None` when that number is not fixed.
+fn exact_target_cardinality_on_path(
+    refs: &[embedded::ElementRef],
+    target: &embedded::ElementRef,
+    path: &embedded::ElementRef,
+) -> Option<usize> {
+    // A ref in a branch `path` cannot reach never precedes it, so drop those
+    // before counting: in `(left=unary | right=unary)` the `left` ref must not
+    // shift `right` to occurrence 1.
+    let reachable = refs
+        .iter()
+        .filter(|element| element.can_coexist_with(path))
+        .cloned()
+        .collect::<Vec<_>>();
+    exact_target_cardinality(&reachable, target)
+}
+
 fn exact_target_cardinality(
     refs: &[embedded::ElementRef],
     target: &embedded::ElementRef,
 ) -> Option<usize> {
-    refs.iter().try_fold(0_usize, |total, element| {
+    // Refs are grouped by their innermost choice so that an *exhaustive* choice
+    // counts once rather than per branch. `(a=A | b=A) x=A` always contributes
+    // exactly one `A` before `x`, even though each branch ref alone reports
+    // `0..1`; summing them independently would read as inexact and drop `x()`.
+    let mut total = 0_usize;
+    let mut choice_totals: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
+    for element in refs {
         if !context_ref_can_match_target(element, target) {
-            return Some(total);
+            continue;
         }
         if !element.token_types.is_empty()
             && !element
@@ -9161,8 +9199,54 @@ fn exact_target_cardinality(
             return None;
         }
         let exact = element.cardinality.max?;
-        (element.cardinality.min == exact).then(|| total.saturating_add(exact))
-    })
+        // A ref inside a choice reports `min: 0` because its *branch* may not be
+        // taken, but within that branch it contributes its maximum exactly. Judge
+        // exactness per branch and let the cross-branch agreement check below
+        // decide whether the choice as a whole is exact.
+        let contribution = (element.cardinality.min == exact || !element.choice_branch.is_empty())
+            .then_some(exact);
+        match element.choice_branch.last() {
+            // Sequential: its count adds directly.
+            None => total = total.saturating_add(contribution?),
+            // Inside a choice: accumulate per branch, compare branches after.
+            Some(&key) => {
+                let branch = choice_totals.entry(key).or_insert(Some(0));
+                *branch = match (*branch, contribution) {
+                    (Some(sum), Some(next)) => Some(sum.saturating_add(next)),
+                    _ => None,
+                };
+            }
+        }
+    }
+    // A choice is exact only when every one of its branches contributes the same
+    // count. Branches with no matching ref never entered the map above yet still
+    // contribute zero, so the full branch set is recovered from `refs` — a choice
+    // whose branch count exceeds the entries seen has a zero-contributing branch
+    // and is therefore exact only if the others contribute zero too.
+    let mut branches_per_choice: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+    for element in refs {
+        for &(choice, branch) in &element.choice_branch {
+            branches_per_choice
+                .entry(choice)
+                .or_default()
+                .insert(branch);
+        }
+    }
+    let mut by_choice: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for ((choice, _), count) in choice_totals {
+        by_choice.entry(choice).or_default().push(count?);
+    }
+    for (choice, counts) in by_choice {
+        let expected = branches_per_choice.get(&choice).map_or(0, BTreeSet::len);
+        let first = counts.first().copied()?;
+        // Every branch must agree, and every branch must have been counted —
+        // otherwise some branch supplies a different number of children.
+        if counts.len() != expected || counts.iter().any(|count| *count != first) {
+            return None;
+        }
+        total = total.saturating_add(first);
+    }
+    Some(total)
 }
 
 fn sum_child_cardinalities(
@@ -14911,6 +14995,19 @@ mod tests {
         //   the sibling's child;
         // * `branch_rival` — rival labels on one target across branches must not
         //   read each other's child.
+        // An exhaustive choice keeps a following label's accessor (its prefix
+        // count is fixed at one however the choice branches), while a preceding
+        // *overlapping* token group does not (only some parses put a matching
+        // child ahead of the label).
+        insta::assert_snapshot!(
+            "multi_alternative_label_exhaustive_prefix_context",
+            context("ExhaustivePrefixContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_overlapping_group_context",
+            context("OverlappingGroupContext")
+        );
+
         for (name, snapshot) in [
             (
                 "MixedUnboundedContext",
