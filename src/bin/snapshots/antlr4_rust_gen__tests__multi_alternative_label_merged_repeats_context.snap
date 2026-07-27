@@ -1,0 +1,44 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: "context(\"MergedRepeatsContext\")"
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 13).map(TerminalNode::new)
+    }
+    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 14).map(TerminalNode::new)
+    }
+    pub fn lparen_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, 16)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("MergedRepeatsContext", "LPAREN"))
+    }
+    pub fn last_pick(&self) -> Option<TerminalNode<'a>> {
+        __labeled_token_children_matching(self.__node, &[13, 14])
+            .skip(0).last()
+            .map(TerminalNode::new)
+    }
+}

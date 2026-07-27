@@ -1,0 +1,35 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: "context(\"OverlappingGroupContext\")"
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 13).map(TerminalNode::new)
+    }
+    pub fn num_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 14)
+            .next()
+            .map(TerminalNode::new)
+    }
+}

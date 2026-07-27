@@ -25,6 +25,25 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: true,
+                span: None,
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: None,
@@ -41,6 +60,30 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: true,
+                span: Some(
+                    (
+                        135,
+                        139,
+                    ),
+                ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: Some(
@@ -57,6 +100,30 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: false,
+                span: Some(
+                    (
+                        146,
+                        147,
+                    ),
+                ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {
@@ -99,6 +166,25 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: true,
+                span: None,
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: None,
@@ -115,6 +201,30 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: true,
+                span: Some(
+                    (
+                        190,
+                        194,
+                    ),
+                ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: Some(
@@ -131,6 +241,30 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: false,
+                span: Some(
+                    (
+                        201,
+                        202,
+                    ),
+                ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {
@@ -173,6 +307,30 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
+                choice_branch: [],
+                choice_arity: [],
+                choice_spans: [],
+                group_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                group_spans: [],
+                branch_spans: [],
+                leading_terminal: true,
+                span: Some(
+                    (
+                        238,
+                        241,
+                    ),
+                ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {

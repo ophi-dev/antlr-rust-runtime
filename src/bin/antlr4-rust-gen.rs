@@ -2589,6 +2589,15 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                             .is_some_and(|removed| removed.label.kind == LabelKind::List),
                         cardinality: embedded::ChildCardinality::ONE,
                         stable_accessor: true,
+                        choice_branch: Vec::new(),
+                        choice_arity: Vec::new(),
+                        choice_spans: Vec::new(),
+                        group_spans: Vec::new(),
+                        branch_spans: Vec::new(),
+                        leading_terminal: true,
+                        span: None,
+                        branch_local_cardinality: embedded::ChildCardinality::ONE,
+                        group_local_cardinality: embedded::ChildCardinality::ONE,
                     }
                 });
             Some(structural_alt_model(alternative, leading_ref, vocabulary))
@@ -2656,19 +2665,67 @@ fn collect_structural_context_refs(
     collect_structural_context_refs_with_cardinality(
         elements,
         refs,
-        stable_accessor,
-        embedded::ChildCardinality::ONE,
+        StructuralRefContext {
+            stable_accessor,
+            enclosing_cardinality: embedded::ChildCardinality::ONE,
+            branch_local_cardinality: embedded::ChildCardinality::ONE,
+            choice_branch: &[],
+            choice_arity: &[],
+            choice_spans: &[],
+            group_spans: &[],
+            branch_spans: &[],
+        },
         vocabulary,
     );
+}
+
+/// Traversal state threaded down while flattening an alternative's elements.
+#[derive(Clone, Copy)]
+struct StructuralRefContext<'a> {
+    stable_accessor: bool,
+    /// Cardinality contributed by every enclosing quantifier *and* choice split.
+    enclosing_cardinality: embedded::ChildCardinality,
+    /// The same, but assuming each enclosing choice took this branch.
+    branch_local_cardinality: embedded::ChildCardinality,
+    choice_branch: &'a [(usize, usize)],
+    choice_arity: &'a [usize],
+    choice_spans: &'a [(usize, usize)],
+    group_spans: &'a [embedded::GroupSpan],
+    branch_spans: &'a [(usize, usize)],
 }
 
 fn collect_structural_context_refs_with_cardinality(
     elements: &[Element],
     refs: &mut Vec<embedded::ElementRef>,
-    stable_accessor: bool,
-    enclosing_cardinality: embedded::ChildCardinality,
+    context: StructuralRefContext<'_>,
     vocabulary: &Vocabulary,
 ) {
+    let StructuralRefContext {
+        stable_accessor,
+        enclosing_cardinality,
+        branch_local_cardinality,
+        choice_branch,
+        choice_arity,
+        choice_spans,
+        group_spans,
+        branch_spans,
+    } = context;
+    // Tracks whether any terminal-bearing ref has been emitted on this path, so an
+    // element can record whether it is the first terminal.
+    // Only refs on *this* branch's path count: `refs` is shared across every branch
+    // of an enclosing choice, so terminals emitted for a sibling branch must not
+    // make this branch's elements look non-leading. `(x=A | x='a')` has each
+    // declaration first on its own path.
+    let mut seen_terminal = branch_local_cardinality.max.is_none_or(|max| max != 0)
+        && refs.iter().any(|existing| {
+            !existing.token_types.is_empty()
+                && existing.cardinality.max != Some(0)
+                && !existing.choice_branch.iter().any(|(choice, branch)| {
+                    choice_branch
+                        .iter()
+                        .any(|(mine, my_branch)| choice == mine && branch != my_branch)
+                })
+        });
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
         let is_list = element
@@ -2677,6 +2734,13 @@ fn collect_structural_context_refs_with_cardinality(
             .is_some_and(|label| label.kind == LabelKind::List);
         let cardinality = multiply_child_cardinalities(
             enclosing_cardinality,
+            quantified_cardinality(embedded::ChildCardinality::ONE, element.quantifier),
+        );
+        // Same product, but against the cardinality this element would have if
+        // every enclosing choice took its branch — so a `min: 0` here comes only
+        // from a quantifier, never from branch membership.
+        let branch_local = multiply_child_cardinalities(
+            branch_local_cardinality,
             quantified_cardinality(embedded::ChildCardinality::ONE, element.quantifier),
         );
         match &element.kind {
@@ -2688,6 +2752,21 @@ fn collect_structural_context_refs_with_cardinality(
                 is_list,
                 cardinality,
                 stable_accessor,
+                choice_branch: choice_branch.to_vec(),
+                choice_arity: choice_arity.to_vec(),
+                choice_spans: choice_spans.to_vec(),
+                group_spans: group_spans.to_vec(),
+                branch_spans: branch_spans.to_vec(),
+                leading_terminal: !seen_terminal,
+                span: Some((
+                    element.span.bytes.start as usize,
+                    element.span.bytes.end as usize,
+                )),
+                branch_local_cardinality: branch_local,
+                group_local_cardinality: quantified_cardinality(
+                    embedded::ChildCardinality::ONE,
+                    element.quantifier,
+                ),
             }),
             ElementKind::Terminal(terminal) => {
                 refs.push(embedded::ElementRef {
@@ -2698,11 +2777,40 @@ fn collect_structural_context_refs_with_cardinality(
                     is_list,
                     cardinality,
                     stable_accessor,
+                    choice_branch: choice_branch.to_vec(),
+                    choice_arity: choice_arity.to_vec(),
+                    choice_spans: choice_spans.to_vec(),
+                    group_spans: group_spans.to_vec(),
+                    branch_spans: branch_spans.to_vec(),
+                    leading_terminal: !seen_terminal,
+                    span: Some((
+                        element.span.bytes.start as usize,
+                        element.span.bytes.end as usize,
+                    )),
+                    branch_local_cardinality: branch_local,
+                    group_local_cardinality: quantified_cardinality(
+                        embedded::ChildCardinality::ONE,
+                        element.quantifier,
+                    ),
                 });
             }
             ElementKind::Block(block) => {
                 let token_types = structural_block_token_types(block, vocabulary);
-                if !token_types.is_empty() {
+                // A token-only block collapses into a single group ref, which is
+                // what makes `x=(A | B)` one labeled token child. That only
+                // holds when the label sits *on* the group: when the block is
+                // unlabeled and the labels sit inside it (`(x=A)?`), collapsing
+                // would swallow them, so descend and let the inner refs carry
+                // their own labels.
+                // A block holding an action or predicate must also stay expanded even
+                // when it is token-only: collapsing it discards the per-branch spans
+                // that place the action, so `x=A? (A | B {$x.text})` could not tell
+                // that the action runs only where the sibling `A` cannot shadow `x`.
+                if !token_types.is_empty()
+                    && (label.is_some()
+                        || !(structural_block_labels_inside(block)
+                            || structural_block_holds_action(block)))
+                {
                     refs.push(embedded::ElementRef {
                         label,
                         target: String::new(),
@@ -2711,7 +2819,26 @@ fn collect_structural_context_refs_with_cardinality(
                         is_list,
                         cardinality,
                         stable_accessor,
+                        choice_branch: choice_branch.to_vec(),
+                        choice_arity: choice_arity.to_vec(),
+                        choice_spans: choice_spans.to_vec(),
+                        group_spans: group_spans.to_vec(),
+                        branch_spans: branch_spans.to_vec(),
+                        leading_terminal: !seen_terminal,
+                        span: Some((
+                            element.span.bytes.start as usize,
+                            element.span.bytes.end as usize,
+                        )),
+                        branch_local_cardinality: branch_local,
+                        group_local_cardinality: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        ),
                     });
+                    // The collapsed group *is* a terminal child, so record it before
+                    // skipping the rest of the loop body — otherwise the next element
+                    // would also be classified as leading.
+                    seen_terminal = true;
                     continue;
                 }
                 if label.is_some() {
@@ -2723,17 +2850,117 @@ fn collect_structural_context_refs_with_cardinality(
                         is_list,
                         cardinality,
                         stable_accessor: false,
+                        choice_branch: choice_branch.to_vec(),
+                        choice_arity: choice_arity.to_vec(),
+                        choice_spans: choice_spans.to_vec(),
+                        group_spans: group_spans.to_vec(),
+                        branch_spans: branch_spans.to_vec(),
+                        leading_terminal: !seen_terminal,
+                        span: Some((
+                            element.span.bytes.start as usize,
+                            element.span.bytes.end as usize,
+                        )),
+                        branch_local_cardinality: branch_local,
+                        group_local_cardinality: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        ),
                     });
                 }
-                let nested_stable = stable_accessor && block.alternatives.len() == 1;
-                for alternative in &block.alternatives {
+                // Refs from one alternative of a *choice* are present only when
+                // the parse took that branch, and the flattened CST does not
+                // record which. Clearing the lower bound states that honestly:
+                // a sibling alternative matching the same target then reads as
+                // inexact, so the occurrence-lookup guards in
+                // `context_label_accessor` reject exactly the layouts where
+                // positional access could resolve to another branch's child.
+                let branch_cardinality = if block.alternatives.len() > 1 {
+                    embedded::ChildCardinality {
+                        min: 0,
+                        max: cardinality.max,
+                    }
+                } else {
+                    cardinality
+                };
+                // Where the expanded refs start, so the terminal state can be read
+                // back off what the branches actually emitted (below).
+                let refs_before_block = refs.len();
+                for (branch, alternative) in block.alternatives.iter().enumerate() {
+                    // Tag each branch of a *choice* with `(block id, branch)` so
+                    // consumers can tell mutually exclusive refs from sequential
+                    // ones. A single-alternative block adds no exclusivity, so it
+                    // keeps whatever tag it inherited.
+                    let mut nested_branch = choice_branch.to_vec();
+                    let mut nested_arity = choice_arity.to_vec();
+                    let mut nested_spans = choice_spans.to_vec();
+                    // Every block counts here, single-alternative groups included.
+                    let mut nested_branch_spans = branch_spans.to_vec();
+                    let mut nested_groups = group_spans.to_vec();
+                    nested_groups.push(embedded::GroupSpan {
+                        start: block.span.bytes.start as usize,
+                        end: block.span.bytes.end as usize,
+                        // Only a quantifier that can yield nothing relaxes the
+                        // elements inside.
+                        optional: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        )
+                        .min == 0,
+                        // A star/plus group can run more than once, so even a group
+                        // known to have run contributes an unfixed count.
+                        repeated: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        )
+                        .is_repeated(),
+                    });
+                    if block.alternatives.len() > 1 {
+                        nested_branch.push((block.syntax.index(), branch));
+                        nested_arity.push(block.alternatives.len());
+                        nested_spans.push((
+                            block.span.bytes.start as usize,
+                            block.span.bytes.end as usize,
+                        ));
+                        nested_branch_spans.push((
+                            alternative.span.bytes.start as usize,
+                            alternative.span.bytes.end as usize,
+                        ));
+                    }
                     collect_structural_context_refs_with_cardinality(
                         &alternative.elements,
                         refs,
-                        nested_stable,
-                        cardinality,
+                        StructuralRefContext {
+                            stable_accessor,
+                            enclosing_cardinality: branch_cardinality,
+                            // Inside a branch the group's own quantifier still
+                            // applies, but the choice split does not.
+                            branch_local_cardinality: branch_local,
+                            choice_branch: &nested_branch,
+                            choice_arity: &nested_arity,
+                            choice_spans: &nested_spans,
+                            group_spans: &nested_groups,
+                            branch_spans: &nested_branch_spans,
+                        },
                         vocabulary,
                     );
+                }
+                // An expanded block still matched terminals, and the collapsibility
+                // helper below cannot see them: `structural_block_token_types`
+                // returns empty for any block that is not one-element-per-branch, so
+                // `(B y=C? | )` reported no tokens and left the *following* element
+                // marked as leading. That false state then let a mixed
+                // token/literal merge through in `(B y=C? | ) x=A | x='a'`.
+                //
+                // Read it back off the refs the branches actually emitted instead.
+                // `leading_terminal` is a *claim* that the element is the first
+                // terminal — which is what makes a block-positional index and a
+                // same-type index agree at 0 — so it has to hold on every path. Any
+                // branch that *can* match a terminal falsifies it, hence `any` over
+                // `cardinality.max != Some(0)` rather than agreement across branches.
+                if refs[refs_before_block..].iter().any(|candidate| {
+                    !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
+                }) {
+                    seen_terminal = true;
                 }
             }
             ElementKind::Set { inverted, elements } => {
@@ -2745,6 +2972,21 @@ fn collect_structural_context_refs_with_cardinality(
                     is_list,
                     cardinality,
                     stable_accessor,
+                    choice_branch: choice_branch.to_vec(),
+                    choice_arity: choice_arity.to_vec(),
+                    choice_spans: choice_spans.to_vec(),
+                    group_spans: group_spans.to_vec(),
+                    branch_spans: branch_spans.to_vec(),
+                    leading_terminal: !seen_terminal,
+                    span: Some((
+                        element.span.bytes.start as usize,
+                        element.span.bytes.end as usize,
+                    )),
+                    branch_local_cardinality: branch_local,
+                    group_local_cardinality: quantified_cardinality(
+                        embedded::ChildCardinality::ONE,
+                        element.quantifier,
+                    ),
                 });
             }
             ElementKind::Range(..) if label.is_some() => refs.push(embedded::ElementRef {
@@ -2755,11 +2997,29 @@ fn collect_structural_context_refs_with_cardinality(
                 is_list,
                 cardinality,
                 stable_accessor: false,
+                choice_branch: choice_branch.to_vec(),
+                choice_arity: choice_arity.to_vec(),
+                choice_spans: choice_spans.to_vec(),
+                group_spans: group_spans.to_vec(),
+                branch_spans: branch_spans.to_vec(),
+                leading_terminal: !seen_terminal,
+                span: Some((
+                    element.span.bytes.start as usize,
+                    element.span.bytes.end as usize,
+                )),
+                branch_local_cardinality: branch_local,
+                group_local_cardinality: quantified_cardinality(
+                    embedded::ChildCardinality::ONE,
+                    element.quantifier,
+                ),
             }),
             ElementKind::Range(..)
             | ElementKind::Action { .. }
             | ElementKind::Predicate { .. }
             | ElementKind::Epsilon => {}
+        }
+        if !structural_element_token_types(element, vocabulary).is_empty() {
+            seen_terminal = true;
         }
     }
 }
@@ -2857,6 +3117,40 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
         token_types.extend(alternative_types);
     }
     token_types.into_iter().collect()
+}
+
+/// Whether `block` contains an action or predicate at any depth. Such a block must
+/// not collapse into a single token-group ref: the collapse discards the per-branch
+/// spans that decide which branch an action sits in.
+fn structural_block_holds_action(block: &Block) -> bool {
+    block
+        .alternatives
+        .iter()
+        .flat_map(|alternative| &alternative.elements)
+        .any(|element| match &element.kind {
+            ElementKind::Action { .. } | ElementKind::Predicate { .. } => true,
+            ElementKind::Block(nested) => structural_block_holds_action(nested),
+            _ => false,
+        })
+}
+
+/// Whether any element anywhere inside `block` carries a label, i.e. the block
+/// is a grouping wrapper around labeled elements (`(x=A)?`) rather than a
+/// labeled token group (`x=(A | B)`).
+///
+/// The search descends nested blocks: extra grouping levels (`((x=A))?`) are
+/// syntactically inert, so a label buried under them must still prevent the
+/// collapse that would discard it.
+fn structural_block_labels_inside(block: &Block) -> bool {
+    block
+        .alternatives
+        .iter()
+        .flat_map(|alternative| &alternative.elements)
+        .any(|element| {
+            element.label.is_some()
+                || matches!(&element.kind, ElementKind::Block(nested)
+                    if structural_block_labels_inside(nested))
+        })
 }
 
 fn structural_terminal_child_target(
@@ -8941,6 +9235,15 @@ fn context_label_accessor(
         is_list,
         cardinality: embedded::ChildCardinality::ONE,
         stable_accessor: true,
+        choice_branch: Vec::new(),
+        choice_arity: Vec::new(),
+        choice_spans: Vec::new(),
+        group_spans: Vec::new(),
+        branch_spans: Vec::new(),
+        leading_terminal: true,
+        span: None,
+        branch_local_cardinality: embedded::ChildCardinality::ONE,
+        group_local_cardinality: embedded::ChildCardinality::ONE,
     };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
@@ -9003,17 +9306,145 @@ fn context_label_selector(
     is_list: bool,
 ) -> Option<ContextLabelSelector> {
     let first_position = matching[0].0;
-    let start = exact_target_cardinality(&alternative.refs[..first_position], target)?;
+    let labeled = matching[0].1;
+    // A sibling branch that matches the same target supplies a child at the very
+    // position this accessor reads, but on a parse where the label is unset —
+    // `(left=unary | right=unary)` would let `right()` return `left`'s child.
+    // Positional lookup cannot tell them apart, so decline.
+    // Another *declaration* of the same label is not an impostor — it binds the
+    // label too, and `context_label_accessor` already proved the declarations share
+    // one read. Only an unlabeled (or differently-labeled) sibling child can be
+    // mistaken for this label's.
+    let start =
+        exact_target_cardinality_on_path(&alternative.refs[..first_position], target, labeled)?;
+    // A sibling branch only collides when it can actually put a matching child at the
+    // position this accessor reads. `(A | A A x=A)` selects occurrence 2 while the
+    // sibling branch supplies at most one `A`, so `nth(2)` is safely empty there.
+    let sibling_supplies_target = alternative.refs.iter().any(|element| {
+        if element.label.as_deref() == Some(label)
+            || element.can_coexist_with(labeled)
+            || !context_ref_can_match_target(element, target)
+            || element.cardinality.max == Some(0)
+        {
+            return false;
+        }
+        let position = alternative
+            .refs
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, element));
+        let reach = position.and_then(|position| {
+            let before =
+                exact_target_cardinality_on_path(&alternative.refs[..position], target, element)?;
+            // The highest occurrence this ref can occupy on its own path.
+            element
+                .cardinality
+                .max
+                .map(|max| before.saturating_add(max))
+        });
+        reach.is_none_or(|reach| reach > start)
+    });
+    if sibling_supplies_target {
+        return None;
+    }
     if is_list {
         let has_unlabeled_target = alternative.refs[first_position..].iter().any(|element| {
             context_ref_can_match_target(element, target)
                 && element.cardinality.max != Some(0)
                 && element.label.as_deref() != Some(label)
         });
-        return (!has_unlabeled_target).then_some(ContextLabelSelector::AllAfter(start));
+        // A same-target ref *before* the label normally just shifts `start`, but if
+        // the two share a repeated group it recurs on every iteration and interleaves
+        // with the labeled children: `(A xs+=A)+` skips one `A` and then collects the
+        // second iteration's unlabeled prefix too. No `skip` can separate them.
+        let repeats_with_prefix = alternative.refs[..first_position].iter().any(|element| {
+            context_ref_can_match_target(element, target)
+                && element.cardinality.max != Some(0)
+                && element.label.as_deref() != Some(label)
+                && element.group_spans.iter().any(|group| {
+                    // Shared and repeatable: `max` is not one, so the group can run
+                    // more than once.
+                    labeled.group_spans.contains(group)
+                        && !matches!(element.cardinality.max, Some(0 | 1))
+                })
+        });
+        if repeats_with_prefix {
+            return None;
+        }
+        // `AllAfter(start)` skips `start` children then takes the rest, so repeated
+        // declarations on one path are fine — the later ones fall inside the tail
+        // (`xs+=e (op xs+=e)*` skips 0 and collects every `e`). What it cannot serve
+        // is *mutually exclusive* declarations that begin at different offsets:
+        // `(A xs+=A | xs+=A)` needs skip 1 on one branch and 0 on the other.
+        let starts_agree = matching.iter().all(|(position, declaration)| {
+            if declaration.can_coexist_with(labeled) {
+                return true;
+            }
+            exact_target_cardinality_on_path(&alternative.refs[..*position], target, declaration)
+                == Some(start)
+        });
+        return (!has_unlabeled_target && starts_agree)
+            .then_some(ContextLabelSelector::AllAfter(start));
     }
+    // Several declarations can share one positional read when they are mutually
+    // exclusive and each sits at the same occurrence — `(x=A | x=B)` binds exactly
+    // one token on every parse, and the accessor's unioned token set selects it.
     if matching.len() != 1 {
-        return None;
+        let mutually_exclusive = matching.iter().enumerate().all(|(index, (_, left))| {
+            matching[index + 1..]
+                .iter()
+                .all(|(_, right)| !left.can_coexist_with(right))
+        });
+        let positions = matching
+            .iter()
+            .map(|(position, element)| {
+                exact_target_cardinality_on_path(&alternative.refs[..*position], target, element)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let agreed = positions.first().copied()?;
+        if !mutually_exclusive || positions.iter().any(|position| *position != agreed) {
+            return None;
+        }
+        // Each declaration must also survive the single-label hazards: an *optional*
+        // one can be displaced by a following same-target child sliding into its
+        // slot, and the shared read cannot tell them apart either
+        // (`(x=A? B | x=B)` returns the unlabeled `B` when `x` is absent).
+        for (position, declaration) in matching {
+            // Optionality here means the *declaration's own* EBNF suffix — a `min: 0`
+            // that only reflects its branch possibly not being taken does not make it
+            // displaceable, since the read is chosen per branch anyway.
+            if declaration.branch_local_cardinality.min == 0
+                && alternative.refs[position + 1..].iter().any(|following| {
+                    context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                        && following.can_coexist_with(declaration)
+                })
+            {
+                return None;
+            }
+        }
+        // A *repeated* scalar declaration (`x=A+`) is overwritten each iteration, so
+        // ANTLR exposes the last match — `nth` would pin the first. But `LastAfter`
+        // applies to every branch, so it is only sound when no branch has a matching
+        // child *after* its declaration: in `(x=A A B | x=A+ C)` the first branch's
+        // trailing unlabeled `A` would become the `last()`.
+        if matching
+            .iter()
+            .any(|(_, element)| element.cardinality.is_repeated())
+        {
+            let followed = matching.iter().any(|(position, declaration)| {
+                alternative.refs[position + 1..].iter().any(|following| {
+                    following.label.as_deref() != Some(label)
+                        && context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                        && following.can_coexist_with(declaration)
+                })
+            });
+            if followed {
+                return None;
+            }
+            return Some(ContextLabelSelector::LastAfter(agreed));
+        }
+        return Some(ContextLabelSelector::Nth(agreed));
     }
     let element = matching[0].1;
     if !element.cardinality.is_repeated() {
@@ -9058,13 +9489,81 @@ fn context_ref_can_match_target(
         .any(|token_type| target.token_types.contains(token_type))
 }
 
+/// Number of `target`-matching children that precede a ref *on the same parse
+/// path* as `path`, or `None` when that number is not fixed.
+fn exact_target_cardinality_on_path(
+    refs: &[embedded::ElementRef],
+    target: &embedded::ElementRef,
+    path: &embedded::ElementRef,
+) -> Option<usize> {
+    // Filtering to one path and then demanding cross-branch agreement are mutually
+    // exclusive: the other branches were removed deliberately, so requiring them to
+    // contribute would reject `(A x=A | B)`, where the retained `A` still carries
+    // the choice's full arity of two.
+    // A ref in a branch `path` cannot reach never precedes it, so drop those
+    // before counting: in `(left=unary | right=unary)` the `left` ref must not
+    // shift `right` to occurrence 1.
+    let reachable = refs
+        .iter()
+        .filter(|element| element.can_coexist_with(path))
+        .cloned()
+        .map(|mut element| {
+            // Drop the branch tags shared with `path`: on this path those branches
+            // are taken, so their refs count as plain sequential children rather
+            // than alternatives awaiting cross-branch agreement.
+            element.retain_choices(|choice| {
+                !path.choice_branch.iter().any(|&(taken, _)| taken == choice)
+            });
+            // Their cardinality on this path is the branch-local one — and when the
+            // ref shares every optional group with the label, those groups are taken
+            // wherever the label is bound, so even their quantifiers are satisfied.
+            // `(A x=A)? EOF` has exactly one `A` before the label on every parse that
+            // binds it, though both figures otherwise report `0..1` from the `?`.
+            //
+            // A *repeated* group not shared with the label is the exception: knowing
+            // it ran says nothing about how many times, so its contribution stays
+            // unfixed. `((A B)+ x=A)?` has a variable run of `A` ahead of the label
+            // even though the outer `?` is satisfied. This mirrors `on_taken_group`
+            // in the action-resolution path.
+            let closed_repeated_group = element
+                .group_spans
+                .iter()
+                .any(|group| group.repeated && !path.group_spans.contains(group));
+            let shares_optional_groups = !element.group_spans.is_empty()
+                && !closed_repeated_group
+                && element
+                    .group_spans
+                    .iter()
+                    .filter(|group| group.optional)
+                    .all(|group| path.group_spans.contains(group));
+            let on_path = if shares_optional_groups {
+                element.group_local_cardinality
+            } else {
+                element.branch_local_cardinality
+            };
+            element.cardinality = on_path;
+            // `exact_target_cardinality` judges exactness from the branch-local
+            // figure, so it has to see the same value.
+            element.branch_local_cardinality = on_path;
+            element
+        })
+        .collect::<Vec<_>>();
+    exact_target_cardinality(&reachable, target)
+}
+
 fn exact_target_cardinality(
     refs: &[embedded::ElementRef],
     target: &embedded::ElementRef,
 ) -> Option<usize> {
-    refs.iter().try_fold(0_usize, |total, element| {
+    // Refs are grouped by their innermost choice so that an *exhaustive* choice
+    // counts once rather than per branch. `(a=A | b=A) x=A` always contributes
+    // exactly one `A` before `x`, even though each branch ref alone reports
+    // `0..1`; summing them independently would read as inexact and drop `x()`.
+    let mut total = 0_usize;
+    let mut choice_totals: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
+    for element in refs {
         if !context_ref_can_match_target(element, target) {
-            return Some(total);
+            continue;
         }
         if !element.token_types.is_empty()
             && !element
@@ -9075,8 +9574,102 @@ fn exact_target_cardinality(
             return None;
         }
         let exact = element.cardinality.max?;
-        (element.cardinality.min == exact).then(|| total.saturating_add(exact))
-    })
+        // A ref inside a choice reports `min: 0` because its *branch* may not be
+        // taken, but within that branch it contributes its branch-local count
+        // exactly. Judge exactness against that, so an *optional* choice
+        // (`(a=A | b=A)? x=A`) stays inexact — the group may yield nothing.
+        let local = element.branch_local_cardinality;
+        let contribution = (local.min == exact && local.max == Some(exact)).then_some(exact);
+        match element.choice_branch.last() {
+            // Sequential: its count adds directly.
+            None => total = total.saturating_add(contribution?),
+            // Inside a choice: accumulate per branch, compare branches after.
+            Some(&key) => {
+                let branch = choice_totals.entry(key).or_insert(Some(0));
+                *branch = match (*branch, contribution) {
+                    (Some(sum), Some(next)) => Some(sum.saturating_add(next)),
+                    _ => None,
+                };
+            }
+        }
+    }
+    // A choice is exact only when every one of its branches contributes the same
+    // count. Branches with no matching ref never entered the map above yet still
+    // contribute zero, so the full branch set is recovered from `refs`.
+    //
+    // Nested choices are folded innermost-first: once an inner choice agrees, its
+    // count is attributed to the *enclosing* branch that contains it, so
+    // `((a=A | b=A) | c=A) x=A` — where every path yields one `A` — stays exact.
+    // Arity comes from the recorded `choice_arity`, not from the branches seen: an
+    // *empty* alternative emits no ref, so `(a=A | )` would otherwise look like a
+    // one-branch choice that always yields an `A`.
+    let mut arity_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+    for element in refs {
+        for (&(choice, _), &arity) in element.choice_branch.iter().zip(&element.choice_arity) {
+            arity_of_choice.insert(choice, arity);
+        }
+    }
+    let mut branches_per_choice: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+    let mut depth_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+    for element in refs {
+        for (depth, &(choice, branch)) in element.choice_branch.iter().enumerate() {
+            branches_per_choice
+                .entry(choice)
+                .or_default()
+                .insert(branch);
+            depth_of_choice.insert(choice, depth);
+        }
+    }
+    // Ancestry per branch key, so an inner choice's total can be re-attributed.
+    let mut ancestry: BTreeMap<(usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
+    for element in refs {
+        if let Some(&key) = element.choice_branch.last() {
+            ancestry.insert(key, element.choice_branch.clone());
+        }
+    }
+    let mut pending = choice_totals;
+    // Deepest choices first, so inner results roll up into their parents.
+    let mut choices = depth_of_choice
+        .iter()
+        .map(|(c, d)| (*d, *c))
+        .collect::<Vec<_>>();
+    choices.sort_unstable_by_key(|(depth, _)| std::cmp::Reverse(*depth));
+    for (_, choice) in choices {
+        let counts = pending
+            .iter()
+            .filter(|((candidate, _), _)| *candidate == choice)
+            .map(|((_, branch), count)| (*branch, *count))
+            .collect::<Vec<_>>();
+        if counts.is_empty() {
+            continue;
+        }
+        let expected = arity_of_choice
+            .get(&choice)
+            .copied()
+            .unwrap_or_else(|| branches_per_choice.get(&choice).map_or(0, BTreeSet::len));
+        let first = counts.first().and_then(|(_, count)| *count)?;
+        if counts.len() != expected || counts.iter().any(|(_, count)| *count != Some(first)) {
+            return None;
+        }
+        for (branch, _) in &counts {
+            pending.remove(&(choice, *branch));
+        }
+        // Attribute this choice's agreed count to its own enclosing branch, if any.
+        let parent = counts.first().and_then(|(branch, _)| {
+            ancestry
+                .get(&(choice, *branch))
+                .and_then(|chain| chain.split_last().map(|(_, rest)| rest.last().copied()))
+                .flatten()
+        });
+        match parent {
+            Some(parent_key) => {
+                let slot = pending.entry(parent_key).or_insert(Some(0));
+                *slot = slot.map(|sum| sum.saturating_add(first));
+            }
+            None => total = total.saturating_add(first),
+        }
+    }
+    Some(total)
 }
 
 fn sum_child_cardinalities(
@@ -14770,6 +15363,496 @@ mod tests {
             "optional labeled token shadowed by a following union match must drop its accessor\n{shadowed_context}"
         );
         insta::assert_snapshot!("multi_alternative_label_shadowed_context", shadowed_context);
+    }
+
+    /// Issue #201: labels nested inside an unlabeled grouping block, and a
+    /// single/list label pair on one rule, both reach the typed surface — while
+    /// layouts where positional lookup could resolve to another choice branch's
+    /// child still decline.
+    #[test]
+    fn grouped_and_mixed_same_rule_labels_emit_accessors_without_crossing_branches() {
+        let data = parser_fixture_data("multi-alternative-label/T.g4");
+        let rendered = render_parser("TParser", &data).expect("parser should render");
+
+        let context = |name: &str| {
+            rendered
+                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+                .unwrap_or_else(|| panic!("{name} impl"))
+                .1
+                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+                .unwrap_or_else(|| panic!("{name} display impl"))
+                .0
+                .to_owned()
+        };
+
+        // `(doc = IDENT)? (oneway = STAR | IN errors += unary ...)?`: the labels
+        // sit inside unlabeled grouping blocks, so collapsing each block into
+        // one token-group ref would swallow them.
+        insta::assert_snapshot!(
+            "multi_alternative_label_grouped_context",
+            context("GroupedContext")
+        );
+
+        // `name = unary ... errors += unary`: a single and a list label on the
+        // same rule must each resolve past the other's children.
+        insta::assert_snapshot!(
+            "multi_alternative_label_mixed_context",
+            context("MixedContext")
+        );
+
+        // A label buried under redundant grouping levels still reaches the
+        // surface — the collapse check descends nested blocks.
+        insta::assert_snapshot!(
+            "multi_alternative_label_nested_group_context",
+            context("NestedGroupContext")
+        );
+
+        // The three declining shapes are snapshotted whole rather than probed
+        // with `!contains`, so the absent accessor is visible alongside
+        // everything the context *does* expose:
+        //
+        // * `mixed_unbounded` — a variable count of the label's own target ahead
+        //   of it leaves no fixed `.skip(N)`;
+        // * `branch_hazard` — only one branch supplies the label while its
+        //   sibling matches the same target unlabeled, so `.nth(0)` could read
+        //   the sibling's child;
+        // * `branch_rival` — rival labels on one target across branches must not
+        //   read each other's child.
+        // An exhaustive choice keeps a following label's accessor (its prefix
+        // count is fixed at one however the choice branches), while a preceding
+        // *overlapping* token group does not (only some parses put a matching
+        // child ahead of the label).
+        insta::assert_snapshot!(
+            "multi_alternative_label_exhaustive_prefix_context",
+            context("ExhaustivePrefixContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_overlapping_group_context",
+            context("OverlappingGroupContext")
+        );
+        // Making that same choice optional removes the fixed position, so the
+        // following label loses its accessor — the branch-local cardinality is
+        // what distinguishes the two.
+        insta::assert_snapshot!(
+            "multi_alternative_label_optional_prefix_context",
+            context("OptionalPrefixContext")
+        );
+        // One label over mutually exclusive branches merges into a single read; and
+        // restricting to the label's own path lets a sibling branch be ignored
+        // rather than demanded.
+        insta::assert_snapshot!(
+            "multi_alternative_label_merged_rivals_context",
+            context("MergedRivalsContext")
+        );
+        // Repeated scalar declarations merge as a *last*-match read, since ANTLR
+        // overwrites a scalar label on every iteration.
+        insta::assert_snapshot!(
+            "multi_alternative_label_merged_repeats_context",
+            context("MergedRepeatsContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_path_restricted_context",
+            context("PathRestrictedContext")
+        );
+        // Two ways the on-path restriction can overstate what it knows, both
+        // declining as a result:
+        //
+        // * `closed_repeat_prefix` — sharing every *optional* group with the label
+        //   proves those groups ran, but a closed `+` inside them ran an unknown
+        //   number of times, so the prefix count stays unfixed;
+        // * `inner_choice_arity` — dropping the taken outer choice must drop its
+        //   arity too, or the surviving three-way inner choice is read as an
+        //   exhaustive two-way one and the prefix count is wrongly fixed at 1.
+        insta::assert_snapshot!(
+            "multi_alternative_label_closed_repeat_prefix_context",
+            context("ClosedRepeatPrefixContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_inner_choice_arity_context",
+            context("InnerChoiceArityContext")
+        );
+        // Nesting the exhaustive choice keeps the count fixed: the inner choice's
+        // agreed contribution rolls up into the outer branch.
+        insta::assert_snapshot!(
+            "multi_alternative_label_nested_exhaustive_prefix_context",
+            context("NestedExhaustivePrefixContext")
+        );
+
+        for (name, snapshot) in [
+            (
+                "MixedUnboundedContext",
+                "multi_alternative_label_mixed_unbounded_context",
+            ),
+            (
+                "BranchHazardContext",
+                "multi_alternative_label_branch_hazard_context",
+            ),
+            (
+                "BranchRivalContext",
+                "multi_alternative_label_branch_rival_context",
+            ),
+        ] {
+            insta::assert_snapshot!(snapshot, context(name));
+        }
+    }
+
+    /// Every label shape whose *resolution outcome* this module decides, kept in
+    /// one place so a change to any guard shows up as a diff here rather than as a
+    /// silent behaviour change in a grammar nobody tests.
+    ///
+    /// A label resolves only when the read `translate_element_read` emits provably
+    /// selects that label's own element. `resolve` means the grammar generates;
+    /// `decline` means resolution fails loudly (`cannot translate $x`), which is
+    /// always preferable to a read that returns some *other* child. Each entry
+    /// records why, because the two outcomes are easy to swap by accident — most
+    /// of these were originally over-rejections introduced while fixing a
+    /// miscompile, or vice versa.
+    #[test]
+    fn label_resolution_corpus_matches_expected_outcomes() {
+        // (fixture, label, resolves, why). `label` is the accessor/read the case
+        // turns on: rendering succeeds either way for a grammar without actions, so
+        // a declined *accessor* shows up as the method being absent rather than as
+        // a render error.
+        const CORPUS: &[(&str, &str, bool, &str)] = &[
+            // Declines: the read would select a child the label never bound.
+            (
+                "SiblingUnlabeledSameTarget",
+                "xs",
+                false,
+                "an action after a choice runs for every branch, so a sibling's token is not the label's",
+            ),
+            (
+                "OptionalBlockFollowedByTerminal",
+                "x",
+                false,
+                "an absent optional block lets the follower occupy its index",
+            ),
+            (
+                "ActionAfterNestedChoice",
+                "xs",
+                false,
+                "a list read would fold in the sibling branch's child",
+            ),
+            (
+                "LiteralAliasDifferingOccurrence",
+                "x",
+                false,
+                "block and token reads index in different units, so occurrence 1 means different children",
+            ),
+            (
+                "MergedDeclarationOptionalFollower",
+                "x",
+                false,
+                "an absent optional declaration lets the follower slide into the merged read",
+            ),
+            (
+                "ListDeclarationsDifferingStart",
+                "xs",
+                false,
+                "one `AllAfter` skip cannot serve branches that begin at different offsets",
+            ),
+            (
+                "InnerGroupClosedBeforeAction",
+                "x",
+                false,
+                "an inner group that closed before the action proves nothing about what matched",
+            ),
+            (
+                "AliasDifferingOccurrenceInAlt",
+                "x",
+                false,
+                "block and token occurrences are comparable only at zero",
+            ),
+            (
+                "DeclarationsDifferingOccurrence",
+                "x",
+                false,
+                "one positional read cannot serve declarations at different occurrences",
+            ),
+            (
+                "DeclarationsDifferingRepetition",
+                "x",
+                false,
+                "a repeated declaration needs a last-match read the others do not",
+            ),
+            (
+                "RepeatedBlockLabel",
+                "x",
+                false,
+                "a repeated block label exposes its last match, which a positional read cannot express",
+            ),
+            (
+                "RepeatedSiblingSpansIndex",
+                "x",
+                false,
+                "a repeated sibling spans a range of terminal positions, not just its start",
+            ),
+            (
+                "RepeatedMergeFollowedByMatch",
+                "x",
+                false,
+                "a shared last-match read would return a following unlabeled child on the non-repeated branch",
+            ),
+            (
+                "InitScalarRuleLabel",
+                "x",
+                false,
+                "a scalar rule read lowers to `.expect(...)`, which panics at rule entry",
+            ),
+            (
+                "AliasDeclarationsInChoice",
+                "x",
+                false,
+                "known limitation: alias declarations inside one nested choice still decline (see PR discussion)",
+            ),
+            (
+                "FallbackReadSiblingAlternative",
+                "x",
+                false,
+                "a `last()` fallback can select any terminal, so a non-declaring alternative satisfies it",
+            ),
+            (
+                "MixedModeLeadingTerminal",
+                "x",
+                false,
+                "mixed-mode occurrence zero coincides only when no terminal precedes either side",
+            ),
+            (
+                "PrecedingSiblingBranch",
+                "x",
+                false,
+                "a same-target sibling *before* the label impersonates it as readily as one after",
+            ),
+            (
+                "ExpandedBlockTerminalState",
+                "x",
+                false,
+                "an expanded block still matched a terminal, so what follows it is not leading",
+            ),
+            (
+                "ListAliasAcrossModes",
+                "xs",
+                false,
+                "a list read has no form common to token and block mode, so aliases cannot merge",
+            ),
+            (
+                "ListLabelWithoutIterator",
+                "xs",
+                false,
+                "a list label whose target names no rule or token type has no iterator read",
+            ),
+            (
+                "InnerChoiceArityInAction",
+                "x",
+                false,
+                "dropping the taken outer choice must drop its arity, or a three-way inner choice reads as two-way",
+            ),
+            // Resolves: valid reads that must not be rejected.
+            (
+                "ExhaustiveInnerChoiceInAction",
+                "x",
+                true,
+                "a genuinely exhaustive inner choice keeps its fixed prefix count of one",
+            ),
+            (
+                "ActionInCollapsibleChoice",
+                "x",
+                true,
+                "a token-only choice holding an action keeps its branch spans",
+            ),
+            (
+                "CollapsedBlockIsTerminal",
+                "x",
+                false,
+                "a collapsed token group is itself a terminal child, so what follows is not leading",
+            ),
+            (
+                "UnrelatedLaterChoiceConfinement",
+                "x",
+                false,
+                "confinement to a later choice says nothing about an earlier sibling",
+            ),
+            (
+                "ListPrefixRepeatsWithLabel",
+                "xs",
+                false,
+                "a same-target prefix sharing a repeated group interleaves with the labeled children",
+            ),
+            (
+                "ClosedRepeatedGroupPrefix",
+                "x",
+                false,
+                "a closed repeated group still contributes an unfixed number of preceding children",
+            ),
+            (
+                "RecoveredDeletedTokenIndex",
+                "x",
+                true,
+                "the positional block read skips deleted-token errors, so recovery cannot shift its index",
+            ),
+            (
+                "ReassignedAfterAction",
+                "x",
+                true,
+                "a declaration after the action has not assigned the label yet, so it cannot conflict",
+            ),
+            (
+                "ForwardBlockLabel",
+                "x",
+                true,
+                "a forward label's prefix is entirely in the action's future, so it cannot make the index inexact",
+            ),
+            (
+                "OptionalGroupSharedWithLabel",
+                "x",
+                true,
+                "an optional group shared with the label is taken wherever the label is bound",
+            ),
+            (
+                "SiblingBranchShorterThanOccurrence",
+                "x",
+                true,
+                "a sibling branch that cannot reach the selected occurrence is no collision",
+            ),
+            (
+                "IdenticalDeclarationsInChoice",
+                "x",
+                true,
+                "isolating one declaration must not reclassify its twin as an impostor",
+            ),
+            (
+                "MandatoryInnerGroupClosed",
+                "x",
+                true,
+                "a mandatory inner group relaxes nothing, so its closing before the action is irrelevant",
+            ),
+            (
+                "InlineActionBeforeLabel",
+                "x",
+                true,
+                "an inline action sees no children, so a later unbounded run cannot poison it",
+            ),
+            (
+                "SiblingDeclarationIrrelevant",
+                "x",
+                true,
+                "a branch-confined action never sees a sibling branch's declaration",
+            ),
+            (
+                "NestedChoiceInsideConfinedBranch",
+                "x",
+                true,
+                "confinement to an outer branch does not restrict a nested choice inside it",
+            ),
+            (
+                "ListAliasDeclarations",
+                "xs",
+                true,
+                "list declarations name one token type through two source forms",
+            ),
+            (
+                "ChoicePrefixOutsideLabel",
+                "x",
+                true,
+                "a choice before the label contributes a fixed count when its branches agree",
+            ),
+            (
+                "LiteralAliasSameOccurrence",
+                "x",
+                true,
+                "block and token reads coincide at occurrence zero",
+            ),
+            (
+                "NestedChoiceSatisfiability",
+                "x",
+                true,
+                "nested choices fold rather than sum: the alternative builds one child",
+            ),
+            (
+                "RepeatedScalarMerge",
+                "x",
+                true,
+                "a repeated scalar label exposes its last match",
+            ),
+            (
+                "ActionInsideTakenGroup",
+                "x",
+                true,
+                "the enclosing group's quantifier is satisfied wherever the action runs",
+            ),
+            (
+                "ActionOnlyBranch",
+                "x",
+                true,
+                "a branch holding only an action still identifies itself by span",
+            ),
+            (
+                "InitActionBeforeChildren",
+                "xs",
+                true,
+                "an `@init` body runs before any child exists, so no read can be polluted",
+            ),
+            (
+                "ExhaustiveChoicePrefix",
+                "x",
+                true,
+                "an exhaustive choice contributes a fixed count",
+            ),
+            (
+                "NotSetLabelBeforeTerminal",
+                "t",
+                true,
+                "ANTLR's `Sets/ParserNotTokenWithLabel` shape",
+            ),
+            (
+                "ConjuredLiteralLabel",
+                "x",
+                true,
+                "ANTLR's `ParserErrors/ConjuringUpToken` shape",
+            ),
+        ];
+
+        let mut wrong = Vec::new();
+        for &(fixture, label, resolves, why) in CORPUS {
+            let data = parser_fixture_data(&format!("label-resolution/{fixture}.g4"));
+            let rendered = render_parser_with_options(
+                &format!("{fixture}Parser"),
+                &data,
+                ParserRenderOptions {
+                    embedded: true,
+                    ..ParserRenderOptions::default()
+                },
+            );
+            // Which signal reports the decision depends on how the fixture reads its
+            // label. A grammar whose *action* reads it fails to render outright when
+            // resolution declines; one that relies on the typed accessor renders
+            // either way, and the decision surfaces as the method's presence.
+            let source = fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/antlr4-rust-gen/label-resolution")
+                    .join(format!("{fixture}.g4")),
+            )
+            .expect("fixture should be readable");
+            let reads_via_action = source.contains(&format!("${label}"));
+            let resolved = rendered.as_ref().is_ok_and(|parser| {
+                reads_via_action || parser.contains(&format!("pub fn {label}("))
+            });
+            if resolved != resolves {
+                let outcome = if resolves { "resolve" } else { "decline" };
+                let error = rendered
+                    .err()
+                    .map(|error| error.to_string())
+                    .unwrap_or_default();
+                wrong.push(format!(
+                    "  {fixture} (${label}): expected {outcome} — {why} {error}"
+                ));
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "label resolution changed:\n{}",
+            wrong.join("\n")
+        );
     }
 
     #[test]
