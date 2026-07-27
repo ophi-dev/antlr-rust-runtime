@@ -14848,39 +14848,40 @@ mod tests {
             context("MixedContext")
         );
 
-        // A variable count of the label's own target ahead of it leaves no
-        // fixed `.skip(N)`.
-        let unbounded = context("MixedUnboundedContext");
-        assert!(
-            !unbounded.contains("pub fn errors("),
-            "a list label behind an unbounded run of its own target has no fixed skip\n{unbounded}"
-        );
-
-        // Only one branch supplies the label while its sibling matches the same
-        // target unlabeled, so `.nth(0)` could read the sibling's child.
-        let hazard = context("BranchHazardContext");
-        assert!(
-            !hazard.contains("pub fn pick("),
-            "a label whose sibling branch matches the same target unlabeled must decline\n{hazard}"
-        );
-
-        // Rival labels on the same target across branches must not read each
-        // other's child.
-        let rival = context("BranchRivalContext");
-        for label in ["pub fn left(", "pub fn right("] {
-            assert!(
-                !rival.contains(label),
-                "rival same-target labels across branches must decline {label}\n{rival}"
-            );
-        }
-
         // A label buried under redundant grouping levels still reaches the
         // surface — the collapse check descends nested blocks.
-        let nested = context("NestedGroupContext");
-        assert!(
-            nested.contains("pub fn deep("),
-            "a label under extra grouping levels must still emit an accessor\n{nested}"
+        insta::assert_snapshot!(
+            "multi_alternative_label_nested_group_context",
+            context("NestedGroupContext")
         );
+
+        // The three declining shapes are snapshotted whole rather than probed
+        // with `!contains`, so the absent accessor is visible alongside
+        // everything the context *does* expose:
+        //
+        // * `mixed_unbounded` — a variable count of the label's own target ahead
+        //   of it leaves no fixed `.skip(N)`;
+        // * `branch_hazard` — only one branch supplies the label while its
+        //   sibling matches the same target unlabeled, so `.nth(0)` could read
+        //   the sibling's child;
+        // * `branch_rival` — rival labels on one target across branches must not
+        //   read each other's child.
+        for (name, snapshot) in [
+            (
+                "MixedUnboundedContext",
+                "multi_alternative_label_mixed_unbounded_context",
+            ),
+            (
+                "BranchHazardContext",
+                "multi_alternative_label_branch_hazard_context",
+            ),
+            (
+                "BranchRivalContext",
+                "multi_alternative_label_branch_rival_context",
+            ),
+        ] {
+            insta::assert_snapshot!(snapshot, context(name));
+        }
     }
 
     #[test]

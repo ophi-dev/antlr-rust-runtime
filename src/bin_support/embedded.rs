@@ -359,20 +359,26 @@ impl TranslationCtx<'_> {
 
     /// Resolves a label to `(ref, occurrence-among-same-target-in-alt)`.
     ///
-    /// The occurrence is a positional index into the flattened CST children, so
-    /// it only means anything when the label's position among same-target
-    /// children is fixed. Two things make it float, and either one reports the
-    /// label unresolved so the caller fails loudly rather than translating to a
-    /// read that silently yields the wrong element:
+    /// Every read `translate_element_read` can emit is a *positional* query over
+    /// the flattened CST children — `nth(i)` for a single label, "all children of
+    /// this target" for a list label, "the last terminal child" for a block
+    /// label. None of those retain which grammar branch built a child, so a
+    /// label only resolves when its read provably selects the label's own
+    /// element and nothing else. When it cannot, this returns `None` and the
+    /// caller fails loudly rather than translating to a silently wrong read.
     ///
-    /// * a preceding ref with inexact cardinality — refs drawn from sibling
-    ///   branches of a choice are mutually exclusive and report `min: 0`, so
-    ///   counting them would index past the children the parse built;
-    /// * an *optional* label with a following same-target child, which slides
-    ///   into the label's position whenever the label itself is absent.
+    /// The conditions that make a read unfaithful, by label kind:
     ///
-    /// List and block labels are exempt: their reads iterate or take the last
-    /// terminal child, so they never consult the occurrence index.
+    /// * **single** — a preceding ref with inexact cardinality (sibling branches
+    ///   of a choice are mutually exclusive and report `min: 0`, so counting
+    ///   them indexes past what the parse built), or an *optional* label with a
+    ///   following same-target child that slides into its position when absent;
+    /// * **list** — any same-target child outside the label, since the read
+    ///   cannot exclude it;
+    /// * **block** — a following terminal, which would become the `last()` the
+    ///   read takes;
+    /// * **any kind** — a second declaration of the same label that this one
+    ///   read cannot also serve.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
         let alts: Vec<&AltModel> = self
@@ -380,54 +386,63 @@ impl TranslationCtx<'_> {
             .and_then(|offset| rule.alt_at(offset))
             .map_or_else(|| rule.alts.iter().collect(), |alt| vec![alt]);
         for alt in alts {
-            let mut occurrence_by_target: BTreeMap<&str, Option<usize>> = BTreeMap::new();
-            for (position, element) in alt.refs.iter().enumerate() {
-                let labeled = element.label.as_deref() == Some(label);
-                // Token groups and wildcards carry no target to count against,
-                // and their reads ignore the index, so they neither consume nor
-                // contribute to an occurrence bucket. Sharing the empty-target
-                // bucket would let unrelated groups poison each other.
-                if element.target.is_empty() {
-                    if labeled {
-                        return Some((element.clone(), 0));
-                    }
-                    continue;
-                }
-                let occurrence = occurrence_by_target
-                    .entry(element.target.as_str())
-                    .or_insert(Some(0));
-                let current = *occurrence;
-                // An inexact ref leaves every later same-target position
-                // floating, so poison the running count rather than guess. A
-                // list ref (`xs+=e`) still contributes children here, so it
-                // must go through the same accounting: its usually-unbounded
-                // count is what stops a later same-target label from trusting
-                // a fixed position.
-                *occurrence = match (current, element.cardinality.max) {
-                    (Some(total), Some(max)) if element.cardinality.min == max => {
-                        Some(total.saturating_add(max))
-                    }
-                    _ => None,
-                };
-                if labeled {
-                    // A list read iterates every same-target child, so it never
-                    // consults the index and stays resolvable regardless.
-                    if element.is_list {
-                        return Some((element.clone(), 0));
-                    }
-                    let shadowed_when_absent = element.cardinality.min == 0
-                        && alt.refs[position + 1..].iter().any(|following| {
-                            following.target == element.target
-                                && following.cardinality.max != Some(0)
-                        });
-                    if shadowed_when_absent {
-                        return None;
-                    }
-                    return current.map(|current| (element.clone(), current));
-                }
+            if let Some(resolved) = Self::resolve_label_in_alt(alt, label) {
+                return Some(resolved);
             }
         }
         None
+    }
+
+    fn resolve_label_in_alt(alt: &AltModel, label: &str) -> Option<(ElementRef, usize)> {
+        let declarations = alt
+            .refs
+            .iter()
+            .filter(|element| element.label.as_deref() == Some(label))
+            .collect::<Vec<_>>();
+        let element = *declarations.first()?;
+        // `(x=A | x=B)` declares one label over disjoint targets; a single
+        // positional read cannot serve both, and picking the first silently
+        // yields an empty value on the other branch.
+        if declarations.len() > 1 {
+            return None;
+        }
+        let position = alt
+            .refs
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, element))?;
+        let (before, after) = (&alt.refs[..position], &alt.refs[position + 1..]);
+        let same_target = |candidate: &ElementRef| {
+            !candidate.target.is_empty()
+                && candidate.target == element.target
+                && candidate.cardinality.max != Some(0)
+        };
+
+        if element.is_list {
+            // The read yields every same-target child, so any same-target
+            // element outside this label would be folded into the label's value.
+            let exclusive = !before.iter().any(same_target) && !after.iter().any(same_target);
+            return exclusive.then(|| (element.clone(), 0));
+        }
+        if element.target.is_empty() {
+            // Block/wildcard labels read the last terminal child, so a later
+            // terminal would take its place.
+            let followed_by_terminal = after
+                .iter()
+                .any(|following| !following.token_types.is_empty());
+            return (!followed_by_terminal).then(|| (element.clone(), 0));
+        }
+
+        // Single label: count the same-target children ahead of it, bailing as
+        // soon as one contributes an unfixed number.
+        let occurrence = before
+            .iter()
+            .filter(|candidate| candidate.target == element.target)
+            .try_fold(0_usize, |total, candidate| {
+                let max = candidate.cardinality.max?;
+                (candidate.cardinality.min == max).then(|| total.saturating_add(max))
+            })?;
+        let shadowed_when_absent = element.cardinality.min == 0 && after.iter().any(same_target);
+        (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
 }
 
@@ -1131,6 +1146,155 @@ mod tests {
         // Unbounded run of `e` ahead of the label: no fixed index exists.
         let error = translate(None).expect_err("unbounded list must not resolve");
         assert!(error.contains("cannot translate $name"), "{error}");
+    }
+
+    /// A list read yields *every* same-target child, so it can only stand for
+    /// the label when no same-target element sits outside it. In the `mixed`
+    /// shape (`name=e ... errors+=e`) a `$errors` read would fold in `name`'s
+    /// child, so the label must not resolve.
+    #[test]
+    fn list_labels_sharing_a_target_with_another_label_stay_unresolved() {
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                ElementRef {
+                    label: Some("name".to_owned()),
+                    target: "e".to_owned(),
+                    token_types: Vec::new(),
+                    is_block: false,
+                    is_list: false,
+                    cardinality: ChildCardinality {
+                        min: 1,
+                        max: Some(1),
+                    },
+                    stable_accessor: true,
+                },
+                ElementRef {
+                    label: Some("errors".to_owned()),
+                    target: "e".to_owned(),
+                    token_types: Vec::new(),
+                    is_block: false,
+                    is_list: true,
+                    cardinality: ChildCardinality { min: 0, max: None },
+                    stable_accessor: true,
+                },
+            ],
+            children: BTreeMap::new(),
+            leading_target: Some("e".to_owned()),
+        });
+        let m = model(vec![statement, rule("e")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$errors", &ctx).expect_err("must not translate");
+        assert!(
+            error.to_string().contains("cannot translate $errors"),
+            "{error}"
+        );
+
+        // `name` is still resolvable: it precedes the list, so its own index is
+        // fixed at 0 and the list contributes nothing ahead of it.
+        let name = translate_body("$name.text", &ctx).expect("translates");
+        assert!(name.contains(".nth(0)"), "{name}");
+    }
+
+    /// A block label reads the last terminal child, so a following terminal
+    /// would take its place: `r : ((x=(A | B))) C {$x...}` must not resolve.
+    #[test]
+    fn block_labels_followed_by_a_terminal_stay_unresolved() {
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                ElementRef {
+                    label: Some("x".to_owned()),
+                    target: String::new(),
+                    token_types: vec![1, 2],
+                    is_block: true,
+                    is_list: false,
+                    cardinality: ChildCardinality {
+                        min: 1,
+                        max: Some(1),
+                    },
+                    stable_accessor: true,
+                },
+                ElementRef {
+                    label: None,
+                    target: "C".to_owned(),
+                    token_types: vec![3],
+                    is_block: false,
+                    is_list: false,
+                    cardinality: ChildCardinality {
+                        min: 1,
+                        max: Some(1),
+                    },
+                    stable_accessor: true,
+                },
+            ],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1), ("B", 2), ("C", 3)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$x.text", &ctx).expect_err("must not translate");
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
+    }
+
+    /// One label declared over disjoint targets (`r : (x=A | x=B)`) cannot be
+    /// served by a single positional read: picking the first declaration yields
+    /// an empty value whenever the parse took the other branch.
+    #[test]
+    fn labels_repeated_over_disjoint_targets_stay_unresolved() {
+        let mut statement = rule("s");
+        let token_ref = |target: &str, token_type| ElementRef {
+            label: Some("x".to_owned()),
+            target: target.to_owned(),
+            token_types: vec![token_type],
+            is_block: false,
+            is_list: false,
+            // Mutually exclusive branches.
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![token_ref("A", 1), token_ref("B", 2)],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1), ("B", 2)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$x.text", &ctx).expect_err("must not translate");
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
     }
 
     #[test]
