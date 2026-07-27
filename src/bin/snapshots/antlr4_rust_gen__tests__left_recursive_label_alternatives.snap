@@ -36,6 +36,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: true,
                 span: None,
                 branch_local_cardinality: ChildCardinality {
                     min: 1,
@@ -70,6 +71,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: true,
                 span: Some(
                     (
                         135,
@@ -109,6 +111,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: false,
                 span: Some(
                     (
                         146,
@@ -174,6 +177,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: true,
                 span: None,
                 branch_local_cardinality: ChildCardinality {
                     min: 1,
@@ -208,6 +212,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: true,
                 span: Some(
                     (
                         190,
@@ -247,6 +252,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: false,
                 span: Some(
                     (
                         201,
@@ -312,6 +318,7 @@ expression: "model.rules[1].alts"
                 },
                 group_spans: [],
                 branch_spans: [],
+                leading_terminal: true,
                 span: Some(
                     (
                         238,

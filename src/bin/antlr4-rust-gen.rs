@@ -2594,6 +2594,7 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         choice_spans: Vec::new(),
                         group_spans: Vec::new(),
                         branch_spans: Vec::new(),
+                        leading_terminal: true,
                         span: None,
                         branch_local_cardinality: embedded::ChildCardinality::ONE,
                         group_local_cardinality: embedded::ChildCardinality::ONE,
@@ -2709,6 +2710,12 @@ fn collect_structural_context_refs_with_cardinality(
         group_spans,
         branch_spans,
     } = context;
+    // Tracks whether any terminal-bearing ref has been emitted on this path, so an
+    // element can record whether it is the first terminal.
+    let mut seen_terminal = branch_local_cardinality.max.is_none_or(|max| max != 0)
+        && refs.iter().any(|existing| {
+            !existing.token_types.is_empty() && existing.cardinality.max != Some(0)
+        });
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
         let is_list = element
@@ -2740,6 +2747,7 @@ fn collect_structural_context_refs_with_cardinality(
                 choice_spans: choice_spans.to_vec(),
                 group_spans: group_spans.to_vec(),
                 branch_spans: branch_spans.to_vec(),
+                leading_terminal: !seen_terminal,
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -2764,6 +2772,7 @@ fn collect_structural_context_refs_with_cardinality(
                     choice_spans: choice_spans.to_vec(),
                     group_spans: group_spans.to_vec(),
                     branch_spans: branch_spans.to_vec(),
+                    leading_terminal: !seen_terminal,
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2783,8 +2792,14 @@ fn collect_structural_context_refs_with_cardinality(
                 // unlabeled and the labels sit inside it (`(x=A)?`), collapsing
                 // would swallow them, so descend and let the inner refs carry
                 // their own labels.
+                // A block holding an action or predicate must also stay expanded even
+                // when it is token-only: collapsing it discards the per-branch spans
+                // that place the action, so `x=A? (A | B {$x.text})` could not tell
+                // that the action runs only where the sibling `A` cannot shadow `x`.
                 if !token_types.is_empty()
-                    && (label.is_some() || !structural_block_labels_inside(block))
+                    && (label.is_some()
+                        || !(structural_block_labels_inside(block)
+                            || structural_block_holds_action(block)))
                 {
                     refs.push(embedded::ElementRef {
                         label,
@@ -2799,6 +2814,7 @@ fn collect_structural_context_refs_with_cardinality(
                         choice_spans: choice_spans.to_vec(),
                         group_spans: group_spans.to_vec(),
                         branch_spans: branch_spans.to_vec(),
+                        leading_terminal: !seen_terminal,
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2825,6 +2841,7 @@ fn collect_structural_context_refs_with_cardinality(
                         choice_spans: choice_spans.to_vec(),
                         group_spans: group_spans.to_vec(),
                         branch_spans: branch_spans.to_vec(),
+                        leading_terminal: !seen_terminal,
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2911,6 +2928,7 @@ fn collect_structural_context_refs_with_cardinality(
                     choice_spans: choice_spans.to_vec(),
                     group_spans: group_spans.to_vec(),
                     branch_spans: branch_spans.to_vec(),
+                    leading_terminal: !seen_terminal,
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2935,6 +2953,7 @@ fn collect_structural_context_refs_with_cardinality(
                 choice_spans: choice_spans.to_vec(),
                 group_spans: group_spans.to_vec(),
                 branch_spans: branch_spans.to_vec(),
+                leading_terminal: !seen_terminal,
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -2949,6 +2968,9 @@ fn collect_structural_context_refs_with_cardinality(
             | ElementKind::Action { .. }
             | ElementKind::Predicate { .. }
             | ElementKind::Epsilon => {}
+        }
+        if !structural_element_token_types(element, vocabulary).is_empty() {
+            seen_terminal = true;
         }
     }
 }
@@ -3046,6 +3068,21 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
         token_types.extend(alternative_types);
     }
     token_types.into_iter().collect()
+}
+
+/// Whether `block` contains an action or predicate at any depth. Such a block must
+/// not collapse into a single token-group ref: the collapse discards the per-branch
+/// spans that decide which branch an action sits in.
+fn structural_block_holds_action(block: &Block) -> bool {
+    block
+        .alternatives
+        .iter()
+        .flat_map(|alternative| &alternative.elements)
+        .any(|element| match &element.kind {
+            ElementKind::Action { .. } | ElementKind::Predicate { .. } => true,
+            ElementKind::Block(nested) => structural_block_holds_action(nested),
+            _ => false,
+        })
 }
 
 /// Whether any element anywhere inside `block` carries a label, i.e. the block
@@ -9154,6 +9191,7 @@ fn context_label_accessor(
         choice_spans: Vec::new(),
         group_spans: Vec::new(),
         branch_spans: Vec::new(),
+        leading_terminal: true,
         span: None,
         branch_local_cardinality: embedded::ChildCardinality::ONE,
         group_local_cardinality: embedded::ChildCardinality::ONE,
@@ -15393,7 +15431,49 @@ mod tests {
                 false,
                 "a repeated declaration needs a last-match read the others do not",
             ),
+            (
+                "RepeatedBlockLabel",
+                "x",
+                false,
+                "a repeated block label exposes its last match, which a positional read cannot express",
+            ),
+            (
+                "RepeatedSiblingSpansIndex",
+                "x",
+                false,
+                "a repeated sibling spans a range of terminal positions, not just its start",
+            ),
+            (
+                "MixedModeLeadingTerminal",
+                "x",
+                false,
+                "mixed-mode occurrence zero coincides only when no terminal precedes either side",
+            ),
             // Resolves: valid reads that must not be rejected.
+            (
+                "ActionInCollapsibleChoice",
+                "x",
+                true,
+                "a token-only choice holding an action keeps its branch spans",
+            ),
+            (
+                "InlineActionBeforeLabel",
+                "x",
+                true,
+                "an inline action sees no children, so a later unbounded run cannot poison it",
+            ),
+            (
+                "SiblingDeclarationIrrelevant",
+                "x",
+                true,
+                "a branch-confined action never sees a sibling branch's declaration",
+            ),
+            (
+                "NestedChoiceInsideConfinedBranch",
+                "x",
+                true,
+                "confinement to an outer branch does not restrict a nested choice inside it",
+            ),
             (
                 "ListAliasDeclarations",
                 "xs",

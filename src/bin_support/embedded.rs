@@ -115,6 +115,12 @@ pub(crate) struct ElementRef {
     /// predicates — such a branch emits no `ElementRef` at all, so ref spans alone
     /// would attribute the action to a neighbouring branch.
     pub(crate) branch_spans: Vec<(usize, usize)>,
+    /// Whether no terminal can precede this element on its own parse path. Only
+    /// then do a block read (which indexes every terminal child) and a token read
+    /// (which indexes only same-type children) provably agree, so this is what
+    /// makes a mixed-mode merge sound — occurrence zero alone is not enough, since
+    /// a token-mode zero can still sit at a non-zero terminal position.
+    pub(crate) leading_terminal: bool,
     /// Byte span of the element in the grammar source, when known. A mid-rule
     /// action executes at *its* source position, so only refs that start before
     /// the action's offset have been matched when its body runs.
@@ -522,9 +528,7 @@ impl TranslationCtx<'_> {
                 .filter(|candidate| {
                     !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
                 })
-                .any(|candidate| {
-                    Self::exact_terminal_index(alt, candidate).is_none_or(|at| at == occurrence)
-                });
+                .any(|candidate| Self::can_occupy_terminal_index(alt, candidate, occurrence));
         }
         // The read queries by token *type*, so a differently-spelled terminal with
         // the same type is the same child (`A : 'a';` makes `A` and `'a'` one).
@@ -550,6 +554,29 @@ impl TranslationCtx<'_> {
         // A list read selects any same-target child; a positional read needs one
         // at `occurrence`. An unbounded count can always reach either.
         available.is_none_or(|available| available > occurrence)
+    }
+
+    /// Whether `candidate` can occupy terminal index `occurrence` on its own parse
+    /// path. A *repeated* candidate spans a range of positions rather than one, so
+    /// comparing a single index would miss it: in `C x=(A | B) | (D | E)+` the
+    /// repeated group starts at 0 yet also covers 1, where `x` reads.
+    fn can_occupy_terminal_index(
+        alt: &AltModel,
+        candidate: &ElementRef,
+        occurrence: usize,
+    ) -> bool {
+        let Some(start) = Self::exact_terminal_index(alt, candidate) else {
+            // No fixed start: the candidate could be anywhere.
+            return true;
+        };
+        if start > occurrence {
+            return false;
+        }
+        // Unbounded repetition reaches every later index.
+        candidate
+            .cardinality
+            .max
+            .is_none_or(|max| start + max > occurrence)
     }
 
     /// Index among terminal children at which `element` sits on its own parse
@@ -796,15 +823,20 @@ impl TranslationCtx<'_> {
         // different children, and `A x='a' B | A x=A C` has them meaning the same
         // child while reporting 1 and 1 only by coincidence.
         //
-        // Rather than guess, mixed-mode pairs merge only at occurrence zero — the
-        // one index where the two systems provably coincide, since "no terminal
-        // before" and "no same-type token before" agree there. Same-mode pairs
-        // compare directly.
+        // Rather than guess, mixed-mode pairs merge only when *neither* has anything
+        // ahead of it — occurrence zero in both systems *and* no preceding terminal
+        // of any type. Occurrence zero alone is not enough: in `B x=A | x='a'` the
+        // symbolic side reports same-token occurrence 0 while sitting at terminal
+        // position 1, and merging it with the literal's terminal 0 exposed `B`.
+        // Same-mode pairs compare directly.
         if !left.0.token_types.is_empty() && left.0.token_types == right.0.token_types {
             if left.0.is_block == right.0.is_block {
                 return left.1 == right.1;
             }
-            return left.1 == 0 && right.1 == 0;
+            return left.1 == 0
+                && right.1 == 0
+                && left.0.leading_terminal
+                && right.0.leading_terminal;
         }
         if left.0.is_block != right.0.is_block {
             return false;
@@ -1025,6 +1057,20 @@ impl TranslationCtx<'_> {
         // results to agree, so one read demonstrably serves every branch:
         // `(A x=A B | x=A C)` wants occurrence 1 then 0, and `(x=A B | x=A+ C)`
         // wants a first-match read then a last-match one.
+        // An action confined to one branch never sees a sibling branch's declaration,
+        // so requiring agreement with it would reject a read that is unambiguous
+        // where the action actually runs (`(x=A {$x} | x=A+ B)`).
+        let relevant = declarations
+            .iter()
+            .copied()
+            .filter(|candidate| !branch_confined || on_action_path(candidate))
+            .collect::<Vec<_>>();
+        let declarations = if relevant.is_empty() {
+            declarations
+        } else {
+            relevant
+        };
+        let element = *declarations.first()?;
         if declarations.len() > 1 {
             let mut resolutions = Vec::with_capacity(declarations.len());
             for candidate in &declarations {
@@ -1062,6 +1108,13 @@ impl TranslationCtx<'_> {
         // leave a literal label counting same-target children while its read walks
         // every terminal.
         if element.is_block {
+            // A *repeated* block label (`x=(A | B)+`) is overwritten each iteration,
+            // so ANTLR exposes the last match while a positional read pins the first.
+            // The non-block path already declines this; do the same rather than read
+            // the wrong iteration.
+            if element.cardinality.is_repeated() {
+                return None;
+            }
             // A block label has no single target to query, so its read walks the
             // context's terminal children by position. The index is the number of
             // terminals matched ahead of the block on this parse path — every
@@ -1069,12 +1122,31 @@ impl TranslationCtx<'_> {
             // each is a distinct child of the same context.
             // `on_action_path` already narrowed these to one parse path (when the
             // action is inside a branch), so branches that survive simply count.
-            let terminals_before = Self::exact_child_count(
-                before.iter().filter(|candidate| {
-                    !candidate.token_types.is_empty() && on_action_path(candidate)
-                }),
-                branch_confined,
-            );
+            // Confinement to one *outer* branch does not restrict a nested choice
+            // inside it: `((a=A | b=B) x=(C | D) {…} | E)` still has the `A`/`B`
+            // branches to reconcile, and calling the count path-restricted summed
+            // them. Strip the tags of choices the action is genuinely inside, then
+            // let any surviving tag force cross-branch agreement.
+            let counted = before
+                .iter()
+                .filter(|candidate| !candidate.token_types.is_empty() && on_action_path(candidate))
+                .cloned()
+                .map(|mut candidate| {
+                    if let Some(branches) = action_branches.as_ref() {
+                        candidate.choice_branch.retain(|(choice, _)| {
+                            !branches.iter().any(|(taken, _)| taken == choice)
+                        });
+                        let keep = candidate.choice_branch.len();
+                        candidate.choice_arity.truncate(keep);
+                        candidate.choice_spans.truncate(keep);
+                    }
+                    candidate
+                })
+                .collect::<Vec<_>>();
+            let restricted = counted
+                .iter()
+                .all(|candidate| candidate.choice_branch.is_empty());
+            let terminals_before = Self::exact_child_count(counted.iter(), restricted);
             // Without a fixed index the read falls back to the most recent
             // terminal, which is only right when nothing has been matched since.
             // A sibling branch that puts a terminal at the same index supplies the
@@ -1091,8 +1163,7 @@ impl TranslationCtx<'_> {
                         !candidate.can_coexist_with(element)
                             && !candidate.token_types.is_empty()
                             && candidate.cardinality.max != Some(0)
-                            && Self::exact_terminal_index(alt, candidate)
-                                .is_none_or(|at| at == index)
+                            && Self::can_occupy_terminal_index(alt, candidate, index)
                     });
                 if sibling_at_index {
                     return None;
@@ -1169,7 +1240,13 @@ impl TranslationCtx<'_> {
         let counted = before
             .iter()
             .filter(|candidate| {
-                counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
+                // Only children already matched when the action runs can affect its
+                // read. An inline action *before* the label sees none of them, so a
+                // later unbounded run must not poison the count:
+                // `r : {$x.text} A* x=A EOF;` reads an empty list, whatever follows.
+                counts_toward_occurrence(candidate)
+                    && matched_at_action(candidate)
+                    && candidate.can_coexist_with(element)
             })
             .cloned()
             .map(|mut candidate| {
@@ -1363,6 +1440,7 @@ fn translate_reference(
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -1384,6 +1462,7 @@ fn translate_reference(
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -1741,6 +1820,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -1758,6 +1838,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -1823,6 +1904,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             // Optional on its own path, so the count ahead of the label floats.
             branch_local_cardinality: ChildCardinality {
@@ -1882,6 +1964,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -1930,6 +2013,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality { min, max: Some(1) },
             group_local_cardinality: ChildCardinality { min, max: Some(1) },
@@ -1979,6 +2063,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -1999,6 +2084,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2060,6 +2146,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -2077,6 +2164,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -2136,6 +2224,7 @@ mod tests {
                         choice_spans: Vec::new(),
                         group_spans: Vec::new(),
                         branch_spans: Vec::new(),
+                        leading_terminal: true,
                         span: Some((10, 20)),
                         branch_local_cardinality: ChildCardinality::ONE,
                         group_local_cardinality: ChildCardinality::ONE,
@@ -2156,6 +2245,7 @@ mod tests {
                         choice_spans: Vec::new(),
                         group_spans: Vec::new(),
                         branch_spans: Vec::new(),
+                        leading_terminal: true,
                         span: Some((30, 31)),
                         branch_local_cardinality: ChildCardinality::ONE,
                         group_local_cardinality: ChildCardinality::ONE,
@@ -2211,6 +2301,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2277,6 +2368,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2361,6 +2453,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2417,6 +2510,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2480,6 +2574,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2524,6 +2619,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2596,6 +2692,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2616,6 +2713,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2646,6 +2744,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2699,6 +2798,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2766,6 +2866,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -2787,6 +2888,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -2836,6 +2938,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2885,6 +2988,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2933,6 +3037,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -2953,6 +3058,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -3011,6 +3117,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -3076,6 +3183,7 @@ mod tests {
             choice_spans: Vec::new(),
             group_spans: Vec::new(),
             branch_spans: Vec::new(),
+            leading_terminal: true,
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
@@ -3161,6 +3269,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
@@ -3178,6 +3287,7 @@ mod tests {
                     choice_spans: Vec::new(),
                     group_spans: Vec::new(),
                     branch_spans: Vec::new(),
+                    leading_terminal: true,
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                     group_local_cardinality: ChildCardinality::ONE,
