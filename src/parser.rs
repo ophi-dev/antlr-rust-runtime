@@ -5196,6 +5196,11 @@ where
         self.syntax_errors = self.syntax_errors.saturating_add(count);
     }
 
+    /// Returns whether no interpreted rule context or generated invocation is active.
+    const fn is_top_level_entry(&self) -> bool {
+        self.rule_context_stack.is_empty() && self.pending_invoking_states.is_empty()
+    }
+
     /// Emits diagnostics buffered by the token stream while generated parser
     /// code was fetching lexer tokens directly.
     pub fn report_token_source_errors(&mut self) {
@@ -5218,6 +5223,15 @@ where
         self.generated_parser_diagnostics
             .truncate(marker.diagnostics_len);
         self.syntax_errors = marker.syntax_errors;
+        self.rollback_generated_tree(marker);
+    }
+
+    /// Rolls back generated tree state while retaining committed diagnostics.
+    ///
+    /// Fatal public entries use this after an earlier child recovery: the
+    /// partial tree is discarded, but ANTLR has already committed the child's
+    /// diagnostic and syntax-error count.
+    pub fn rollback_generated_tree(&mut self, marker: GeneratedDiagnosticsCheckpoint) {
         self.generated_sync_expected = None;
         self.tree.rollback(marker.tree);
     }
@@ -5227,6 +5241,24 @@ where
         let parser_diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
         let token_errors = self.input.drain_source_errors();
         self.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
+    }
+
+    /// Emits a fatal parser error after an entry-rule parse commits to returning it.
+    ///
+    /// Generated parsers call this only at their public entry boundary. Nested
+    /// failures remain silent until generated recovery commits and buffers them.
+    pub fn report_unrecovered_parser_error(&self, error: &AntlrError) {
+        let AntlrError::ParserError {
+            line,
+            column,
+            message,
+            offending,
+        } = error
+        else {
+            return;
+        };
+        let offending = offending.and_then(|token| self.token_store().view(token));
+        self.notify_error_listeners(offending, *line, *column, message, Some(error));
     }
 
     fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
@@ -7210,6 +7242,7 @@ where
         predicate_context: Option<FastPredicateContext<'_>>,
         alt_tracking: AltNumberTracking,
     ) -> Result<ParseTree, AntlrError> {
+        let report_unrecovered_error = self.is_top_level_entry();
         let start_state = atn.rule_to_start_state().get(rule_index).ok_or_else(|| {
             AntlrError::Unsupported(format!("rule {rule_index} has no start state"))
         })?;
@@ -7295,6 +7328,9 @@ where
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 self.record_syntax_errors(1);
                 self.report_token_source_errors();
+                if report_unrecovered_error {
+                    self.report_unrecovered_parser_error(&error);
+                }
                 error
             })?
         } else {
@@ -7767,6 +7803,7 @@ where
         precedence: i32,
         options: ParserRuntimeOptions<'_>,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        let report_unrecovered_error = self.is_top_level_entry();
         let ParserRuntimeOptions {
             init_action_rules,
             track_alt_numbers,
@@ -7907,6 +7944,9 @@ where
             let error = self.recognition_error(rule_index, start_index, &expected);
             self.record_syntax_errors(1);
             self.report_token_source_errors();
+            if report_unrecovered_error {
+                self.report_unrecovered_parser_error(&error);
+            }
             return Err(error);
         };
 
@@ -17246,19 +17286,31 @@ mod tests {
     }
 
     #[test]
-    fn parser_syntax_error_count_tracks_failed_interpreted_parse() {
+    fn failed_interpreted_parse_notifies_error_listener() {
         let atn = token_then_eof_atn();
         let mut parser = mini_parser(vec![
-            TestToken::new(2).with_text("y"),
+            TestToken::new(2)
+                .with_text("y")
+                .with_span(0, 0)
+                .with_position(3, 5),
             TestToken::eof("parser-test", 1, 1, 1),
         ]);
+        parser.remove_error_listeners();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
 
         let error = parser
             .parse_atn_rule(&atn, 0)
             .expect_err("start-rule mismatch should remain a parser error");
 
         assert_eq!(parser.number_of_syntax_errors(), 1);
-        assert!(matches!(error, AntlrError::ParserError { .. }));
+        assert!(matches!(&error, AntlrError::ParserError { .. }));
+        insta::assert_debug_snapshot!(
+            "failed_interpreted_parse_notifies_error_listener",
+            *diagnostics.lock().expect("recorded diagnostics lock")
+        );
     }
 
     #[test]
