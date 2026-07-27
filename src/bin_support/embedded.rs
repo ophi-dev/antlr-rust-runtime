@@ -659,15 +659,12 @@ impl TranslationCtx<'_> {
             })
             .cloned()
             .map(|mut candidate| {
-                candidate.choice_branch.retain(|(choice, _)| {
+                candidate.retain_choices(|choice| {
                     !element
                         .choice_branch
                         .iter()
-                        .any(|(taken, _)| taken == choice)
+                        .any(|&(taken, _)| taken == choice)
                 });
-                let keep = candidate.choice_branch.len();
-                candidate.choice_arity.truncate(keep);
-                candidate.choice_spans.truncate(keep);
                 if candidate.choice_branch.is_empty() {
                     candidate.cardinality = candidate.group_local_cardinality;
                 }
@@ -1408,15 +1405,12 @@ impl TranslationCtx<'_> {
                 // tags carry no remaining alternation. Tags that survive belong to
                 // choices the label sits outside of, whose branches are genuinely
                 // alternative.
-                candidate.choice_branch.retain(|(choice, _)| {
+                candidate.retain_choices(|choice| {
                     !element
                         .choice_branch
                         .iter()
-                        .any(|(taken, _)| taken == choice)
+                        .any(|&(taken, _)| taken == choice)
                 });
-                let keep = candidate.choice_branch.len();
-                candidate.choice_arity.truncate(keep);
-                candidate.choice_spans.truncate(keep);
                 candidate
             })
             .collect::<Vec<_>>();

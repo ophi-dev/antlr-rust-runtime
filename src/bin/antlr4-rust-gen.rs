@@ -15641,7 +15641,19 @@ mod tests {
                 false,
                 "a list label whose target names no rule or token type has no iterator read",
             ),
+            (
+                "InnerChoiceArityInAction",
+                "x",
+                false,
+                "dropping the taken outer choice must drop its arity, or a three-way inner choice reads as two-way",
+            ),
             // Resolves: valid reads that must not be rejected.
+            (
+                "ExhaustiveInnerChoiceInAction",
+                "x",
+                true,
+                "a genuinely exhaustive inner choice keeps its fixed prefix count of one",
+            ),
             (
                 "ActionInCollapsibleChoice",
                 "x",
