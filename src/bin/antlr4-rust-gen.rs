@@ -5666,11 +5666,12 @@ fn render_generated_rule_dispatch_with_rule_names(
         {
             // Expensive left-recursive regions start generated and switch only
             // after warmed adaptive-prediction work identifies a costly input.
-            // Features implemented solely by generated bodies still override
-            // the adaptive ATN preference.
+            // Features implemented solely by generated bodies, and hooks whose
+            // decision overrides differ between generated and interpreted
+            // parsing, still override the adaptive ATN preference.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -5757,7 +5758,7 @@ fn render_generated_rule_dispatch_with_rule_names(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() {{\n            \
+                "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() {{\n            \
                  return self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
                  }}\n        \
                  let __adaptive_outermost = self.adaptive_atn_preference_depths[{slot}] == 0;\n        \
@@ -5791,7 +5792,7 @@ fn render_generated_rule_dispatch_with_rule_names(
                          && self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[{slot}]\n                        \
                          && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn_preference_starts[{slot}], __adaptive_after);\n                \
                      self.adaptive_atn_preferred_rules[{slot}] = __adaptive_expensive;\n                \
-                     if __adaptive_expensive && !__adaptive_outermost {{\n                    \
+                     if __adaptive_expensive {{\n                    \
                          self.adaptive_atn_retry_slot = Some({slot});\n                    \
                          __result = Err(GeneratedRuleError::AdaptiveRetry);\n                \
                      }}\n            \
@@ -13739,7 +13740,7 @@ mod tests {
         );
 
         assert!(rendered.contains(
-            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
         ));
         assert!(rendered.contains(
             "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
@@ -13758,6 +13759,38 @@ mod tests {
         assert!(rendered.contains(
             "ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
         ));
+        assert!(
+            rendered.contains("if __adaptive_expensive {")
+                && rendered.contains("self.adaptive_atn_retry_slot = Some(0);"),
+            "an expensive outermost candidate must retry on the same invocation"
+        );
+        assert!(
+            !rendered.contains("if __adaptive_expensive && !__adaptive_outermost"),
+            "outermost candidates must not defer routing to parser reuse"
+        );
+    }
+
+    #[test]
+    fn renders_bare_left_recursive_seed_retry_on_same_invocation() {
+        let rules = vec![Some(left_recursive_rule(
+            0,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        ))];
+
+        let rendered = render_generated_rule_dispatch(&rules, &[true], &BTreeMap::new(), false);
+
+        assert!(rendered.contains(
+            "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
+        ));
+        assert!(
+            rendered.contains("if __adaptive_expensive {")
+                && rendered.contains("self.adaptive_atn_retry_slot = Some(0);")
+                && rendered.contains("__result = Err(GeneratedRuleError::AdaptiveRetry);"),
+            "a bare seed must replay through the interpreter as soon as measured work is expensive"
+        );
+        assert!(!rendered.contains("_adaptive_probe_dispatch"));
+        assert!(!rendered.contains("if __adaptive_expensive && !__adaptive_outermost"));
     }
 
     #[test]

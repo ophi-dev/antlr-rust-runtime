@@ -34,7 +34,8 @@ pub struct ParserAtnSimulator<'a> {
     deferred_accept_states: FxHashSet<(usize, DfaStateId)>,
     shared_cache_key: Option<usize>,
     shared_cache_generation: u64,
-    shared_cache_trained: bool,
+    has_trained_decision: bool,
+    measure_adaptive_work: bool,
     adaptive_calls: usize,
     adaptive_closure_work: usize,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
@@ -158,7 +159,6 @@ impl PredictionStore {
 struct SharedPredictionStore {
     generation: u64,
     store: Option<PredictionStore>,
-    trained: bool,
 }
 
 thread_local! {
@@ -172,7 +172,6 @@ fn clear_shared_prediction_store(key: usize) -> u64 {
         let shared = cache.entry(key).or_default();
         shared.generation = shared.generation.wrapping_add(1);
         shared.store = None;
-        shared.trained = false;
         shared.generation
     })
 }
@@ -506,7 +505,6 @@ impl Drop for ParserAtnSimulator<'_> {
             .iter()
             .map(ParserDfa::state_count)
             .sum();
-        let trained = self.shared_cache_trained || self.adaptive_calls != 0;
         // Check the DFAs back IN by move. The slot is normally vacant because
         // `new_shared` checked them out; it is occupied only when another
         // simulator for the same ATN was created while this one was alive
@@ -519,7 +517,6 @@ impl Drop for ParserAtnSimulator<'_> {
             if shared.generation != self.shared_cache_generation {
                 return false;
             }
-            shared.trained |= trained;
             if let Some(shared_store) = shared.store.as_mut() {
                 union_prediction_stores(shared_store, store, &mut self.workspace);
             } else {
@@ -551,7 +548,8 @@ impl<'a> ParserAtnSimulator<'a> {
             deferred_accept_states: FxHashSet::default(),
             shared_cache_key: None,
             shared_cache_generation: 0,
-            shared_cache_trained: false,
+            has_trained_decision: false,
+            measure_adaptive_work: false,
             adaptive_calls: 0,
             adaptive_closure_work: 0,
             exact_ambig_detection: false,
@@ -563,7 +561,7 @@ impl<'a> ParserAtnSimulator<'a> {
 
     /// Resets transient simulator state while retaining learned decision DFAs.
     pub fn reset(&mut self) {
-        self.shared_cache_trained |= self.adaptive_calls != 0;
+        self.measure_adaptive_work = false;
         self.adaptive_calls = 0;
         self.adaptive_closure_work = 0;
         self.outer_context_cache = None;
@@ -582,7 +580,7 @@ impl<'a> ParserAtnSimulator<'a> {
         self.full_context_memo.clear();
         self.full_context_memo_len = 0;
         self.reset();
-        self.shared_cache_trained = false;
+        self.has_trained_decision = false;
         if let Some(key) = self.shared_cache_key {
             self.shared_cache_generation = clear_shared_prediction_store(key);
         }
@@ -658,19 +656,18 @@ impl<'a> ParserAtnSimulator<'a> {
         let key = ptr as usize;
         #[cfg(feature = "perf-counters")]
         let import_started = std::time::Instant::now();
-        let (store, generation, trained) = SHARED_PREDICTION_STORES.with(|cache| {
+        let (store, generation) = SHARED_PREDICTION_STORES.with(|cache| {
             let mut cache = cache.borrow_mut();
             let shared = cache.entry(key).or_default();
-            let trained = shared.trained && shared.store.is_some();
             (
                 shared
                     .store
                     .take()
                     .unwrap_or_else(|| PredictionStore::new(atn)),
                 shared.generation,
-                trained,
             )
         });
+        let has_trained_decision = store.decision_to_dfa.iter().any(|dfa| !dfa.is_empty());
         #[cfg(feature = "perf-counters")]
         crate::perf::record_dfa_cache_import(
             import_started.elapsed().as_nanos(),
@@ -690,7 +687,8 @@ impl<'a> ParserAtnSimulator<'a> {
             deferred_accept_states: FxHashSet::default(),
             shared_cache_key: Some(key),
             shared_cache_generation: generation,
-            shared_cache_trained: trained,
+            has_trained_decision,
+            measure_adaptive_work: false,
             adaptive_calls: 0,
             adaptive_closure_work: 0,
             exact_ambig_detection: false,
@@ -704,10 +702,14 @@ impl<'a> ParserAtnSimulator<'a> {
         &self.store.decision_to_dfa
     }
 
-    /// Returns the warmed adaptive-call and closure-work counters.
+    /// Returns adaptive-call and closure-work counters for trained decisions.
+    ///
+    /// A call contributes only when its decision DFA was already non-empty at
+    /// call entry, so first-population work cannot make an unrelated candidate
+    /// look expensive.
     #[doc(hidden)]
     pub const fn adaptive_prediction_work(&self) -> Option<(usize, usize)> {
-        if self.shared_cache_trained {
+        if self.has_trained_decision {
             Some((self.adaptive_calls, self.adaptive_closure_work))
         } else {
             None
@@ -935,6 +937,31 @@ impl<'a> ParserAtnSimulator<'a> {
         input: &mut T,
         merge_cache: &mut PredictionWorkspace,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        let decision = request.decision;
+        self.measure_adaptive_work = self
+            .store
+            .decision_to_dfa
+            .get(decision)
+            .is_some_and(|dfa| !dfa.is_empty());
+        if self.measure_adaptive_work {
+            self.adaptive_calls = self.adaptive_calls.saturating_add(1);
+        }
+        let result = self.adaptive_predict_stream_inner_impl(request, input, merge_cache);
+        self.measure_adaptive_work = false;
+        self.has_trained_decision |= self
+            .store
+            .decision_to_dfa
+            .get(decision)
+            .is_some_and(|dfa| !dfa.is_empty());
+        result
+    }
+
+    fn adaptive_predict_stream_inner_impl<T: IntStream>(
+        &mut self,
+        request: AdaptivePredictRequest,
+        input: &mut T,
+        merge_cache: &mut PredictionWorkspace,
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let AdaptivePredictRequest {
             decision,
             precedence,
@@ -942,7 +969,6 @@ impl<'a> ParserAtnSimulator<'a> {
             force_full_context_retry,
             sll_probe_only,
         } = request;
-        self.adaptive_calls = self.adaptive_calls.saturating_add(1);
         self.deferred_accept_states
             .retain(|(stored_decision, _)| *stored_decision != decision);
         #[cfg(feature = "perf-counters")]
@@ -1913,7 +1939,9 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         }
         let closure_work = scratch.visited.len();
-        self.adaptive_closure_work = self.adaptive_closure_work.saturating_add(closure_work);
+        if self.measure_adaptive_work {
+            self.adaptive_closure_work = self.adaptive_closure_work.saturating_add(closure_work);
+        }
         #[cfg(feature = "perf-counters")]
         crate::perf::record_closure(closure_work);
     }
@@ -2300,11 +2328,6 @@ mod tests {
 
     #[test]
     fn adaptive_atn_preference_requires_expensive_prediction_delta() {
-        let atn = two_token_decision_atn();
-        let mut simulator = ParserAtnSimulator::new(&atn);
-        assert_eq!(simulator.adaptive_prediction_work(), None);
-        simulator.shared_cache_trained = true;
-        assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
         assert!(!ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
             (0, 0),
             (ADAPTIVE_ATN_PREFERENCE_MIN_CALLS - 1, usize::MAX),
@@ -2343,39 +2366,60 @@ mod tests {
                     * ADAPTIVE_ATN_PREFERENCE_DECISIVE_CLOSURE_WORK_PER_CALL,
             ),
         ));
-
-        simulator.shared_cache_trained = false;
-        assert_eq!(simulator.adaptive_prediction_work(), None);
     }
 
     #[test]
-    fn reset_warms_adaptive_atn_preference_and_clear_dfa_cools_it() {
+    fn adaptive_atn_preference_excludes_first_population_per_decision() {
+        let atn = two_independent_decisions_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_prediction_work(), None);
+        assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+        let after_first_decision = simulator
+            .adaptive_prediction_work()
+            .expect("one decision is trained");
+        assert_eq!(after_first_decision, (0, 0));
+
+        assert_eq!(simulator.adaptive_predict(1, [1, 2]), Ok(1));
+        assert_eq!(
+            simulator.adaptive_prediction_work(),
+            Some(after_first_decision),
+            "cold work for another decision must not enter the routing counters"
+        );
+
+        assert_eq!(simulator.adaptive_predict(1, [1, 2]), Ok(1));
+        let after_warm_decision = simulator
+            .adaptive_prediction_work()
+            .expect("trained decision work is measurable");
+        assert_eq!(after_warm_decision.0, after_first_decision.0 + 1);
+    }
+
+    #[test]
+    fn reset_retains_adaptive_training_and_clear_dfa_cools_it() {
         let atn = two_token_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
-        simulator.adaptive_calls = ADAPTIVE_ATN_PREFERENCE_MIN_CALLS;
-        simulator.adaptive_closure_work =
-            ADAPTIVE_ATN_PREFERENCE_MIN_CALLS * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL;
+        assert_eq!(simulator.adaptive_prediction_work(), None);
+        assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+        assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
 
         simulator.reset();
-        assert!(simulator.shared_cache_trained);
         assert_eq!(simulator.adaptive_calls, 0);
         assert_eq!(simulator.adaptive_closure_work, 0);
         assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
 
-        simulator.adaptive_calls = ADAPTIVE_ATN_PREFERENCE_MIN_CALLS;
-        simulator.adaptive_closure_work =
-            ADAPTIVE_ATN_PREFERENCE_MIN_CALLS * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL;
-        assert!(ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
-            (0, 0),
+        assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+        assert_eq!(
             simulator
                 .adaptive_prediction_work()
-                .expect("warmed counters"),
-        ));
+                .expect("warmed counters")
+                .0,
+            1
+        );
 
         simulator.clear_dfa();
-        assert!(!simulator.shared_cache_trained);
         assert_eq!(simulator.adaptive_calls, 0);
         assert_eq!(simulator.adaptive_closure_work, 0);
+        assert_eq!(simulator.adaptive_prediction_work(), None);
     }
 
     #[test]
@@ -2410,17 +2454,17 @@ mod tests {
         let atn = Box::leak(Box::new(two_token_decision_atn()));
         {
             let mut simulator = ParserAtnSimulator::new_shared(atn);
-            simulator.adaptive_calls = 1;
+            assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
         }
 
         {
             let simulator = ParserAtnSimulator::new_shared(atn);
-            assert!(simulator.shared_cache_trained);
+            assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
         }
 
         ParserAtnSimulator::clear_shared_dfa(atn);
         let simulator = ParserAtnSimulator::new_shared(atn);
-        assert!(!simulator.shared_cache_trained);
+        assert_eq!(simulator.adaptive_prediction_work(), None);
     }
 
     #[test]
@@ -2428,13 +2472,13 @@ mod tests {
         let atn = Box::leak(Box::new(two_token_decision_atn()));
         {
             let mut simulator = ParserAtnSimulator::new_shared(atn);
-            simulator.adaptive_calls = 1;
+            assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
         }
 
         let warmed = ParserAtnSimulator::new_shared(atn);
-        assert!(warmed.shared_cache_trained);
+        assert_eq!(warmed.adaptive_prediction_work(), Some((0, 0)));
         let overlapping = ParserAtnSimulator::new_shared(atn);
-        assert!(!overlapping.shared_cache_trained);
+        assert_eq!(overlapping.adaptive_prediction_work(), None);
     }
 
     #[test]
@@ -3146,66 +3190,101 @@ mod tests {
         two_token_decision_atn_with_precedence(false)
     }
 
+    fn two_independent_decisions_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(3);
+        add_two_token_decision_rule(&mut atn, 0, 0);
+        add_two_token_decision_rule(&mut atn, 8, 1);
+        atn.set_rule_to_start_state(vec![0, 8])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![7, 15])
+            .expect("rule stop states");
+        finish_atn(atn)
+    }
+
     fn two_token_decision_atn_with_precedence(precedence: bool) -> Atn {
         let mut atn = ParserAtnBuilder::new(3);
-        add_state(&mut atn, 0, AtnStateKind::RuleStart);
-        add_state(&mut atn, 1, AtnStateKind::BlockStart);
-        add_state(&mut atn, 2, AtnStateKind::Basic);
-        add_state(&mut atn, 3, AtnStateKind::Basic);
-        add_state(&mut atn, 4, AtnStateKind::Basic);
-        add_state(&mut atn, 5, AtnStateKind::Basic);
-        add_state(&mut atn, 6, AtnStateKind::BlockEnd);
-        add_state(&mut atn, 7, AtnStateKind::RuleStop);
+        add_two_token_decision_rule(&mut atn, 0, 0);
         atn.set_rule_to_start_state(vec![0])
             .expect("rule start states");
         atn.set_rule_to_stop_state(vec![7])
             .expect("rule stop states");
-        atn.add_decision_state(1).expect("decision state");
         if precedence {
             atn.set_precedence_rule_decision(1)
                 .expect("precedence decision state");
         }
-        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 4 })
+        finish_atn(atn)
+    }
+
+    fn add_two_token_decision_rule(atn: &mut ParserAtnBuilder, offset: usize, rule_index: usize) {
+        assert_eq!(atn.state_count(), offset);
+        for kind in [
+            AtnStateKind::RuleStart,
+            AtnStateKind::BlockStart,
+            AtnStateKind::Basic,
+            AtnStateKind::Basic,
+            AtnStateKind::Basic,
+            AtnStateKind::Basic,
+            AtnStateKind::BlockEnd,
+            AtnStateKind::RuleStop,
+        ] {
+            let expected = atn.state_count();
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                expected
+            );
+        }
+        atn.add_decision_state(offset + 1).expect("decision state");
+        atn.add_transition(offset, ParserTransitionSpec::Epsilon { target: offset + 1 })
             .expect("transition");
         atn.add_transition(
-            2,
+            offset + 1,
+            ParserTransitionSpec::Epsilon { target: offset + 2 },
+        )
+        .expect("transition");
+        atn.add_transition(
+            offset + 1,
+            ParserTransitionSpec::Epsilon { target: offset + 4 },
+        )
+        .expect("transition");
+        atn.add_transition(
+            offset + 2,
             ParserTransitionSpec::Atom {
-                target: 3,
+                target: offset + 3,
                 label: 1,
             },
         )
         .expect("transition");
         atn.add_transition(
-            3,
+            offset + 3,
             ParserTransitionSpec::Atom {
-                target: 6,
+                target: offset + 6,
                 label: 2,
             },
         )
         .expect("transition");
         atn.add_transition(
-            4,
+            offset + 4,
             ParserTransitionSpec::Atom {
-                target: 5,
+                target: offset + 5,
                 label: 1,
             },
         )
         .expect("transition");
         atn.add_transition(
-            5,
+            offset + 5,
             ParserTransitionSpec::Atom {
-                target: 6,
+                target: offset + 6,
                 label: 3,
             },
         )
         .expect("transition");
-        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
-            .expect("transition");
-        finish_atn(atn)
+        atn.add_transition(
+            offset + 6,
+            ParserTransitionSpec::Epsilon { target: offset + 7 },
+        )
+        .expect("transition");
     }
 
     fn optional_token_decision_atn() -> Atn {
