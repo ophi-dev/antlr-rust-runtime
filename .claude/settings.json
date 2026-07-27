@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "DISABLE_TELEMETRY": "1",
+    "CLICOLOR": "1",
+    "CLICOLOR_FORCE": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "CLAUDE_CODE_RETRY_WATCHDOG": "1",
+    "CLAUDE_ENABLE_BYTE_WATCHDOG_BEDROCK": "1",
+    "ENABLE_PROMPT_CACHING_1H": "1",
+    "GH_PAGER": "cat"
+  },
+  "skipWebFetchPreflight": true,
+  "permissions": {
+    "allow": [
+      "mcp__exa__*",
+      "mcp__tavily__*",
+      "mcp__plugin_serena_serena__*",
+      "mcp__plugin_mintlify_Mintlify__*",
+      "Bash(gsed:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh:*)",
+      "Bash(grep:*)",
+      "Bash(cargo:*)",
+      "Bash(RUST_LOG=debug cargo:*)",
+      "Bash(kill:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(cp:*)",
+      "Bash(rustc:*)",
+      "Bash(timeout:*)",
+      "Bash(rg:*)",
+      "Bash(sed:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(cargo build:*)",
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:pypi.org)"
+    ],
+    "deny": [],
+    "defaultMode": "auto"
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hk install",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "coderabbit@claude-plugins-official": true,
+    "ast-grep@ast-grep-marketplace": true,
+    "mintlify@claude-plugins-official": true
+  },
+  "alwaysThinkingEnabled": true,
+  "worktree": {
+    "symlinkDirectories": []
+  }
+}
