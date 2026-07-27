@@ -3,7 +3,7 @@
 **Status:** Request for Comments — addressed to ANTLR maintainers and grammar-analysis researchers
 **Implementation:** shipped in [`antlr-rust-runtime`](https://github.com/ophi-dev/antlr-rust-runtime) PR [#221](https://github.com/ophi-dev/antlr-rust-runtime/pull/221) (issue [#151](https://github.com/ophi-dev/antlr-rust-runtime/issues/151))
 **Validation oracle:** ANTLR 4.13.2 (Java tool + runtime)
-**Date:** 2026-07-26
+**Date:** 2026-07-26 (rev. 2026-07-27: added the Visual Basic replication, §1.2/§3.1)
 
 ---
 
@@ -26,7 +26,11 @@ a machine-checkable oracle. We validate on the grammar that motivated the work
 — Roslyn's `CSharp.Generated.g4`, the C# compiler team's own generated
 grammar, whose only blocker after trivial repairs is `error(119)` on four rule
 cycles — achieving byte-identical parse trees against ANTLR's runtime, with
-the full 357-descriptor runtime testsuite unperturbed. We state precisely
+the full 357-descriptor runtime testsuite unperturbed. A replication on
+Roslyn's second generated grammar, `VisualBasic.Grammar.g4` (419 rules, four
+cycles including a 32-rule expression cycle), succeeds with the identical
+pass, unmodified, supporting the claim that the covered subclass is the
+natural shape of syntax-model-generated grammars. We state precisely
 which cycle shapes are reduced, which are declined, and why the known-hard
 cases (argument-bearing recursion, label mixing, epsilon-only cycles) remain
 declined. We invite critique of the subclass boundary, the tree-shape
@@ -95,7 +99,45 @@ node class becomes a rule and the abstract base (`ExpressionSyntax`) becomes
 the hub. We conjecture this hub-and-spoke shape is the dominant shape of
 mutual left recursion in machine-generated grammars generally.
 
-### 1.2 Why the human fix is unsatisfying
+### 1.2 A replication: Roslyn's Visual Basic grammar
+
+The conjecture invites an obvious test: Roslyn ships a *second*
+syntax-model-generated grammar,
+[`VisualBasic.Grammar.g4`](https://github.com/dotnet/roslyn/blob/main/src/Compilers/VisualBasic/Portable/Generated/VisualBasic.Grammar.g4)
+(2 040 lines, 419 rules), produced by the analogous VB syntax generator and,
+as far as we can tell, never before run through the ANTLR tool in anger. It is
+a strictly harsher specimen. Reaching the left-recursion question required
+repairing, in order: an unescaped `'\='` literal (VB's integer-divide-assign;
+`error(156)`); **three duplicate rule definitions** (`error(51)`:
+`resume_statement`, `case_block`, `if_directive_trivia`, each emitted once as
+a union and once concrete); fourteen empty lexical stubs (C# had four); three
+outright generator bugs — the multi-line lambda rules are published *without
+their introducing header and with swapped end markers*
+(`multi_line_function_lambda_expression : statement* end_sub_statement`),
+`array_type : type array_rank_specifier*` (star, not plus — an epsilon
+self-loop), and `invocation_expression : expression? argument_list?` (both
+sides optional — matches the empty string); and seven intrinsically-nullable
+rule bodies (`xml_text : xml_text_token*`, …). After those repairs — none of
+which touches the recursion structure — the **entire** remaining error output
+is again one `error(119)`, naming four cycles:
+
+| Cycle | Shape |
+|---|---|
+| `expression` + 31 satellites | VB splits *every* binary operator into its own rule (`add_expression : expression '+' expression`, ×25) plus a member-access family using the leading-optional pattern (`expression? '.' identifier_name`) four times |
+| `type, array_type, nullable_type` | 1 hub + 2 satellites |
+| `name, qualified_name, qualified_cref_operator_reference` | 1 hub + 2 satellites |
+| `xml_node, xml_attribute, base_xml_attribute` | VB XML literals: `xml_attribute : xml_node '=' xml_node` |
+
+All four are hub-and-spoke; the externally-referenced satellites
+(`qualified_name` from `implements_clause`, `xml_attribute` from
+`xml_declaration_option`, `array_type` again) are exactly the retained-copy
+case. The pass of §2, **unmodified**, reduces all four (§3.1). Two grammars
+from two independent syntax models is still a small sample, but the
+replication is consistent with the conjecture — and the VB expression cycle
+(32 rules, 25 of them isomorphic binary-operator satellites) is a usefully
+extreme instance of it.
+
+### 1.3 Why the human fix is unsatisfying
 
 A human can inline `binary_pattern` into `pattern` by hand — that is exactly
 what grammar authors do today to appease `error(119)`. But for a published,
@@ -192,14 +234,16 @@ inlined alternatives occupy the position of the satellite reference in the
 hub's alternative list, so the hub's declared order remains the single source
 of precedence truth, and the standard rewrite's left-associativity default
 (and `<assoc=right>` option) applies unchanged. For Roslyn specifically this
-is even simpler than it sounds: the generated grammar is deliberately
-**precedence-agnostic** — alternatives are listed alphabetically and *all*
-binary operators share one `expression op expression` alternative, real C#
-precedence living in Roslyn's hand-written parser. The grammar defines a flat
-operator tree, and the transformed parser reproduces exactly that tree (§3).
-A user who wants C#'s true precedence must edit the grammar to split and
-order the operator alternatives — in the hub, exactly as they would today for
-an immediate-recursive rule. The transform neither helps nor hinders that.
+is even simpler than it sounds: both generated grammars are deliberately
+**precedence-agnostic** — alternatives are listed alphabetically, with real
+precedence living in Roslyn's hand-written parsers. C# lumps *all* binary
+operators into one `expression op expression` alternative; VB splits them
+into 25 one-per-operator satellite rules, likewise unordered. Either way the
+grammar defines a flat operator tree, and the transformed parser reproduces
+exactly that tree (§3). A user who wants the language's true precedence must
+edit the grammar to order the operator alternatives — in the hub, exactly as
+they would today for an immediate-recursive rule. The transform neither helps
+nor hinders that.
 
 ---
 
@@ -238,6 +282,42 @@ Validation performed (all artifacts reproducible; ANTLR 4.13.2 as oracle):
 4. **Boundary probes.** Each declined shape was probed against the reference
    tool to confirm the decline mirrors an upstream refusal (`error(80)`,
    `error(122)`, `error(169)`) rather than our own limitation.
+
+### 3.1 Replication on the Visual Basic grammar
+
+The identical protocol was run on the repaired `VisualBasic.Grammar.g4`
+(§1.2), with **no change to the pass**:
+
+- **Acceptance flip.** Reference tool → `error(119)` (sole error, four
+  cycles); our pipeline → accepted, parser generated and compiled.
+- **Collapse shape.** All hub-only satellites vanish (the 25 binary-operator
+  rules, `member_access_expression`, `invocation_expression`,
+  `nullable_type`, `base_xml_attribute`, …); the three externally-referenced
+  satellites (`qualified_name`, `xml_attribute`, `array_type`) are retained
+  as non-recursive copies, as specified in §2.2 step 5.
+- **Tree equality.** On inputs exercising each cycle — operator chains
+  (`a + b * c - d / e`), member/call chains (`a.b.c(x).d(y)`), dotted
+  imports/namespaces, array/nullable/qualified types — the reference runtime
+  on the hand-inlined equivalent and our parser on the mechanically
+  transformed original print **byte-identical** trees, all clean parses.
+- **Growth.** The 32-rule expression cycle collapses into a hub of 59
+  alternatives (from 30): each single-alternative satellite contributes one
+  alternative, plus one per leading-optional expansion. `type` and `name`
+  stay at 5 alternatives; `xml_node` grows 15 → 17. Linear in the cycle's own
+  alternative count, as predicted in §4.5.
+
+Beyond replication, VB stresses two aspects C# barely exercises: the
+leading-optional expansion fires **four times** (the whole
+`expression? '.' …` member-access family, vs. C#'s single range operator),
+and the XML-literal cycle (`xml_attribute : xml_node '=' xml_node`) shows the
+pattern arising outside expression/type/name territory. One honest caveat:
+the published VB file needed the §1.2 repairs *before* the recursion question
+could even be posed — three of those repairs (the swapped lambda ends, the
+`*`-quantified `array_type`, the doubly-optional `invocation_expression`) are
+defects in Roslyn's grammar emitter that no parser-side mechanism can absorb,
+and in the raw file they entangle `statement` and the lambda rules into the
+expression SCC. Mutual-recursion support makes such grammars *consumable*; it
+does not make them *correct*.
 
 What we do **not** claim: that the transform preserves ANTLR's *ambiguity
 resolution* on grammars that were ambiguous across the cycle in ways
@@ -311,11 +391,12 @@ algorithm unattractive). The contribution here is not the substitution but
 the **scoping and gating**: substituting only within left-corner SCCs, only
 into a designated hub, only when the result lands in ANTLR's
 precedence-pattern subclass — which keeps the blow-up bounded by the cycle's
-own alternative count (Roslyn's 13-rule expression cycle grows from 46 to
-just 47 hub alternatives, since each satellite is single-alternative and only
-the optional-expansion adds one) and inherits, rather than re-derives, the
-precedence semantics of [OOPSLA 2014]. Moore-style worst cases are exactly
-what the budget + gate decline.
+own alternative count (C#'s 13-rule expression cycle: 46 → 47 hub
+alternatives; VB's 32-rule cycle: 30 → 59; in both, each single-alternative
+satellite contributes one alternative and each leading-optional expansion one
+more) and inherits, rather than re-derives, the precedence semantics of
+[OOPSLA 2014]. Moore-style worst cases are exactly what the budget + gate
+decline.
 
 ---
 
@@ -335,8 +416,11 @@ that consumes `.g4` source directly. Correspondences to the Java tool:
 
 Design doc with the full empirical log:
 [`docs/issue-151-mutual-left-recursion-plan.md`](./issue-151-mutual-left-recursion-plan.md).
-Repro for the Roslyn measurements (six-rule repair, staged error output,
-tree-diff harness) is scripted in the PR.
+Repro for the Roslyn measurements is scripted in the PR — for C#, the
+six-rule repair, staged error output, and tree-diff harness; for VB, the
+§1.2 repair sequence (escape, duplicate rules, lexical stubs, the three
+emitter-bug corrections, nullable roots) followed by the same
+generate/compile/tree-diff protocol.
 
 ---
 
