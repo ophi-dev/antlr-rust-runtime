@@ -520,39 +520,16 @@ impl TranslationCtx<'_> {
                 .iter()
                 .any(|token_type| element.token_types.contains(token_type))
         };
-        // The most matching children *one parse* can build: sequential refs add,
-        // but branches of a choice are alternatives, so the largest branch wins.
-        // Summing them all would overstate the count and reject valid reads —
-        // `A x=A | (A B? | A C?)` builds at most one `A` in the second alternative.
-        let mut sequential = Some(0_usize);
-        let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
-        for candidate in alt
-            .refs
-            .iter()
-            .filter(|candidate| same_read_target(candidate))
-        {
-            let slot = match candidate.choice_branch.last() {
-                None => &mut sequential,
-                Some(&key) => per_branch.entry(key).or_insert(Some(0)),
-            };
-            *slot = match (*slot, candidate.cardinality.max) {
-                (Some(total), Some(max)) => Some(total.saturating_add(max)),
-                _ => None,
-            };
-        }
-        let mut widest_by_choice: BTreeMap<usize, Option<usize>> = BTreeMap::new();
-        for ((choice, _), count) in per_branch {
-            let slot = widest_by_choice.entry(choice).or_insert(Some(0));
-            *slot = match (*slot, count) {
-                (Some(current), Some(next)) => Some(current.max(next)),
-                _ => None,
-            };
-        }
-        let available = sequential.and_then(|base| {
-            widest_by_choice
-                .into_values()
-                .try_fold(base, |total, count| Some(total.saturating_add(count?)))
-        });
+        // The most matching children *one parse* can build. Sequential refs add;
+        // branches of a choice are alternatives, so the widest branch wins. Nested
+        // choices must fold innermost-first — reducing each choice independently
+        // and then summing would double-count, rejecting valid reads such as
+        // `q x=q | ((q|b)|(q|c))` where the second alternative builds one `q`.
+        let available = Self::widest_child_count(
+            alt.refs
+                .iter()
+                .filter(|candidate| same_read_target(candidate)),
+        );
         // A list read selects any same-target child; a positional read needs one
         // at `occurrence`. An unbounded count can always reach either.
         available.is_none_or(|available| available > occurrence)
@@ -565,12 +542,34 @@ impl TranslationCtx<'_> {
             .refs
             .iter()
             .position(|candidate| std::ptr::eq(candidate, element))?;
-        Self::exact_child_count(
-            alt.refs[..position].iter().filter(|candidate| {
+        // `can_coexist_with` keeps everything a ref *after* the choice coexists
+        // with — both branches — so it does not by itself select one path. Strip the
+        // tags of choices the element is inside (those branches are taken on its
+        // path) and leave the rest tagged, so `exact_child_count` still demands
+        // cross-branch agreement for choices the element is not part of.
+        let on_path = alt.refs[..position]
+            .iter()
+            .filter(|candidate| {
                 !candidate.token_types.is_empty() && candidate.can_coexist_with(element)
-            }),
-            true,
-        )
+            })
+            .cloned()
+            .map(|mut candidate| {
+                candidate.choice_branch.retain(|(choice, _)| {
+                    !element
+                        .choice_branch
+                        .iter()
+                        .any(|(taken, _)| taken == choice)
+                });
+                let keep = candidate.choice_branch.len();
+                candidate.choice_arity.truncate(keep);
+                candidate.choice_spans.truncate(keep);
+                if candidate.choice_branch.is_empty() {
+                    candidate.cardinality = candidate.branch_local_cardinality;
+                }
+                candidate
+            })
+            .collect::<Vec<_>>();
+        Self::exact_child_count(on_path.iter(), false)
     }
 
     /// Total children contributed by `refs`, or `None` when that total is not the
@@ -688,13 +687,97 @@ impl TranslationCtx<'_> {
         Some(total)
     }
 
+    /// Greatest number of children `refs` can contribute on any single parse, or
+    /// `None` when unbounded. Sequential refs add; branches of a choice are
+    /// alternatives, so the widest one wins. Choices fold innermost-first so a
+    /// nested choice's maximum lands in its enclosing branch rather than being
+    /// summed alongside it.
+    fn widest_child_count<'a>(refs: impl Iterator<Item = &'a ElementRef>) -> Option<usize> {
+        let refs = refs.collect::<Vec<_>>();
+        let mut total = Some(0_usize);
+        let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
+        let mut depth_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut ancestry: BTreeMap<(usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
+        for candidate in &refs {
+            for (depth, &(choice, branch)) in candidate.choice_branch.iter().enumerate() {
+                depth_of_choice
+                    .entry(choice)
+                    .and_modify(|existing| *existing = (*existing).min(depth))
+                    .or_insert(depth);
+                ancestry.insert((choice, branch), candidate.choice_branch[..=depth].to_vec());
+            }
+        }
+        let add = |slot: &mut Option<usize>, value: Option<usize>| {
+            *slot = match (*slot, value) {
+                (Some(total), Some(next)) => Some(total.saturating_add(next)),
+                _ => None,
+            };
+        };
+        for candidate in &refs {
+            match candidate.choice_branch.last() {
+                None => add(&mut total, candidate.cardinality.max),
+                Some(&key) => {
+                    let slot = per_branch.entry(key).or_insert(Some(0));
+                    add(slot, candidate.cardinality.max);
+                }
+            }
+        }
+        let mut processed: BTreeSet<usize> = BTreeSet::new();
+        while let Some(choice) = per_branch
+            .keys()
+            .map(|(choice, _)| *choice)
+            .filter(|choice| !processed.contains(choice))
+            .max_by_key(|choice| depth_of_choice.get(choice).copied().unwrap_or(0))
+        {
+            processed.insert(choice);
+            let counts = per_branch
+                .iter()
+                .filter(|((candidate, _), _)| *candidate == choice)
+                .map(|((_, branch), count)| (*branch, *count))
+                .collect::<Vec<_>>();
+            if counts.is_empty() {
+                continue;
+            }
+            let widest = counts
+                .iter()
+                .try_fold(0_usize, |widest, (_, count)| Some(widest.max((*count)?)));
+            let parent = counts.first().and_then(|(branch, _)| {
+                ancestry.get(&(choice, *branch)).and_then(|chain| {
+                    chain
+                        .split_last()
+                        .and_then(|(_, rest)| rest.last().copied())
+                })
+            });
+            for (branch, _) in &counts {
+                per_branch.remove(&(choice, *branch));
+            }
+            match parent {
+                Some(parent_key) => {
+                    let slot = per_branch.entry(parent_key).or_insert(Some(0));
+                    add(slot, widest);
+                }
+                None => add(&mut total, widest),
+            }
+        }
+        total
+    }
+
     /// Whether two per-alternative resolutions lower to the same read, so one
     /// translation can stand for both. The fields compared are exactly those
     /// `translate_element_read` consumes to pick a read: list mode, block mode,
     /// and the target it queries. Two block labels are equivalent regardless of
     /// their token sets, because the block read ignores them.
     fn same_label_read(left: &(ElementRef, usize), right: &(ElementRef, usize)) -> bool {
-        if left.0.is_list != right.0.is_list || left.0.is_block != right.0.is_block {
+        if left.0.is_list != right.0.is_list {
+            return false;
+        }
+        // Token-backed resolutions are equivalent when they query the same token
+        // type, regardless of source form: `x=A` resolves in token mode while
+        // `x='a'` is block mode, yet both lower to `child_tokens(A)`.
+        if !left.0.token_types.is_empty() && left.0.token_types == right.0.token_types {
+            return left.1 == right.1;
+        }
+        if left.0.is_block != right.0.is_block {
             return false;
         }
         // Block reads are positional now, so two block labels agree only when
@@ -758,27 +841,60 @@ impl TranslationCtx<'_> {
         // either side of the action — but the block's own extent can: in the first
         // the action sits after the closing paren, in the second inside it.
         let action_branches = action_offset.map(|offset| {
-            let mut enclosing: Vec<(usize, usize)> = Vec::new();
+            // For each enclosing choice, the *one* branch the action sits in: the
+            // branch whose own refs span the offset. Refs of an earlier sibling
+            // also precede the action and share the choice's block span, so
+            // collecting every preceding ref's tags would record mutually
+            // conflicting branches (`(B | C x=A? A {…})` would claim both).
+            //
+            // A branch contains the action when some ref of it starts before the
+            // offset and no ref of a *later* sibling does — source order means a
+            // later branch having started implies the action is past this one.
+            let mut chosen: Vec<(usize, usize)> = Vec::new();
+            let mut choices: Vec<usize> = Vec::new();
             for candidate in &alt.refs {
-                let inside_all = candidate
-                    .choice_spans
-                    .iter()
-                    .all(|&(start, end)| start <= offset && offset < end);
-                if !inside_all || candidate.choice_branch.is_empty() {
-                    continue;
-                }
-                // Only the branch actually containing the action counts, so require
-                // the candidate itself to be positioned around it.
-                let brackets = candidate.span.is_some_and(|(start, _)| start < offset);
-                if brackets {
-                    for &key in &candidate.choice_branch {
-                        if !enclosing.contains(&key) {
-                            enclosing.push(key);
-                        }
+                for &(choice, _) in &candidate.choice_branch {
+                    if !choices.contains(&choice) {
+                        choices.push(choice);
                     }
                 }
             }
-            enclosing
+            for choice in choices {
+                // Only choices whose block encloses the action are in play.
+                let encloses = alt.refs.iter().any(|candidate| {
+                    candidate
+                        .choice_branch
+                        .iter()
+                        .zip(&candidate.choice_spans)
+                        .any(|(&(candidate_choice, _), &(start, end))| {
+                            candidate_choice == choice && start <= offset && offset < end
+                        })
+                });
+                if !encloses {
+                    continue;
+                }
+                let started_before = |branch: usize| {
+                    alt.refs.iter().any(|candidate| {
+                        candidate.span.is_some_and(|(start, _)| start < offset)
+                            && candidate
+                                .choice_branch
+                                .iter()
+                                .any(|&(c, b)| c == choice && b == branch)
+                    })
+                };
+                let branches = alt
+                    .refs
+                    .iter()
+                    .flat_map(|candidate| candidate.choice_branch.iter())
+                    .filter(|&&(c, _)| c == choice)
+                    .map(|&(_, b)| b)
+                    .collect::<BTreeSet<_>>();
+                // The last branch that has started is the one containing the action.
+                if let Some(branch) = branches.into_iter().rfind(|&branch| started_before(branch)) {
+                    chosen.push((choice, branch));
+                }
+            }
+            chosen
         });
         let branch_confined = action_branches
             .as_ref()
@@ -885,13 +1001,32 @@ impl TranslationCtx<'_> {
             // child this read selects on a parse where the label is unset:
             // `((x=(A | B)) | C) {$x}` reads `C` on the `C` branch.
             if let Some(index) = terminals_before {
-                let sibling_at_index = alt.refs.iter().any(|candidate| {
-                    !candidate.can_coexist_with(element)
-                        && !candidate.token_types.is_empty()
-                        && candidate.cardinality.max != Some(0)
-                        && Self::exact_terminal_index(alt, candidate).is_none_or(|at| at == index)
-                });
+                // A sibling branch's terminal can only be mistaken for the label
+                // when the read actually runs on that branch. An action confined to
+                // the label's own branch never executes there, so the sibling is
+                // irrelevant — `(x=(A | B) {…} | C)` is safe even though `C` sits at
+                // the same index.
+                let sibling_at_index = !branch_confined
+                    && alt.refs.iter().any(|candidate| {
+                        !candidate.can_coexist_with(element)
+                            && !candidate.token_types.is_empty()
+                            && candidate.cardinality.max != Some(0)
+                            && Self::exact_terminal_index(alt, candidate)
+                                .is_none_or(|at| at == index)
+                    });
                 if sibling_at_index {
+                    return None;
+                }
+                // ROOT J: a fixed index is not enough when the label is *optional* —
+                // `x=(A | B)? C {…}` puts `C` at index 0 whenever the block is
+                // absent, so the read would report it as the label's token.
+                if element.cardinality.min == 0
+                    && after.iter().any(|candidate| {
+                        !candidate.token_types.is_empty()
+                            && candidate.cardinality.max != Some(0)
+                            && matched_at_action(candidate)
+                    })
+                {
                     return None;
                 }
             }

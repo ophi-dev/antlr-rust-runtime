@@ -72,6 +72,12 @@ exhaustive_prefix
     : (first = unary | second = unary) pick = unary NUM
     ;
 
+// A repeated scalar label over mutually exclusive branches: ANTLR overwrites a
+// scalar on every iteration, so the merged read must select the *last* match.
+merged_repeats
+    : (last_pick = IDENT+ | last_pick = NUM+) NUM
+    ;
+
 // One label declared over mutually exclusive branches at the same occurrence: the
 // accessor's unioned token set selects whichever token the parse bound, so a
 // single positional read serves both.

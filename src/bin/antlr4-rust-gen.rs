@@ -9205,6 +9205,14 @@ fn context_label_selector(
         if !mutually_exclusive || positions.iter().any(|position| *position != agreed) {
             return None;
         }
+        // A *repeated* scalar declaration (`x=A+`) is overwritten each iteration, so
+        // ANTLR exposes the last match — `nth` would pin the first.
+        if matching
+            .iter()
+            .any(|(_, element)| element.cardinality.is_repeated())
+        {
+            return Some(ContextLabelSelector::LastAfter(agreed));
+        }
         return Some(ContextLabelSelector::Nth(agreed));
     }
     let element = matching[0].1;
@@ -15178,6 +15186,12 @@ mod tests {
         insta::assert_snapshot!(
             "multi_alternative_label_merged_rivals_context",
             context("MergedRivalsContext")
+        );
+        // Repeated scalar declarations merge as a *last*-match read, since ANTLR
+        // overwrites a scalar label on every iteration.
+        insta::assert_snapshot!(
+            "multi_alternative_label_merged_repeats_context",
+            context("MergedRepeatsContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_path_restricted_context",
