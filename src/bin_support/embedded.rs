@@ -468,9 +468,8 @@ impl TranslationCtx<'_> {
             // relative to these refs is not recoverable here and the read is
             // accepted as-is. A label read *across* an intervening terminal
             // (`((x=(A | B))) C {$x.text}` reads `C`) is therefore still wrong;
-            // fixing it needs element spans in the model, tracked separately
-            // rather than papered over with a guard that would reject the
-            // conformance shapes above.
+            // fixing it needs element spans in the model (issue #233) rather
+            // than a guard that would reject the conformance shapes above.
             return Some((element.clone(), 0));
         }
 
@@ -1253,7 +1252,8 @@ mod tests {
     /// action runs at its own source position. `ElementRef` carries no span, so
     /// that ordering is not recoverable here and the read is accepted as-is —
     /// this test pins the resulting behaviour, including the known limitation
-    /// that a read across an intervening terminal picks the later token.
+    /// that a read across an intervening terminal picks the later token
+    /// (issue #233).
     #[test]
     fn block_labels_resolve_to_the_most_recent_terminal_read() {
         let mut statement = rule("s");
