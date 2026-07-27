@@ -117,9 +117,18 @@ their introducing header and with swapped end markers*
 `array_type : type array_rank_specifier*` (star, not plus — an epsilon
 self-loop), and `invocation_expression : expression? argument_list?` (both
 sides optional — matches the empty string); and seven intrinsically-nullable
-rule bodies (`xml_text : xml_text_token*`, …). After those repairs — none of
-which touches the recursion structure — the **entire** remaining error output
-is again one `error(119)`, naming four cycles:
+rule bodies (`xml_text : xml_text_token*`, …). The defects we could root-cause
+to the VB grammar emitter are reported upstream with fixes identified:
+[dotnet/roslyn#84633](https://github.com/dotnet/roslyn/issues/84633)
+(duplicate rules from a structure/node-kind name collision),
+[#84634](https://github.com/dotnet/roslyn/issues/84634) (lambda header dropped
++ `End` markers swapped by positional kind-pairing),
+[#84635](https://github.com/dotnet/roslyn/issues/84635) (the `'\='` escape),
+and [#84636](https://github.com/dotnet/roslyn/issues/84636) (required list
+children emitted `*` instead of `+`, which subsumes the `array_type` and
+several nullable-root repairs). After those repairs — none of which touches
+the recursion structure — the **entire** remaining error output is again one
+`error(119)`, naming four cycles:
 
 | Cycle | Shape |
 |---|---|
