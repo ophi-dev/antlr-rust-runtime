@@ -2899,6 +2899,13 @@ fn collect_structural_context_refs_with_cardinality(
                             element.quantifier,
                         )
                         .min == 0,
+                        // A star/plus group can run more than once, so even a group
+                        // known to have run contributes an unfixed count.
+                        repeated: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        )
+                        .is_repeated(),
                     });
                     if block.alternatives.len() > 1 {
                         nested_branch.push((block.syntax.index(), branch));
@@ -9320,6 +9327,24 @@ fn context_label_selector(
                 && element.cardinality.max != Some(0)
                 && element.label.as_deref() != Some(label)
         });
+        // A same-target ref *before* the label normally just shifts `start`, but if
+        // the two share a repeated group it recurs on every iteration and interleaves
+        // with the labeled children: `(A xs+=A)+` skips one `A` and then collects the
+        // second iteration's unlabeled prefix too. No `skip` can separate them.
+        let repeats_with_prefix = alternative.refs[..first_position].iter().any(|element| {
+            context_ref_can_match_target(element, target)
+                && element.cardinality.max != Some(0)
+                && element.label.as_deref() != Some(label)
+                && element.group_spans.iter().any(|group| {
+                    // Shared and repeatable: `max` is not one, so the group can run
+                    // more than once.
+                    labeled.group_spans.contains(group)
+                        && !matches!(element.cardinality.max, Some(0 | 1))
+                })
+        });
+        if repeats_with_prefix {
+            return None;
+        }
         // `AllAfter(start)` skips `start` children then takes the rest, so repeated
         // declarations on one path are fine — the later ones fall inside the tail
         // (`xs+=e (op xs+=e)*` skips 0 and collects every `e`). What it cannot serve
@@ -15548,6 +15573,18 @@ mod tests {
                 "x",
                 true,
                 "a token-only choice holding an action keeps its branch spans",
+            ),
+            (
+                "ListPrefixRepeatsWithLabel",
+                "xs",
+                false,
+                "a same-target prefix sharing a repeated group interleaves with the labeled children",
+            ),
+            (
+                "ClosedRepeatedGroupPrefix",
+                "x",
+                false,
+                "a closed repeated group still contributes an unfixed number of preceding children",
             ),
             (
                 "ReassignedAfterAction",

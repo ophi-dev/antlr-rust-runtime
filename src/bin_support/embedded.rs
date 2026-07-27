@@ -72,6 +72,9 @@ pub(crate) struct GroupSpan {
     pub(crate) end: usize,
     /// `true` for `(…)?` / `(…)*` — the group may contribute nothing.
     pub(crate) optional: bool,
+    /// `true` for `(…)*` / `(…)+` — the group may run more than once, so the number
+    /// of children it contributes is not fixed even when it is known to have run.
+    pub(crate) repeated: bool,
 }
 
 /// One element reference inside an alternative: a rule ref, token ref, or a
@@ -1004,15 +1007,23 @@ impl TranslationCtx<'_> {
         // mandatory and already closed.
         let on_taken_group = |candidate: &ElementRef| {
             action_offset.is_some_and(|offset| {
+                let encloses = |group: &GroupSpan| group.start <= offset && offset < group.end;
+                // A *repeated* group that has closed still contributes an unknown
+                // number of children, so knowing it ran does not fix the count:
+                // `((A B)+ x=A {…})?` has a variable run of `A` before the label.
+                if candidate
+                    .group_spans
+                    .iter()
+                    .any(|group| group.repeated && !encloses(group))
+                {
+                    return false;
+                }
                 let relaxing = candidate
                     .group_spans
                     .iter()
                     .filter(|group| group.optional)
                     .collect::<Vec<_>>();
-                !relaxing.is_empty()
-                    && relaxing
-                        .iter()
-                        .all(|group| group.start <= offset && offset < group.end)
+                !relaxing.is_empty() && relaxing.iter().all(|group| encloses(group))
             })
         };
         // Whether a ref can have run before the action, given that ancestry. An
