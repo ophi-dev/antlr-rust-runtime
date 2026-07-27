@@ -2712,9 +2712,19 @@ fn collect_structural_context_refs_with_cardinality(
     } = context;
     // Tracks whether any terminal-bearing ref has been emitted on this path, so an
     // element can record whether it is the first terminal.
+    // Only refs on *this* branch's path count: `refs` is shared across every branch
+    // of an enclosing choice, so terminals emitted for a sibling branch must not
+    // make this branch's elements look non-leading. `(x=A | x='a')` has each
+    // declaration first on its own path.
     let mut seen_terminal = branch_local_cardinality.max.is_none_or(|max| max != 0)
         && refs.iter().any(|existing| {
-            !existing.token_types.is_empty() && existing.cardinality.max != Some(0)
+            !existing.token_types.is_empty()
+                && existing.cardinality.max != Some(0)
+                && !existing.choice_branch.iter().any(|(choice, branch)| {
+                    choice_branch
+                        .iter()
+                        .any(|(mine, my_branch)| choice == mine && branch != my_branch)
+                })
         });
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
@@ -9273,17 +9283,37 @@ fn context_label_selector(
     // label too, and `context_label_accessor` already proved the declarations share
     // one read. Only an unlabeled (or differently-labeled) sibling child can be
     // mistaken for this label's.
+    let start =
+        exact_target_cardinality_on_path(&alternative.refs[..first_position], target, labeled)?;
+    // A sibling branch only collides when it can actually put a matching child at the
+    // position this accessor reads. `(A | A A x=A)` selects occurrence 2 while the
+    // sibling branch supplies at most one `A`, so `nth(2)` is safely empty there.
     let sibling_supplies_target = alternative.refs.iter().any(|element| {
-        element.label.as_deref() != Some(label)
-            && !element.can_coexist_with(labeled)
-            && context_ref_can_match_target(element, target)
-            && element.cardinality.max != Some(0)
+        if element.label.as_deref() == Some(label)
+            || element.can_coexist_with(labeled)
+            || !context_ref_can_match_target(element, target)
+            || element.cardinality.max == Some(0)
+        {
+            return false;
+        }
+        let position = alternative
+            .refs
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, element));
+        let reach = position.and_then(|position| {
+            let before =
+                exact_target_cardinality_on_path(&alternative.refs[..position], target, element)?;
+            // The highest occurrence this ref can occupy on its own path.
+            element
+                .cardinality
+                .max
+                .map(|max| before.saturating_add(max))
+        });
+        reach.is_none_or(|reach| reach > start)
     });
     if sibling_supplies_target {
         return None;
     }
-    let start =
-        exact_target_cardinality_on_path(&alternative.refs[..first_position], target, labeled)?;
     if is_list {
         let has_unlabeled_target = alternative.refs[first_position..].iter().any(|element| {
             context_ref_can_match_target(element, target)
@@ -9437,8 +9467,26 @@ fn exact_target_cardinality_on_path(
             let keep = element.choice_branch.len();
             element.choice_arity.truncate(keep);
             element.choice_spans.truncate(keep);
-            // Their cardinality on this path is the branch-local one.
-            element.cardinality = element.branch_local_cardinality;
+            // Their cardinality on this path is the branch-local one — and when the
+            // ref shares every optional group with the label, those groups are taken
+            // wherever the label is bound, so even their quantifiers are satisfied.
+            // `(A x=A)? EOF` has exactly one `A` before the label on every parse that
+            // binds it, though both figures otherwise report `0..1` from the `?`.
+            let shares_optional_groups = !element.group_spans.is_empty()
+                && element
+                    .group_spans
+                    .iter()
+                    .filter(|group| group.optional)
+                    .all(|group| path.group_spans.contains(group));
+            let on_path = if shares_optional_groups {
+                element.group_local_cardinality
+            } else {
+                element.branch_local_cardinality
+            };
+            element.cardinality = on_path;
+            // `exact_target_cardinality` judges exactness from the branch-local
+            // figure, so it has to see the same value.
+            element.branch_local_cardinality = on_path;
             element
         })
         .collect::<Vec<_>>();
@@ -15471,6 +15519,18 @@ mod tests {
                 "a shared last-match read would return a following unlabeled child on the non-repeated branch",
             ),
             (
+                "InitScalarRuleLabel",
+                "x",
+                false,
+                "a scalar rule read lowers to `.expect(...)`, which panics at rule entry",
+            ),
+            (
+                "AliasDeclarationsInChoice",
+                "x",
+                false,
+                "known limitation: alias declarations inside one nested choice still decline (see PR discussion)",
+            ),
+            (
                 "FallbackReadSiblingAlternative",
                 "x",
                 false,
@@ -15488,6 +15548,24 @@ mod tests {
                 "x",
                 true,
                 "a token-only choice holding an action keeps its branch spans",
+            ),
+            (
+                "OptionalGroupSharedWithLabel",
+                "x",
+                true,
+                "an optional group shared with the label is taken wherever the label is bound",
+            ),
+            (
+                "SiblingBranchShorterThanOccurrence",
+                "x",
+                true,
+                "a sibling branch that cannot reach the selected occurrence is no collision",
+            ),
+            (
+                "IdenticalDeclarationsInChoice",
+                "x",
+                true,
+                "isolating one declaration must not reclassify its twin as an impostor",
             ),
             (
                 "MandatoryInnerGroupClosed",

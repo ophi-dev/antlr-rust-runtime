@@ -59,6 +59,11 @@ impl ChildCardinality {
     }
 }
 
+/// Suffix marking a label that was temporarily renamed while resolving a *sibling*
+/// declaration of the same label in isolation. Grammar labels are identifiers, so
+/// this cannot collide with a real one.
+const SIBLING_DECLARATION_SUFFIX: &str = " (sibling declaration)";
+
 /// One enclosing block: its byte extent, and whether its own quantifier relaxes
 /// the lower bound of the elements inside it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -466,14 +471,19 @@ impl TranslationCtx<'_> {
         let rule = self.rule();
         if self.site == ActionSite::Init {
             // An `@init` body runs at rule entry, before any child exists, so every
-            // read over children is empty and nothing can pollute it. Applying the
-            // after-rule hazards here would reject valid actions.
-            return rule
+            // read over children is empty and nothing can pollute it — no hazard
+            // applies. Most reads degrade gracefully (an iterator yields nothing, a
+            // `.text` read yields `""`), but a *scalar rule* label lowers to
+            // `.nth(i).expect("labeled rule child")`, which panics on every parse.
+            // Decline that one rather than emit code that cannot run.
+            let element = rule
                 .alts
                 .iter()
                 .flat_map(|alt| alt.refs.iter())
-                .find(|element| element.label.as_deref() == Some(label))
-                .map(|element| (element.clone(), 0));
+                .find(|element| element.label.as_deref() == Some(label))?;
+            let panics_when_absent =
+                !element.is_list && element.token_types.is_empty() && !element.target.is_empty();
+            return (!panics_when_absent).then(|| (element.clone(), 0));
         }
         if let Some((offset, alt)) = self
             .body_offset
@@ -880,7 +890,13 @@ impl TranslationCtx<'_> {
             .filter(|element| element.label.as_deref() == Some(label))
             .collect::<Vec<_>>();
         let element = *declarations.first()?;
-        let declares_label = |candidate: &ElementRef| candidate.label.as_deref() == Some(label);
+        // A renamed sibling declaration (see the isolation below) still counts as
+        // declaring the label: it binds it too, so it can never impersonate it.
+        let declares_label = |candidate: &ElementRef| {
+            candidate.label.as_deref().is_some_and(|name| {
+                name == label || name.strip_suffix(SIBLING_DECLARATION_SUFFIX) == Some(label)
+            })
+        };
         // The generated read queries by rule index or *token type*, so a
         // differently-spelled terminal with the same type is the same child as
         // far as the read is concerned (`A : 'a';` makes `A` and `'a'` aliases).
@@ -1107,11 +1123,16 @@ impl TranslationCtx<'_> {
                     .iter()
                     .position(|other| std::ptr::eq(other, *candidate))?;
                 let mut alone = alt.clone();
-                // Keep this declaration's label and drop the others', so the
-                // recursion resolves exactly one.
+                // Isolate this declaration by *renaming* the others rather than
+                // clearing their labels. Clearing would reclassify a fellow
+                // declaration as an unlabeled impostor and trip the shadow check —
+                // `(x=A | x=A)` would reject itself. Renaming keeps them labeled, so
+                // `declares_label` still exempts them, while only one answers to
+                // `label`.
+                let shadow_name = format!("{label}{SIBLING_DECLARATION_SUFFIX}");
                 for (index, ref_at) in alone.refs.iter_mut().enumerate() {
                     if index != position && ref_at.label.as_deref() == Some(label) {
-                        ref_at.label = None;
+                        ref_at.label = Some(shadow_name.clone());
                     }
                 }
                 resolutions.push(Self::resolve_label_in_alt(&alone, label, action_offset)?);
@@ -1125,10 +1146,14 @@ impl TranslationCtx<'_> {
             }
             return Some(first);
         }
+        // `element` is borrowed from `alt.refs`, so identity holds — but compare by
+        // value as a fallback, because the sibling-isolation rename above clones the
+        // alternative and a filtered `declarations` list can outlive that borrow.
         let position = alt
             .refs
             .iter()
-            .position(|candidate| std::ptr::eq(candidate, element))?;
+            .position(|candidate| std::ptr::eq(candidate, element))
+            .or_else(|| alt.refs.iter().position(|candidate| candidate == element))?;
         let (before, after) = (&alt.refs[..position], &alt.refs[position + 1..]);
         // `translate_element_read` routes on `is_block`, which covers labeled
         // groups and *literal* terminals alike (`x='b'`), so the occurrence has to
@@ -1157,7 +1182,14 @@ impl TranslationCtx<'_> {
             // let any surviving tag force cross-branch agreement.
             let counted = before
                 .iter()
-                .filter(|candidate| !candidate.token_types.is_empty() && on_action_path(candidate))
+                .filter(|candidate| {
+                    !candidate.token_types.is_empty()
+                        && on_action_path(candidate)
+                        // A ref in a branch this label cannot reach never precedes it:
+                        // in `(x=A | x='a')` the sibling declaration is not a prefix
+                        // terminal of the literal's path.
+                        && candidate.can_coexist_with(element)
+                })
                 .cloned()
                 .map(|mut candidate| {
                     if let Some(branches) = action_branches.as_ref() {
@@ -1188,7 +1220,11 @@ impl TranslationCtx<'_> {
                 // the same index.
                 let sibling_at_index = !branch_confined
                     && alt.refs.iter().any(|candidate| {
-                        !candidate.can_coexist_with(element)
+                        // Another declaration of the same label binds it too, so it
+                        // can never impersonate it — `(x=A | x='a')` is one label
+                        // over two branches, not a label and an impostor.
+                        !declares_label(candidate)
+                            && !candidate.can_coexist_with(element)
                             && !candidate.token_types.is_empty()
                             && candidate.cardinality.max != Some(0)
                             && Self::can_occupy_terminal_index(alt, candidate, index)
