@@ -30,6 +30,12 @@ expression: "context(\"MergedRepeatsContext\")"
     pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 14).map(TerminalNode::new)
     }
+    pub fn lparen_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, 16)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("MergedRepeatsContext", "LPAREN"))
+    }
     pub fn last_pick(&self) -> Option<TerminalNode<'a>> {
         __labeled_token_children_matching(self.__node, &[13, 14])
             .skip(0).last()

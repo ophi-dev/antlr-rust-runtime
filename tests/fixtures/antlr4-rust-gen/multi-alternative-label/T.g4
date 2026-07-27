@@ -73,9 +73,12 @@ exhaustive_prefix
     ;
 
 // A repeated scalar label over mutually exclusive branches: ANTLR overwrites a
-// scalar on every iteration, so the merged read must select the *last* match.
+// scalar on every iteration, so the merged read must select the *last* match. The
+// trailing `LPAREN` is outside the accessor's token union, so nothing can become
+// the `last()` ahead of the label — with a trailing `NUM` it could, and the merge
+// would have to decline.
 merged_repeats
-    : (last_pick = IDENT+ | last_pick = NUM+) NUM
+    : (last_pick = IDENT+ | last_pick = NUM+) LPAREN
     ;
 
 // One label declared over mutually exclusive branches at the same occurrence: the

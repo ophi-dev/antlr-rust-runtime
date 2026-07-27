@@ -9336,11 +9336,25 @@ fn context_label_selector(
             }
         }
         // A *repeated* scalar declaration (`x=A+`) is overwritten each iteration, so
-        // ANTLR exposes the last match — `nth` would pin the first.
+        // ANTLR exposes the last match — `nth` would pin the first. But `LastAfter`
+        // applies to every branch, so it is only sound when no branch has a matching
+        // child *after* its declaration: in `(x=A A B | x=A+ C)` the first branch's
+        // trailing unlabeled `A` would become the `last()`.
         if matching
             .iter()
             .any(|(_, element)| element.cardinality.is_repeated())
         {
+            let followed = matching.iter().any(|(position, declaration)| {
+                alternative.refs[position + 1..].iter().any(|following| {
+                    following.label.as_deref() != Some(label)
+                        && context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                        && following.can_coexist_with(declaration)
+                })
+            });
+            if followed {
+                return None;
+            }
             return Some(ContextLabelSelector::LastAfter(agreed));
         }
         return Some(ContextLabelSelector::Nth(agreed));
@@ -15442,6 +15456,12 @@ mod tests {
                 "x",
                 false,
                 "a repeated sibling spans a range of terminal positions, not just its start",
+            ),
+            (
+                "RepeatedMergeFollowedByMatch",
+                "x",
+                false,
+                "a shared last-match read would return a following unlabeled child on the non-repeated branch",
             ),
             (
                 "MixedModeLeadingTerminal",
