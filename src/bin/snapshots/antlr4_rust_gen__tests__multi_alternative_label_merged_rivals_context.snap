@@ -33,7 +33,7 @@ expression: "context(\"MergedRivalsContext\")"
         __token_children(self.__node, 14).map(TerminalNode::new)
     }
     pub fn pick(&self) -> Option<TerminalNode<'a>> {
-        __token_children_matching(self.__node, &[13, 14])
+        __labeled_token_children_matching(self.__node, &[13, 14])
             .nth(0)
             .map(TerminalNode::new)
     }

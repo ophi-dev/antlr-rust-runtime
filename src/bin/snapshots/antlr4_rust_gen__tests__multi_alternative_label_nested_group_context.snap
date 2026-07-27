@@ -36,7 +36,7 @@ expression: "context(\"NestedGroupContext\")"
             .ok_or_else(|| MissingChildError::new("NestedGroupContext", "NUM"))
     }
     pub fn deep(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
+        __labeled_token_children(self.__node, 13)
             .nth(0)
             .map(TerminalNode::new)
     }

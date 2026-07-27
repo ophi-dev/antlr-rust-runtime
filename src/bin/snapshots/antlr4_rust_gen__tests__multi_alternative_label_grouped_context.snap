@@ -53,7 +53,7 @@ expression: "context(\"GroupedContext\")"
         __token_children(self.__node, 15).map(TerminalNode::new)
     }
     pub fn doc(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
+        __labeled_token_children(self.__node, 13)
             .nth(0)
             .map(TerminalNode::new)
     }
@@ -63,7 +63,7 @@ expression: "context(\"GroupedContext\")"
             .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn oneway(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
+        __labeled_token_children(self.__node, 8)
             .nth(0)
             .map(TerminalNode::new)
     }

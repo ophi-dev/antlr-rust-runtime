@@ -31,7 +31,7 @@ expression: "context(\"MergedRepeatsContext\")"
         __token_children(self.__node, 14).map(TerminalNode::new)
     }
     pub fn last_pick(&self) -> Option<TerminalNode<'a>> {
-        __token_children_matching(self.__node, &[13, 14])
+        __labeled_token_children_matching(self.__node, &[13, 14])
             .skip(0).last()
             .map(TerminalNode::new)
     }
