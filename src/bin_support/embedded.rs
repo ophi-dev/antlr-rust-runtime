@@ -381,16 +381,43 @@ impl TranslationCtx<'_> {
     ///   read cannot also serve.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
-        let alts: Vec<&AltModel> = self
-            .body_offset
-            .and_then(|offset| rule.alt_at(offset))
-            .map_or_else(|| rule.alts.iter().collect(), |alt| vec![alt]);
-        for alt in alts {
-            if let Some(resolved) = Self::resolve_label_in_alt(alt, label) {
-                return Some(resolved);
-            }
+        if let Some(alt) = self.body_offset.and_then(|offset| rule.alt_at(offset)) {
+            return Self::resolve_label_in_alt(alt, label);
         }
-        None
+        // `@after` / `@init` bodies are not scoped to an alternative, so the
+        // label may be declared in several. One read has to serve whichever
+        // alternative the parse took: taking the first match would emit that
+        // alternative's lookup and silently yield a default on the others.
+        let mut resolved: Option<(ElementRef, usize)> = None;
+        for alt in &rule.alts {
+            let declares = alt
+                .refs
+                .iter()
+                .any(|element| element.label.as_deref() == Some(label));
+            // Alternatives that never mention the label put no children of their
+            // own in the way, so they neither constrain nor veto the read.
+            if !declares {
+                continue;
+            }
+            let candidate = Self::resolve_label_in_alt(alt, label)?;
+            if resolved
+                .as_ref()
+                .is_some_and(|existing| !Self::same_label_read(existing, &candidate))
+            {
+                return None;
+            }
+            resolved = Some(candidate);
+        }
+        resolved
+    }
+
+    /// Whether two per-alternative resolutions lower to the same read, so one
+    /// translation can stand for both.
+    fn same_label_read(left: &(ElementRef, usize), right: &(ElementRef, usize)) -> bool {
+        left.1 == right.1
+            && left.0.target == right.0.target
+            && left.0.is_list == right.0.is_list
+            && left.0.token_types == right.0.token_types
     }
 
     fn resolve_label_in_alt(alt: &AltModel, label: &str) -> Option<(ElementRef, usize)> {
@@ -400,9 +427,27 @@ impl TranslationCtx<'_> {
             .filter(|element| element.label.as_deref() == Some(label))
             .collect::<Vec<_>>();
         let element = *declarations.first()?;
-        // `(x=A | x=B)` declares one label over disjoint targets; a single
-        // positional read cannot serve both, and picking the first silently
-        // yields an empty value on the other branch.
+        let declares_label = |candidate: &ElementRef| candidate.label.as_deref() == Some(label);
+        let same_target = |candidate: &ElementRef| {
+            !candidate.target.is_empty()
+                && candidate.target == element.target
+                && candidate.cardinality.max != Some(0)
+        };
+
+        if element.is_list {
+            // A list read yields every same-target child, so repeated
+            // declarations are the normal idiom (`xs+=e (op xs+=e)+`) — they all
+            // feed the one iteration. What it cannot express is exclusion, so the
+            // label resolves only when no same-target element sits *outside* it.
+            let exclusive = alt
+                .refs
+                .iter()
+                .all(|candidate| declares_label(candidate) || !same_target(candidate));
+            return exclusive.then(|| (element.clone(), 0));
+        }
+        // A single label read is one positional lookup, so a second declaration
+        // (`(x=A | x=B)`) cannot be served: picking the first silently yields an
+        // empty value whenever the parse took the other branch.
         if declarations.len() > 1 {
             return None;
         }
@@ -411,18 +456,6 @@ impl TranslationCtx<'_> {
             .iter()
             .position(|candidate| std::ptr::eq(candidate, element))?;
         let (before, after) = (&alt.refs[..position], &alt.refs[position + 1..]);
-        let same_target = |candidate: &ElementRef| {
-            !candidate.target.is_empty()
-                && candidate.target == element.target
-                && candidate.cardinality.max != Some(0)
-        };
-
-        if element.is_list {
-            // The read yields every same-target child, so any same-target
-            // element outside this label would be folded into the label's value.
-            let exclusive = !before.iter().any(same_target) && !after.iter().any(same_target);
-            return exclusive.then(|| (element.clone(), 0));
-        }
         if element.target.is_empty() {
             // Block/wildcard labels read the most recent terminal child. That is
             // the block's own token exactly when no other terminal has been
@@ -1269,6 +1302,123 @@ mod tests {
         let translated = translate_body("$x.text", &ctx).expect("translates");
         assert!(translated.contains("terminal_children"), "{translated}");
         assert!(translated.contains(".last()"), "{translated}");
+    }
+
+    /// A list label repeated within one alternative is the ordinary
+    /// comma-separated idiom (`xs+=e (op xs+=e)+`) — every declaration feeds the
+    /// same iteration, so repeats must not be mistaken for a conflict. This is
+    /// the shape of ANTLR's `ParserExec/ListLabelsOnRuleRefStartOfAlt`
+    /// descriptor, read from `@after` across alternatives that declare it plus
+    /// one that does not.
+    #[test]
+    fn repeated_list_declarations_across_alternatives_still_resolve() {
+        let list_ref = || ElementRef {
+            label: Some("args".to_owned()),
+            target: "e".to_owned(),
+            token_types: Vec::new(),
+            is_block: false,
+            is_list: true,
+            cardinality: ChildCardinality { min: 1, max: None },
+            stable_accessor: true,
+        };
+        let token_ref = ElementRef {
+            label: None,
+            target: "ID".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let mut statement = rule("s");
+        for (index, refs) in [
+            // `args+=e (AND args+=e)+` — two declarations, one iteration.
+            vec![list_ref(), list_ref()],
+            // An alternative that never mentions the label at all.
+            vec![token_ref],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            statement.alts.push(AltModel {
+                label: None,
+                span: (index * 10, index * 10 + 10),
+                refs,
+                children: BTreeMap::new(),
+                leading_target: None,
+            });
+        }
+        let m = model(vec![statement, rule("e")]);
+        let toks = tokens(&[("ID", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::After,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$args", &ctx).expect("list label resolves");
+        assert!(translated.contains("child_rule_trees"), "{translated}");
+    }
+
+    /// `@after` / `@init` bodies are not scoped to an alternative, so one read
+    /// has to serve whichever alternative the parse took. `r : x=A | x=B` with an
+    /// `@after` read of `$x` would emit the `A` lookup and yield a default on the
+    /// `B` branch, while `r : x=A B | x=A C` resolves identically in both.
+    #[test]
+    fn unscoped_bodies_reject_labels_that_resolve_differently_per_alternative() {
+        let token_ref = |label: Option<&str>, target: &str, token_type| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: target.to_owned(),
+            token_types: vec![token_type],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let translate = |second: Vec<ElementRef>| {
+            let mut statement = rule("s");
+            for (index, refs) in [vec![token_ref(Some("x"), "A", 1)], second]
+                .into_iter()
+                .enumerate()
+            {
+                statement.alts.push(AltModel {
+                    label: None,
+                    span: (index * 10, index * 10 + 10),
+                    refs,
+                    children: BTreeMap::new(),
+                    leading_target: None,
+                });
+            }
+            let m = model(vec![statement]);
+            let toks = tokens(&[("A", 1), ("B", 2), ("C", 3)]);
+            let ctx = TranslationCtx {
+                model: &m,
+                rule_index: 0,
+                // `@after`: no offset, so no single owning alternative.
+                body_offset: None,
+                site: ActionSite::After,
+                token_types: &toks,
+            };
+            translate_body("$x.text", &ctx).map_err(|error| error.to_string())
+        };
+
+        // `x=A | x=B`: the two alternatives need different token lookups.
+        let error = translate(vec![token_ref(Some("x"), "B", 2)])
+            .expect_err("conflicting per-alternative reads must not translate");
+        assert!(error.contains("cannot translate $x"), "{error}");
+
+        // `x=A B | x=A C`: both resolve to the same `A` lookup at occurrence 0.
+        let agreed = translate(vec![token_ref(Some("x"), "A", 1), token_ref(None, "C", 3)])
+            .expect("agreeing per-alternative reads still translate");
+        assert!(agreed.contains(".nth(0)"), "{agreed}");
     }
 
     /// One label declared over disjoint targets (`r : (x=A | x=B)`) cannot be
