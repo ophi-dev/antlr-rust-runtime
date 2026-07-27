@@ -435,6 +435,14 @@ impl TranslationCtx<'_> {
         };
 
         if element.is_list {
+            // `translate_element_read` lowers a list label to a per-target child
+            // iterator, which needs a rule or token *target*. A list over a token
+            // group (`xs+=(A | B)`) has none, so the read would fall through to
+            // the scalar block path and emit `.last()…collect()` — code that does
+            // not compile. Leave it unresolved instead.
+            if element.target.is_empty() {
+                return None;
+            }
             // A list read yields every same-target child, so repeated
             // declarations are the normal idiom (`xs+=e (op xs+=e)+`) — they all
             // feed the one iteration. What it cannot express is exclusion, so the
@@ -473,6 +481,14 @@ impl TranslationCtx<'_> {
             return Some((element.clone(), 0));
         }
 
+        // A repeated single label (`(x=A)+`) is overwritten on every iteration,
+        // so ANTLR exposes the *latest* match. The read here is a fixed
+        // `nth(i)`, which would pin the first one; only the accessor path can
+        // express `.last()`. Leave it unresolved rather than read the wrong
+        // iteration.
+        if element.cardinality.is_repeated() {
+            return None;
+        }
         // Single label: count the same-target children ahead of it, bailing as
         // soon as one contributes an unfixed number.
         let occurrence = before
@@ -482,7 +498,15 @@ impl TranslationCtx<'_> {
                 let max = candidate.cardinality.max?;
                 (candidate.cardinality.min == max).then(|| total.saturating_add(max))
             })?;
-        let shadowed_when_absent = element.cardinality.min == 0 && after.iter().any(same_target);
+        // An optional label is displaced by a *following* same-target child that
+        // slides into its position. Only children that are certain to be matched
+        // can do that: a ref from a sibling choice branch reports `min: 0` and
+        // never coexists with this label, so counting it would reject valid
+        // mid-rule actions like `r : (x=A {$x.text} B | A C)`.
+        let shadowed_when_absent = element.cardinality.min == 0
+            && after
+                .iter()
+                .any(|candidate| same_target(candidate) && candidate.cardinality.min > 0);
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
 }
@@ -1302,6 +1326,100 @@ mod tests {
         let translated = translate_body("$x.text", &ctx).expect("translates");
         assert!(translated.contains("terminal_children"), "{translated}");
         assert!(translated.contains(".last()"), "{translated}");
+    }
+
+    /// Reads that `translate_element_read` cannot express must stay unresolved
+    /// rather than fall through to a different read: a list over a *token group*
+    /// (`xs+=(A | B)`) has no target to iterate and would emit
+    /// `.last()…collect()` — Rust that does not compile — and a *repeated* single
+    /// label (`(x=A)+`) is overwritten each iteration, so a fixed `nth(0)` pins
+    /// the first match where ANTLR exposes the latest.
+    #[test]
+    fn reads_the_translator_cannot_express_stay_unresolved() {
+        let translate = |element: ElementRef, read: &str| {
+            let mut statement = rule("s");
+            statement.alts.push(AltModel {
+                label: None,
+                span: (10, 20),
+                refs: vec![element],
+                children: BTreeMap::new(),
+                leading_target: None,
+            });
+            let m = model(vec![statement]);
+            let toks = tokens(&[("A", 1), ("B", 2)]);
+            let ctx = TranslationCtx {
+                model: &m,
+                rule_index: 0,
+                body_offset: Some(15),
+                site: ActionSite::Body,
+                token_types: &toks,
+            };
+            translate_body(read, &ctx).map_err(|error| error.to_string())
+        };
+
+        let group_list = ElementRef {
+            label: Some("xs".to_owned()),
+            target: String::new(),
+            token_types: vec![1, 2],
+            is_block: true,
+            is_list: true,
+            cardinality: ChildCardinality { min: 1, max: None },
+            stable_accessor: true,
+        };
+        let error = translate(group_list, "$xs").expect_err("no target to iterate");
+        assert!(error.contains("cannot translate $xs"), "{error}");
+
+        let repeated_single = ElementRef {
+            label: Some("x".to_owned()),
+            target: "A".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality { min: 1, max: None },
+            stable_accessor: true,
+        };
+        let error = translate(repeated_single, "$x.text").expect_err("no last-occurrence read");
+        assert!(error.contains("cannot translate $x"), "{error}");
+    }
+
+    /// A same-target ref in a *sibling* choice branch never coexists with the
+    /// label, so it cannot displace an optional one: `r : (x=A {$x.text} B | A C)`
+    /// must still translate. Only a certainly-matched following child shadows.
+    #[test]
+    fn sibling_branch_children_do_not_shadow_an_optional_label() {
+        let mut statement = rule("s");
+        let branch_ref = |label: Option<&str>| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "A".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            // Mutually exclusive branches both report `min: 0`.
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![branch_ref(Some("x")), branch_ref(None)],
+            children: BTreeMap::new(),
+            leading_target: Some("A".to_owned()),
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$x.text", &ctx).expect("translates");
+        assert!(translated.contains(".nth(0)"), "{translated}");
     }
 
     /// A list label repeated within one alternative is the ordinary
