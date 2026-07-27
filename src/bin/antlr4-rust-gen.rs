@@ -15550,6 +15550,12 @@ mod tests {
                 "a token-only choice holding an action keeps its branch spans",
             ),
             (
+                "ReassignedAfterAction",
+                "x",
+                true,
+                "a declaration after the action has not assigned the label yet, so it cannot conflict",
+            ),
+            (
                 "ForwardBlockLabel",
                 "x",
                 true,

@@ -1084,6 +1084,24 @@ impl TranslationCtx<'_> {
             });
             return exclusive.then(|| (element.clone(), 0));
         }
+        // Only declarations the action can actually observe constrain its read. Two
+        // rule it out: one in a sibling branch, which never runs alongside a
+        // branch-confined action (`(x=A {$x} | x=A+ B)`), and one *after* the action,
+        // which has not assigned the label yet (`x=A {$x} x=A` reads the first
+        // assignment unambiguously).
+        let relevant = declarations
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                (!branch_confined || on_action_path(candidate)) && matched_at_action(candidate)
+            })
+            .collect::<Vec<_>>();
+        let declarations = if relevant.is_empty() {
+            declarations
+        } else {
+            relevant
+        };
+        let element = *declarations.first()?;
         // A single label read is one positional lookup. Several declarations can
         // still share it when each lowers to the same query — mutually exclusive
         // branches holding `x=A` at the same occurrence do. What cannot be served
@@ -1101,20 +1119,6 @@ impl TranslationCtx<'_> {
         // results to agree, so one read demonstrably serves every branch:
         // `(A x=A B | x=A C)` wants occurrence 1 then 0, and `(x=A B | x=A+ C)`
         // wants a first-match read then a last-match one.
-        // An action confined to one branch never sees a sibling branch's declaration,
-        // so requiring agreement with it would reject a read that is unambiguous
-        // where the action actually runs (`(x=A {$x} | x=A+ B)`).
-        let relevant = declarations
-            .iter()
-            .copied()
-            .filter(|candidate| !branch_confined || on_action_path(candidate))
-            .collect::<Vec<_>>();
-        let declarations = if relevant.is_empty() {
-            declarations
-        } else {
-            relevant
-        };
-        let element = *declarations.first()?;
         if declarations.len() > 1 {
             let mut resolutions = Vec::with_capacity(declarations.len());
             for candidate in &declarations {
