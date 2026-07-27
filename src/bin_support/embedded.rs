@@ -14,7 +14,7 @@
 //! references with labels (for `$label.attr` occurrence resolution), and
 //! `@members` bodies split into struct fields, impl items, and module items.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::io;
 
@@ -498,6 +498,64 @@ impl TranslationCtx<'_> {
         available.is_none_or(|available| available > occurrence)
     }
 
+    /// Index among terminal children at which `element` sits on its own parse
+    /// path, or `None` when that index is not fixed.
+    fn exact_terminal_index(alt: &AltModel, element: &ElementRef) -> Option<usize> {
+        let position = alt
+            .refs
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, element))?;
+        Self::exact_terminal_count(alt.refs[..position].iter().filter(|candidate| {
+            !candidate.token_types.is_empty() && candidate.can_coexist_with(element)
+        }))
+    }
+
+    /// Total terminals contributed by `refs`, or `None` when not fixed. Refs are
+    /// grouped by their innermost choice so an *exhaustive* choice counts once
+    /// rather than per branch; the choice is exact only when every branch it has
+    /// contributes the same number.
+    fn exact_terminal_count<'a>(refs: impl Iterator<Item = &'a ElementRef>) -> Option<usize> {
+        let refs = refs.collect::<Vec<_>>();
+        let mut total = 0_usize;
+        let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
+        let mut branches_seen: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        for candidate in &refs {
+            for &(choice, branch) in &candidate.choice_branch {
+                branches_seen.entry(choice).or_default().insert(branch);
+            }
+        }
+        for candidate in &refs {
+            let max = candidate.cardinality.max?;
+            let local = candidate.branch_local_cardinality;
+            let exact = (local.min == max && local.max == Some(max)).then_some(max);
+            match candidate.choice_branch.last() {
+                None => total = total.saturating_add(exact?),
+                Some(&key) => {
+                    let slot = per_branch.entry(key).or_insert(Some(0));
+                    *slot = match (*slot, exact) {
+                        (Some(sum), Some(next)) => Some(sum.saturating_add(next)),
+                        _ => None,
+                    };
+                }
+            }
+        }
+        let mut by_choice: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for ((choice, _), count) in per_branch {
+            by_choice.entry(choice).or_default().push(count?);
+        }
+        for (choice, counts) in by_choice {
+            let expected = branches_seen.get(&choice).map_or(0, BTreeSet::len);
+            let first = counts.first().copied()?;
+            // Every branch must agree *and* be accounted for — `(A A | B)` has
+            // branch counts 2 and 1, so the prefix is not a fixed position.
+            if counts.len() != expected || counts.iter().any(|count| *count != first) {
+                return None;
+            }
+            total = total.saturating_add(first);
+        }
+        Some(total)
+    }
+
     /// Whether two per-alternative resolutions lower to the same read, so one
     /// translation can stand for both. The fields compared are exactly those
     /// `translate_element_read` consumes to pick a read: list mode, block mode,
@@ -507,8 +565,10 @@ impl TranslationCtx<'_> {
         if left.0.is_list != right.0.is_list || left.0.is_block != right.0.is_block {
             return false;
         }
-        if left.0.is_block && left.0.target.is_empty() && right.0.target.is_empty() {
-            return true;
+        // Block reads are positional now, so two block labels agree only when
+        // their terminal indices do: `x=(A | B) | C x=(A | B)` puts `x` at 0 and 1.
+        if left.0.is_block && right.0.is_block {
+            return left.1 == right.1;
         }
         left.1 == right.1 && left.0.target == right.0.target
     }
@@ -554,19 +614,22 @@ impl TranslationCtx<'_> {
         // action belongs to the innermost branch whose refs bracket its offset.
         // Refs from any *other* branch of those choices cannot have run.
         let action_branches = action_offset.map(|offset| {
-            let mut enclosing: Vec<(usize, usize)> = Vec::new();
-            for candidate in &alt.refs {
-                let Some((start, _)) = candidate.span else {
-                    continue;
-                };
-                // A ref before the action shares its path only if no later ref of
-                // the same branch-set is closer; taking the nearest preceding ref
-                // gives the branch the action was written inside.
-                if start < offset && candidate.choice_branch.len() >= enclosing.len() {
-                    enclosing.clone_from(&candidate.choice_branch);
-                }
-            }
-            enclosing
+            // The *nearest* preceding ref, by source position — not the deepest.
+            // Taking the deepest would keep a closed-over branch's ancestry after
+            // the choice ends: in `(A A | B) x=(C | D) {…}` the second `A` is
+            // deeper than `x`, and treating the action as still inside that branch
+            // would count both `A`s as matched.
+            alt.refs
+                .iter()
+                .filter_map(|candidate| {
+                    candidate
+                        .span
+                        .filter(|(start, _)| *start < offset)
+                        .map(|(start, _)| (start, &candidate.choice_branch))
+                })
+                .max_by_key(|(start, _)| *start)
+                .map(|(_, branches)| branches.clone())
+                .unwrap_or_default()
         });
         // Whether a ref can have run before the action, given that ancestry. An
         // action after the whole choice (`(x=A | A) {$x}`) has no branch tag, so
@@ -656,16 +719,25 @@ impl TranslationCtx<'_> {
             // terminals matched ahead of the block on this parse path — every
             // terminal counts, not just ones sharing the block's token set, since
             // each is a distinct child of the same context.
-            let terminals_before = before
-                .iter()
-                .filter(|candidate| !candidate.token_types.is_empty() && on_action_path(candidate))
-                .try_fold(0_usize, |total, candidate| {
-                    let max = candidate.cardinality.max?;
-                    (candidate.cardinality.min == max || !candidate.choice_branch.is_empty())
-                        .then(|| total.saturating_add(max))
-                });
+            let terminals_before = Self::exact_terminal_count(before.iter().filter(|candidate| {
+                !candidate.token_types.is_empty() && on_action_path(candidate)
+            }));
             // Without a fixed index the read falls back to the most recent
             // terminal, which is only right when nothing has been matched since.
+            // A sibling branch that puts a terminal at the same index supplies the
+            // child this read selects on a parse where the label is unset:
+            // `((x=(A | B)) | C) {$x}` reads `C` on the `C` branch.
+            if let Some(index) = terminals_before {
+                let sibling_at_index = alt.refs.iter().any(|candidate| {
+                    !candidate.can_coexist_with(element)
+                        && !candidate.token_types.is_empty()
+                        && candidate.cardinality.max != Some(0)
+                        && Self::exact_terminal_index(alt, candidate).is_none_or(|at| at == index)
+                });
+                if sibling_at_index {
+                    return None;
+                }
+            }
             return terminals_before.map_or_else(
                 || {
                     let displaced = after.iter().any(|candidate| {
@@ -1373,6 +1445,8 @@ mod tests {
     #[test]
     fn disjoint_token_groups_do_not_poison_a_later_block_label() {
         let mut statement = rule("s");
+        // `branch_local_cardinality` mirrors `cardinality` here: the optionality
+        // comes from the group's own `?`, not from choice membership.
         let group_ref = |label: Option<&str>, token_types: Vec<i32>, min| ElementRef {
             label: label.map(ToOwned::to_owned),
             target: String::new(),
@@ -1383,7 +1457,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             span: None,
-            branch_local_cardinality: ChildCardinality::ONE,
+            branch_local_cardinality: ChildCardinality { min, max: Some(1) },
         };
         statement.alts.push(AltModel {
             label: None,

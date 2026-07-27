@@ -72,6 +72,13 @@ exhaustive_prefix
     : (first = unary | second = unary) pick = unary NUM
     ;
 
+// Nested exhaustive choices: every path still yields exactly one `unary` before
+// the label, so the inner choice's agreed count rolls up into the outer branch
+// and the accessor survives.
+nested_exhaustive_prefix
+    : ((one = unary | two = unary) | three = unary) chosen = unary NUM
+    ;
+
 // The same choice made *optional*: it may now contribute no `unary` at all, so
 // the following label has no fixed position and loses its accessor. Only the
 // branch-local cardinality separates this from `exhaustive_prefix` above.

@@ -9258,31 +9258,67 @@ fn exact_target_cardinality(
     }
     // A choice is exact only when every one of its branches contributes the same
     // count. Branches with no matching ref never entered the map above yet still
-    // contribute zero, so the full branch set is recovered from `refs` — a choice
-    // whose branch count exceeds the entries seen has a zero-contributing branch
-    // and is therefore exact only if the others contribute zero too.
+    // contribute zero, so the full branch set is recovered from `refs`.
+    //
+    // Nested choices are folded innermost-first: once an inner choice agrees, its
+    // count is attributed to the *enclosing* branch that contains it, so
+    // `((a=A | b=A) | c=A) x=A` — where every path yields one `A` — stays exact.
     let mut branches_per_choice: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+    let mut depth_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
     for element in refs {
-        for &(choice, branch) in &element.choice_branch {
+        for (depth, &(choice, branch)) in element.choice_branch.iter().enumerate() {
             branches_per_choice
                 .entry(choice)
                 .or_default()
                 .insert(branch);
+            depth_of_choice.insert(choice, depth);
         }
     }
-    let mut by_choice: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for ((choice, _), count) in choice_totals {
-        by_choice.entry(choice).or_default().push(count?);
+    // Ancestry per branch key, so an inner choice's total can be re-attributed.
+    let mut ancestry: BTreeMap<(usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
+    for element in refs {
+        if let Some(&key) = element.choice_branch.last() {
+            ancestry.insert(key, element.choice_branch.clone());
+        }
     }
-    for (choice, counts) in by_choice {
+    let mut pending = choice_totals;
+    // Deepest choices first, so inner results roll up into their parents.
+    let mut choices = depth_of_choice
+        .iter()
+        .map(|(c, d)| (*d, *c))
+        .collect::<Vec<_>>();
+    choices.sort_unstable_by_key(|(depth, _)| std::cmp::Reverse(*depth));
+    for (_, choice) in choices {
+        let counts = pending
+            .iter()
+            .filter(|((candidate, _), _)| *candidate == choice)
+            .map(|((_, branch), count)| (*branch, *count))
+            .collect::<Vec<_>>();
+        if counts.is_empty() {
+            continue;
+        }
         let expected = branches_per_choice.get(&choice).map_or(0, BTreeSet::len);
-        let first = counts.first().copied()?;
-        // Every branch must agree, and every branch must have been counted —
-        // otherwise some branch supplies a different number of children.
-        if counts.len() != expected || counts.iter().any(|count| *count != first) {
+        let first = counts.first().and_then(|(_, count)| *count)?;
+        if counts.len() != expected || counts.iter().any(|(_, count)| *count != Some(first)) {
             return None;
         }
-        total = total.saturating_add(first);
+        for (branch, _) in &counts {
+            pending.remove(&(choice, *branch));
+        }
+        // Attribute this choice's agreed count to its own enclosing branch, if any.
+        let parent = counts.first().and_then(|(branch, _)| {
+            ancestry
+                .get(&(choice, *branch))
+                .and_then(|chain| chain.split_last().map(|(_, rest)| rest.last().copied()))
+                .flatten()
+        });
+        match parent {
+            Some(parent_key) => {
+                let slot = pending.entry(parent_key).or_insert(Some(0));
+                *slot = slot.map(|sum| sum.saturating_add(first));
+            }
+            None => total = total.saturating_add(first),
+        }
     }
     Some(total)
 }
@@ -15051,6 +15087,12 @@ mod tests {
         insta::assert_snapshot!(
             "multi_alternative_label_optional_prefix_context",
             context("OptionalPrefixContext")
+        );
+        // Nesting the exhaustive choice keeps the count fixed: the inner choice's
+        // agreed contribution rolls up into the outer branch.
+        insta::assert_snapshot!(
+            "multi_alternative_label_nested_exhaustive_prefix_context",
+            context("NestedExhaustivePrefixContext")
         );
 
         for (name, snapshot) in [
