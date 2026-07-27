@@ -25,7 +25,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
             ElementRef {
                 label: None,
@@ -42,7 +42,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
             ElementRef {
                 label: Some(
@@ -59,7 +59,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
         ],
         children: {
@@ -102,7 +102,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
             ElementRef {
                 label: None,
@@ -119,7 +119,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
             ElementRef {
                 label: Some(
@@ -136,7 +136,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
         ],
         children: {
@@ -179,7 +179,7 @@ expression: "model.rules[1].alts"
                     ),
                 },
                 stable_accessor: true,
-                choice_branch: None,
+                choice_branch: [],
             },
         ],
         children: {

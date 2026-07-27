@@ -77,23 +77,29 @@ pub(crate) struct ElementRef {
     /// label accessor. Single-alternative EBNF groups preserve it; choices opt
     /// out because their flattened CST children do not retain the chosen path.
     pub(crate) stable_accessor: bool,
-    /// `(choice id, alternative index)` of the innermost enclosing *multi*-
-    /// alternative block, if any. Two refs tagged with the same choice id but
-    /// different alternative indexes are mutually exclusive: no parse contains
-    /// both. `None` means the ref is on the rule's own sequential path.
-    pub(crate) choice_branch: Option<(usize, usize)>,
+    /// `(choice id, alternative index)` for every enclosing *multi*-alternative
+    /// block, outermost first. Two refs that share a choice id but sit in
+    /// different alternatives of it are mutually exclusive: no parse contains
+    /// both. Empty means the ref is on the rule's own sequential path.
+    ///
+    /// The whole ancestry is kept, not just the innermost choice: for
+    /// `((x=e | f) | e)` the labeled `x` and the trailing `e` are separated by
+    /// the *outer* choice, which an innermost-only tag would lose.
+    pub(crate) choice_branch: Vec<(usize, usize)>,
 }
 
 impl ElementRef {
-    /// Whether `self` and `other` can both appear in one parse. Refs from
-    /// different alternatives of the same choice never do.
-    pub(crate) const fn can_coexist_with(&self, other: &Self) -> bool {
-        match (self.choice_branch, other.choice_branch) {
-            (Some((left_choice, left_alt)), Some((right_choice, right_alt))) => {
-                left_choice != right_choice || left_alt == right_alt
-            }
-            _ => true,
-        }
+    /// Whether `self` and `other` can both appear in one parse. They cannot when
+    /// any choice encloses both in *different* alternatives.
+    pub(crate) fn can_coexist_with(&self, other: &Self) -> bool {
+        !self.choice_branch.iter().any(|(choice, branch)| {
+            other
+                .choice_branch
+                .iter()
+                .any(|(other_choice, other_branch)| {
+                    choice == other_choice && branch != other_branch
+                })
+        })
     }
 }
 
@@ -400,7 +406,9 @@ impl TranslationCtx<'_> {
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
         if let Some(alt) = self.body_offset.and_then(|offset| rule.alt_at(offset)) {
-            return Self::resolve_label_in_alt(alt, label);
+            // A mid-rule action is confined to the branch it is written in, so a
+            // sibling branch's children can be excluded.
+            return Self::resolve_label_in_alt(alt, label, true);
         }
         // `@after` / `@init` bodies are not scoped to an alternative, so the
         // label may be declared in several. One read has to serve whichever
@@ -417,7 +425,10 @@ impl TranslationCtx<'_> {
                 non_declaring.push(alt);
                 continue;
             }
-            let candidate = Self::resolve_label_in_alt(alt, label)?;
+            // An `@after` / `@init` body runs whichever branch the parse took, so
+            // a sibling branch's match *can* be the child present when the read
+            // executes — sibling exclusion does not apply here.
+            let candidate = Self::resolve_label_in_alt(alt, label, false)?;
             if resolved
                 .as_ref()
                 .is_some_and(|existing| !Self::same_label_read(existing, &candidate))
@@ -475,7 +486,11 @@ impl TranslationCtx<'_> {
         left.1 == right.1 && left.0.target == right.0.target
     }
 
-    fn resolve_label_in_alt(alt: &AltModel, label: &str) -> Option<(ElementRef, usize)> {
+    fn resolve_label_in_alt(
+        alt: &AltModel,
+        label: &str,
+        exclude_sibling_branches: bool,
+    ) -> Option<(ElementRef, usize)> {
         let declarations = alt
             .refs
             .iter()
@@ -483,10 +498,20 @@ impl TranslationCtx<'_> {
             .collect::<Vec<_>>();
         let element = *declarations.first()?;
         let declares_label = |candidate: &ElementRef| candidate.label.as_deref() == Some(label);
+        // The generated read queries by rule index or *token type*, so a
+        // differently-spelled terminal with the same type is the same child as
+        // far as the read is concerned (`A : 'a';` makes `A` and `'a'` aliases).
         let same_target = |candidate: &ElementRef| {
-            !candidate.target.is_empty()
-                && candidate.target == element.target
-                && candidate.cardinality.max != Some(0)
+            if candidate.target.is_empty() || candidate.cardinality.max == Some(0) {
+                return false;
+            }
+            if element.token_types.is_empty() || candidate.token_types.is_empty() {
+                return candidate.target == element.target;
+            }
+            candidate
+                .token_types
+                .iter()
+                .any(|token_type| element.token_types.contains(token_type))
         };
 
         if element.is_list {
@@ -568,9 +593,10 @@ impl TranslationCtx<'_> {
         // cannot, since no parse contains both, so counting it would reject valid
         // mid-rule actions like `r : (x=A {$x.text} B | A C)`.
         let shadowed_when_absent = element.cardinality.min == 0
-            && after
-                .iter()
-                .any(|candidate| same_target(candidate) && candidate.can_coexist_with(element));
+            && after.iter().any(|candidate| {
+                same_target(candidate)
+                    && (!exclude_sibling_branches || candidate.can_coexist_with(element))
+            });
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
 }
@@ -695,7 +721,7 @@ fn translate_reference(
             is_list: false,
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let _ = target_rule;
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
@@ -709,7 +735,7 @@ fn translate_reference(
             is_list: false,
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
     }
@@ -1050,7 +1076,7 @@ mod tests {
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
                 ElementRef {
                     label: Some("right".to_owned()),
@@ -1060,7 +1086,7 @@ mod tests {
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
             ],
             children: BTreeMap::from([(
@@ -1115,7 +1141,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1160,7 +1186,7 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1199,7 +1225,7 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1241,7 +1267,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let single_ref = ElementRef {
             label: Some("name".to_owned()),
@@ -1254,7 +1280,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let translate = |max| {
             let mut statement = rule("s");
@@ -1308,7 +1334,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
                 ElementRef {
                     label: Some("errors".to_owned()),
@@ -1318,7 +1344,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 0, max: None },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
             ],
             children: BTreeMap::new(),
@@ -1371,7 +1397,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
                 ElementRef {
                     label: None,
@@ -1384,7 +1410,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
             ],
             children: BTreeMap::new(),
@@ -1422,7 +1448,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let translate = |second: ElementRef| {
             let mut statement = rule("s");
@@ -1478,7 +1504,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -1515,7 +1541,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let mut choice = rule("s");
         for (index, refs) in [vec![block_ref(vec![1, 2])], vec![block_ref(vec![3, 4])]]
@@ -1580,7 +1606,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let error = translate(group_list, "$xs").expect_err("no target to iterate");
         assert!(error.contains("cannot translate $xs"), "{error}");
@@ -1593,10 +1619,167 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let error = translate(repeated_single, "$x.text").expect_err("no last-occurrence read");
         assert!(error.contains("cannot translate $x"), "{error}");
+    }
+
+    /// Mutual exclusion needs the *whole* choice ancestry, not just the innermost
+    /// choice. In `((x=e | f) | e)` the label and the trailing `e` are separated
+    /// by the outer choice; keeping only the inner tag would make them look
+    /// independent and reject a valid action.
+    #[test]
+    fn nested_choices_keep_their_outer_branch_ancestry() {
+        let rule_ref = |label: Option<&str>, branches: Vec<(usize, usize)>| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "e".to_owned(),
+            token_types: Vec::new(),
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+            choice_branch: branches,
+        };
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                // Outer choice 1 branch 0, then inner choice 2 branch 0.
+                rule_ref(Some("x"), vec![(1, 0), (2, 0)]),
+                // Outer choice 1 branch 1 — excluded by the *outer* choice alone.
+                rule_ref(None, vec![(1, 1)]),
+            ],
+            children: BTreeMap::new(),
+            leading_target: Some("e".to_owned()),
+        });
+        let m = model(vec![statement, rule("e")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$x.text", &ctx).expect("outer exclusion still applies");
+        assert!(translated.contains(".nth(0)"), "{translated}");
+    }
+
+    /// Sibling exclusion is valid only for a *mid-rule* action, which is confined
+    /// to the branch it is written in. An `@after` body runs whichever branch the
+    /// parse took, so `r @after {$x.text} : (x=A | A) EOF;` must decline — the
+    /// unlabeled branch's `A` is present when the read executes.
+    #[test]
+    fn unscoped_bodies_treat_sibling_matches_as_hazards() {
+        let branch_ref = |label: Option<&str>, branch| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "A".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+            choice_branch: vec![(3, branch)],
+        };
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![branch_ref(Some("x"), 0), branch_ref(None, 1)],
+            children: BTreeMap::new(),
+            leading_target: Some("A".to_owned()),
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1)]);
+        let after = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            // `@after`: unscoped, so any branch may have run.
+            body_offset: None,
+            site: ActionSite::After,
+            token_types: &toks,
+        };
+        let error = translate_body("$x.text", &after).expect_err("sibling match is a hazard here");
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
+
+        // The same refs read from a mid-rule action inside the labeled branch do
+        // resolve, since that action cannot run on the sibling branch.
+        let body = TranslationCtx {
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            ..after
+        };
+        let translated =
+            translate_body("$x.text", &body).expect("mid-rule action excludes sibling");
+        assert!(translated.contains(".nth(0)"), "{translated}");
+    }
+
+    /// A token label's read queries by token *type*, so a differently-spelled
+    /// terminal with the same type is the same child: with `A : 'a';`,
+    /// `r : (xs+=A)? 'a' {$xs}` must decline because the mandatory `'a'` would be
+    /// iterated as an `xs` element.
+    #[test]
+    fn token_labels_compare_types_not_source_spelling() {
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                ElementRef {
+                    label: Some("xs".to_owned()),
+                    target: "A".to_owned(),
+                    token_types: vec![1],
+                    is_block: false,
+                    is_list: true,
+                    cardinality: ChildCardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                    stable_accessor: true,
+                    choice_branch: Vec::new(),
+                },
+                ElementRef {
+                    label: None,
+                    // Literal spelling differs; the token type is identical.
+                    target: "'a'".to_owned(),
+                    token_types: vec![1],
+                    is_block: false,
+                    is_list: false,
+                    cardinality: ChildCardinality {
+                        min: 1,
+                        max: Some(1),
+                    },
+                    stable_accessor: true,
+                    choice_branch: Vec::new(),
+                },
+            ],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$xs", &ctx).expect_err("aliased terminal is the same child");
+        assert!(
+            error.to_string().contains("cannot translate $xs"),
+            "{error}"
+        );
     }
 
     /// A same-target ref in a *sibling* choice branch never coexists with the
@@ -1618,7 +1801,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: Some((7, branch)),
+            choice_branch: vec![(7, branch)],
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1656,7 +1839,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         sequential.alts.push(AltModel {
             label: None,
@@ -1693,7 +1876,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let token_ref = ElementRef {
             label: None,
@@ -1706,7 +1889,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let mut statement = rule("s");
         for (index, refs) in [
@@ -1757,7 +1940,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         let translate = |second: Vec<ElementRef>| {
             let mut statement = rule("s");
@@ -1815,7 +1998,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
-            choice_branch: None,
+            choice_branch: Vec::new(),
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1893,7 +2076,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
                 ElementRef {
                     label: Some("ids".to_owned()),
@@ -1903,7 +2086,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
-                    choice_branch: None,
+                    choice_branch: Vec::new(),
                 },
             ],
             children: BTreeMap::new(),
