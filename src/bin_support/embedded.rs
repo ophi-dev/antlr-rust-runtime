@@ -389,14 +389,14 @@ impl TranslationCtx<'_> {
         // alternative the parse took: taking the first match would emit that
         // alternative's lookup and silently yield a default on the others.
         let mut resolved: Option<(ElementRef, usize)> = None;
+        let mut non_declaring = Vec::new();
         for alt in &rule.alts {
             let declares = alt
                 .refs
                 .iter()
                 .any(|element| element.label.as_deref() == Some(label));
-            // Alternatives that never mention the label put no children of their
-            // own in the way, so they neither constrain nor veto the read.
             if !declares {
+                non_declaring.push(alt);
                 continue;
             }
             let candidate = Self::resolve_label_in_alt(alt, label)?;
@@ -408,16 +408,53 @@ impl TranslationCtx<'_> {
             }
             resolved = Some(candidate);
         }
-        resolved
+        let (element, occurrence) = resolved?;
+        // An alternative that never declares the label leaves it unset, so the
+        // read must come up empty there. It will not if that alternative happens
+        // to build a child the read would select anyway (`r : x=A | A`), which
+        // would report a value for a label the parse never bound.
+        for alt in non_declaring {
+            if Self::alt_can_satisfy_read(alt, &element, occurrence) {
+                return None;
+            }
+        }
+        Some((element, occurrence))
+    }
+
+    /// Whether `alt` builds a child that the read for `element` would select,
+    /// even though `alt` does not declare the label.
+    fn alt_can_satisfy_read(alt: &AltModel, element: &ElementRef, occurrence: usize) -> bool {
+        if element.target.is_empty() {
+            // Block reads take the last terminal child, so any terminal matches.
+            return alt.refs.iter().any(|candidate| {
+                !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
+            });
+        }
+        let available = alt
+            .refs
+            .iter()
+            .filter(|candidate| candidate.target == element.target)
+            .try_fold(0_usize, |total, candidate| {
+                Some(total.saturating_add(candidate.cardinality.max?))
+            });
+        // A list read selects any same-target child; a positional read needs one
+        // at `occurrence`. An unbounded count can always reach either.
+        available.is_none_or(|available| available > occurrence)
     }
 
     /// Whether two per-alternative resolutions lower to the same read, so one
-    /// translation can stand for both.
+    /// translation can stand for both. The fields compared are exactly those
+    /// `translate_element_read` consumes to pick a read: list mode, block mode,
+    /// and the target it queries. Two block labels are equivalent regardless of
+    /// their token sets, because the block read ignores them.
     fn same_label_read(left: &(ElementRef, usize), right: &(ElementRef, usize)) -> bool {
-        left.1 == right.1
-            && left.0.target == right.0.target
-            && left.0.is_list == right.0.is_list
-            && left.0.token_types == right.0.token_types
+        if left.0.is_list != right.0.is_list || left.0.is_block != right.0.is_block {
+            return false;
+        }
+        if left.0.is_block && left.0.target.is_empty() && right.0.target.is_empty() {
+            return true;
+        }
+        left.1 == right.1 && left.0.target == right.0.target
     }
 
     fn resolve_label_in_alt(alt: &AltModel, label: &str) -> Option<(ElementRef, usize)> {
@@ -443,10 +480,18 @@ impl TranslationCtx<'_> {
             if element.target.is_empty() {
                 return None;
             }
-            // A list read yields every same-target child, so repeated
-            // declarations are the normal idiom (`xs+=e (op xs+=e)+`) — they all
-            // feed the one iteration. What it cannot express is exclusion, so the
-            // label resolves only when no same-target element sits *outside* it.
+            // A list read yields every child of *one* target, so repeated
+            // declarations are the normal idiom (`xs+=e (op xs+=e)+`) only while
+            // they all name that same target. `xs+=A xs+=B` would iterate `A`
+            // alone and silently drop every `B`.
+            if declarations
+                .iter()
+                .any(|candidate| candidate.target != element.target || !candidate.is_list)
+            {
+                return None;
+            }
+            // What the read cannot express is exclusion, so the label resolves
+            // only when no same-target element sits *outside* it.
             let exclusive = alt
                 .refs
                 .iter()
@@ -1326,6 +1371,141 @@ mod tests {
         let translated = translate_body("$x.text", &ctx).expect("translates");
         assert!(translated.contains("terminal_children"), "{translated}");
         assert!(translated.contains(".last()"), "{translated}");
+    }
+
+    /// An alternative that does not declare the label leaves it unset, so the
+    /// read has to come up empty there. `r : x=A | A` breaks that: the second
+    /// alternative builds an `A` the read would select, reporting a value for a
+    /// label the parse never bound. Conversely `r : x=A | B` is fine.
+    #[test]
+    fn unscoped_reads_reject_alternatives_that_would_satisfy_them_unbound() {
+        let token_ref = |label: Option<&str>, target: &str, token_type| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: target.to_owned(),
+            token_types: vec![token_type],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let translate = |second: ElementRef| {
+            let mut statement = rule("s");
+            for (index, refs) in [vec![token_ref(Some("x"), "A", 1)], vec![second]]
+                .into_iter()
+                .enumerate()
+            {
+                statement.alts.push(AltModel {
+                    label: None,
+                    span: (index * 10, index * 10 + 10),
+                    refs,
+                    children: BTreeMap::new(),
+                    leading_target: None,
+                });
+            }
+            let m = model(vec![statement]);
+            let toks = tokens(&[("A", 1), ("B", 2)]);
+            let ctx = TranslationCtx {
+                model: &m,
+                rule_index: 0,
+                body_offset: None,
+                site: ActionSite::After,
+                token_types: &toks,
+            };
+            translate_body("$x.text", &ctx).map_err(|error| error.to_string())
+        };
+
+        // `x=A | A`: the unlabeled `A` satisfies the read with `x` unset.
+        let error = translate(token_ref(None, "A", 1))
+            .expect_err("an unbound label must not read another alternative's child");
+        assert!(error.contains("cannot translate $x"), "{error}");
+
+        // `x=A | B`: nothing in the second alternative can be mistaken for `x`.
+        let translated =
+            translate(token_ref(None, "B", 2)).expect("disjoint alternative keeps the read");
+        assert!(translated.contains(".nth(0)"), "{translated}");
+    }
+
+    /// A list read iterates one target, so every declaration of the label must
+    /// name that target: `xs+=A xs+=B` would iterate `A` and drop every `B`.
+    /// Equivalent *block* labels across alternatives (`x=(A | B) | x=(C | D)`)
+    /// conversely stay resolvable, because the block read ignores token sets.
+    #[test]
+    fn list_declarations_must_share_a_target_while_block_reads_ignore_token_sets() {
+        let list_ref = |target: &str, token_type| ElementRef {
+            label: Some("xs".to_owned()),
+            target: target.to_owned(),
+            token_types: vec![token_type],
+            is_block: false,
+            is_list: true,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![list_ref("A", 1), list_ref("B", 2)],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1), ("B", 2)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let error = translate_body("$xs", &ctx).expect_err("mixed list targets must not resolve");
+        assert!(
+            error.to_string().contains("cannot translate $xs"),
+            "{error}"
+        );
+
+        // Two block labels over different token sets lower to the same read.
+        let block_ref = |token_types: Vec<i32>| ElementRef {
+            label: Some("x".to_owned()),
+            target: String::new(),
+            token_types,
+            is_block: true,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let mut choice = rule("s");
+        for (index, refs) in [vec![block_ref(vec![1, 2])], vec![block_ref(vec![3, 4])]]
+            .into_iter()
+            .enumerate()
+        {
+            choice.alts.push(AltModel {
+                label: None,
+                span: (index * 10, index * 10 + 10),
+                refs,
+                children: BTreeMap::new(),
+                leading_target: None,
+            });
+        }
+        let m = model(vec![choice]);
+        let toks = tokens(&[("A", 1), ("B", 2), ("C", 3), ("D", 4)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::After,
+            token_types: &toks,
+        };
+        let translated = translate_body("$x.text", &ctx).expect("equivalent block reads resolve");
+        assert!(translated.contains("terminal_children"), "{translated}");
     }
 
     /// Reads that `translate_element_read` cannot express must stay unresolved
