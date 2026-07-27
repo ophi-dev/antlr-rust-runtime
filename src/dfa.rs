@@ -137,6 +137,7 @@ pub struct ParserDfa {
     start_state: DfaStateId,
     precedence_start_states: Vec<DfaStateId>,
     precedence_mode: bool,
+    learning_revision: u64,
     learning: DfaLearningCounters,
 }
 
@@ -160,6 +161,7 @@ impl ParserDfa {
             start_state: NO_DFA_STATE,
             precedence_start_states: Vec::new(),
             precedence_mode: false,
+            learning_revision: 0,
             learning: DfaLearningCounters::default(),
         }
     }
@@ -205,7 +207,11 @@ impl ParserDfa {
 
     pub(crate) fn set_start_state(&mut self, state: DfaStateId) {
         self.assert_valid_state(state);
+        if self.start_state == state {
+            return;
+        }
         self.start_state = state;
+        self.bump_learning_revision();
     }
 
     pub const fn is_precedence_dfa(&self) -> bool {
@@ -222,6 +228,7 @@ impl ParserDfa {
         self.start_state = NO_DFA_STATE;
         self.precedence_start_states.clear();
         self.precedence_mode = precedence_dfa;
+        self.bump_learning_revision();
         if precedence_dfa {
             let state = self.add_state(DfaStateBuilder::new(AtnConfigSet::new()));
             self.start_state = state;
@@ -241,11 +248,19 @@ impl ParserDfa {
 
     pub(crate) fn set_precedence_start_state(&mut self, precedence: usize, state: DfaStateId) {
         self.assert_valid_state(state);
+        if self.precedence_start_state(precedence) == Some(state) {
+            return;
+        }
         if precedence >= self.precedence_start_states.len() {
             self.precedence_start_states
                 .resize(precedence + 1, NO_DFA_STATE);
         }
         self.precedence_start_states[precedence] = state;
+        self.bump_learning_revision();
+    }
+
+    pub(crate) const fn learning_revision(&self) -> u64 {
+        self.learning_revision
     }
 
     pub fn stats(&self) -> ParserDfaStats {
@@ -311,6 +326,7 @@ impl ParserDfa {
         self.cold.push(configs, conflicting_alts);
         self.interner.insert(fingerprint, id);
         self.learning.states_created = self.learning.states_created.saturating_add(1);
+        self.bump_learning_revision();
         #[cfg(feature = "perf-counters")]
         crate::perf::record_dfa_state_created();
         id
@@ -352,7 +368,11 @@ impl ParserDfa {
     pub(crate) fn add_edge(&mut self, source: DfaStateId, symbol: i32, target: DfaStateId) {
         self.assert_valid_state(source);
         self.assert_valid_state(target);
+        let previous = self.edge(source, symbol);
         self.hot.edges.add(source, symbol, target);
+        if self.edge(source, symbol) != previous {
+            self.bump_learning_revision();
+        }
     }
 
     pub(crate) fn configs(&self, state: DfaStateId) -> &AtnConfigSet {
@@ -387,6 +407,10 @@ impl ParserDfa {
             state.index() < self.state_count(),
             "DFA state ID must index aligned hot/cold storage"
         );
+    }
+
+    const fn bump_learning_revision(&mut self) {
+        self.learning_revision = self.learning_revision.wrapping_add(1);
     }
 }
 

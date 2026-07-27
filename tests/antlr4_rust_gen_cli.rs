@@ -272,6 +272,41 @@ fn positional_lexer_root_emits_rust_and_manifest() {
     assert!(manifest.contains("\"kind\": \"lexer\""), "{manifest}");
 }
 
+#[test]
+fn adaptive_atn_routing_generated_path_compiles() {
+    let temp = temporary_directory("adaptive-atn-routing");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/adaptive-atn-routing/AdaptiveRouting.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser = fs::read_to_string(out.join("adaptive_routing_parser.rs"))
+        .expect("parser should be emitted");
+    assert!(
+        parser.contains("adaptive_atn_preferred_rules"),
+        "structural candidate should emit adaptive ATN routing"
+    );
+    assert!(
+        parser.contains("_adaptive_probe_dispatch"),
+        "left-recursive seed should probe its enclosing candidate"
+    );
+    assert_generated_modules_compile(
+        temp.path(),
+        &["adaptive_routing_lexer.rs", "adaptive_routing_parser.rs"],
+    );
+}
+
 /// Editors on Windows commonly save `.g4` sources with a UTF-8 byte order mark
 /// and CRLF line endings. Both must generate exactly like the plain spelling.
 #[test]

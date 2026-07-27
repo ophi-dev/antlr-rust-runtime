@@ -6084,6 +6084,16 @@ where
         !self.parse_listeners.is_empty()
     }
 
+    /// Reports whether semantic hooks may override interpreted decisions.
+    ///
+    /// Generated parsers use this to keep adaptive performance routing from
+    /// changing parse semantics after a decision DFA becomes warm.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn observes_parser_decisions(&self) -> bool {
+        self.semantic_hooks.observes_parser_decisions()
+    }
+
     /// Fires `enter_every_rule` on registered parse listeners, returning the
     /// abort error if any listener requested one.
     ///

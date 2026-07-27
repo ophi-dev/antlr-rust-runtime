@@ -3740,6 +3740,7 @@ struct PortableLocalStepRender<'a> {
 
 #[derive(Clone, Copy)]
 struct GeneratedStepRenderContext<'a> {
+    current_rule_index: usize,
     /// `Some` in embedded mode: actions/predicates are verbatim Rust.
     embedded: Option<EmbeddedStepRender<'a>>,
     /// Portable raw-grammar boolean locals translated without embedded mode.
@@ -3749,6 +3750,8 @@ struct GeneratedStepRenderContext<'a> {
     track_context_alt_numbers: bool,
     direct_generated_rule_calls: &'a [bool],
     atn_preferred_rule_calls: &'a [bool],
+    adaptive_atn_preferred_rule_slots: &'a [Option<usize>],
+    adaptive_atn_probe_rule_slots: &'a [Vec<usize>],
 }
 
 struct GeneratedParserCompileContext<'a> {
@@ -3806,6 +3809,23 @@ impl Default for ParserRenderOptions<'_> {
             generate_visitor: false,
             sem_unknown: SemUnknownPolicy::default(),
             patterns: None,
+        }
+    }
+}
+
+/// A non-default policy must reach the interpreter through the emitted runtime
+/// options, so its literal forces the options-carrying call shape.
+///
+/// A `hook`-disposed coordinate falls through to the configured policy when its
+/// hook is unimplemented. It does not escalate the global policy, because that
+/// would flip unrelated `assume-true` coordinates in the same grammar to
+/// fail-loud.
+const fn parser_unknown_policy_literal(policy: SemUnknownPolicy) -> Option<&'static str> {
+    match policy {
+        SemUnknownPolicy::AssumeTrue => None,
+        SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
+        SemUnknownPolicy::Hook | SemUnknownPolicy::Error => {
+            Some("antlr4_runtime::UnknownSemanticPolicy::Error")
         }
     }
 }
@@ -3896,18 +3916,25 @@ fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) 
 
 const ATN_PREFERRED_LEADING_CALL_CHAIN_MIN: usize = 8;
 const ATN_PREFERRED_CHAIN_MIN_DECISION_DENSITY_NUMERATOR: usize = 2;
+const ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST: usize = 8;
+const ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS: usize = 8;
+const ATN_PREFERRED_LEFT_RECURSIVE_WRAPPER_MIN_DECISION_COST: usize = 8;
 const ATN_PREFERRED_WRAPPER_MIN_DECISION_COST: usize = 2;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct GeneratedRuleShape {
     decision_cost: usize,
     action_or_predicate_count: usize,
+    left_recursive_operator_alts: usize,
 }
 
 impl AddAssign for GeneratedRuleShape {
     fn add_assign(&mut self, rhs: Self) {
         self.decision_cost += rhs.decision_cost;
         self.action_or_predicate_count += rhs.action_or_predicate_count;
+        self.left_recursive_operator_alts = self
+            .left_recursive_operator_alts
+            .max(rhs.left_recursive_operator_alts);
     }
 }
 
@@ -3917,6 +3944,16 @@ fn generated_atn_preferred_rule_calls(
     rule_names: &[String],
 ) -> Vec<bool> {
     generated_atn_preferred_rule_calls_excluding(rules, rule_names, &BTreeSet::new())
+}
+
+#[cfg(test)]
+fn generated_adaptive_atn_preferred_rule_calls(rules: &[Option<GeneratedParserRule>]) -> Vec<bool> {
+    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &BTreeSet::new())
+}
+
+struct GeneratedAdaptiveAtnRouting {
+    candidates: Vec<bool>,
+    probe_candidate_rules: Vec<Vec<usize>>,
 }
 
 fn generated_atn_preferred_rule_calls_excluding(
@@ -3931,13 +3968,7 @@ fn generated_atn_preferred_rule_calls_excluding(
                 .and_then(|rule| generated_steps_leading_mandatory_rule_call(&rule.steps))
         })
         .collect::<Vec<_>>();
-    let shapes = rules
-        .iter()
-        .map(|rule| {
-            rule.as_ref()
-                .map_or_else(GeneratedRuleShape::default, generated_rule_shape)
-        })
-        .collect::<Vec<_>>();
+    let shapes = generated_rule_shapes(rules);
     let mut preferred = vec![false; rules.len()];
 
     for start in 0..rules.len() {
@@ -3969,13 +4000,138 @@ fn generated_atn_preferred_rule_calls_excluding(
         }
     }
     propagate_atn_preferred_wrappers(rules, &shapes, &mut preferred);
+    exclude_forced_generated_rules(&mut preferred, force_generated);
+
+    preferred
+}
+
+fn generated_adaptive_atn_preferred_rule_calls_excluding(
+    rules: &[Option<GeneratedParserRule>],
+    force_generated: &BTreeSet<usize>,
+) -> Vec<bool> {
+    generated_adaptive_atn_routing_excluding(rules, force_generated).candidates
+}
+
+fn generated_adaptive_atn_routing_excluding(
+    rules: &[Option<GeneratedParserRule>],
+    force_generated: &BTreeSet<usize>,
+) -> GeneratedAdaptiveAtnRouting {
+    let shapes = generated_rule_shapes(rules);
+    let seeds = rules
+        .iter()
+        .flatten()
+        .filter(|rule| {
+            generated_rule_is_expensive_left_recursive(
+                rule,
+                shapes.get(rule.rule_index).copied().unwrap_or_default(),
+            )
+        })
+        .map(|rule| rule.rule_index)
+        .collect::<Vec<_>>();
+    let mut candidates = vec![false; rules.len()];
+    let mut probe_candidate_rules = vec![BTreeSet::new(); rules.len()];
+
+    for seed in seeds {
+        // Keep the seed eligible when it is entered directly or through a
+        // cheaper caller. Calls from an eligible wrapper use the probe mapping
+        // below instead, so the wrapper remains the retry boundary there.
+        candidates[seed] = true;
+        let mut region = vec![false; rules.len()];
+        region[seed] = true;
+        let wrappers = rules
+            .iter()
+            .enumerate()
+            .filter_map(|(rule_index, rule)| {
+                rule.as_ref()
+                    .filter(|rule| {
+                        generated_rule_is_atn_preferred_wrapper(
+                            rule,
+                            &shapes,
+                            &region,
+                            ATN_PREFERRED_LEFT_RECURSIVE_WRAPPER_MIN_DECISION_COST,
+                        )
+                    })
+                    .map(|_| rule_index)
+            })
+            .collect::<Vec<_>>();
+        for wrapper in wrappers {
+            candidates[wrapper] = true;
+            probe_candidate_rules[seed].insert(wrapper);
+        }
+    }
+    exclude_forced_generated_rules(&mut candidates, force_generated);
+    let probe_candidate_rules = probe_candidate_rules
+        .into_iter()
+        .map(|candidates_for_probe| {
+            candidates_for_probe
+                .into_iter()
+                .filter(|candidate| candidates.get(*candidate).copied().unwrap_or_default())
+                .collect()
+        })
+        .collect();
+
+    GeneratedAdaptiveAtnRouting {
+        candidates,
+        probe_candidate_rules,
+    }
+}
+
+fn indexed_rule_slots(selected: &[bool]) -> Vec<Option<usize>> {
+    let mut next_slot = 0;
+    selected
+        .iter()
+        .map(|selected| {
+            if *selected {
+                let slot = next_slot;
+                next_slot += 1;
+                Some(slot)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn indexed_probe_slots(
+    probe_candidate_rules: &[Vec<usize>],
+    candidate_slots: &[Option<usize>],
+) -> Vec<Vec<usize>> {
+    probe_candidate_rules
+        .iter()
+        .map(|candidate_rules| {
+            candidate_rules
+                .iter()
+                .filter_map(|candidate| candidate_slots.get(*candidate).copied().flatten())
+                .collect()
+        })
+        .collect()
+}
+
+fn generated_rule_shapes(rules: &[Option<GeneratedParserRule>]) -> Vec<GeneratedRuleShape> {
+    rules
+        .iter()
+        .map(|rule| {
+            rule.as_ref()
+                .map_or_else(GeneratedRuleShape::default, generated_rule_shape)
+        })
+        .collect()
+}
+
+fn exclude_forced_generated_rules(preferred: &mut [bool], force_generated: &BTreeSet<usize>) {
     for rule_index in force_generated {
         if let Some(entry) = preferred.get_mut(*rule_index) {
             *entry = false;
         }
     }
+}
 
-    preferred
+const fn generated_rule_is_expensive_left_recursive(
+    rule: &GeneratedParserRule,
+    shape: GeneratedRuleShape,
+) -> bool {
+    rule.left_recursive
+        && shape.decision_cost >= ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST
+        && shape.left_recursive_operator_alts >= ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS
 }
 
 fn generated_rule_callers_reaching(
@@ -4121,6 +4277,20 @@ fn propagate_atn_preferred_wrappers(
     shapes: &[GeneratedRuleShape],
     preferred: &mut [bool],
 ) {
+    propagate_atn_preferred_wrappers_with_min_decision_cost(
+        rules,
+        shapes,
+        preferred,
+        ATN_PREFERRED_WRAPPER_MIN_DECISION_COST,
+    );
+}
+
+fn propagate_atn_preferred_wrappers_with_min_decision_cost(
+    rules: &[Option<GeneratedParserRule>],
+    shapes: &[GeneratedRuleShape],
+    preferred: &mut [bool],
+    min_decision_cost: usize,
+) {
     loop {
         let mut changed = false;
         for (rule_index, rule) in rules.iter().enumerate() {
@@ -4130,7 +4300,8 @@ fn propagate_atn_preferred_wrappers(
             let Some(rule) = rule else {
                 continue;
             };
-            if !generated_rule_is_atn_preferred_wrapper(rule, shapes, preferred) {
+            if !generated_rule_is_atn_preferred_wrapper(rule, shapes, preferred, min_decision_cost)
+            {
                 continue;
             }
             preferred[rule_index] = true;
@@ -4146,13 +4317,14 @@ fn generated_rule_is_atn_preferred_wrapper(
     rule: &GeneratedParserRule,
     shapes: &[GeneratedRuleShape],
     preferred: &[bool],
+    min_decision_cost: usize,
 ) -> bool {
     if rule.left_recursive {
         return false;
     }
     let shape = shapes.get(rule.rule_index).copied().unwrap_or_default();
     shape.action_or_predicate_count == 0
-        && shape.decision_cost >= ATN_PREFERRED_WRAPPER_MIN_DECISION_COST
+        && shape.decision_cost >= min_decision_cost
         && generated_steps_call_atn_preferred_rule(&rule.steps, preferred)
 }
 
@@ -4182,6 +4354,7 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
                     fast_path.is_none() || *allow_semantic_context || *force_context,
                 ),
                 action_or_predicate_count: 0,
+                left_recursive_operator_alts: 0,
             };
             for alt in alts {
                 shape += generated_steps_shape(alt);
@@ -4200,6 +4373,7 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
                     fast_path.is_none() || *allow_semantic_context || *force_context,
                 ),
                 action_or_predicate_count: 0,
+                left_recursive_operator_alts: 0,
             };
             shape += generated_steps_shape(body);
             shape
@@ -4208,6 +4382,7 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
             let mut shape = GeneratedRuleShape {
                 decision_cost: 1,
                 action_or_predicate_count: 0,
+                left_recursive_operator_alts: generated_steps_direct_max_alt_count(body),
             };
             shape += generated_steps_shape(body);
             shape
@@ -4216,6 +4391,7 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
             GeneratedRuleShape {
                 decision_cost: 0,
                 action_or_predicate_count: 1,
+                left_recursive_operator_alts: 0,
             }
         }
         GeneratedParserStep::MatchToken { .. }
@@ -4225,6 +4401,26 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::CallRule { .. } => GeneratedRuleShape::default(),
     }
+}
+
+fn generated_steps_direct_max_alt_count(steps: &[GeneratedParserStep]) -> usize {
+    steps
+        .iter()
+        .filter_map(|step| match step {
+            GeneratedParserStep::Decision { alts, .. } => Some(alts.len()),
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::CallRule { .. }
+            | GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. } => None,
+        })
+        .max()
+        .unwrap_or_default()
 }
 
 fn generated_steps_call_atn_preferred_rule(
@@ -5326,6 +5522,93 @@ fn render_generated_rule_dispatch(
     )
 }
 
+fn generated_force_generated_rules(
+    rules: &[Option<GeneratedParserRule>],
+    embedded: bool,
+    portable_required_generated_rules: Option<&BTreeSet<usize>>,
+) -> BTreeSet<usize> {
+    if embedded {
+        rules.iter().flatten().map(|rule| rule.rule_index).collect()
+    } else {
+        portable_required_generated_rules.map_or_else(BTreeSet::new, |required| {
+            generated_rule_callers_reaching(rules, required)
+        })
+    }
+}
+
+fn generated_adaptive_atn_preferred_rule_count(
+    rules: &[Option<GeneratedParserRule>],
+    embedded: bool,
+    portable_required_generated_rules: Option<&BTreeSet<usize>>,
+) -> usize {
+    let force_generated_rules =
+        generated_force_generated_rules(rules, embedded, portable_required_generated_rules);
+    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &force_generated_rules)
+        .into_iter()
+        .filter(|preferred| *preferred)
+        .count()
+}
+
+struct AdaptiveAtnParserRenderSlots {
+    struct_field: String,
+    field_init: String,
+    reset: &'static str,
+    retry_variant: &'static str,
+    retry_into_error: &'static str,
+}
+
+fn adaptive_atn_parser_render_slots(preferred_rule_count: usize) -> AdaptiveAtnParserRenderSlots {
+    if preferred_rule_count == 0 {
+        return AdaptiveAtnParserRenderSlots {
+            struct_field: String::new(),
+            field_init: String::new(),
+            reset: "",
+            retry_variant: "",
+            retry_into_error: "",
+        };
+    }
+    AdaptiveAtnParserRenderSlots {
+        struct_field: format!(
+            "    adaptive_atn_preferred_rules: [bool; {preferred_rule_count}],\n    adaptive_atn_preference_depths: [usize; {preferred_rule_count}],\n    adaptive_atn_preference_starts: [(usize, usize); {preferred_rule_count}],\n    adaptive_atn_syntax_error_starts: [usize; {preferred_rule_count}],\n    adaptive_atn_retry_slot: Option<usize>,\n"
+        ),
+        field_init: format!(
+            "            adaptive_atn_preferred_rules: [false; {preferred_rule_count}],\n            adaptive_atn_preference_depths: [0; {preferred_rule_count}],\n            adaptive_atn_preference_starts: [(0, 0); {preferred_rule_count}],\n            adaptive_atn_syntax_error_starts: [0; {preferred_rule_count}],\n            adaptive_atn_retry_slot: None,\n"
+        ),
+        reset: "        self.adaptive_atn_preferred_rules.fill(false);\n        self.adaptive_atn_preference_depths.fill(0);\n        self.adaptive_atn_preference_starts.fill((0, 0));\n        self.adaptive_atn_syntax_error_starts.fill(0);\n        self.adaptive_atn_retry_slot = None;\n",
+        retry_variant: "    AdaptiveRetry,\n",
+        retry_into_error: "            Self::AdaptiveRetry => antlr4_runtime::AntlrError::Unsupported(\"internal adaptive ATN retry escaped its routing boundary\".to_owned()),\n",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_generated_rule_routing(
+    rules: &[Option<GeneratedParserRule>],
+    rule_names: &[String],
+    inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
+    track_context_alt_numbers: bool,
+    embedded: Option<EmbeddedStepRender<'_>>,
+    portable_locals: Option<PortableLocalStepRender<'_>>,
+) -> (String, usize) {
+    let direct_generated_rule_calls = rules.iter().map(Option::is_some).collect::<Vec<_>>();
+    let preferred_rule_count = generated_adaptive_atn_preferred_rule_count(
+        rules,
+        embedded.is_some(),
+        portable_locals.map(|portable| portable.required_generated_rules),
+    );
+    let dispatch = render_generated_rule_dispatch_with_rule_names(
+        rules,
+        &direct_generated_rule_calls,
+        rule_names,
+        inline_action_statements,
+        track_alt_numbers,
+        track_context_alt_numbers,
+        embedded,
+        portable_locals,
+    );
+    (dispatch, preferred_rule_count)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_generated_rule_dispatch_with_rule_names(
     rules: &[Option<GeneratedParserRule>],
@@ -5338,15 +5621,20 @@ fn render_generated_rule_dispatch_with_rule_names(
     portable_locals: Option<PortableLocalStepRender<'_>>,
 ) -> String {
     let mut out = String::new();
-    let force_generated_rules = if embedded.is_some() {
-        rules.iter().flatten().map(|rule| rule.rule_index).collect()
-    } else {
-        portable_locals.map_or_else(BTreeSet::new, |portable| {
-            generated_rule_callers_reaching(rules, portable.required_generated_rules)
-        })
-    };
+    let force_generated_rules = generated_force_generated_rules(
+        rules,
+        embedded.is_some(),
+        portable_locals.map(|portable| portable.required_generated_rules),
+    );
     let atn_preferred_rule_calls =
         generated_atn_preferred_rule_calls_excluding(rules, rule_names, &force_generated_rules);
+    let adaptive_atn_routing =
+        generated_adaptive_atn_routing_excluding(rules, &force_generated_rules);
+    let adaptive_atn_preferred_rule_slots = indexed_rule_slots(&adaptive_atn_routing.candidates);
+    let adaptive_atn_probe_rule_slots = indexed_probe_slots(
+        &adaptive_atn_routing.probe_candidate_rules,
+        &adaptive_atn_preferred_rule_slots,
+    );
     writeln!(
         out,
         "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
@@ -5371,6 +5659,26 @@ fn render_generated_rule_dispatch_with_rule_names(
                 "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
+        } else if let Some(slot) = adaptive_atn_preferred_rule_slots
+            .get(index)
+            .copied()
+            .flatten()
+        {
+            // Expensive left-recursive regions start generated and switch only
+            // after warmed adaptive-prediction work identifies a costly input.
+            // Features implemented solely by generated bodies, and hooks whose
+            // decision overrides differ between generated and interpreted
+            // parsing, still override the adaptive ATN preference.
+            writeln!(
+                out,
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "            {index} if !self.adaptive_atn_preferred_rules[{slot}] => Some(self.parse_generated_rule_{index}_adaptive_dispatch(precedence, allow_fallback, None)),"
+            )
+            .expect("writing to a string cannot fail");
         } else {
             writeln!(
                 out,
@@ -5383,6 +5691,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     let step_render_context = GeneratedStepRenderContext {
+        current_rule_index: usize::MAX,
         embedded,
         portable_locals,
         inline_action_statements,
@@ -5390,9 +5699,123 @@ fn render_generated_rule_dispatch_with_rule_names(
         track_context_alt_numbers,
         direct_generated_rule_calls,
         atn_preferred_rule_calls: &atn_preferred_rule_calls,
+        adaptive_atn_preferred_rule_slots: &adaptive_atn_preferred_rule_slots,
+        adaptive_atn_probe_rule_slots: &adaptive_atn_probe_rule_slots,
     };
     for rule in rules.iter().flatten() {
         let index = rule.rule_index;
+        if let Some(probe_slots) = adaptive_atn_probe_rule_slots
+            .get(index)
+            .filter(|slots| !slots.is_empty())
+        {
+            writeln!(
+                out,
+                "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_adaptive_probe_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        let __result = self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        if __result.is_ok() && self.adaptive_atn_retry_slot.is_none() {{\n            \
+                 if let Some(__adaptive_after) = self.simulator\n                \
+                     .as_ref()\n                \
+                     .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n            \
+                 {{"
+            )
+            .expect("writing to a string cannot fail");
+            for slot in probe_slots {
+                writeln!(
+                out,
+                "                if self.adaptive_atn_preference_depths[{slot}] != 0\n                    \
+                     && !self.adaptive_atn_preferred_rules[{slot}]\n                    \
+                     && self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[{slot}]\n                    \
+                     && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[{slot}], __adaptive_after)\n                \
+                     {{\n                    \
+                         self.adaptive_atn_preferred_rules[{slot}] = true;\n                    \
+                         self.adaptive_atn_retry_slot = Some({slot});\n                    \
+                         return Err(GeneratedRuleError::AdaptiveRetry);\n                \
+                     }}"
+                )
+                .expect("writing to a string cannot fail");
+            }
+            writeln!(out, "            }}\n        }}\n        __result")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "    }}").expect("writing to a string cannot fail");
+        }
+        if let Some(slot) = adaptive_atn_preferred_rule_slots
+            .get(index)
+            .copied()
+            .flatten()
+        {
+            writeln!(
+                out,
+                "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_adaptive_dispatch(&mut self, precedence: i32, allow_fallback: bool, invoking_state: Option<isize>) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() {{\n            \
+                 return self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
+                 }}\n        \
+                 let __adaptive_outermost = self.adaptive_atn_preference_depths[{slot}] == 0;\n        \
+                 let __adaptive_rule_start = antlr4_runtime::IntStream::index(self.base.input());\n        \
+                 let __adaptive_parser_state = self.base.state();\n        \
+                 let __adaptive_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        if __adaptive_outermost {{\n            \
+                 self.adaptive_atn_preference_starts[{slot}] = self.simulator\n                \
+                     .as_ref()\n                \
+                     .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n                \
+                     .unwrap_or((0, 0));\n        \
+                 self.adaptive_atn_syntax_error_starts[{slot}] = self.base.number_of_syntax_errors();\n        \
+                 }}\n        \
+                 self.adaptive_atn_preference_depths[{slot}] += 1;\n        \
+                 let mut __result = self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
+                 self.adaptive_atn_preference_depths[{slot}] -= 1;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        if !self.adaptive_atn_preferred_rules[{slot}] {{\n            \
+                 if let Some(__adaptive_after) = self.simulator\n                \
+                     .as_ref()\n                \
+                     .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n            \
+                 {{\n                \
+                     let __adaptive_expensive = __result.is_ok()\n                        \
+                         && self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[{slot}]\n                        \
+                         && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn_preference_starts[{slot}], __adaptive_after);\n                \
+                     self.adaptive_atn_preferred_rules[{slot}] = __adaptive_expensive;\n                \
+                     if __adaptive_expensive {{\n                    \
+                         self.adaptive_atn_retry_slot = Some({slot});\n                    \
+                         __result = Err(GeneratedRuleError::AdaptiveRetry);\n                \
+                     }}\n            \
+                 }}\n        \
+                 }}\n        \
+                 if __adaptive_outermost\n            \
+                     && self.adaptive_atn_retry_slot == Some({slot})\n            \
+                     && matches!(&__result, Err(GeneratedRuleError::AdaptiveRetry))\n        \
+                 {{\n            \
+                     self.adaptive_atn_retry_slot = None;\n            \
+                     self.base.restore_generated_diagnostics(__adaptive_diagnostic_marker);\n            \
+                     antlr4_runtime::IntStream::seek(self.base.input(), __adaptive_rule_start);\n            \
+                     self.base.set_state(__adaptive_parser_state);\n            \
+                     if let Some(invoking_state) = invoking_state {{\n                \
+                         self.base.push_invoking_state(invoking_state);\n            \
+                     }}\n            \
+                     return self.parse_rule_precedence_from_generated({index}, precedence).map_err(GeneratedRuleError::Fatal);\n        \
+                 }}"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "        __result").expect("writing to a string cannot fail");
+            writeln!(out, "    }}").expect("writing to a string cannot fail");
+        }
         writeln!(
             out,
             "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
@@ -5431,7 +5854,14 @@ fn render_generated_rule_dispatch_with_rule_names(
         )
         .expect("writing to a string cannot fail");
         writeln!(out, "    }}").expect("writing to a string cannot fail");
-        render_generated_rule_method(&mut out, rule, step_render_context);
+        render_generated_rule_method(
+            &mut out,
+            rule,
+            GeneratedStepRenderContext {
+                current_rule_index: index,
+                ..step_render_context
+            },
+        );
     }
     out
 }
@@ -5534,6 +5964,34 @@ fn render_embedded_after_and_seal(
     }
 }
 
+fn render_generated_adaptive_retry_unwind(
+    out: &mut String,
+    step_render_context: GeneratedStepRenderContext<'_>,
+    left_recursive: bool,
+) {
+    if !step_render_context
+        .adaptive_atn_preferred_rule_slots
+        .iter()
+        .any(Option::is_some)
+    {
+        return;
+    }
+    let exit_rule = if left_recursive {
+        "self.base.unroll_recursion_context();"
+    } else {
+        "self.base.exit_rule();"
+    };
+    writeln!(
+        out,
+        "                if self.adaptive_atn_retry_slot.is_some() {{\n                    \
+         {exit_rule}\n                    \
+         self.base.restore_generated_diagnostics(__generated_diagnostic_marker);\n                    \
+         return Err(GeneratedRuleError::AdaptiveRetry);\n                \
+         }}"
+    )
+    .expect("writing to a string cannot fail");
+}
+
 fn render_generated_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,
@@ -5600,6 +6058,7 @@ fn render_generated_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    render_generated_adaptive_retry_unwind(out, step_render_context, false);
     // A rule's own `sync_decision` failure (`__sync_error`) is fatal ONLY at the
     // top-level public entry (`allow_fallback`). When this rule is a nested child
     // (`!allow_fallback`), ANTLR recovers the mismatch INSIDE the child and returns
@@ -5736,6 +6195,7 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    render_generated_adaptive_retry_unwind(out, step_render_context, true);
     // Same as the non-left-recursive case: a nested child (`!allow_fallback`)
     // recovers its own sync failure internally and returns a partial subtree; only
     // the top-level entry propagates `Fatal`. Use `finish_recursion_rule` (which
@@ -6014,14 +6474,32 @@ fn render_generated_step(
             };
             let from_generated_call =
                 format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
+            let mut probes_enclosing_candidate = false;
             let generated_child_call = if render_context
                 .direct_generated_rule_calls
                 .get(*rule_index)
                 .copied()
                 .unwrap_or_default()
             {
+                let probe_slots = render_context
+                    .adaptive_atn_probe_rule_slots
+                    .get(*rule_index)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let caller_candidate_slot = render_context
+                    .adaptive_atn_preferred_rule_slots
+                    .get(render_context.current_rule_index)
+                    .copied()
+                    .flatten();
+                probes_enclosing_candidate =
+                    caller_candidate_slot.is_some_and(|slot| probe_slots.contains(&slot));
+                let dispatch = if probes_enclosing_candidate {
+                    "adaptive_probe_dispatch"
+                } else {
+                    "dispatch"
+                };
                 format!(
-                    "self.parse_generated_rule_{rule_index}_dispatch({precedence}, false).map_err(GeneratedRuleError::into_error)"
+                    "self.parse_generated_rule_{rule_index}_{dispatch}({precedence}, false).map_err(GeneratedRuleError::into_error)"
                 )
             } else {
                 from_generated_call.clone()
@@ -6041,6 +6519,24 @@ fn render_generated_step(
                 // cap or a registered parse listener flips it to the generated
                 // body, the only path that enforces the cap and fires events.
                 from_generated_call
+            } else if probes_enclosing_candidate {
+                // The child is also a candidate for direct entry paths, but
+                // this call belongs to an enclosing wrapper candidate. Probe
+                // that wrapper and keep it as the sole retry boundary.
+                generated_child_call
+            } else if let Some(slot) = render_context
+                .adaptive_atn_preferred_rule_slots
+                .get(*rule_index)
+                .copied()
+                .flatten()
+            {
+                // Keep the direct generated call while prediction remains
+                // cheap. Once the warmed simulator crosses the cost threshold,
+                // enter through the wrapper so its guarded dispatch can select
+                // the interpreted rule without reordering buffered actions.
+                format!(
+                    "if self.adaptive_atn_preferred_rules[{slot}] {{ {from_generated_call} }} else {{ self.parse_generated_rule_{rule_index}_adaptive_dispatch({precedence}, false, Some({source_state}isize)).map_err(GeneratedRuleError::into_error) }}"
+                )
             } else {
                 generated_child_call
             };
@@ -9748,37 +10244,18 @@ fn render_parser_with_options(
         // compile; an interpreted fallback would silently skip them.
         require_all_parser_rules_generated(&generated_rules, data)?;
     }
-    let direct_generated_rule_calls = generated_rules
-        .iter()
-        .map(Option::is_some)
-        .collect::<Vec<_>>();
-    let generated_rule_dispatch = render_generated_rule_dispatch_with_rule_names(
-        &generated_rules,
-        &direct_generated_rule_calls,
-        &data.rule_names,
-        &inline_action_statements,
-        track_alt_numbers,
-        track_context_alt_numbers,
-        embedded_step_render,
-        portable_local_data.step_render(),
-    );
-    // A non-default policy must reach the interpreter through the emitted
-    // runtime options, so its literal forces the options-carrying call shape.
-    //
-    // A `hook`-disposed coordinate falls through to the configured policy when
-    // its hook is unimplemented (the documented `SemIR → hook → policy` chain),
-    // so it does NOT escalate the global policy: doing so would flip unrelated
-    // `assume-true` coordinates in the same grammar to fail-loud. Users select
-    // fail-loud for missing hooks with `--sem-unknown=error` /
-    // `--require-full-semantics`; under the default policy a declined hook keeps
-    // historical pass-through, per coordinate.
-    let unknown_policy_literal = match options.sem_unknown {
-        SemUnknownPolicy::AssumeTrue => None,
-        SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
-        SemUnknownPolicy::Hook | SemUnknownPolicy::Error => {
-            Some("antlr4_runtime::UnknownSemanticPolicy::Error")
-        }
-    };
+    let portable_step_render = portable_local_data.step_render();
+    let (generated_rule_dispatch, adaptive_atn_preferred_rule_count) =
+        render_generated_rule_routing(
+            &generated_rules,
+            &data.rule_names,
+            &inline_action_statements,
+            track_alt_numbers,
+            track_context_alt_numbers,
+            embedded_step_render,
+            portable_step_render,
+        );
+    let unknown_policy_literal = parser_unknown_policy_literal(options.sem_unknown);
     let parse_rule_fallback = render_parser_parse_rule_fallback(
         track_alt_numbers,
         track_context_alt_numbers,
@@ -9843,6 +10320,13 @@ fn render_parser_with_options(
     ) = embedded_render_slots(embedded_data.as_ref().or(structural_surface.as_ref()));
     let generated_header = GENERATED_MODULE_HEADER;
     let generated_footer = GENERATED_MODULE_FOOTER;
+    let AdaptiveAtnParserRenderSlots {
+        struct_field: adaptive_atn_preference_struct_field,
+        field_init: adaptive_atn_preference_field_init,
+        reset: adaptive_atn_preference_reset,
+        retry_variant: adaptive_atn_retry_variant,
+        retry_into_error: adaptive_atn_retry_into_error,
+    } = adaptive_atn_parser_render_slots(adaptive_atn_preferred_rule_count);
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
         "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\n"
@@ -9893,19 +10377,19 @@ where
     base: BaseParser<L, H>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
     generated_only: bool,
-{embedded_struct_fields}}}
+{adaptive_atn_preference_struct_field}{embedded_struct_fields}}}
 
 #[allow(dead_code)]
 #[derive(Debug)]
 enum GeneratedRuleError {{
     Fatal(antlr4_runtime::AntlrError),
-}}
+{adaptive_atn_retry_variant}}}
 
 impl GeneratedRuleError {{
     fn into_error(self) -> antlr4_runtime::AntlrError {{
         match self {{
             Self::Fatal(error) => error,
-        }}
+{adaptive_atn_retry_into_error}        }}
     }}
 }}
 
@@ -9931,7 +10415,7 @@ where
             base,
             simulator: None,
             generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
-{embedded_field_inits}        }}
+{adaptive_atn_preference_field_init}{embedded_field_inits}        }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -9958,7 +10442,7 @@ where
         if let Some(simulator) = self.simulator.as_mut() {{
             simulator.reset();
         }}
-    }}
+{adaptive_atn_preference_reset}    }}
 
     /// Replaces the token stream and fully resets parser-owned state.
     pub fn set_token_stream(&mut self, input: CommonTokenStream<L>) {{
@@ -9966,7 +10450,7 @@ where
         if let Some(simulator) = self.simulator.as_mut() {{
             simulator.reset();
         }}
-    }}
+{adaptive_atn_preference_reset}    }}
 
     #[must_use]
     pub const fn token_stream(&self) -> &CommonTokenStream<L> {{
@@ -10011,7 +10495,7 @@ where
         }} else {{
             antlr4_runtime::ParserAtnSimulator::clear_shared_dfa(atn());
         }}
-    }}
+{adaptive_atn_preference_reset}    }}
 
     #[must_use]
     pub fn node(&self, id: antlr4_runtime::NodeId) -> antlr4_runtime::Node<'_> {{
@@ -12728,6 +13212,41 @@ mod tests {
         }
     }
 
+    fn adaptive_decision(decision: usize, alt_count: usize) -> GeneratedParserStep {
+        GeneratedParserStep::Decision {
+            state: 2_000 + decision,
+            decision,
+            track_alt_number: false,
+            allow_semantic_context: false,
+            force_context: false,
+            fast_path: None,
+            alts: (0..alt_count).map(|_| vec![mt(2, 0)]).collect(),
+        }
+    }
+
+    fn left_recursive_rule(
+        rule_index: usize,
+        decision_cost: usize,
+        operator_alt_count: usize,
+    ) -> GeneratedParserRule {
+        let mut steps = (2..decision_cost).map(adaptive_loop).collect::<Vec<_>>();
+        steps.push(GeneratedParserStep::LeftRecursiveLoop {
+            state: 3_000 + rule_index,
+            decision: 0,
+            enter_alt: 1,
+            exit_alt: 2,
+            rule_index,
+            entry_state: rule_index * 2,
+            body: vec![adaptive_decision(1, operator_alt_count)],
+        });
+        GeneratedParserRule {
+            rule_index,
+            entry_state: rule_index * 2,
+            left_recursive: true,
+            steps,
+        }
+    }
+
     fn expensive_ladder_rule(rule_index: usize, next: Option<usize>) -> GeneratedParserRule {
         let mut steps = Vec::new();
         if let Some(next) = next {
@@ -13035,6 +13554,74 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_atn_preferred_rule_calls_select_expensive_wrapper_boundaries() {
+        let rules = vec![
+            Some(test_rule(0, {
+                let mut steps = (100..108).map(adaptive_loop).collect::<Vec<_>>();
+                steps.push(cr(1));
+                steps
+            })),
+            Some(left_recursive_rule(
+                1,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+            )),
+            Some(left_recursive_rule(
+                2,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST - 1,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+            )),
+            Some(left_recursive_rule(
+                3,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS - 1,
+            )),
+            Some(left_recursive_rule(
+                4,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+            )),
+        ];
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &[]),
+            vec![false; rules.len()],
+            "left-recursive routing must remain separate from unconditional cascade routing"
+        );
+        let preferred = generated_adaptive_atn_preferred_rule_calls(&rules);
+        let routing = generated_adaptive_atn_routing_excluding(&rules, &BTreeSet::new());
+
+        assert!(
+            preferred[0],
+            "an expensive wrapper should become the candidate boundary"
+        );
+        assert!(
+            preferred[1],
+            "an expensive LR seed must remain eligible for direct entry paths"
+        );
+        assert!(
+            !preferred[2],
+            "decision cost below the threshold should stay generated"
+        );
+        assert!(
+            !preferred[3],
+            "operator fan-out below the threshold should stay generated"
+        );
+        assert!(
+            preferred[4],
+            "an expensive LR rule without a wrapper should remain a candidate"
+        );
+        assert_eq!(routing.probe_candidate_rules[1], vec![0]);
+        assert!(routing.probe_candidate_rules[4].is_empty());
+
+        let force_generated = generated_rule_callers_reaching(&rules, &BTreeSet::from([1]));
+        assert_eq!(
+            generated_adaptive_atn_preferred_rule_calls_excluding(&rules, &force_generated),
+            vec![false, false, false, false, true]
+        );
+    }
+
+    #[test]
     fn atn_preferred_rule_calls_propagate_through_expensive_wrappers() {
         let mut rules = Vec::new();
         rules.push(Some(test_rule(
@@ -13135,6 +13722,85 @@ mod tests {
         // The ATN-preferred child call routes through the buffering wrapper.
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(2, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(2, 0)"));
+    }
+
+    #[test]
+    fn renders_adaptive_atn_preference_after_prediction_becomes_expensive() {
+        let rules = vec![
+            Some(test_rule(0, {
+                let mut steps = (100..108).map(adaptive_loop).collect::<Vec<_>>();
+                steps.push(cr(1));
+                steps
+            })),
+            Some(left_recursive_rule(
+                1,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+                ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+            )),
+        ];
+
+        let rendered = render_generated_rule_dispatch(
+            &rules,
+            &vec![true; rules.len()],
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains(
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(rendered.contains(
+            "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
+        ));
+        assert!(rendered.contains(
+            "ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
+        ));
+        assert!(rendered.contains(
+            "self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[0]"
+        ));
+        assert!(rendered.contains("return Err(GeneratedRuleError::AdaptiveRetry);"));
+        assert!(rendered.contains(
+            "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Fatal);"
+        ));
+        assert!(rendered.contains("self.parse_generated_rule_1_adaptive_probe_dispatch(0, false)"));
+        assert!(rendered.contains(
+            "1 if !self.adaptive_atn_preferred_rules[1] => Some(self.parse_generated_rule_1_adaptive_dispatch(precedence, allow_fallback, None))"
+        ));
+        assert!(rendered.contains(
+            "ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
+        ));
+        assert!(
+            rendered.contains("if __adaptive_expensive {")
+                && rendered.contains("self.adaptive_atn_retry_slot = Some(0);"),
+            "an expensive outermost candidate must retry on the same invocation"
+        );
+        assert!(
+            !rendered.contains("if __adaptive_expensive && !__adaptive_outermost"),
+            "outermost candidates must not defer routing to parser reuse"
+        );
+    }
+
+    #[test]
+    fn renders_bare_left_recursive_seed_retry_on_same_invocation() {
+        let rules = vec![Some(left_recursive_rule(
+            0,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        ))];
+
+        let rendered = render_generated_rule_dispatch(&rules, &[true], &BTreeMap::new(), false);
+
+        assert!(rendered.contains(
+            "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
+        ));
+        assert!(
+            rendered.contains("if __adaptive_expensive {")
+                && rendered.contains("self.adaptive_atn_retry_slot = Some(0);")
+                && rendered.contains("__result = Err(GeneratedRuleError::AdaptiveRetry);"),
+            "a bare seed must replay through the interpreter as soon as measured work is expensive"
+        );
+        assert!(!rendered.contains("_adaptive_probe_dispatch"));
+        assert!(!rendered.contains("if __adaptive_expensive && !__adaptive_outermost"));
     }
 
     #[test]
@@ -13509,6 +14175,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -13516,6 +14183,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -13527,6 +14196,7 @@ mod tests {
     fn render_call_rule_step(
         direct_generated_rule_calls: &[bool],
         atn_preferred_rule_calls: &[bool],
+        adaptive_atn_preferred_rule_slots: &[Option<usize>],
     ) -> String {
         let mut rendered = String::new();
         render_generated_step(
@@ -13538,6 +14208,7 @@ mod tests {
             },
             2,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -13545,6 +14216,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls,
                 atn_preferred_rule_calls,
+                adaptive_atn_preferred_rule_slots,
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
         rendered
@@ -13557,7 +14230,7 @@ mod tests {
         // `parse_rule_precedence_from_generated`, which preserves interpreted routing
         // (the rule's generated dispatch arm is guarded by `generated_only()`) while
         // BUFFERING the child's body actions and `@after` in position.
-        let rendered = render_call_rule_step(&[true, false], &[true, true]);
+        let rendered = render_call_rule_step(&[true, false], &[true, true], &[]);
 
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
@@ -13572,10 +14245,19 @@ mod tests {
         // parent's buffered actions. The wrapper buffers them in position instead while
         // still parsing the child interpreted (the dispatch arm is `generated_only()`
         // guarded).
-        let rendered = render_call_rule_step(&[true, true], &[true, true]);
+        let rendered = render_call_rule_step(&[true, true], &[true, true], &[]);
 
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
+    }
+
+    #[test]
+    fn adaptive_atn_preferred_child_starts_with_direct_generated_dispatch() {
+        let rendered = render_call_rule_step(&[true, true], &[], &[None, Some(0)]);
+
+        assert!(rendered.contains(
+            "if self.adaptive_atn_preferred_rules[0] { self.parse_rule_precedence_from_generated(1, 0) } else { self.parse_generated_rule_1_adaptive_dispatch(0, false, Some(4isize)).map_err(GeneratedRuleError::into_error) }"
+        ));
     }
 
     #[test]
@@ -14305,7 +14987,7 @@ mod tests {
 
     #[test]
     fn call_rule_step_skips_child_action_scaffolding_without_parser_actions() {
-        let rendered = render_call_rule_step(&[true, true], &[false, false]);
+        let rendered = render_call_rule_step(&[true, true], &[false, false], &[]);
 
         assert!(rendered.contains("let __child = self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error);"));
         assert!(rendered.contains("self.base.discard_invoking_state(__invoking_marker);"));
@@ -14410,6 +15092,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14417,6 +15100,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14459,6 +15144,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14466,6 +15152,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14516,6 +15204,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: Some(PortableLocalStepRender {
                     declarations: &declarations,
@@ -14528,6 +15217,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14565,6 +15256,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14572,6 +15264,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14609,6 +15303,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14616,6 +15311,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14653,6 +15350,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14660,6 +15358,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14699,6 +15399,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: Some(PortableLocalStepRender {
                     declarations: &declarations,
@@ -14711,6 +15412,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
@@ -14758,6 +15461,7 @@ mod tests {
             },
             0,
             GeneratedStepRenderContext {
+                current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
@@ -14765,6 +15469,8 @@ mod tests {
                 track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
+                adaptive_atn_preferred_rule_slots: &[],
+                adaptive_atn_probe_rule_slots: &[],
             },
         );
 
