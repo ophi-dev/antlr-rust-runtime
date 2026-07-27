@@ -65,7 +65,7 @@ ExpressionContext
             .map(TerminalNode::new)
     }
     pub fn bop(&self) -> Option<TerminalNode<'a>> {
-        __token_children_matching(self.__node, &[1, 2, 3, 4, 5, 6])
+        __labeled_token_children_matching(self.__node, &[1, 2, 3, 4, 5, 6])
             .nth(0)
             .map(TerminalNode::new)
     }
