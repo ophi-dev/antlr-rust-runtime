@@ -358,6 +358,14 @@ impl TranslationCtx<'_> {
     }
 
     /// Resolves a label to `(ref, occurrence-among-same-target-in-alt)`.
+    ///
+    /// The occurrence is a positional index into the flattened CST children, so
+    /// it only means anything when the number of same-target children ahead of
+    /// the label is fixed. Refs drawn from sibling branches of a choice are
+    /// mutually exclusive and report `min: 0` — counting them would index past
+    /// the children the parse actually built. Such a label is reported
+    /// unresolved so the caller fails loudly instead of translating to a read
+    /// that silently yields the wrong element.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
         let alts: Vec<&AltModel> = self
@@ -365,15 +373,22 @@ impl TranslationCtx<'_> {
             .and_then(|offset| rule.alt_at(offset))
             .map_or_else(|| rule.alts.iter().collect(), |alt| vec![alt]);
         for alt in alts {
-            let mut occurrence_by_target: BTreeMap<&str, usize> = BTreeMap::new();
+            let mut occurrence_by_target: BTreeMap<&str, Option<usize>> = BTreeMap::new();
             for element in &alt.refs {
                 let occurrence = occurrence_by_target
                     .entry(element.target.as_str())
-                    .or_insert(0);
+                    .or_insert(Some(0));
                 let current = *occurrence;
-                *occurrence += 1;
+                // An inexact ref leaves every later same-target position
+                // floating, so poison the running count rather than guess.
+                *occurrence = match (current, element.cardinality.max) {
+                    (Some(total), Some(max)) if element.cardinality.min == max => {
+                        Some(total.saturating_add(max))
+                    }
+                    _ => None,
+                };
                 if element.label.as_deref() == Some(label) {
-                    return Some((element.clone(), current));
+                    return current.map(|current| (element.clone(), current));
                 }
             }
         }
@@ -895,6 +910,55 @@ mod tests {
             translated.contains("generated_attrs::<__RuleAttrs1>"),
             "{translated}"
         );
+    }
+
+    /// A label preceded by a same-target ref from a *sibling* choice branch has
+    /// no fixed CST position: `r : (e | x=e) {$x...}` builds one `e` child, so
+    /// counting the flattened refs would emit `nth(1)` and silently read an
+    /// element the parse never produced. Such a label must stay unresolved and
+    /// surface as a translation error.
+    #[test]
+    fn inexact_preceding_refs_leave_labels_unresolved_instead_of_misindexing() {
+        let mut statement = rule("s");
+        let branch_ref = |label: Option<&str>| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "e".to_owned(),
+            token_types: Vec::new(),
+            is_block: false,
+            is_list: false,
+            // Sibling branches of a choice are mutually exclusive.
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![branch_ref(None), branch_ref(Some("x"))],
+            children: BTreeMap::from([(
+                "e".to_owned(),
+                ChildCardinality {
+                    min: 1,
+                    max: Some(1),
+                },
+            )]),
+            leading_target: Some("e".to_owned()),
+        });
+        let m = model(vec![statement, rule("e")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$x.text", &ctx).expect_err("must not translate");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
     }
 
     #[test]

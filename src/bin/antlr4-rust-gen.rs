@@ -2703,11 +2703,11 @@ fn collect_structural_context_refs_with_cardinality(
             ElementKind::Block(block) => {
                 let token_types = structural_block_token_types(block, vocabulary);
                 // A token-only block collapses into a single group ref, which is
-                // what makes `typeName=(Boolean | Int)` one labeled token child.
-                // That only holds when the label sits *on* the group: when the
-                // block is unlabeled and the labels sit inside it
-                // (`(doc=DocComment)?`), collapsing would swallow them, so
-                // descend and let the inner refs carry their own labels.
+                // what makes `x=(A | B)` one labeled token child. That only
+                // holds when the label sits *on* the group: when the block is
+                // unlabeled and the labels sit inside it (`(x=A)?`), collapsing
+                // would swallow them, so descend and let the inner refs carry
+                // their own labels.
                 if !token_types.is_empty()
                     && (label.is_some() || !structural_block_labels_inside(block))
                 {
@@ -2882,8 +2882,8 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
 }
 
 /// Whether any element directly inside `block` carries a label, i.e. the block
-/// is a grouping wrapper around labeled elements (`(doc=DocComment)?`) rather
-/// than a labeled token group (`typeName=(Boolean | Int)`).
+/// is a grouping wrapper around labeled elements (`(x=A)?`) rather than a
+/// labeled token group (`x=(A | B)`).
 fn structural_block_labels_inside(block: &Block) -> bool {
     block
         .alternatives
