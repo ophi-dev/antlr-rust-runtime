@@ -1163,6 +1163,35 @@ impl ParserRuleContext {
             })
     }
 
+    /// Terminal children as a *grammar-positional* sequence: deleted input tokens
+    /// are skipped while inserted missing tokens are kept.
+    ///
+    /// A generated label read derives its index from the grammar, which knows
+    /// nothing about error recovery. A deleted token still occupies a child slot, so
+    /// indexing [`Self::terminal_children`] would shift every later position on
+    /// recovered input; an *inserted* token, by contrast, is the value ANTLR assigns
+    /// to the label and must stay. This matches the labeled-token accessors the
+    /// generator emits.
+    pub fn labeled_terminal_children<'a>(
+        &'a self,
+        storage: &'a ParseTreeStorage,
+        tokens: &'a TokenStore,
+    ) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
+        self.child_nodes(storage, tokens)
+            .filter_map(|child| match child.kind() {
+                NodeKind::Terminal => child.as_terminal(),
+                NodeKind::Error => {
+                    let terminal = child.as_error().map(ErrorNodeView::terminal)?;
+                    let symbol = terminal.symbol();
+                    // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
+                    // deleted input tokens retain real source boundaries.
+                    (symbol.start() == usize::MAX && symbol.stop() == usize::MAX)
+                        .then_some(terminal)
+                }
+                NodeKind::Rule => None,
+            })
+    }
+
     #[must_use]
     pub fn text(&self, storage: &ParseTreeStorage, tokens: &TokenStore) -> String {
         self.child_nodes(storage, tokens).map(Node::text).collect()
@@ -1486,6 +1515,7 @@ fn stored_token_id(raw: u32) -> TokenId {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
     use crate::token::TokenSpec;
@@ -1518,6 +1548,41 @@ mod tests {
             parsed.tree().to_string_tree_with_names(&["root"]),
             "(root a b)"
         );
+    }
+
+    #[test]
+    fn labeled_terminal_children_keep_inserted_tokens_and_skip_deleted_ones() {
+        let mut tokens = TokenStore::new(None, "");
+        let deleted = token(&mut tokens, 1, "x");
+        let inserted = tokens
+            .push(
+                TokenSpec::explicit(2, "<missing B>")
+                    .with_span(usize::MAX, usize::MAX)
+                    .with_byte_span(0, 0),
+            )
+            .expect("test token should fit");
+        let kept = token(&mut tokens, 3, "c");
+        let mut storage = ParseTreeStorage::new();
+        let deleted = storage.error(deleted);
+        let inserted = storage.error(inserted);
+        let kept = storage.terminal(kept);
+        let mut context = ParserRuleContext::new(0, -1);
+        storage.add_child(&mut context, deleted);
+        storage.add_child(&mut context, inserted);
+        storage.add_child(&mut context, kept);
+
+        // `terminal_children` is the raw CST view: every error node counts, so a
+        // deleted token shifts the positions a grammar-derived index relies on.
+        let raw = context
+            .terminal_children(&storage, &tokens)
+            .map(|terminal| terminal.text().to_owned())
+            .collect::<Vec<_>>();
+        let labeled = context
+            .labeled_terminal_children(&storage, &tokens)
+            .map(|terminal| terminal.text().to_owned())
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!("terminal_children_raw_vs_labeled", (raw, labeled));
     }
 
     #[test]

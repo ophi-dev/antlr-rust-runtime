@@ -837,6 +837,33 @@ impl TranslationCtx<'_> {
         total
     }
 
+    /// Whether the action sits inside the branch that separates `element` from
+    /// `candidate` — i.e. inside the label's own branch of the choice that makes the
+    /// two mutually exclusive. Only then can the candidate be dismissed: the action
+    /// cannot run on the branch that would supply it.
+    ///
+    /// Judged per choice rather than rule-wide, because an action confined to some
+    /// *unrelated* later choice says nothing about an earlier one.
+    fn action_inside_separating_branch(
+        element: &ElementRef,
+        candidate: &ElementRef,
+        action_branches: Option<&[(usize, usize)]>,
+    ) -> bool {
+        let Some(branches) = action_branches else {
+            // An unscoped body runs whatever branch matched.
+            return false;
+        };
+        element.choice_branch.iter().any(|&(choice, branch)| {
+            // A choice that separates them...
+            candidate
+                .choice_branch
+                .iter()
+                .any(|&(other, other_branch)| other == choice && other_branch != branch)
+                // ...and whose label-side branch encloses the action.
+                && branches.contains(&(choice, branch))
+        })
+    }
+
     /// Whether two per-alternative resolutions lower to the same read, so one
     /// translation can stand for both. The fields compared are exactly those
     /// `translate_element_read` consumes to pick a read: list mode, block mode,
@@ -1391,10 +1418,17 @@ impl TranslationCtx<'_> {
                     // A sibling branch's child cannot slide into the label's slot
                     // *within a parse that bound the label* — the two never coexist.
                     // It is still a hazard when the read may run with the label
-                    // unset, which is precisely when the action is not confined to
-                    // the label's branch: an `@after` body, or a mid-rule action
-                    // written after the whole choice (`(x=A | A) {$x}`).
-                    && (candidate.can_coexist_with(element) || !branch_confined)
+                    // unset, which is when the action is not inside the branch that
+                    // separates them. That has to be judged per *choice*: a
+                    // rule-wide flag would let an action confined to some unrelated
+                    // later choice exempt an earlier sibling
+                    // (`({false}? x=A | A) (B {$x} | C)`).
+                    && (candidate.can_coexist_with(element)
+                        || !Self::action_inside_separating_branch(
+                            element,
+                            candidate,
+                            action_branches.as_deref(),
+                        ))
             });
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
@@ -1641,7 +1675,11 @@ fn translate_element_read(
         // start/stop.
         //
         // The block has no target to query, so the read walks the context's
-        // terminal children and picks by *position*: `occurrence` is the number of
+        // terminal children and picks by *position*. It uses the *labeled* iterator,
+        // which skips deleted-token errors while keeping inserted missing ones —
+        // a grammar-derived index knows nothing about recovery, and a deleted token
+        // would otherwise shift every later position (see #235 for the same rule on
+        // token accessors): `occurrence` is the number of
         // terminals matched ahead of the block on this parse path. `usize::MAX`
         // means the position is not fixed, in which case the most recent terminal
         // is the best available answer — the historical behaviour.
@@ -1652,10 +1690,10 @@ fn translate_element_read(
         };
         return match suffix {
             None | Some("stop" | "start") => Ok(format!(
-                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.symbol().to_string()).unwrap_or_default()"
+                "__ctx.labeled_terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.symbol().to_string()).unwrap_or_default()"
             )),
             Some("text") => Ok(format!(
-                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.text().to_owned()).unwrap_or_default()"
+                "__ctx.labeled_terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.text().to_owned()).unwrap_or_default()"
             )),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,

@@ -2835,6 +2835,10 @@ fn collect_structural_context_refs_with_cardinality(
                             element.quantifier,
                         ),
                     });
+                    // The collapsed group *is* a terminal child, so record it before
+                    // skipping the rest of the loop body — otherwise the next element
+                    // would also be classified as leading.
+                    seen_terminal = true;
                     continue;
                 }
                 if label.is_some() {
@@ -15575,6 +15579,18 @@ mod tests {
                 "a token-only choice holding an action keeps its branch spans",
             ),
             (
+                "CollapsedBlockIsTerminal",
+                "x",
+                false,
+                "a collapsed token group is itself a terminal child, so what follows is not leading",
+            ),
+            (
+                "UnrelatedLaterChoiceConfinement",
+                "x",
+                false,
+                "confinement to a later choice says nothing about an earlier sibling",
+            ),
+            (
                 "ListPrefixRepeatsWithLabel",
                 "xs",
                 false,
@@ -15585,6 +15601,12 @@ mod tests {
                 "x",
                 false,
                 "a closed repeated group still contributes an unfixed number of preceding children",
+            ),
+            (
+                "RecoveredDeletedTokenIndex",
+                "x",
+                true,
+                "the positional block read skips deleted-token errors, so recovery cannot shift its index",
             ),
             (
                 "ReassignedAfterAction",
