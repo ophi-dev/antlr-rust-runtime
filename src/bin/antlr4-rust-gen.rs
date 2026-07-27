@@ -2590,6 +2590,7 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         cardinality: embedded::ChildCardinality::ONE,
                         stable_accessor: true,
                         choice_branch: Vec::new(),
+                        span: None,
                     }
                 });
             Some(structural_alt_model(alternative, leading_ref, vocabulary))
@@ -2692,6 +2693,10 @@ fn collect_structural_context_refs_with_cardinality(
                 cardinality,
                 stable_accessor,
                 choice_branch: choice_branch.to_vec(),
+                span: Some((
+                    element.span.bytes.start as usize,
+                    element.span.bytes.end as usize,
+                )),
             }),
             ElementKind::Terminal(terminal) => {
                 refs.push(embedded::ElementRef {
@@ -2703,6 +2708,10 @@ fn collect_structural_context_refs_with_cardinality(
                     cardinality,
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
+                    span: Some((
+                        element.span.bytes.start as usize,
+                        element.span.bytes.end as usize,
+                    )),
                 });
             }
             ElementKind::Block(block) => {
@@ -2725,6 +2734,10 @@ fn collect_structural_context_refs_with_cardinality(
                         cardinality,
                         stable_accessor,
                         choice_branch: choice_branch.to_vec(),
+                        span: Some((
+                            element.span.bytes.start as usize,
+                            element.span.bytes.end as usize,
+                        )),
                     });
                     continue;
                 }
@@ -2738,6 +2751,10 @@ fn collect_structural_context_refs_with_cardinality(
                         cardinality,
                         stable_accessor: false,
                         choice_branch: choice_branch.to_vec(),
+                        span: Some((
+                            element.span.bytes.start as usize,
+                            element.span.bytes.end as usize,
+                        )),
                     });
                 }
                 // Refs from one alternative of a *choice* are present only when
@@ -2784,6 +2801,10 @@ fn collect_structural_context_refs_with_cardinality(
                     cardinality,
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
+                    span: Some((
+                        element.span.bytes.start as usize,
+                        element.span.bytes.end as usize,
+                    )),
                 });
             }
             ElementKind::Range(..) if label.is_some() => refs.push(embedded::ElementRef {
@@ -2795,6 +2816,10 @@ fn collect_structural_context_refs_with_cardinality(
                 cardinality,
                 stable_accessor: false,
                 choice_branch: choice_branch.to_vec(),
+                span: Some((
+                    element.span.bytes.start as usize,
+                    element.span.bytes.end as usize,
+                )),
             }),
             ElementKind::Range(..)
             | ElementKind::Action { .. }
@@ -9001,6 +9026,7 @@ fn context_label_accessor(
         cardinality: embedded::ChildCardinality::ONE,
         stable_accessor: true,
         choice_branch: Vec::new(),
+        span: None,
     };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());

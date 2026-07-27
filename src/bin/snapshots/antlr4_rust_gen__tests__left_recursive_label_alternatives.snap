@@ -26,6 +26,7 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: None,
             },
             ElementRef {
                 label: None,
@@ -43,6 +44,12 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: Some(
+                    (
+                        135,
+                        139,
+                    ),
+                ),
             },
             ElementRef {
                 label: Some(
@@ -60,6 +67,12 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: Some(
+                    (
+                        146,
+                        147,
+                    ),
+                ),
             },
         ],
         children: {
@@ -103,6 +116,7 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: None,
             },
             ElementRef {
                 label: None,
@@ -120,6 +134,12 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: Some(
+                    (
+                        190,
+                        194,
+                    ),
+                ),
             },
             ElementRef {
                 label: Some(
@@ -137,6 +157,12 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: Some(
+                    (
+                        201,
+                        202,
+                    ),
+                ),
             },
         ],
         children: {
@@ -180,6 +206,12 @@ expression: "model.rules[1].alts"
                 },
                 stable_accessor: true,
                 choice_branch: [],
+                span: Some(
+                    (
+                        238,
+                        241,
+                    ),
+                ),
             },
         ],
         children: {
