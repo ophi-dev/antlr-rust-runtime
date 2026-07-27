@@ -59,7 +59,7 @@ expression: calc_context
             .map(TerminalNode::new)
     }
     pub fn op(&self) -> Option<TerminalNode<'a>> {
-        __token_children_matching(self.__node, &[8, 9, 10, 11, 12])
+        __labeled_token_children_matching(self.__node, &[8, 9, 10, 11, 12])
             .nth(0)
             .map(TerminalNode::new)
     }

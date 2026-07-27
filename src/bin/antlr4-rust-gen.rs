@@ -9173,9 +9173,9 @@ fn render_token_label_accessor(
         .collect::<Vec<_>>()
         .join(", ");
     let children = if let [token_type] = label.token_types.as_slice() {
-        format!("__token_children(self.__node, {token_type})")
+        format!("__labeled_token_children(self.__node, {token_type})")
     } else {
-        format!("__token_children_matching(self.__node, &[{token_types}])")
+        format!("__labeled_token_children_matching(self.__node, &[{token_types}])")
     };
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
@@ -9320,6 +9320,51 @@ fn render_context_child_accessors(
     }
     out
 }
+
+const LABELED_TOKEN_CHILD_HELPERS: &str = r#"#[allow(dead_code)]
+fn __labeled_token_child(
+    child: antlr4_runtime::Node<'_>,
+) -> Option<RuntimeTerminalNode<'_>> {
+    match child.kind() {
+        antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+        antlr4_runtime::NodeKind::Error => {
+            let terminal = child
+                .as_error()
+                .map(antlr4_runtime::ErrorNodeView::terminal)?;
+            let symbol = terminal.symbol();
+            // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
+            // deleted input tokens retain real source boundaries.
+            (symbol.start() == usize::MAX && symbol.stop() == usize::MAX).then_some(terminal)
+        }
+        antlr4_runtime::NodeKind::Rule => None,
+    }
+}
+
+#[allow(dead_code)]
+fn __labeled_token_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_type: i32,
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = __labeled_token_child(child)?;
+        (terminal.symbol().token_type() == token_type).then_some(terminal)
+    })
+}
+
+#[allow(dead_code)]
+fn __labeled_token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = __labeled_token_child(child)?;
+        token_types
+            .contains(&terminal.symbol().token_type())
+            .then_some(terminal)
+    })
+}
+
+"#;
 
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
@@ -9501,7 +9546,11 @@ fn __token_children_matching<'a>(
     })
 }
 
-#[allow(dead_code)]
+"#,
+    );
+    out.push_str(LABELED_TOKEN_CHILD_HELPERS);
+    out.push_str(
+        r#"#[allow(dead_code)]
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,

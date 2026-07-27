@@ -957,6 +957,117 @@ mod multi_alternative_label_tests {
 }
 
 #[test]
+fn token_label_accessors_distinguish_deleted_and_inserted_recovery_tokens() {
+    let temp = temporary_directory("token-label-recovery");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/token-label-recovery/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod token_label_recovery_tests {
+    use super::t_lexer::TLexer;
+    use super::t_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _, Token as _};
+
+    #[test]
+    fn union_label_skips_a_deleted_token_from_another_alternative() {
+        let lexer = TLexer::new(InputStream::new("x b a"));
+        let mut parser = TParser::new(CommonTokenStream::new(lexer));
+        let root = parser
+            .different_types()
+            .expect("single-token deletion should recover");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let parsed = parser.into_parsed_file(root);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("differentTypes rule")
+            .downcast_ref::<DifferentTypesContext>()
+            .expect("typed differentTypes context");
+
+        assert_eq!(context.op().expect("operator label").to_string(), "a");
+        assert_eq!(
+            context
+                .b_token()
+                .expect("plain token accessors retain deleted tokens")
+                .to_string(),
+            "b"
+        );
+    }
+
+    #[test]
+    fn single_type_label_skips_a_deleted_token_of_the_same_type() {
+        let lexer = TLexer::new(InputStream::new("x a y a"));
+        let mut parser = TParser::new(CommonTokenStream::new(lexer));
+        let root = parser
+            .same_type()
+            .expect("single-token deletion should recover");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let parsed = parser.into_parsed_file(root);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("sameType rule")
+            .downcast_ref::<SameTypeContext>()
+            .expect("typed sameType context");
+
+        assert_eq!(context.op().expect("operator label").to_string(), "a");
+        assert_eq!(
+            context
+                .a_token()
+                .expect("plain token accessor retains the deleted token")
+                .symbol()
+                .column(),
+            2
+        );
+        assert_eq!(context.op().expect("operator label").symbol().column(), 6);
+    }
+
+    #[test]
+    fn label_keeps_a_synthesized_missing_token() {
+        let lexer = TLexer::new(InputStream::new("x b"));
+        let mut parser = TParser::new(CommonTokenStream::new(lexer));
+        let root = parser
+            .missing_token()
+            .expect("single-token insertion should recover");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let parsed = parser.into_parsed_file(root);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("missingToken rule")
+            .downcast_ref::<MissingTokenContext>()
+            .expect("typed missingToken context");
+        let label = context.op().expect("missing token remains assigned to label");
+
+        assert_eq!(label.to_string(), "<missing 'a'>");
+        assert_eq!(label.symbol().start(), usize::MAX);
+        assert_eq!(
+            label.symbol(),
+            context.a_token().expect("plain token accessor").symbol()
+        );
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn compile_parse_tree_pattern_matches_and_binds_against_generated_parser() {
     let temp = temporary_directory("tree-pattern-compile");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1134,7 +1245,7 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
         "pub fn wildcard(&self) -> Result<TerminalNode<'a>, MissingChildError>",
         "pub fn plus_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
         "pub fn star_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "__token_children_matching(self.__node",
+        "__labeled_token_children_matching(self.__node",
         "track_context_alt_numbers: true",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");

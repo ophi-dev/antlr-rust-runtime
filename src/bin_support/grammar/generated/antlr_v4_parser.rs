@@ -700,6 +700,49 @@ fn __token_children_matching<'a>(
 }
 
 #[allow(dead_code)]
+fn __labeled_token_child(
+    child: antlr4_runtime::Node<'_>,
+) -> Option<RuntimeTerminalNode<'_>> {
+    match child.kind() {
+        antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+        antlr4_runtime::NodeKind::Error => {
+            let terminal = child
+                .as_error()
+                .map(antlr4_runtime::ErrorNodeView::terminal)?;
+            let symbol = terminal.symbol();
+            // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
+            // deleted input tokens retain real source boundaries.
+            (symbol.start() == usize::MAX && symbol.stop() == usize::MAX).then_some(terminal)
+        }
+        antlr4_runtime::NodeKind::Rule => None,
+    }
+}
+
+#[allow(dead_code)]
+fn __labeled_token_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_type: i32,
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = __labeled_token_child(child)?;
+        (terminal.symbol().token_type() == token_type).then_some(terminal)
+    })
+}
+
+#[allow(dead_code)]
+fn __labeled_token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = __labeled_token_child(child)?;
+        token_types
+            .contains(&terminal.symbol().token_type())
+            .then_some(terminal)
+    })
+}
+
+#[allow(dead_code)]
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
