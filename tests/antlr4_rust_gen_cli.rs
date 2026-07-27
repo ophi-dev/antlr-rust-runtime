@@ -81,6 +81,20 @@ fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
 }
 
+/// Lines of `haystack` containing `needle`, numbered, capped so a failure
+/// message stays readable when the subject is a large generated file.
+fn matching_lines(haystack: &str, needle: &str) -> String {
+    const LIMIT: usize = 20;
+    let hits = haystack
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.contains(needle))
+        .map(|(index, line)| format!("  {}: {}", index + 1, line.trim()))
+        .take(LIMIT)
+        .collect::<Vec<_>>();
+    hits.join("\n")
+}
+
 fn temporary_directory(label: &str) -> TempDirectory {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -3116,6 +3130,8 @@ fn mutual_left_recursion_is_reduced_to_a_working_precedence_parser() {
     let parser =
         fs::read_to_string(out.join("mutual_expr_parser.rs")).expect("parser should be emitted");
     // Hub-only satellites collapse into their hub; the hub becomes a rule method.
+    // The generated parser is tens of thousands of lines, so failures report the
+    // matching lines rather than the whole file.
     for collapsed in [
         "add_expr",
         "mul_expr",
@@ -3123,13 +3139,19 @@ fn mutual_left_recursion_is_reduced_to_a_working_precedence_parser() {
         "range_expr",
         "qualified_name",
     ] {
+        let needle = format!("fn {collapsed}(");
+        let offenders = matching_lines(&parser, &needle);
         assert!(
-            !parser.contains(&format!("fn {collapsed}(")),
-            "hub-only satellite {collapsed:?} should be inlined away\n{parser}"
+            offenders.is_empty(),
+            "hub-only satellite {collapsed:?} should be inlined away, found:\n{offenders}"
         );
     }
     for hub in ["fn expr(", "fn name(", "fn primary("] {
-        assert!(parser.contains(hub), "hub {hub:?} should survive\n{parser}");
+        assert!(
+            parser.contains(hub),
+            "hub {hub:?} should survive; emitted rule methods:\n{}",
+            matching_lines(&parser, "    pub fn ")
+        );
     }
 
     assert_generated_project(
@@ -3189,5 +3211,44 @@ mod mutual_left_recursion_tests {
     }
 }
 "#,
+    );
+}
+
+/// Issue #151, decline path: a cycle the transform must *not* rewrite still
+/// reports the pre-existing `G4A005` mutual-left-recursion diagnostic, naming
+/// both original rules. This is the guard that the transform is additive — it
+/// either produces a grammar the verified direct-recursion path accepts, or it
+/// changes nothing observable.
+#[test]
+fn undecidable_mutual_left_recursion_still_reports_the_cycle() {
+    let temp = temporary_directory("mutual-left-recursion-declined");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/mutual-left-recursion/DeclinedCycle.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "a declined cycle must not generate a parser\nstdout: {}",
+        utf8(&output.stdout)
+    );
+    let stderr = utf8(&output.stderr);
+    assert!(
+        stderr.contains("G4A005"),
+        "declining must fall through to the cycle detector: {stderr}"
+    );
+    // Both cycle members are still present and named, i.e. nothing was inlined
+    // or deleted on the way to the diagnostic.
+    assert!(
+        stderr.contains("mutually left-recursive rules: [a, b]"),
+        "the diagnostic must name the original rule set: {stderr}"
+    );
+    assert!(
+        !out.join("declined_cycle_parser.rs").exists(),
+        "no parser artifact should be emitted for a declined cycle"
     );
 }

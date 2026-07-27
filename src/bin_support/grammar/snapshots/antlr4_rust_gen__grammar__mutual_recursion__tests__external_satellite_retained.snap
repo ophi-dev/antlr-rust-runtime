@@ -3,9 +3,9 @@ source: src/bin_support/grammar/mutual_recursion.rs
 expression: render(&unit)
 ---
 t:
+  | t ''['' '']''
   | t ''?''
   | ID
-  | t ''['' '']''
 arr:
   | t ''['' '']''
 new_arr:
