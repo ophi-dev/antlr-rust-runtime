@@ -86,6 +86,12 @@ pub(crate) struct ElementRef {
     /// `((x=e | f) | e)` the labeled `x` and the trailing `e` are separated by
     /// the *outer* choice, which an innermost-only tag would lose.
     pub(crate) choice_branch: Vec<(usize, usize)>,
+    /// Alternative count of each choice named in `choice_branch`, in the same
+    /// order. Recorded at collection time because an *empty* alternative emits no
+    /// ref at all, so the branch count cannot be recovered from the refs alone —
+    /// `(a=A | )` would otherwise look like a one-branch choice that always
+    /// yields an `A`.
+    pub(crate) choice_arity: Vec<usize>,
     /// Byte span of the element in the grammar source, when known. A mid-rule
     /// action executes at *its* source position, so only refs that start before
     /// the action's offset have been matched when its body runs.
@@ -486,13 +492,39 @@ impl TranslationCtx<'_> {
                 .iter()
                 .any(|token_type| element.token_types.contains(token_type))
         };
-        let available = alt
+        // The most matching children *one parse* can build: sequential refs add,
+        // but branches of a choice are alternatives, so the largest branch wins.
+        // Summing them all would overstate the count and reject valid reads —
+        // `A x=A | (A B? | A C?)` builds at most one `A` in the second alternative.
+        let mut sequential = Some(0_usize);
+        let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
+        for candidate in alt
             .refs
             .iter()
             .filter(|candidate| same_read_target(candidate))
-            .try_fold(0_usize, |total, candidate| {
-                Some(total.saturating_add(candidate.cardinality.max?))
-            });
+        {
+            let slot = match candidate.choice_branch.last() {
+                None => &mut sequential,
+                Some(&key) => per_branch.entry(key).or_insert(Some(0)),
+            };
+            *slot = match (*slot, candidate.cardinality.max) {
+                (Some(total), Some(max)) => Some(total.saturating_add(max)),
+                _ => None,
+            };
+        }
+        let mut widest_by_choice: BTreeMap<usize, Option<usize>> = BTreeMap::new();
+        for ((choice, _), count) in per_branch {
+            let slot = widest_by_choice.entry(choice).or_insert(Some(0));
+            *slot = match (*slot, count) {
+                (Some(current), Some(next)) => Some(current.max(next)),
+                _ => None,
+            };
+        }
+        let available = sequential.and_then(|base| {
+            widest_by_choice
+                .into_values()
+                .try_fold(base, |total, count| Some(total.saturating_add(count?)))
+        });
         // A list read selects any same-target child; a positional read needs one
         // at `occurrence`. An unbounded count can always reach either.
         available.is_none_or(|available| available > occurrence)
@@ -519,9 +551,17 @@ impl TranslationCtx<'_> {
         let mut total = 0_usize;
         let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
         let mut branches_seen: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        // Recorded arity, so an empty alternative (which emits no ref) still counts
+        // toward the branches that must agree.
+        let mut arity_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
         for candidate in &refs {
             for &(choice, branch) in &candidate.choice_branch {
                 branches_seen.entry(choice).or_default().insert(branch);
+            }
+            for (&(choice, _), &arity) in
+                candidate.choice_branch.iter().zip(&candidate.choice_arity)
+            {
+                arity_of_choice.insert(choice, arity);
             }
         }
         for candidate in &refs {
@@ -544,7 +584,10 @@ impl TranslationCtx<'_> {
             by_choice.entry(choice).or_default().push(count?);
         }
         for (choice, counts) in by_choice {
-            let expected = branches_seen.get(&choice).map_or(0, BTreeSet::len);
+            let expected = arity_of_choice
+                .get(&choice)
+                .copied()
+                .unwrap_or_else(|| branches_seen.get(&choice).map_or(0, BTreeSet::len));
             let first = counts.first().copied()?;
             // Every branch must agree *and* be accounted for — `(A A | B)` has
             // branch counts 2 and 1, so the prefix is not a fixed position.
@@ -929,6 +972,7 @@ fn translate_reference(
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -945,6 +989,7 @@ fn translate_reference(
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1297,6 +1342,7 @@ mod tests {
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1309,6 +1355,7 @@ mod tests {
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1366,6 +1413,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1413,6 +1461,7 @@ mod tests {
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1456,6 +1505,7 @@ mod tests {
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality { min, max: Some(1) },
         };
@@ -1500,6 +1550,7 @@ mod tests {
             cardinality: ChildCardinality { min: 1, max },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1515,6 +1566,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1571,6 +1623,7 @@ mod tests {
                     },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1583,6 +1636,7 @@ mod tests {
                     cardinality: ChildCardinality { min: 0, max: None },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1637,6 +1691,7 @@ mod tests {
                         },
                         stable_accessor: true,
                         choice_branch: Vec::new(),
+                        choice_arity: Vec::new(),
                         span: Some((10, 20)),
                         branch_local_cardinality: ChildCardinality::ONE,
                     },
@@ -1652,6 +1707,7 @@ mod tests {
                         },
                         stable_accessor: true,
                         choice_branch: Vec::new(),
+                        choice_arity: Vec::new(),
                         span: Some((30, 31)),
                         branch_local_cardinality: ChildCardinality::ONE,
                     },
@@ -1702,6 +1758,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1760,6 +1817,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: vec![(5, branch)],
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1819,6 +1877,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1870,6 +1929,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1928,6 +1988,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1967,6 +2028,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2034,6 +2096,7 @@ mod tests {
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2049,6 +2112,7 @@ mod tests {
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2074,6 +2138,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: branches,
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2122,6 +2187,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: vec![(3, branch)],
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2184,6 +2250,7 @@ mod tests {
                     },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2200,6 +2267,7 @@ mod tests {
                     },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2244,6 +2312,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: vec![(7, branch)],
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2288,6 +2357,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2331,6 +2401,7 @@ mod tests {
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2346,6 +2417,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2399,6 +2471,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2459,6 +2532,7 @@ mod tests {
             },
             stable_accessor: true,
             choice_branch: Vec::new(),
+            choice_arity: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2539,6 +2613,7 @@ mod tests {
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2551,6 +2626,7 @@ mod tests {
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
                     choice_branch: Vec::new(),
+                    choice_arity: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },

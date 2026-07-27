@@ -2590,6 +2590,7 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         cardinality: embedded::ChildCardinality::ONE,
                         stable_accessor: true,
                         choice_branch: Vec::new(),
+                        choice_arity: Vec::new(),
                         span: None,
                         branch_local_cardinality: embedded::ChildCardinality::ONE,
                     }
@@ -2664,6 +2665,7 @@ fn collect_structural_context_refs(
             enclosing_cardinality: embedded::ChildCardinality::ONE,
             branch_local_cardinality: embedded::ChildCardinality::ONE,
             choice_branch: &[],
+            choice_arity: &[],
         },
         vocabulary,
     );
@@ -2678,6 +2680,7 @@ struct StructuralRefContext<'a> {
     /// The same, but assuming each enclosing choice took this branch.
     branch_local_cardinality: embedded::ChildCardinality,
     choice_branch: &'a [(usize, usize)],
+    choice_arity: &'a [usize],
 }
 
 fn collect_structural_context_refs_with_cardinality(
@@ -2691,6 +2694,7 @@ fn collect_structural_context_refs_with_cardinality(
         enclosing_cardinality,
         branch_local_cardinality,
         choice_branch,
+        choice_arity,
     } = context;
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
@@ -2719,6 +2723,7 @@ fn collect_structural_context_refs_with_cardinality(
                 cardinality,
                 stable_accessor,
                 choice_branch: choice_branch.to_vec(),
+                choice_arity: choice_arity.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -2735,6 +2740,7 @@ fn collect_structural_context_refs_with_cardinality(
                     cardinality,
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
+                    choice_arity: choice_arity.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2762,6 +2768,7 @@ fn collect_structural_context_refs_with_cardinality(
                         cardinality,
                         stable_accessor,
                         choice_branch: choice_branch.to_vec(),
+                        choice_arity: choice_arity.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2780,6 +2787,7 @@ fn collect_structural_context_refs_with_cardinality(
                         cardinality,
                         stable_accessor: false,
                         choice_branch: choice_branch.to_vec(),
+                        choice_arity: choice_arity.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2808,8 +2816,10 @@ fn collect_structural_context_refs_with_cardinality(
                     // ones. A single-alternative block adds no exclusivity, so it
                     // keeps whatever tag it inherited.
                     let mut nested_branch = choice_branch.to_vec();
+                    let mut nested_arity = choice_arity.to_vec();
                     if block.alternatives.len() > 1 {
                         nested_branch.push((block.syntax.index(), branch));
+                        nested_arity.push(block.alternatives.len());
                     }
                     collect_structural_context_refs_with_cardinality(
                         &alternative.elements,
@@ -2821,6 +2831,7 @@ fn collect_structural_context_refs_with_cardinality(
                             // applies, but the choice split does not.
                             branch_local_cardinality: branch_local,
                             choice_branch: &nested_branch,
+                            choice_arity: &nested_arity,
                         },
                         vocabulary,
                     );
@@ -2836,6 +2847,7 @@ fn collect_structural_context_refs_with_cardinality(
                     cardinality,
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
+                    choice_arity: choice_arity.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2852,6 +2864,7 @@ fn collect_structural_context_refs_with_cardinality(
                 cardinality,
                 stable_accessor: false,
                 choice_branch: choice_branch.to_vec(),
+                choice_arity: choice_arity.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -9063,6 +9076,7 @@ fn context_label_accessor(
         cardinality: embedded::ChildCardinality::ONE,
         stable_accessor: true,
         choice_branch: Vec::new(),
+        choice_arity: Vec::new(),
         span: None,
         branch_local_cardinality: embedded::ChildCardinality::ONE,
     };
@@ -9263,6 +9277,15 @@ fn exact_target_cardinality(
     // Nested choices are folded innermost-first: once an inner choice agrees, its
     // count is attributed to the *enclosing* branch that contains it, so
     // `((a=A | b=A) | c=A) x=A` — where every path yields one `A` — stays exact.
+    // Arity comes from the recorded `choice_arity`, not from the branches seen: an
+    // *empty* alternative emits no ref, so `(a=A | )` would otherwise look like a
+    // one-branch choice that always yields an `A`.
+    let mut arity_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+    for element in refs {
+        for (&(choice, _), &arity) in element.choice_branch.iter().zip(&element.choice_arity) {
+            arity_of_choice.insert(choice, arity);
+        }
+    }
     let mut branches_per_choice: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
     let mut depth_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
     for element in refs {
@@ -9297,7 +9320,10 @@ fn exact_target_cardinality(
         if counts.is_empty() {
             continue;
         }
-        let expected = branches_per_choice.get(&choice).map_or(0, BTreeSet::len);
+        let expected = arity_of_choice
+            .get(&choice)
+            .copied()
+            .unwrap_or_else(|| branches_per_choice.get(&choice).map_or(0, BTreeSet::len));
         let first = counts.first().and_then(|(_, count)| *count)?;
         if counts.len() != expected || counts.iter().any(|(_, count)| *count != Some(first)) {
             return None;
