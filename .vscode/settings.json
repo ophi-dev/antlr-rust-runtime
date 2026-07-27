@@ -1,3 +1,29 @@
 {
-    "sarif-viewer.connectToGithubCodeScanning": "off"
+  "sarif-viewer.connectToGithubCodeScanning": "off",
+  "antlr4.generation": {
+    "mode": "none",
+    "listeners": true,
+    "visitors": false
+  },
+  "codeQL.githubDatabase.update": "never",
+  "files.exclude": {
+    ".rumdl_cache": true
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "rvben.rumdl",
+    "editor.formatOnSave": true,
+    "editor.wordWrap": "on",
+    "editor.quickSuggestions": {
+      "comments": "off",
+      "strings": "off",
+      "other": "off"
+    },
+    "editor.codeActionsOnSave": {
+      "source.fixAll.rumdl": "explicit"
+    }
+  },
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml",
+    "editor.formatOnSave": true
+  }
 }

@@ -1,0 +1,6 @@
+[net]
+# Cargo's bundled libgit2 does not pick up `url.git@github.com:.insteadof`
+# rewrites that contributors may have configured globally. The CLI fetcher
+# delegates to `git`, which honors those rewrites — required for the Ruff
+# clone to succeed when developers have global SSH-rewrite rules.
+git-fetch-with-cli = true

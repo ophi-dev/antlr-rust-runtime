@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install hk hooks",
+      "type": "shell",
+      "command": "hk",
+      "args": [
+        "install"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    }
+  ]
+}

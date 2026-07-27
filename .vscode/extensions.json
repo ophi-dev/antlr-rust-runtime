@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "mike-lischke.vscode-antlr4",
+        "rust-lang.rust-analyzer",
+        "rvben.rumdl",
+        "tamasfe.even-better-toml"
+    ]
+}
