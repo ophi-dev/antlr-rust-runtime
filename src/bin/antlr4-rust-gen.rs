@@ -2690,7 +2690,7 @@ struct StructuralRefContext<'a> {
     choice_branch: &'a [(usize, usize)],
     choice_arity: &'a [usize],
     choice_spans: &'a [(usize, usize)],
-    group_spans: &'a [(usize, usize)],
+    group_spans: &'a [embedded::GroupSpan],
     branch_spans: &'a [(usize, usize)],
 }
 
@@ -2879,10 +2879,17 @@ fn collect_structural_context_refs_with_cardinality(
                     // Every block counts here, single-alternative groups included.
                     let mut nested_branch_spans = branch_spans.to_vec();
                     let mut nested_groups = group_spans.to_vec();
-                    nested_groups.push((
-                        block.span.bytes.start as usize,
-                        block.span.bytes.end as usize,
-                    ));
+                    nested_groups.push(embedded::GroupSpan {
+                        start: block.span.bytes.start as usize,
+                        end: block.span.bytes.end as usize,
+                        // Only a quantifier that can yield nothing relaxes the
+                        // elements inside.
+                        optional: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        )
+                        .min == 0,
+                    });
                     if block.alternatives.len() > 1 {
                         nested_branch.push((block.syntax.index(), branch));
                         nested_arity.push(block.alternatives.len());
@@ -15464,6 +15471,12 @@ mod tests {
                 "a shared last-match read would return a following unlabeled child on the non-repeated branch",
             ),
             (
+                "FallbackReadSiblingAlternative",
+                "x",
+                false,
+                "a `last()` fallback can select any terminal, so a non-declaring alternative satisfies it",
+            ),
+            (
                 "MixedModeLeadingTerminal",
                 "x",
                 false,
@@ -15475,6 +15488,12 @@ mod tests {
                 "x",
                 true,
                 "a token-only choice holding an action keeps its branch spans",
+            ),
+            (
+                "MandatoryInnerGroupClosed",
+                "x",
+                true,
+                "a mandatory inner group relaxes nothing, so its closing before the action is irrelevant",
             ),
             (
                 "InlineActionBeforeLabel",

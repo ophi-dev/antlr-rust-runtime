@@ -59,6 +59,16 @@ impl ChildCardinality {
     }
 }
 
+/// One enclosing block: its byte extent, and whether its own quantifier relaxes
+/// the lower bound of the elements inside it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct GroupSpan {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    /// `true` for `(…)?` / `(…)*` — the group may contribute nothing.
+    pub(crate) optional: bool,
+}
+
 /// One element reference inside an alternative: a rule ref, token ref, or a
 /// labeled sub-block, in source order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,11 +114,13 @@ pub(crate) struct ElementRef {
     /// preceding `A` is exactly-once even though both `cardinality` and
     /// `branch_local_cardinality` report `0..1` from the group's `?`.
     pub(crate) group_local_cardinality: ChildCardinality,
-    /// Byte spans of *every* enclosing block, including single-alternative groups
-    /// that `choice_spans` omits. An action inside such a group only runs when the
-    /// group was taken, so refs sharing the group have run even though their
-    /// cardinality reports `min: 0` from the group's `?`.
-    pub(crate) group_spans: Vec<(usize, usize)>,
+    /// Byte span and lower-bound-relaxing flag of *every* enclosing block, including
+    /// single-alternative groups that `choice_spans` omits. The flag says whether
+    /// that group's own quantifier is what made this element optional (`(…)?` or
+    /// `(…)*`), so a group known taken can have *its* contribution removed without
+    /// disturbing the others: in `((q) x=q {…})?` the outer `?` is satisfied when the
+    /// action runs while the inner `(q)` is mandatory and already closed.
+    pub(crate) group_spans: Vec<GroupSpan>,
     /// Byte span of each enclosing choice *alternative* (the branch itself), in the
     /// same order as `choice_branch`. Lets an action be attributed to the branch
     /// whose text contains it, including a branch holding only actions or
@@ -565,6 +577,12 @@ impl TranslationCtx<'_> {
         candidate: &ElementRef,
         occurrence: usize,
     ) -> bool {
+        // `usize::MAX` is the sentinel for "no fixed index, the read falls back to
+        // `last()`" — not a position. Any terminal the alternative builds can be that
+        // last child, so every candidate can occupy it.
+        if occurrence == usize::MAX {
+            return true;
+        }
         let Some(start) = Self::exact_terminal_index(alt, candidate) else {
             // No fixed start: the candidate could be anywhere.
             return true;
@@ -962,13 +980,23 @@ impl TranslationCtx<'_> {
         // *Every* group the ref sits in must enclose the action, not merely one: an
         // inner group that closed before the action proves nothing, so
         // `((q)? x=q {…})?` must not treat the inner `(q)?` as matched.
+        // A ref is exactly-once on the action's path when every group that *relaxed*
+        // its lower bound is one the action also sits inside — the action running
+        // proves those groups were taken. Groups that impose nothing (a mandatory
+        // `(…)`) are irrelevant whether or not they enclose the action, so requiring
+        // all of them to would reject `((q) x=q {…})?`, where the inner group is
+        // mandatory and already closed.
         let on_taken_group = |candidate: &ElementRef| {
             action_offset.is_some_and(|offset| {
-                !candidate.group_spans.is_empty()
-                    && candidate
-                        .group_spans
+                let relaxing = candidate
+                    .group_spans
+                    .iter()
+                    .filter(|group| group.optional)
+                    .collect::<Vec<_>>();
+                !relaxing.is_empty()
+                    && relaxing
                         .iter()
-                        .all(|&(start, end)| start <= offset && offset < end)
+                        .all(|group| group.start <= offset && offset < group.end)
             })
         };
         // Whether a ref can have run before the action, given that ancestry. An
