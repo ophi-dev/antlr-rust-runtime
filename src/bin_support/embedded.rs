@@ -387,7 +387,7 @@ impl TranslationCtx<'_> {
                 // and their reads ignore the index, so they neither consume nor
                 // contribute to an occurrence bucket. Sharing the empty-target
                 // bucket would let unrelated groups poison each other.
-                if element.target.is_empty() || element.is_list {
+                if element.target.is_empty() {
                     if labeled {
                         return Some((element.clone(), 0));
                     }
@@ -398,7 +398,11 @@ impl TranslationCtx<'_> {
                     .or_insert(Some(0));
                 let current = *occurrence;
                 // An inexact ref leaves every later same-target position
-                // floating, so poison the running count rather than guess.
+                // floating, so poison the running count rather than guess. A
+                // list ref (`xs+=e`) still contributes children here, so it
+                // must go through the same accounting: its usually-unbounded
+                // count is what stops a later same-target label from trusting
+                // a fixed position.
                 *occurrence = match (current, element.cardinality.max) {
                     (Some(total), Some(max)) if element.cardinality.min == max => {
                         Some(total.saturating_add(max))
@@ -406,6 +410,11 @@ impl TranslationCtx<'_> {
                     _ => None,
                 };
                 if labeled {
+                    // A list read iterates every same-target child, so it never
+                    // consults the index and stays resolvable regardless.
+                    if element.is_list {
+                        return Some((element.clone(), 0));
+                    }
                     let shadowed_when_absent = element.cardinality.min == 0
                         && alt.refs[position + 1..].iter().any(|following| {
                             following.target == element.target
@@ -1064,6 +1073,64 @@ mod tests {
         let translated = translate_body("$x.text", &ctx).expect("translates");
         assert!(translated.contains("terminal_children"), "{translated}");
         assert!(translated.contains(".last()"), "{translated}");
+    }
+
+    /// A list label ahead of a same-target single label still contributes
+    /// children, so it must go through the occurrence accounting rather than be
+    /// skipped: `r : xs+=e name=e` puts one `e` before `name` (exact, countable
+    /// → `nth(1)`), while `r : xs+=e+ name=e` puts an unbounded run there and
+    /// leaves no fixed position at all.
+    #[test]
+    fn list_refs_ahead_of_a_single_label_are_counted_then_poison_when_unbounded() {
+        let list_ref = |max| ElementRef {
+            label: Some("xs".to_owned()),
+            target: "e".to_owned(),
+            token_types: Vec::new(),
+            is_block: false,
+            is_list: true,
+            cardinality: ChildCardinality { min: 1, max },
+            stable_accessor: true,
+        };
+        let single_ref = ElementRef {
+            label: Some("name".to_owned()),
+            target: "e".to_owned(),
+            token_types: Vec::new(),
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+        };
+        let translate = |max| {
+            let mut statement = rule("s");
+            statement.alts.push(AltModel {
+                label: None,
+                span: (10, 20),
+                refs: vec![list_ref(max), single_ref.clone()],
+                children: BTreeMap::new(),
+                leading_target: Some("e".to_owned()),
+            });
+            let m = model(vec![statement, rule("e")]);
+            let toks = tokens(&[]);
+            let ctx = TranslationCtx {
+                model: &m,
+                rule_index: 0,
+                body_offset: Some(15),
+                site: ActionSite::Body,
+                token_types: &toks,
+            };
+            translate_body("$name.text", &ctx).map_err(|error| error.to_string())
+        };
+
+        // Exactly one preceding `e`: the position is known.
+        let exact = translate(Some(1)).expect("exact list count still resolves");
+        assert!(exact.contains(".nth(1)"), "{exact}");
+
+        // Unbounded run of `e` ahead of the label: no fixed index exists.
+        let error = translate(None).expect_err("unbounded list must not resolve");
+        assert!(error.contains("cannot translate $name"), "{error}");
     }
 
     #[test]
