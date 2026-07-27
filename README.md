@@ -692,6 +692,7 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 ## Useful Information
 
-- ANTLR: <https://www.antlr.org/>
-- ANTLR documentation: <https://github.com/antlr/antlr4/blob/dev/doc/index.md>
-- Grammars v4: <https://github.com/antlr/grammars-v4>
+[**Awesome ANTLR**](https://github.com/ophi-dev/awesome-antlr) — our curated
+list of ANTLR resources: the tool and its documentation, runtimes for every
+target language, editor and build tooling, grammar collections, and the research
+behind adaptive LL(*) parsing.
