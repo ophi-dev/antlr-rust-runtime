@@ -120,6 +120,23 @@ nested_group
     : ((deep = IDENT))? NUM
     ;
 
+// The outer `?` is satisfied wherever the label binds, but the *inner* `+` is a
+// closed repeated group: it ran an unknown number of times, so the count of
+// matching children ahead of the label is not fixed and the accessor must go.
+// Only the repeated-group carve-out separates this from `nested_group`'s
+// all-shared-groups case.
+closed_repeat_prefix
+    : ((IDENT STAR)+ tail = IDENT)? NUM
+    ;
+
+// Restricting to the label's path drops the *outer* choice, so the surviving
+// inner choice must be read with its own arity of three. Treating it as an
+// exhaustive two-way choice would fix the prefix count at one and emit
+// `.nth(1)`, which reads nothing on the `param` path.
+inner_choice_arity
+    : ((unary | unary | param) tail = unary | NUM) NUM
+    ;
+
 LESS
     : '<'
     ;

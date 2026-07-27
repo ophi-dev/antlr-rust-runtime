@@ -168,6 +168,36 @@ impl ElementRef {
                 })
         })
     }
+
+    /// Drops the choices `discard` selects, keeping every parallel choice array
+    /// aligned with `choice_branch`.
+    ///
+    /// `choice_arity`, `choice_spans`, and `branch_spans` are indexed *by position*
+    /// in `choice_branch`, so removing an entry must remove the same position from
+    /// each. Truncating to the surviving length instead keeps the outermost
+    /// entries — which is wrong whenever an *outer* choice is the one dropped:
+    /// `((q | q | b) x=q | c)` would then read the outer choice's arity of 2
+    /// against the surviving inner choice, mistaking a three-way choice for an
+    /// exhaustive two-way one.
+    pub(crate) fn retain_choices(&mut self, mut keep: impl FnMut(usize) -> bool) {
+        let mask = self
+            .choice_branch
+            .iter()
+            .map(|&(choice, _)| keep(choice))
+            .collect::<Vec<_>>();
+        fn retain_by_mask<T>(list: &mut Vec<T>, mask: &[bool]) {
+            let mut index = 0;
+            list.retain(|_| {
+                let kept = mask.get(index).copied().unwrap_or(true);
+                index += 1;
+                kept
+            });
+        }
+        retain_by_mask(&mut self.choice_branch, &mask);
+        retain_by_mask(&mut self.choice_arity, &mask);
+        retain_by_mask(&mut self.choice_spans, &mask);
+        retain_by_mask(&mut self.branch_spans, &mask);
+    }
 }
 
 /// One top-level alternative of a parser rule.
@@ -1241,12 +1271,9 @@ impl TranslationCtx<'_> {
                 .cloned()
                 .map(|mut candidate| {
                     if let Some(branches) = action_branches.as_ref() {
-                        candidate.choice_branch.retain(|(choice, _)| {
-                            !branches.iter().any(|(taken, _)| taken == choice)
+                        candidate.retain_choices(|choice| {
+                            !branches.iter().any(|&(taken, _)| taken == choice)
                         });
-                        let keep = candidate.choice_branch.len();
-                        candidate.choice_arity.truncate(keep);
-                        candidate.choice_spans.truncate(keep);
                     }
                     candidate
                 })

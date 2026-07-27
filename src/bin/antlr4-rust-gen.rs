@@ -9490,18 +9490,26 @@ fn exact_target_cardinality_on_path(
             // Drop the branch tags shared with `path`: on this path those branches
             // are taken, so their refs count as plain sequential children rather
             // than alternatives awaiting cross-branch agreement.
-            element
-                .choice_branch
-                .retain(|(choice, _)| !path.choice_branch.iter().any(|(taken, _)| taken == choice));
-            let keep = element.choice_branch.len();
-            element.choice_arity.truncate(keep);
-            element.choice_spans.truncate(keep);
+            element.retain_choices(|choice| {
+                !path.choice_branch.iter().any(|&(taken, _)| taken == choice)
+            });
             // Their cardinality on this path is the branch-local one — and when the
             // ref shares every optional group with the label, those groups are taken
             // wherever the label is bound, so even their quantifiers are satisfied.
             // `(A x=A)? EOF` has exactly one `A` before the label on every parse that
             // binds it, though both figures otherwise report `0..1` from the `?`.
+            //
+            // A *repeated* group not shared with the label is the exception: knowing
+            // it ran says nothing about how many times, so its contribution stays
+            // unfixed. `((A B)+ x=A)?` has a variable run of `A` ahead of the label
+            // even though the outer `?` is satisfied. This mirrors `on_taken_group`
+            // in the action-resolution path.
+            let closed_repeated_group = element
+                .group_spans
+                .iter()
+                .any(|group| group.repeated && !path.group_spans.contains(group));
             let shares_optional_groups = !element.group_spans.is_empty()
+                && !closed_repeated_group
                 && element
                     .group_spans
                     .iter()
@@ -15424,6 +15432,23 @@ mod tests {
         insta::assert_snapshot!(
             "multi_alternative_label_path_restricted_context",
             context("PathRestrictedContext")
+        );
+        // Two ways the on-path restriction can overstate what it knows, both
+        // declining as a result:
+        //
+        // * `closed_repeat_prefix` — sharing every *optional* group with the label
+        //   proves those groups ran, but a closed `+` inside them ran an unknown
+        //   number of times, so the prefix count stays unfixed;
+        // * `inner_choice_arity` — dropping the taken outer choice must drop its
+        //   arity too, or the surviving three-way inner choice is read as an
+        //   exhaustive two-way one and the prefix count is wrongly fixed at 1.
+        insta::assert_snapshot!(
+            "multi_alternative_label_closed_repeat_prefix_context",
+            context("ClosedRepeatPrefixContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_inner_choice_arity_context",
+            context("InnerChoiceArityContext")
         );
         // Nesting the exhaustive choice keeps the count fixed: the inner choice's
         // agreed contribution rolls up into the outer branch.
