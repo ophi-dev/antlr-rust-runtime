@@ -15369,7 +15369,43 @@ mod tests {
                 false,
                 "one `AllAfter` skip cannot serve branches that begin at different offsets",
             ),
+            (
+                "InnerGroupClosedBeforeAction",
+                "x",
+                false,
+                "an inner group that closed before the action proves nothing about what matched",
+            ),
+            (
+                "AliasDifferingOccurrenceInAlt",
+                "x",
+                false,
+                "block and token occurrences are comparable only at zero",
+            ),
+            (
+                "DeclarationsDifferingOccurrence",
+                "x",
+                false,
+                "one positional read cannot serve declarations at different occurrences",
+            ),
+            (
+                "DeclarationsDifferingRepetition",
+                "x",
+                false,
+                "a repeated declaration needs a last-match read the others do not",
+            ),
             // Resolves: valid reads that must not be rejected.
+            (
+                "ListAliasDeclarations",
+                "xs",
+                true,
+                "list declarations name one token type through two source forms",
+            ),
+            (
+                "ChoicePrefixOutsideLabel",
+                "x",
+                true,
+                "a choice before the label contributes a fixed count when its branches agree",
+            ),
             (
                 "LiteralAliasSameOccurrence",
                 "x",

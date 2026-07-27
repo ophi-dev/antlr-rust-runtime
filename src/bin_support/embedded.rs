@@ -792,15 +792,19 @@ impl TranslationCtx<'_> {
         // token-mode, `x='a'` is block-mode) because both lower to the same
         // `child_tokens(A)` query — but their occurrences are counted in different
         // units: a block read indexes *every* terminal child, a token read only
-        // same-type children. Comparing the raw numbers merged `x='a' | A x=A`,
-        // where each side reports 1 but means a different child. Both must
-        // therefore agree on the occurrence *and*, when the modes differ, that
-        // occurrence must be zero — the one index where the two systems coincide.
+        // same-type children. `x='a' | A x=A` has both reporting 1 while meaning
+        // different children, and `A x='a' B | A x=A C` has them meaning the same
+        // child while reporting 1 and 1 only by coincidence.
+        //
+        // Rather than guess, mixed-mode pairs merge only at occurrence zero — the
+        // one index where the two systems provably coincide, since "no terminal
+        // before" and "no same-type token before" agree there. Same-mode pairs
+        // compare directly.
         if !left.0.token_types.is_empty() && left.0.token_types == right.0.token_types {
-            if left.1 != right.1 {
-                return false;
+            if left.0.is_block == right.0.is_block {
+                return left.1 == right.1;
             }
-            return left.0.is_block == right.0.is_block || left.1 == 0;
+            return left.1 == 0 && right.1 == 0;
         }
         if left.0.is_block != right.0.is_block {
             return false;
@@ -917,17 +921,22 @@ impl TranslationCtx<'_> {
         let branch_confined = action_branches
             .as_ref()
             .is_some_and(|branches| !branches.is_empty());
-        // A ref inside an enclosing group that the action also sits inside has run:
-        // the action only executes when that group was taken. Its cardinality still
-        // reports `min: 0` from the group's `?`, so use the branch-local figure for
-        // those refs — `(A x=A {…})?` has exactly one `A` before the label whenever
-        // the action runs at all.
+        // A ref inside a group that also encloses the action has run: the action
+        // only executes when that group was taken. Its cardinality still reports
+        // `min: 0` from the group's `?`, so use the quantifier-free figure —
+        // `(A x=A {…})?` has exactly one `A` before the label whenever the action
+        // runs at all.
+        //
+        // *Every* group the ref sits in must enclose the action, not merely one: an
+        // inner group that closed before the action proves nothing, so
+        // `((q)? x=q {…})?` must not treat the inner `(q)?` as matched.
         let on_taken_group = |candidate: &ElementRef| {
             action_offset.is_some_and(|offset| {
-                candidate
-                    .group_spans
-                    .iter()
-                    .any(|&(start, end)| start <= offset && offset < end)
+                !candidate.group_spans.is_empty()
+                    && candidate
+                        .group_spans
+                        .iter()
+                        .all(|&(start, end)| start <= offset && offset < end)
             })
         };
         // Whether a ref can have run before the action, given that ancestry. An
@@ -970,13 +979,21 @@ impl TranslationCtx<'_> {
             if element.target.is_empty() {
                 return None;
             }
-            // A list read yields every child of *one* target, so repeated
-            // declarations are the normal idiom (`xs+=e (op xs+=e)+`) only while
-            // they all name that same target. `xs+=A xs+=B` would iterate `A`
-            // alone and silently drop every `B`.
+            // A list read yields every child of *one* query, so repeated declarations
+            // are the normal idiom (`xs+=e (op xs+=e)+`) only while they all name that
+            // same query. `xs+=A xs+=B` would iterate `A` alone and drop every `B`.
+            // The query is the token type for token-backed refs, not the spelling:
+            // `xs+=A B | xs+='a' C` binds one type through two source forms.
+            let same_query = |candidate: &ElementRef| {
+                if element.token_types.is_empty() || candidate.token_types.is_empty() {
+                    candidate.target == element.target
+                } else {
+                    candidate.token_types == element.token_types
+                }
+            };
             if declarations
                 .iter()
-                .any(|candidate| candidate.target != element.target || !candidate.is_list)
+                .any(|candidate| !same_query(candidate) || !candidate.is_list)
             {
                 return None;
             }
@@ -1001,6 +1018,38 @@ impl TranslationCtx<'_> {
                 || (!std::ptr::eq(*candidate, element) && candidate.can_coexist_with(element))
         }) {
             return None;
+        }
+        // Deriving the read from the *first* declaration and probing the others
+        // property-by-property kept missing a dimension — occurrence and repetition
+        // among them. Instead resolve each declaration on its own and require the
+        // results to agree, so one read demonstrably serves every branch:
+        // `(A x=A B | x=A C)` wants occurrence 1 then 0, and `(x=A B | x=A+ C)`
+        // wants a first-match read then a last-match one.
+        if declarations.len() > 1 {
+            let mut resolutions = Vec::with_capacity(declarations.len());
+            for candidate in &declarations {
+                let position = alt
+                    .refs
+                    .iter()
+                    .position(|other| std::ptr::eq(other, *candidate))?;
+                let mut alone = alt.clone();
+                // Keep this declaration's label and drop the others', so the
+                // recursion resolves exactly one.
+                for (index, ref_at) in alone.refs.iter_mut().enumerate() {
+                    if index != position && ref_at.label.as_deref() == Some(label) {
+                        ref_at.label = None;
+                    }
+                }
+                resolutions.push(Self::resolve_label_in_alt(&alone, label, action_offset)?);
+            }
+            let first = resolutions.first()?.clone();
+            if resolutions
+                .iter()
+                .any(|resolution| !Self::same_label_read(resolution, &first))
+            {
+                return None;
+            }
+            return Some(first);
         }
         let position = alt
             .refs
@@ -1117,26 +1166,42 @@ impl TranslationCtx<'_> {
         // Count only children on the label's own parse path, and — when the action
         // is confined to a branch — count the surviving branch as that path rather
         // than demanding agreement from branches already filtered out.
-        let occurrence = Self::exact_child_count(
-            before
-                .iter()
-                .filter(|candidate| {
-                    counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
-                })
-                .cloned()
-                .map(|mut candidate| {
-                    if on_taken_group(&candidate) {
-                        // The enclosing group is taken on the action's path, so the
-                        // group's own quantifier no longer relaxes this ref.
-                        candidate.cardinality = candidate.group_local_cardinality;
-                        candidate.branch_local_cardinality = candidate.group_local_cardinality;
-                    }
-                    candidate
-                })
-                .collect::<Vec<_>>()
-                .iter(),
-            true,
-        )?;
+        let counted = before
+            .iter()
+            .filter(|candidate| {
+                counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
+            })
+            .cloned()
+            .map(|mut candidate| {
+                if on_taken_group(&candidate) {
+                    // The enclosing group is taken on the action's path, so the
+                    // group's own quantifier no longer relaxes this ref.
+                    candidate.cardinality = candidate.group_local_cardinality;
+                    candidate.branch_local_cardinality = candidate.group_local_cardinality;
+                }
+                // Choices the *label* is inside are settled on its path, so those
+                // tags carry no remaining alternation. Tags that survive belong to
+                // choices the label sits outside of, whose branches are genuinely
+                // alternative.
+                candidate.choice_branch.retain(|(choice, _)| {
+                    !element
+                        .choice_branch
+                        .iter()
+                        .any(|(taken, _)| taken == choice)
+                });
+                let keep = candidate.choice_branch.len();
+                candidate.choice_arity.truncate(keep);
+                candidate.choice_spans.truncate(keep);
+                candidate
+            })
+            .collect::<Vec<_>>();
+        // `can_coexist_with` keeps every branch of a choice the label is outside of,
+        // so it does not by itself select one path: `(A B | A C) x=A` would sum both
+        // prefixes. Only claim path-restriction once no alternation remains.
+        let restricted = counted
+            .iter()
+            .all(|candidate| candidate.choice_branch.is_empty());
+        let occurrence = Self::exact_child_count(counted.iter(), restricted)?;
         // An optional label is displaced by a following same-target child that can
         // slide into its position, whether that child is mandatory (`x=A? A`) or
         // optional (`(pred x=A)? A?` — the follower may consume the only token).
@@ -1158,7 +1223,16 @@ impl TranslationCtx<'_> {
         };
         let shadowed_when_absent = element_optional_here
             && after.iter().any(|candidate| {
-                !declares_label(candidate) && same_target(candidate) && matched_at_action(candidate)
+                !declares_label(candidate)
+                    && same_target(candidate)
+                    && matched_at_action(candidate)
+                    // A sibling branch's child cannot slide into the label's slot
+                    // *within a parse that bound the label* — the two never coexist.
+                    // It is still a hazard when the read may run with the label
+                    // unset, which is precisely when the action is not confined to
+                    // the label's branch: an `@after` body, or a mid-rule action
+                    // written after the whole choice (`(x=A | A) {$x}`).
+                    && (candidate.can_coexist_with(element) || !branch_confined)
             });
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
@@ -2184,6 +2258,9 @@ mod tests {
     /// equivalence is by *type*, not by source form or block-ness.
     #[test]
     fn compatible_declarations_share_one_read() {
+        // Each declaration is mandatory *within its branch* — `min: 0` on
+        // `cardinality` would say the label is genuinely optional, which is a
+        // different (and displaceable) shape.
         let decl = |branch, is_block, span| ElementRef {
             label: Some("x".to_owned()),
             target: if is_block { "'a'" } else { "A" }.to_owned(),
@@ -2191,7 +2268,7 @@ mod tests {
             is_block,
             is_list: false,
             cardinality: ChildCardinality {
-                min: 0,
+                min: 1,
                 max: Some(1),
             },
             stable_accessor: true,
@@ -2204,15 +2281,32 @@ mod tests {
             branch_local_cardinality: ChildCardinality::ONE,
             group_local_cardinality: ChildCardinality::ONE,
         };
-        let translate = |second: ElementRef, offset| {
+        // `separate_alts` models `x=… | x=…` written as *top-level* alternatives,
+        // which the collector emits as two `AltModel`s — the shape a real grammar
+        // produces. Both in one `AltModel` instead models a nested `(… | …)` choice.
+        let translate = |second: ElementRef, offset, separate_alts: bool| {
             let mut statement = rule("s");
-            statement.alts.push(AltModel {
-                label: None,
-                span: (0, 100),
-                refs: vec![decl(0, false, (10, 11)), second],
-                children: BTreeMap::new(),
-                leading_target: None,
-            });
+            if separate_alts {
+                for (index, declaration) in
+                    [decl(0, false, (10, 11)), second].into_iter().enumerate()
+                {
+                    statement.alts.push(AltModel {
+                        label: None,
+                        span: (index * 50, index * 50 + 50),
+                        refs: vec![declaration],
+                        children: BTreeMap::new(),
+                        leading_target: None,
+                    });
+                }
+            } else {
+                statement.alts.push(AltModel {
+                    label: None,
+                    span: (0, 100),
+                    refs: vec![decl(0, false, (10, 11)), second],
+                    children: BTreeMap::new(),
+                    leading_target: None,
+                });
+            }
             let m = model(vec![statement]);
             let toks = tokens(&[("A", 1)]);
             let ctx = TranslationCtx {
@@ -2229,13 +2323,16 @@ mod tests {
             translate_body("$x.text", &ctx).map_err(|error| error.to_string())
         };
 
-        // `(x=A e {action} | x=A f {action})`: same query, exclusive branches.
-        let translated = translate(decl(1, false, (30, 31)), Some(20))
+        // `(x=A e {action} | x=A f {action})`: same query, exclusive branches of one
+        // nested choice.
+        let translated = translate(decl(1, false, (30, 31)), Some(20), false)
             .expect("identical reads in exclusive branches share one lookup");
         assert!(translated.contains(".nth(0)"), "{translated}");
 
-        // `x=A | x='a'` from `@after`: literal vs symbolic, same token type.
-        let aliased = translate(decl(1, true, (30, 33)), None)
+        // `r @after {…} : x=A | x='a';` — literal and symbolic forms of one token
+        // type, as *top-level* alternatives. Both resolve at occurrence zero, the
+        // index where the block and token coordinate systems coincide.
+        let aliased = translate(decl(1, true, (60, 63)), None, true)
             .expect("token-type equivalence ignores source form");
         assert!(aliased.contains(".nth(0)"), "{aliased}");
     }
