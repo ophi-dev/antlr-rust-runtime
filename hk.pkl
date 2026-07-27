@@ -2,8 +2,22 @@ amends "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-  ["clippy"] = Builtins.cargo_clippy
-  ["rustfmt"] = Builtins.cargo_fmt
+  ["actionlint"] = Builtins.actionlint
+  ["cargo-fmt"] = (Builtins.cargo_fmt) {
+    workspace_indicator = "rust-toolchain.toml"
+    check = "cargo fmt --check --all"
+    fix = "cargo fmt --all"
+  }
+  ["cargo-check"] = (Builtins.cargo_check) {
+    workspace_indicator = "rust-toolchain.toml"
+    check = "cargo check --all-targets --all-features --locked"
+  }
+  ["cargo-clippy"] = (Builtins.cargo_clippy) {
+    workspace_indicator = "rust-toolchain.toml"
+    check = "cargo clippy --all-targets --all-features --locked -- -D warnings"
+    fix =
+      "cargo clippy --all-targets --all-features --fix --allow-dirty --allow-staged --locked -- -D warnings"
+  }
   // uses taplo for TOML formatting and validation
   ["taplo"] {
     glob = List("**/*.toml")

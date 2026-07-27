@@ -3,6 +3,7 @@
         "mike-lischke.vscode-antlr4",
         "rust-lang.rust-analyzer",
         "rvben.rumdl",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "llvm-vs-code-extensions.lldb-dap"
     ]
 }
