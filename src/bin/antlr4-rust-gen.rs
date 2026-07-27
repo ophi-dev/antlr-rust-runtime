@@ -5580,6 +5580,25 @@ fn adaptive_atn_parser_render_slots(preferred_rule_count: usize) -> AdaptiveAtnP
     }
 }
 
+fn render_generated_rule_error(retry_variant: &str, retry_into_error: &str) -> String {
+    format!(
+        r#"#[allow(dead_code)]
+#[derive(Debug)]
+enum GeneratedRuleError {{
+    Fatal(antlr4_runtime::AntlrError),
+    Interpreted(antlr4_runtime::AntlrError),
+{retry_variant}}}
+
+impl GeneratedRuleError {{
+    fn into_error(self) -> antlr4_runtime::AntlrError {{
+        match self {{
+            Self::Fatal(error) | Self::Interpreted(error) => error,
+{retry_into_error}        }}
+    }}
+}}"#
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_generated_rule_routing(
     rules: &[Option<GeneratedParserRule>],
@@ -5809,7 +5828,7 @@ fn render_generated_rule_dispatch_with_rule_names(
                      if let Some(invoking_state) = invoking_state {{\n                \
                          self.base.push_invoking_state(invoking_state);\n            \
                      }}\n            \
-                     return self.parse_rule_precedence_from_generated({index}, precedence).map_err(GeneratedRuleError::Fatal);\n        \
+                     return self.parse_rule_precedence_from_generated({index}, precedence).map_err(GeneratedRuleError::Interpreted);\n        \
                  }}"
             )
             .expect("writing to a string cannot fail");
@@ -6078,7 +6097,7 @@ fn render_generated_rule_method(
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                        self.base.rollback_generated_tree(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -6215,7 +6234,7 @@ fn render_generated_left_recursive_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                        self.base.rollback_generated_tree(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -10327,6 +10346,8 @@ fn render_parser_with_options(
         retry_variant: adaptive_atn_retry_variant,
         retry_into_error: adaptive_atn_retry_into_error,
     } = adaptive_atn_parser_render_slots(adaptive_atn_preferred_rule_count);
+    let generated_rule_error =
+        render_generated_rule_error(adaptive_atn_retry_variant, adaptive_atn_retry_into_error);
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
         "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\n"
@@ -10379,20 +10400,7 @@ where
     generated_only: bool,
 {adaptive_atn_preference_struct_field}{embedded_struct_fields}}}
 
-#[allow(dead_code)]
-#[derive(Debug)]
-enum GeneratedRuleError {{
-    Fatal(antlr4_runtime::AntlrError),
-{adaptive_atn_retry_variant}}}
-
-impl GeneratedRuleError {{
-    fn into_error(self) -> antlr4_runtime::AntlrError {{
-        match self {{
-            Self::Fatal(error) => error,
-{adaptive_atn_retry_into_error}        }}
-    }}
-}}
-
+{generated_rule_error}
 impl<L> {type_name}<L, antlr4_runtime::NoSemanticHooks>
 where
     L: TokenSource,
@@ -10564,6 +10572,15 @@ where
                 Ok(tree) => tree,
                 Err(error) => {{
                     antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    let __report_error =
+                        matches!(&error, GeneratedRuleError::Fatal(_));
+                    // A fatal unwind retains recovery diagnostics committed
+                    // earlier in this entry. Dispatch them before a semantic
+                    // or parser-abort override can return, or they would leak
+                    // into the next entry on a reused parser.
+                    if allow_generated_fallback && __report_error {{
+                        self.base.report_generated_parser_diagnostics();
+                    }}
                     // A generated predicate that consulted an unimplemented hook
                     // (returning None under the Error policy) fails the alternative
                     // and surfaces here as a generic failed-predicate/rule error.
@@ -10585,7 +10602,11 @@ where
                             return Err(abort);
                         }}
                     }}
-                    return Err(error.into_error());
+                    let error = error.into_error();
+                    if allow_generated_fallback && __report_error {{
+                        self.base.report_unrecovered_parser_error(&error);
+                    }}
+                    return Err(error);
                 }}
             }}
         }} else if __generated_only {{
@@ -13282,7 +13303,7 @@ mod tests {
         let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
         assert!(rendered.contains("generated_diagnostics_checkpoint()"));
-        assert!(rendered.contains("restore_generated_diagnostics(__generated_diagnostic_marker)"));
+        assert!(rendered.contains("rollback_generated_tree(__generated_diagnostic_marker)"));
     }
 
     #[test]
@@ -13760,7 +13781,7 @@ mod tests {
         ));
         assert!(rendered.contains("return Err(GeneratedRuleError::AdaptiveRetry);"));
         assert!(rendered.contains(
-            "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Fatal);"
+            "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Interpreted);"
         ));
         assert!(rendered.contains("self.parse_generated_rule_1_adaptive_probe_dispatch(0, false)"));
         assert!(rendered.contains(
@@ -14878,12 +14899,13 @@ mod tests {
     }
 
     #[test]
-    fn generated_parser_reports_lexer_errors_on_outer_success() {
+    fn generated_parser_reports_diagnostics_at_outer_boundaries() {
         let rendered =
             render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
         assert!(rendered.contains("if allow_generated_fallback {"));
         assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
+        assert!(rendered.contains("self.base.report_unrecovered_parser_error(&error);"));
         assert!(rendered.contains("fn number_of_syntax_errors(&self) -> usize"));
         assert!(!rendered.contains("self.base.report_token_source_errors();"));
     }
@@ -14970,9 +14992,12 @@ mod tests {
         let count = rest
             .find("self.base.record_generated_syntax_error();")
             .expect("fatal sync path records syntax error");
+        let rollback = rest
+            .find("self.base.rollback_generated_tree(__generated_diagnostic_marker);")
+            .expect("fatal sync path rolls back only partial tree state");
         assert!(
-            guard < count && count < fatal,
-            "fatal sync path must increment before returning"
+            guard < rollback && rollback < count && count < fatal,
+            "fatal sync path must preserve diagnostics, roll back the tree, and increment before returning"
         );
         // And the nested-child path recovers locally and returns Ok.
         let recover = rest
@@ -17401,7 +17426,7 @@ dispose = "hook"
     }
 
     #[test]
-    fn generated_rule_error_prefers_recorded_semantic_error() {
+    fn generated_rule_error_drains_diagnostics_before_recorded_overrides() {
         // When a generated-direct predicate consulted an unimplemented hook
         // (returning None under the Error policy), the alternative fails and
         // `parse_generated_rule` returns a generic `failed_predicate_error`. The
@@ -17424,8 +17449,12 @@ dispose = "hook"
         .expect("parser should render");
 
         // Locate the generated-rule `Err` arm's generic return.
-        let generic_return_at = module
-            .find("return Err(error.into_error());")
+        let error_conversion_at = module
+            .find("let error = error.into_error();")
+            .expect("generated-rule Err arm converts the generic rule error");
+        let generic_return_at = module[error_conversion_at..]
+            .find("return Err(error);")
+            .map(|offset| error_conversion_at + offset)
             .expect("generated-rule Err arm returns the generic rule error");
         // The fail-loud drain must appear inside that arm, before the generic
         // return, under the top-level gate.
@@ -17433,12 +17462,18 @@ dispose = "hook"
             .rfind("Err(error) => {")
             .expect("generic return lives in the Err arm");
         let arm = &module[arm_start..generic_return_at];
+        let diagnostics_at = arm
+            .find("self.base.report_generated_parser_diagnostics();")
+            .expect("the fatal Err arm drains retained diagnostics");
+        let semantic_at = arm
+            .find("if let Some(semantic_error) = self.base.take_unknown_semantic_error()")
+            .expect("the Err arm drains a recorded semantic error");
+        let abort_at = arm
+            .find("if let Some(abort) = self.base.take_parse_abort()")
+            .expect("the Err arm drains a recorded parser abort");
         assert!(
-            arm.contains("if allow_generated_fallback {")
-                && arm.contains(
-                    "if let Some(semantic_error) = self.base.take_unknown_semantic_error()"
-                ),
-            "the Err arm must drain a recorded semantic error before the generic return"
+            diagnostics_at < semantic_at && diagnostics_at < abort_at,
+            "retained diagnostics must be dispatched before either override can return"
         );
     }
 

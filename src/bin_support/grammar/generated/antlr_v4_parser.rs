@@ -10673,16 +10673,16 @@ where
 #[derive(Debug)]
 enum GeneratedRuleError {
     Fatal(antlr4_runtime::AntlrError),
+    Interpreted(antlr4_runtime::AntlrError),
 }
 
 impl GeneratedRuleError {
     fn into_error(self) -> antlr4_runtime::AntlrError {
         match self {
-            Self::Fatal(error) => error,
+            Self::Fatal(error) | Self::Interpreted(error) => error,
         }
     }
 }
-
 impl<L> AntlRv4Parser<L, antlr4_runtime::NoSemanticHooks>
 where
     L: TokenSource,
@@ -10923,6 +10923,15 @@ where
                 Ok(tree) => tree,
                 Err(error) => {
                     antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    let __report_error =
+                        matches!(&error, GeneratedRuleError::Fatal(_));
+                    // A fatal unwind retains recovery diagnostics committed
+                    // earlier in this entry. Dispatch them before a semantic
+                    // or parser-abort override can return, or they would leak
+                    // into the next entry on a reused parser.
+                    if allow_generated_fallback && __report_error {
+                        self.base.report_generated_parser_diagnostics();
+                    }
                     // A generated predicate that consulted an unimplemented hook
                     // (returning None under the Error policy) fails the alternative
                     // and surfaces here as a generic failed-predicate/rule error.
@@ -10944,7 +10953,11 @@ where
                             return Err(abort);
                         }
                     }
-                    return Err(error.into_error());
+                    let error = error.into_error();
+                    if allow_generated_fallback && __report_error {
+                        self.base.report_unrecovered_parser_error(&error);
+                    }
+                    return Err(error);
                 }
             }
         } else if __generated_only {
@@ -11230,7 +11243,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11297,7 +11310,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11418,7 +11431,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11555,7 +11568,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11670,7 +11683,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11737,7 +11750,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -11917,7 +11930,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12037,7 +12050,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12151,7 +12164,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12258,7 +12271,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12365,7 +12378,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12524,7 +12537,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12641,7 +12654,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12758,7 +12771,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12815,7 +12828,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -12911,7 +12924,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13028,7 +13041,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13134,7 +13147,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13247,7 +13260,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13607,7 +13620,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13760,7 +13773,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13827,7 +13840,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -13889,7 +13902,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14002,7 +14015,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14064,7 +14077,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14181,7 +14194,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14243,7 +14256,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14310,7 +14323,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14421,7 +14434,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14478,7 +14491,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14537,7 +14550,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14651,7 +14664,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14760,7 +14773,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14920,7 +14933,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -14979,7 +14992,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15093,7 +15106,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15241,7 +15254,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15394,7 +15407,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15654,7 +15667,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15719,7 +15732,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15836,7 +15849,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -15953,7 +15966,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16064,7 +16077,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16175,7 +16188,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16289,7 +16302,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16489,7 +16502,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16803,7 +16816,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -16923,7 +16936,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17095,7 +17108,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17216,7 +17229,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17322,7 +17335,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17381,7 +17394,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17631,7 +17644,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17771,7 +17784,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -17900,7 +17913,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18004,7 +18017,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18116,7 +18129,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18236,7 +18249,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18451,7 +18464,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18660,7 +18673,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18811,7 +18824,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -18874,7 +18887,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -19077,7 +19090,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -19197,7 +19210,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -19369,7 +19382,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -19426,7 +19439,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }
@@ -19540,7 +19553,7 @@ where
                 if let Some(__error) = __sync_error {
                     if allow_fallback {
                         self.base.exit_rule();
-                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);
+                        self.base.rollback_generated_tree(__generated_diagnostic_marker);
                         self.base.record_generated_syntax_error();
                         return Err(GeneratedRuleError::Fatal(__error));
                     }

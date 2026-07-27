@@ -307,6 +307,235 @@ fn adaptive_atn_routing_generated_path_compiles() {
     );
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn unrecovered_generated_entry_errors_notify_listeners_once() {
+    let temp = temporary_directory("fatal-error-listener");
+    let grammar = temp.path().join("Fatal.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar Fatal;\nfatal: A (B B | C C);\nstart: child EOF;\nmixed: child A (B B | C C);\nsemantic_mixed: child semantic_child A (B B | C C);\nsemantic_child: {unsupported()}?;\nclean: A;\nchild: A (B B | C C);\nA: 'a';\nB: 'b';\nC: 'c';\nD: 'd';\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("templates"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("hook"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod fatal_error_listener_tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::fatal_lexer::FatalLexer;
+    use super::fatal_parser::FatalParser;
+    use antlr4_runtime::{
+        AntlrError, CommonTokenStream, ErrorListener, InputStream, Parser as _, Recognizer,
+        TokenView,
+    };
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct Event {
+        offending_text: Option<String>,
+        line: usize,
+        column: usize,
+        message: String,
+        error: Option<AntlrError>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    struct EntrySnapshot<'a> {
+        returned_error: &'a AntlrError,
+        syntax_errors: usize,
+        events: &'a [Event],
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingListener {
+        events: Arc<Mutex<Vec<Event>>>,
+    }
+
+    impl<R> ErrorListener<R> for RecordingListener
+    where
+        R: Recognizer + ?Sized,
+    {
+        fn syntax_error(
+            &mut self,
+            _recognizer: &R,
+            offending: Option<TokenView<'_>>,
+            line: usize,
+            column: usize,
+            message: &str,
+            error: Option<&AntlrError>,
+        ) {
+            self.events.lock().expect("events lock").push(Event {
+                offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
+                line,
+                column,
+                message: message.to_owned(),
+                error: error.cloned(),
+            });
+        }
+    }
+
+    fn parser(
+        input: &str,
+    ) -> (
+        FatalParser<FatalLexer<InputStream>>,
+        Arc<Mutex<Vec<Event>>>,
+    ) {
+        let lexer = FatalLexer::new(InputStream::new(input));
+        let mut parser = FatalParser::new(CommonTokenStream::new(lexer));
+        // A configured (effectively unbounded) cap selects generated bodies
+        // for rules the normal performance routing prefers to interpret.
+        parser.set_max_rule_depth(Some(usize::MAX));
+        parser.remove_error_listeners();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingListener {
+            events: Arc::clone(&events),
+        });
+        (parser, events)
+    }
+
+    #[test]
+    fn fatal_public_entry_reports_the_returned_error() {
+        let (mut parser, events) = parser("ad");
+
+        let error = parser
+            .fatal()
+            .expect_err("invalid first token should remain fatal");
+
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let events = events.lock().expect("events lock");
+        assert_eq!(events.len(), 1, "fatal error must be reported exactly once");
+        let event = &events[0];
+        assert_eq!(event.offending_text.as_deref(), Some("d"));
+        let AntlrError::ParserError {
+            line,
+            column,
+            message,
+            ..
+        } = &error
+        else {
+            panic!("expected a positioned parser error, got {error:?}");
+        };
+        assert_eq!((event.line, event.column), (*line, *column));
+        assert_eq!(&event.message, message);
+        assert_eq!(event.error.as_ref(), Some(&error));
+    }
+
+    #[test]
+    fn recovered_nested_error_is_not_reported_twice() {
+        let (mut parser, events) = parser("ad");
+
+        parser
+            .start()
+            .expect("the parent should recover the nested child error");
+
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let events = events.lock().expect("events lock");
+        assert_eq!(events.len(), 1, "recovery must report the error exactly once");
+        assert_eq!(events[0].offending_text.as_deref(), Some("d"));
+    }
+
+    #[test]
+    fn fatal_entry_preserves_prior_recovery_diagnostics() {
+        let (mut parser, events) = parser("adad");
+
+        let error = parser
+            .mixed()
+            .expect_err("the entry should fail after the child recovery");
+
+        let events = events.lock().expect("events lock");
+        let snapshot = EntrySnapshot {
+            returned_error: &error,
+            syntax_errors: parser.number_of_syntax_errors(),
+            events: &events,
+        };
+        std::fs::write(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/fatal-entry-events.txt"),
+            format!("{snapshot:#?}\n"),
+        )
+        .expect("fatal entry snapshot should be writable");
+    }
+
+    #[test]
+    fn semantic_override_does_not_leak_prior_recovery_diagnostics() {
+        let (mut parser, events) = parser("adad");
+
+        let error = parser
+            .semantic_mixed()
+            .expect_err("the semantic override should win over the fatal parser error");
+        assert!(
+            matches!(&error, AntlrError::Unsupported(_)),
+            "expected the configured fail-loud semantic error, got {error:?}"
+        );
+
+        let reported_before_reuse = events.lock().expect("events lock").len();
+        parser
+            .clean()
+            .expect("the clean entry should succeed on the rewound input");
+        let events = events.lock().expect("events lock");
+        assert_eq!(
+            events.len(),
+            reported_before_reuse,
+            "the clean entry must not emit diagnostics retained by the failed entry"
+        );
+
+        let snapshot = EntrySnapshot {
+            returned_error: &error,
+            syntax_errors: parser.number_of_syntax_errors(),
+            events: &events,
+        };
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/semantic-override-events.txt"
+            ),
+            format!("{snapshot:#?}\n"),
+        )
+        .expect("semantic override snapshot should be writable");
+    }
+}
+"####;
+
+    assert_generated_project(
+        temp.path(),
+        &["fatal_lexer.rs", "fatal_parser.rs"],
+        test_source,
+    );
+    let fatal_entry =
+        fs::read_to_string(temp.path().join("compile-generated/fatal-entry-events.txt"))
+            .expect("fatal entry snapshot should be emitted");
+    insta::assert_snapshot!(
+        "fatal_entry_preserves_prior_recovery_diagnostics",
+        fatal_entry
+    );
+    let semantic_override = fs::read_to_string(
+        temp.path()
+            .join("compile-generated/semantic-override-events.txt"),
+    )
+    .expect("semantic override snapshot should be emitted");
+    insta::assert_snapshot!(
+        "semantic_override_does_not_leak_prior_recovery_diagnostics",
+        semantic_override
+    );
+}
+
 /// Editors on Windows commonly save `.g4` sources with a UTF-8 byte order mark
 /// and CRLF line endings. Both must generate exactly like the plain spelling.
 #[test]
