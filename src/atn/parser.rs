@@ -34,6 +34,9 @@ pub struct ParserAtnSimulator<'a> {
     deferred_accept_states: FxHashSet<(usize, DfaStateId)>,
     shared_cache_key: Option<usize>,
     shared_cache_generation: u64,
+    shared_cache_trained: bool,
+    adaptive_calls: usize,
+    adaptive_closure_work: usize,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
@@ -155,6 +158,7 @@ impl PredictionStore {
 struct SharedPredictionStore {
     generation: u64,
     store: Option<PredictionStore>,
+    trained: bool,
 }
 
 thread_local! {
@@ -168,8 +172,22 @@ fn clear_shared_prediction_store(key: usize) -> u64 {
         let shared = cache.entry(key).or_default();
         shared.generation = shared.generation.wrapping_add(1);
         shared.store = None;
+        shared.trained = false;
         shared.generation
     })
+}
+
+const ADAPTIVE_ATN_PREFERENCE_MIN_CALLS: usize = 32;
+const ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL: usize = 256;
+const ADAPTIVE_ATN_PREFERENCE_DECISIVE_CLOSURE_WORK_PER_CALL: usize = 512;
+
+const fn adaptive_prediction_has_work_density(
+    calls: usize,
+    closure_work: usize,
+    minimum_closure_work_per_call: usize,
+) -> bool {
+    calls >= ADAPTIVE_ATN_PREFERENCE_MIN_CALLS
+        && closure_work >= calls.saturating_mul(minimum_closure_work_per_call)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -488,6 +506,7 @@ impl Drop for ParserAtnSimulator<'_> {
             .iter()
             .map(ParserDfa::state_count)
             .sum();
+        let trained = self.shared_cache_trained || self.adaptive_calls != 0;
         // Check the DFAs back IN by move. The slot is normally vacant because
         // `new_shared` checked them out; it is occupied only when another
         // simulator for the same ATN was created while this one was alive
@@ -500,6 +519,7 @@ impl Drop for ParserAtnSimulator<'_> {
             if shared.generation != self.shared_cache_generation {
                 return false;
             }
+            shared.trained |= trained;
             if let Some(shared_store) = shared.store.as_mut() {
                 union_prediction_stores(shared_store, store, &mut self.workspace);
             } else {
@@ -531,6 +551,9 @@ impl<'a> ParserAtnSimulator<'a> {
             deferred_accept_states: FxHashSet::default(),
             shared_cache_key: None,
             shared_cache_generation: 0,
+            shared_cache_trained: false,
+            adaptive_calls: 0,
+            adaptive_closure_work: 0,
             exact_ambig_detection: false,
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
@@ -540,6 +563,9 @@ impl<'a> ParserAtnSimulator<'a> {
 
     /// Resets transient simulator state while retaining learned decision DFAs.
     pub fn reset(&mut self) {
+        self.shared_cache_trained |= self.adaptive_calls != 0;
+        self.adaptive_calls = 0;
+        self.adaptive_closure_work = 0;
         self.outer_context_cache = None;
         self.deferred_accept_states.clear();
         self.workspace.reset();
@@ -556,6 +582,7 @@ impl<'a> ParserAtnSimulator<'a> {
         self.full_context_memo.clear();
         self.full_context_memo_len = 0;
         self.reset();
+        self.shared_cache_trained = false;
         if let Some(key) = self.shared_cache_key {
             self.shared_cache_generation = clear_shared_prediction_store(key);
         }
@@ -631,15 +658,17 @@ impl<'a> ParserAtnSimulator<'a> {
         let key = ptr as usize;
         #[cfg(feature = "perf-counters")]
         let import_started = std::time::Instant::now();
-        let (store, generation) = SHARED_PREDICTION_STORES.with(|cache| {
+        let (store, generation, trained) = SHARED_PREDICTION_STORES.with(|cache| {
             let mut cache = cache.borrow_mut();
             let shared = cache.entry(key).or_default();
+            let trained = shared.trained && shared.store.is_some();
             (
                 shared
                     .store
                     .take()
                     .unwrap_or_else(|| PredictionStore::new(atn)),
                 shared.generation,
+                trained,
             )
         });
         #[cfg(feature = "perf-counters")]
@@ -661,6 +690,9 @@ impl<'a> ParserAtnSimulator<'a> {
             deferred_accept_states: FxHashSet::default(),
             shared_cache_key: Some(key),
             shared_cache_generation: generation,
+            shared_cache_trained: trained,
+            adaptive_calls: 0,
+            adaptive_closure_work: 0,
             exact_ambig_detection: false,
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
@@ -670,6 +702,45 @@ impl<'a> ParserAtnSimulator<'a> {
 
     pub fn decision_dfas(&self) -> &[ParserDfa] {
         &self.store.decision_to_dfa
+    }
+
+    /// Returns the warmed adaptive-call and closure-work counters.
+    #[doc(hidden)]
+    pub const fn adaptive_prediction_work(&self) -> Option<(usize, usize)> {
+        if self.shared_cache_trained {
+            Some((self.adaptive_calls, self.adaptive_closure_work))
+        } else {
+            None
+        }
+    }
+
+    /// Reports whether the adaptive-prediction work between two snapshots is
+    /// expensive enough to justify trying an ATN-recognizer route.
+    #[doc(hidden)]
+    pub const fn adaptive_prediction_delta_is_expensive(
+        before: (usize, usize),
+        after: (usize, usize),
+    ) -> bool {
+        adaptive_prediction_has_work_density(
+            after.0.saturating_sub(before.0),
+            after.1.saturating_sub(before.1),
+            ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL,
+        )
+    }
+
+    /// Reports whether a partial adaptive-prediction window has enough work
+    /// density to justify abandoning generated parsing before the enclosing
+    /// rule invocation completes.
+    #[doc(hidden)]
+    pub const fn adaptive_prediction_delta_is_decisive(
+        before: (usize, usize),
+        after: (usize, usize),
+    ) -> bool {
+        adaptive_prediction_has_work_density(
+            after.0.saturating_sub(before.0),
+            after.1.saturating_sub(before.1),
+            ADAPTIVE_ATN_PREFERENCE_DECISIVE_CLOSURE_WORK_PER_CALL,
+        )
     }
 
     /// Returns aggregate learned parser-DFA storage and interning measurements.
@@ -871,6 +942,7 @@ impl<'a> ParserAtnSimulator<'a> {
             force_full_context_retry,
             sll_probe_only,
         } = request;
+        self.adaptive_calls = self.adaptive_calls.saturating_add(1);
         self.deferred_accept_states
             .retain(|(stored_decision, _)| *stored_decision != decision);
         #[cfg(feature = "perf-counters")]
@@ -1840,8 +1912,10 @@ impl<'a> ParserAtnSimulator<'a> {
                 }
             }
         }
+        let closure_work = scratch.visited.len();
+        self.adaptive_closure_work = self.adaptive_closure_work.saturating_add(closure_work);
         #[cfg(feature = "perf-counters")]
-        crate::perf::record_closure(scratch.visited.len());
+        crate::perf::record_closure(closure_work);
     }
 
     fn closure_at_rule_stop(
@@ -2225,6 +2299,86 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_atn_preference_requires_expensive_prediction_delta() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        assert_eq!(simulator.adaptive_prediction_work(), None);
+        simulator.shared_cache_trained = true;
+        assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
+        assert!(!ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
+            (0, 0),
+            (ADAPTIVE_ATN_PREFERENCE_MIN_CALLS - 1, usize::MAX),
+        ));
+        assert!(!ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
+            (5, 7),
+            (
+                5 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS,
+                7 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS
+                    * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL
+                    - 1,
+            ),
+        ));
+        assert!(ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
+            (5, 7),
+            (
+                5 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS,
+                7 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS
+                    * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL,
+            ),
+        ));
+        assert!(!ParserAtnSimulator::adaptive_prediction_delta_is_decisive(
+            (5, 7),
+            (
+                5 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS,
+                7 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS
+                    * ADAPTIVE_ATN_PREFERENCE_DECISIVE_CLOSURE_WORK_PER_CALL
+                    - 1,
+            ),
+        ));
+        assert!(ParserAtnSimulator::adaptive_prediction_delta_is_decisive(
+            (5, 7),
+            (
+                5 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS,
+                7 + ADAPTIVE_ATN_PREFERENCE_MIN_CALLS
+                    * ADAPTIVE_ATN_PREFERENCE_DECISIVE_CLOSURE_WORK_PER_CALL,
+            ),
+        ));
+
+        simulator.shared_cache_trained = false;
+        assert_eq!(simulator.adaptive_prediction_work(), None);
+    }
+
+    #[test]
+    fn reset_warms_adaptive_atn_preference_and_clear_dfa_cools_it() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        simulator.adaptive_calls = ADAPTIVE_ATN_PREFERENCE_MIN_CALLS;
+        simulator.adaptive_closure_work =
+            ADAPTIVE_ATN_PREFERENCE_MIN_CALLS * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL;
+
+        simulator.reset();
+        assert!(simulator.shared_cache_trained);
+        assert_eq!(simulator.adaptive_calls, 0);
+        assert_eq!(simulator.adaptive_closure_work, 0);
+        assert_eq!(simulator.adaptive_prediction_work(), Some((0, 0)));
+
+        simulator.adaptive_calls = ADAPTIVE_ATN_PREFERENCE_MIN_CALLS;
+        simulator.adaptive_closure_work =
+            ADAPTIVE_ATN_PREFERENCE_MIN_CALLS * ADAPTIVE_ATN_PREFERENCE_MIN_CLOSURE_WORK_PER_CALL;
+        assert!(ParserAtnSimulator::adaptive_prediction_delta_is_expensive(
+            (0, 0),
+            simulator
+                .adaptive_prediction_work()
+                .expect("warmed counters"),
+        ));
+
+        simulator.clear_dfa();
+        assert!(!simulator.shared_cache_trained);
+        assert_eq!(simulator.adaptive_calls, 0);
+        assert_eq!(simulator.adaptive_closure_work, 0);
+    }
+
+    #[test]
     fn adaptive_predict_reuses_dense_dfa_edges() {
         let atn = two_token_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
@@ -2249,6 +2403,38 @@ mod tests {
 
         let simulator = ParserAtnSimulator::new_shared(atn);
         assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
+    }
+
+    #[test]
+    fn shared_simulator_preserves_and_clears_prediction_training_state() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        {
+            let mut simulator = ParserAtnSimulator::new_shared(atn);
+            simulator.adaptive_calls = 1;
+        }
+
+        {
+            let simulator = ParserAtnSimulator::new_shared(atn);
+            assert!(simulator.shared_cache_trained);
+        }
+
+        ParserAtnSimulator::clear_shared_dfa(atn);
+        let simulator = ParserAtnSimulator::new_shared(atn);
+        assert!(!simulator.shared_cache_trained);
+    }
+
+    #[test]
+    fn overlapping_shared_simulator_treats_an_empty_store_as_cold() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        {
+            let mut simulator = ParserAtnSimulator::new_shared(atn);
+            simulator.adaptive_calls = 1;
+        }
+
+        let warmed = ParserAtnSimulator::new_shared(atn);
+        assert!(warmed.shared_cache_trained);
+        let overlapping = ParserAtnSimulator::new_shared(atn);
+        assert!(!overlapping.shared_cache_trained);
     }
 
     #[test]
