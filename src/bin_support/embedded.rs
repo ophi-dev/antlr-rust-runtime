@@ -528,27 +528,41 @@ impl TranslationCtx<'_> {
         // after it is still in the future and cannot affect the read; a ref in a
         // branch the action does not sit inside cannot have run either. An
         // `@after` body runs after everything, so every ref counts.
-        // Whether the action sits *inside* the labeled element's own branch. Only
-        // then can a sibling branch be ruled out: an action written after the
-        // whole choice (`(x=A | A) {$x}`) runs for either branch, so the sibling's
-        // match really can be the child its read finds. Inclusion is decided from
-        // the label's span — the action follows it and precedes whatever ends the
-        // branch, so a same-branch action lies before any later-branch ref.
-        let action_inside_label_branch = || match (action_offset, element.span) {
-            (Some(offset), Some((_, label_end))) => {
-                offset >= label_end
-                    && alt.refs.iter().all(|candidate| {
-                        candidate.can_coexist_with(element)
-                            || candidate.span.is_none_or(|(start, _)| start > offset)
-                    })
+        // The choice ancestry the action itself sits in, derived from spans: the
+        // action belongs to the innermost branch whose refs bracket its offset.
+        // Refs from any *other* branch of those choices cannot have run.
+        let action_branches = action_offset.map(|offset| {
+            let mut enclosing: Vec<(usize, usize)> = Vec::new();
+            for candidate in &alt.refs {
+                let Some((start, _)) = candidate.span else {
+                    continue;
+                };
+                // A ref before the action shares its path only if no later ref of
+                // the same branch-set is closer; taking the nearest preceding ref
+                // gives the branch the action was written inside.
+                if start < offset && candidate.choice_branch.len() >= enclosing.len() {
+                    enclosing.clone_from(&candidate.choice_branch);
+                }
             }
-            _ => false,
+            enclosing
+        });
+        // Whether a ref can have run before the action, given that ancestry. An
+        // action after the whole choice (`(x=A | A) {$x}`) has no branch tag, so
+        // every branch counts; one written inside a branch excludes its siblings —
+        // including when the label itself is in another branch (`(e | xs+=e {…})`).
+        let on_action_path = |candidate: &ElementRef| {
+            action_branches.as_ref().is_none_or(|branches| {
+                !candidate.choice_branch.iter().any(|(choice, branch)| {
+                    branches
+                        .iter()
+                        .any(|(a_choice, a_branch)| choice == a_choice && branch != a_branch)
+                })
+            })
         };
-        let branch_confined = action_inside_label_branch();
         let matched_at_action = |candidate: &ElementRef| {
             action_offset.is_none_or(|offset| {
                 let started = candidate.span.is_none_or(|(start, _)| start < offset);
-                started && (!branch_confined || candidate.can_coexist_with(element))
+                started && on_action_path(candidate)
             })
         };
         // Two declarations can share one read when the generated query is the
@@ -609,24 +623,38 @@ impl TranslationCtx<'_> {
             .iter()
             .position(|candidate| std::ptr::eq(candidate, element))?;
         let (before, after) = (&alt.refs[..position], &alt.refs[position + 1..]);
-        if element.target.is_empty() {
-            // Block/wildcard labels read the most recent terminal child, which is
-            // the block's own token only while no *other* terminal was matched
-            // between the block and the action. Spans make that decidable: a
-            // terminal written after the action has not run yet, which is what
-            // ANTLR's `t=~'x' 'z' {$t.text}` descriptors rely on
-            // (`Sets/ParserNotTokenWithLabel`), while one between the label and
-            // the action displaces it (`((x=(A | B))) C {$x.text}` reads `C`).
-            let displaced = after.iter().any(|candidate| {
-                !candidate.token_types.is_empty()
-                    && candidate.cardinality.max != Some(0)
-                    && matched_at_action(candidate)
-                    && !candidate
-                        .token_types
-                        .iter()
-                        .all(|token_type| element.token_types.contains(token_type))
-            });
-            return (!displaced).then(|| (element.clone(), 0));
+        // `translate_element_read` routes on `is_block`, which covers labeled
+        // groups and *literal* terminals alike (`x='b'`), so the occurrence has to
+        // be computed the same way for both — keying on an empty target here would
+        // leave a literal label counting same-target children while its read walks
+        // every terminal.
+        if element.is_block {
+            // A block label has no single target to query, so its read walks the
+            // context's terminal children by position. The index is the number of
+            // terminals matched ahead of the block on this parse path — every
+            // terminal counts, not just ones sharing the block's token set, since
+            // each is a distinct child of the same context.
+            let terminals_before = before
+                .iter()
+                .filter(|candidate| !candidate.token_types.is_empty() && on_action_path(candidate))
+                .try_fold(0_usize, |total, candidate| {
+                    let max = candidate.cardinality.max?;
+                    (candidate.cardinality.min == max || !candidate.choice_branch.is_empty())
+                        .then(|| total.saturating_add(max))
+                });
+            // Without a fixed index the read falls back to the most recent
+            // terminal, which is only right when nothing has been matched since.
+            return terminals_before.map_or_else(
+                || {
+                    let displaced = after.iter().any(|candidate| {
+                        !candidate.token_types.is_empty()
+                            && candidate.cardinality.max != Some(0)
+                            && matched_at_action(candidate)
+                    });
+                    (!displaced).then(|| (element.clone(), usize::MAX))
+                },
+                |index| Some((element.clone(), index)),
+            );
         }
 
         // A repeated single label (`(x=A)+`) is overwritten on every iteration,
@@ -907,19 +935,28 @@ fn translate_element_read(
         }
     }
     if element.is_block {
-        // A labeled `(...)` block over tokens: `$myset.stop` / `$myset.text`
-        // read the token the block matched — the most recent terminal child.
-        // A bare `$myset` read denotes the Token object itself (Java prints
-        // `Token.toString()`), which is the same rendering as start/stop.
+        // A labeled `(...)` block over tokens: `$myset.stop` / `$myset.text` read
+        // the token the block matched. A bare `$myset` read denotes the Token
+        // object itself (Java prints `Token.toString()`), the same rendering as
+        // start/stop.
+        //
+        // The block has no target to query, so the read walks the context's
+        // terminal children and picks by *position*: `occurrence` is the number of
+        // terminals matched ahead of the block on this parse path. `usize::MAX`
+        // means the position is not fixed, in which case the most recent terminal
+        // is the best available answer — the historical behaviour.
+        let pick = if occurrence == usize::MAX {
+            "last()".to_owned()
+        } else {
+            format!("nth({occurrence})")
+        };
         return match suffix {
-            None | Some("stop" | "start") => Ok(
-                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).last().map(|__t| __t.symbol().to_string()).unwrap_or_default()"
-                    .to_owned(),
-            ),
-            Some("text") => Ok(
-                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).last().map(|__t| __t.text().to_owned()).unwrap_or_default()"
-                    .to_owned(),
-            ),
+            None | Some("stop" | "start") => Ok(format!(
+                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.symbol().to_string()).unwrap_or_default()"
+            )),
+            Some("text") => Ok(format!(
+                "__ctx.terminal_children(self.base.parse_tree_storage(), self.base.token_store()).{pick}.map(|__t| __t.text().to_owned()).unwrap_or_default()"
+            )),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unsupported block-label read in embedded action: {body}"),
@@ -1468,13 +1505,13 @@ mod tests {
         assert!(name.contains(".nth(0)"), "{name}");
     }
 
-    /// A block label reads the most recent terminal child, so whether that is the
-    /// label's own token depends on where the action sits. Spans make it
-    /// decidable: an action before the trailing terminal still reads the block
-    /// (ANTLR's `t=~'x' 'z' {$t.text}` shape, `Sets/ParserNotTokenWithLabel`),
-    /// while one after it would read that terminal and must decline (issue #233).
+    /// A block label has no target to query, so its read walks the context's
+    /// terminal children by *position*: the count of terminals matched ahead of
+    /// the block. That is what makes `t=~'x' 'z' {$t.text}` read the token the
+    /// label bound rather than the trailing `'z'` the old `last()` picked
+    /// (issue #233). Where the count is not fixed, `last()` remains the fallback.
     #[test]
-    fn block_labels_resolve_only_while_no_later_terminal_has_matched() {
+    fn block_labels_read_the_terminal_the_label_bound() {
         let translate = |action_offset| {
             let mut statement = rule("s");
             statement.alts.push(AltModel {
@@ -1525,14 +1562,17 @@ mod tests {
             translate_body("$x.text", &ctx).map_err(|error| error.to_string())
         };
 
-        // Action between the block and `C`: only the block has matched.
-        let translated = translate(25).expect("the trailing terminal has not run yet");
-        assert!(translated.contains("terminal_children"), "{translated}");
-        assert!(translated.contains(".last()"), "{translated}");
-
-        // Action after `C`: `last()` would be `C`, not the block's token.
-        let error = translate(40).expect_err("a matched later terminal displaces the read");
-        assert!(error.contains("cannot translate $x"), "{error}");
+        // The block is the first terminal either way, so the read is `nth(0)` and
+        // the trailing `C` cannot be mistaken for it — regardless of whether the
+        // action precedes or follows `C`.
+        for offset in [25, 40] {
+            let translated = translate(offset).expect("a fixed terminal position resolves");
+            assert!(translated.contains("terminal_children"), "{translated}");
+            assert!(
+                translated.contains(".nth(0)"),
+                "offset {offset}: {translated}"
+            );
+        }
     }
 
     /// A mid-rule action executes at its own source position, so refs written
@@ -1646,6 +1686,58 @@ mod tests {
         let aliased = translate(decl(1, true, (30, 33)), None)
             .expect("token-type equivalence ignores source form");
         assert!(aliased.contains(".nth(0)"), "{aliased}");
+    }
+
+    /// A *literal* terminal label (`x='b'`) is `is_block` too, so it must take the
+    /// same positional terminal count as a labeled group — keying the count on an
+    /// empty target instead would leave it counting same-target children while its
+    /// read walks every terminal. This is ANTLR's
+    /// `ParserErrors/ConjuringUpToken` shape, where `'a'` precedes the label.
+    #[test]
+    fn literal_terminal_labels_count_every_preceding_terminal() {
+        let terminal = |label: Option<&str>, target: &str, token_type, span| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: target.to_owned(),
+            token_types: vec![token_type],
+            // Literals and groups alike route through the block read.
+            is_block: true,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 1,
+                max: Some(1),
+            },
+            stable_accessor: true,
+            choice_branch: Vec::new(),
+            span: Some(span),
+        };
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (0, 100),
+            // `'a' x='b' {action} 'c'`
+            refs: vec![
+                terminal(None, "'a'", 1, (10, 13)),
+                terminal(Some("x"), "'b'", 2, (14, 17)),
+                terminal(None, "'c'", 3, (40, 43)),
+            ],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(20),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$x", &ctx).expect("translates");
+        assert!(translated.contains("terminal_children"), "{translated}");
+        // `'a'` is terminal 0, so the label is terminal 1 — not `last()`, which
+        // would become `'c'` once that matched.
+        assert!(translated.contains(".nth(1)"), "{translated}");
     }
 
     /// An alternative that does not declare the label leaves it unset, so the
