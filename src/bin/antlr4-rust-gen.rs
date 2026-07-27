@@ -2591,6 +2591,7 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         stable_accessor: true,
                         choice_branch: Vec::new(),
                         span: None,
+                        branch_local_cardinality: embedded::ChildCardinality::ONE,
                     }
                 });
             Some(structural_alt_model(alternative, leading_ref, vocabulary))
@@ -2658,21 +2659,39 @@ fn collect_structural_context_refs(
     collect_structural_context_refs_with_cardinality(
         elements,
         refs,
-        stable_accessor,
-        embedded::ChildCardinality::ONE,
-        &[],
+        StructuralRefContext {
+            stable_accessor,
+            enclosing_cardinality: embedded::ChildCardinality::ONE,
+            branch_local_cardinality: embedded::ChildCardinality::ONE,
+            choice_branch: &[],
+        },
         vocabulary,
     );
+}
+
+/// Traversal state threaded down while flattening an alternative's elements.
+#[derive(Clone, Copy)]
+struct StructuralRefContext<'a> {
+    stable_accessor: bool,
+    /// Cardinality contributed by every enclosing quantifier *and* choice split.
+    enclosing_cardinality: embedded::ChildCardinality,
+    /// The same, but assuming each enclosing choice took this branch.
+    branch_local_cardinality: embedded::ChildCardinality,
+    choice_branch: &'a [(usize, usize)],
 }
 
 fn collect_structural_context_refs_with_cardinality(
     elements: &[Element],
     refs: &mut Vec<embedded::ElementRef>,
-    stable_accessor: bool,
-    enclosing_cardinality: embedded::ChildCardinality,
-    choice_branch: &[(usize, usize)],
+    context: StructuralRefContext<'_>,
     vocabulary: &Vocabulary,
 ) {
+    let StructuralRefContext {
+        stable_accessor,
+        enclosing_cardinality,
+        branch_local_cardinality,
+        choice_branch,
+    } = context;
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
         let is_list = element
@@ -2681,6 +2700,13 @@ fn collect_structural_context_refs_with_cardinality(
             .is_some_and(|label| label.kind == LabelKind::List);
         let cardinality = multiply_child_cardinalities(
             enclosing_cardinality,
+            quantified_cardinality(embedded::ChildCardinality::ONE, element.quantifier),
+        );
+        // Same product, but against the cardinality this element would have if
+        // every enclosing choice took its branch — so a `min: 0` here comes only
+        // from a quantifier, never from branch membership.
+        let branch_local = multiply_child_cardinalities(
+            branch_local_cardinality,
             quantified_cardinality(embedded::ChildCardinality::ONE, element.quantifier),
         );
         match &element.kind {
@@ -2697,6 +2723,7 @@ fn collect_structural_context_refs_with_cardinality(
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
                 )),
+                branch_local_cardinality: branch_local,
             }),
             ElementKind::Terminal(terminal) => {
                 refs.push(embedded::ElementRef {
@@ -2712,6 +2739,7 @@ fn collect_structural_context_refs_with_cardinality(
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
                     )),
+                    branch_local_cardinality: branch_local,
                 });
             }
             ElementKind::Block(block) => {
@@ -2738,6 +2766,7 @@ fn collect_structural_context_refs_with_cardinality(
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
                         )),
+                        branch_local_cardinality: branch_local,
                     });
                     continue;
                 }
@@ -2755,6 +2784,7 @@ fn collect_structural_context_refs_with_cardinality(
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
                         )),
+                        branch_local_cardinality: branch_local,
                     });
                 }
                 // Refs from one alternative of a *choice* are present only when
@@ -2784,9 +2814,14 @@ fn collect_structural_context_refs_with_cardinality(
                     collect_structural_context_refs_with_cardinality(
                         &alternative.elements,
                         refs,
-                        stable_accessor,
-                        branch_cardinality,
-                        &nested_branch,
+                        StructuralRefContext {
+                            stable_accessor,
+                            enclosing_cardinality: branch_cardinality,
+                            // Inside a branch the group's own quantifier still
+                            // applies, but the choice split does not.
+                            branch_local_cardinality: branch_local,
+                            choice_branch: &nested_branch,
+                        },
                         vocabulary,
                     );
                 }
@@ -2805,6 +2840,7 @@ fn collect_structural_context_refs_with_cardinality(
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
                     )),
+                    branch_local_cardinality: branch_local,
                 });
             }
             ElementKind::Range(..) if label.is_some() => refs.push(embedded::ElementRef {
@@ -2820,6 +2856,7 @@ fn collect_structural_context_refs_with_cardinality(
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
                 )),
+                branch_local_cardinality: branch_local,
             }),
             ElementKind::Range(..)
             | ElementKind::Action { .. }
@@ -9027,6 +9064,7 @@ fn context_label_accessor(
         stable_accessor: true,
         choice_branch: Vec::new(),
         span: None,
+        branch_local_cardinality: embedded::ChildCardinality::ONE,
     };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
@@ -9200,11 +9238,11 @@ fn exact_target_cardinality(
         }
         let exact = element.cardinality.max?;
         // A ref inside a choice reports `min: 0` because its *branch* may not be
-        // taken, but within that branch it contributes its maximum exactly. Judge
-        // exactness per branch and let the cross-branch agreement check below
-        // decide whether the choice as a whole is exact.
-        let contribution = (element.cardinality.min == exact || !element.choice_branch.is_empty())
-            .then_some(exact);
+        // taken, but within that branch it contributes its branch-local count
+        // exactly. Judge exactness against that, so an *optional* choice
+        // (`(a=A | b=A)? x=A`) stays inexact — the group may yield nothing.
+        let local = element.branch_local_cardinality;
+        let contribution = (local.min == exact && local.max == Some(exact)).then_some(exact);
         match element.choice_branch.last() {
             // Sequential: its count adds directly.
             None => total = total.saturating_add(contribution?),
@@ -15006,6 +15044,13 @@ mod tests {
         insta::assert_snapshot!(
             "multi_alternative_label_overlapping_group_context",
             context("OverlappingGroupContext")
+        );
+        // Making that same choice optional removes the fixed position, so the
+        // following label loses its accessor — the branch-local cardinality is
+        // what distinguishes the two.
+        insta::assert_snapshot!(
+            "multi_alternative_label_optional_prefix_context",
+            context("OptionalPrefixContext")
         );
 
         for (name, snapshot) in [

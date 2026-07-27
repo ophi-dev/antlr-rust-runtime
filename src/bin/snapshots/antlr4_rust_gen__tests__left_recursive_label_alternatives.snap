@@ -27,6 +27,12 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 span: None,
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: None,
@@ -50,6 +56,12 @@ expression: "model.rules[1].alts"
                         139,
                     ),
                 ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: Some(
@@ -73,6 +85,12 @@ expression: "model.rules[1].alts"
                         147,
                     ),
                 ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {
@@ -117,6 +135,12 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 span: None,
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: None,
@@ -140,6 +164,12 @@ expression: "model.rules[1].alts"
                         194,
                     ),
                 ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
             ElementRef {
                 label: Some(
@@ -163,6 +193,12 @@ expression: "model.rules[1].alts"
                         202,
                     ),
                 ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {
@@ -212,6 +248,12 @@ expression: "model.rules[1].alts"
                         241,
                     ),
                 ),
+                branch_local_cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
             },
         ],
         children: {

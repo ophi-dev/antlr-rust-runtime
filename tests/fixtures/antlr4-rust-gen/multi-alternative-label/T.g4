@@ -72,6 +72,13 @@ exhaustive_prefix
     : (first = unary | second = unary) pick = unary NUM
     ;
 
+// The same choice made *optional*: it may now contribute no `unary` at all, so
+// the following label has no fixed position and loses its accessor. Only the
+// branch-local cardinality separates this from `exhaustive_prefix` above.
+optional_prefix
+    : (early = unary | late = unary)? tail = unary NUM
+    ;
+
 // A preceding token group overlaps the label's token type, so only some parses
 // put a matching child ahead of it — no fixed occurrence, so no accessor.
 overlapping_group
