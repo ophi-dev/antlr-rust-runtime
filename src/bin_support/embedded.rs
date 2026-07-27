@@ -77,6 +77,24 @@ pub(crate) struct ElementRef {
     /// label accessor. Single-alternative EBNF groups preserve it; choices opt
     /// out because their flattened CST children do not retain the chosen path.
     pub(crate) stable_accessor: bool,
+    /// `(choice id, alternative index)` of the innermost enclosing *multi*-
+    /// alternative block, if any. Two refs tagged with the same choice id but
+    /// different alternative indexes are mutually exclusive: no parse contains
+    /// both. `None` means the ref is on the rule's own sequential path.
+    pub(crate) choice_branch: Option<(usize, usize)>,
+}
+
+impl ElementRef {
+    /// Whether `self` and `other` can both appear in one parse. Refs from
+    /// different alternatives of the same choice never do.
+    pub(crate) const fn can_coexist_with(&self, other: &Self) -> bool {
+        match (self.choice_branch, other.choice_branch) {
+            (Some((left_choice, left_alt)), Some((right_choice, right_alt))) => {
+                left_choice != right_choice || left_alt == right_alt
+            }
+            _ => true,
+        }
+    }
 }
 
 /// One top-level alternative of a parser rule.
@@ -544,14 +562,15 @@ impl TranslationCtx<'_> {
                 (candidate.cardinality.min == max).then(|| total.saturating_add(max))
             })?;
         // An optional label is displaced by a *following* same-target child that
-        // slides into its position. Only children that are certain to be matched
-        // can do that: a ref from a sibling choice branch reports `min: 0` and
-        // never coexists with this label, so counting it would reject valid
+        // can slide into its position. Sequential followers can, whether they are
+        // mandatory (`x=A? A`) or optional (`(pred x=A)? A?` — the follower may
+        // consume the only token). A ref from a sibling branch of the same choice
+        // cannot, since no parse contains both, so counting it would reject valid
         // mid-rule actions like `r : (x=A {$x.text} B | A C)`.
         let shadowed_when_absent = element.cardinality.min == 0
             && after
                 .iter()
-                .any(|candidate| same_target(candidate) && candidate.cardinality.min > 0);
+                .any(|candidate| same_target(candidate) && candidate.can_coexist_with(element));
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
 }
@@ -676,6 +695,7 @@ fn translate_reference(
             is_list: false,
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
+            choice_branch: None,
         };
         let _ = target_rule;
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
@@ -689,6 +709,7 @@ fn translate_reference(
             is_list: false,
             cardinality: ChildCardinality::ONE,
             stable_accessor: false,
+            choice_branch: None,
         };
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
     }
@@ -1029,6 +1050,7 @@ mod tests {
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
+                    choice_branch: None,
                 },
                 ElementRef {
                     label: Some("right".to_owned()),
@@ -1038,6 +1060,7 @@ mod tests {
                     is_list: false,
                     cardinality: ChildCardinality::ONE,
                     stable_accessor: true,
+                    choice_branch: None,
                 },
             ],
             children: BTreeMap::from([(
@@ -1092,6 +1115,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1136,6 +1160,7 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
+            choice_branch: None,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1174,6 +1199,7 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min, max: Some(1) },
             stable_accessor: true,
+            choice_branch: None,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1215,6 +1241,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max },
             stable_accessor: true,
+            choice_branch: None,
         };
         let single_ref = ElementRef {
             label: Some("name".to_owned()),
@@ -1227,6 +1254,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let translate = |max| {
             let mut statement = rule("s");
@@ -1280,6 +1308,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
                 ElementRef {
                     label: Some("errors".to_owned()),
@@ -1289,6 +1318,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 0, max: None },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
             ],
             children: BTreeMap::new(),
@@ -1341,6 +1371,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
                 ElementRef {
                     label: None,
@@ -1353,6 +1384,7 @@ mod tests {
                         max: Some(1),
                     },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
             ],
             children: BTreeMap::new(),
@@ -1390,6 +1422,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let translate = |second: ElementRef| {
             let mut statement = rule("s");
@@ -1445,6 +1478,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -1481,6 +1515,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let mut choice = rule("s");
         for (index, refs) in [vec![block_ref(vec![1, 2])], vec![block_ref(vec![3, 4])]]
@@ -1545,6 +1580,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
+            choice_branch: None,
         };
         let error = translate(group_list, "$xs").expect_err("no target to iterate");
         assert!(error.contains("cannot translate $xs"), "{error}");
@@ -1557,6 +1593,7 @@ mod tests {
             is_list: false,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
+            choice_branch: None,
         };
         let error = translate(repeated_single, "$x.text").expect_err("no last-occurrence read");
         assert!(error.contains("cannot translate $x"), "{error}");
@@ -1568,7 +1605,8 @@ mod tests {
     #[test]
     fn sibling_branch_children_do_not_shadow_an_optional_label() {
         let mut statement = rule("s");
-        let branch_ref = |label: Option<&str>| ElementRef {
+        // Two branches of one choice: same choice id, different branch index.
+        let branch_ref = |label: Option<&str>, branch| ElementRef {
             label: label.map(ToOwned::to_owned),
             target: "A".to_owned(),
             token_types: vec![1],
@@ -1580,11 +1618,12 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: Some((7, branch)),
         };
         statement.alts.push(AltModel {
             label: None,
             span: (10, 20),
-            refs: vec![branch_ref(Some("x")), branch_ref(None)],
+            refs: vec![branch_ref(Some("x"), 0), branch_ref(None, 1)],
             children: BTreeMap::new(),
             leading_target: Some("A".to_owned()),
         });
@@ -1600,6 +1639,42 @@ mod tests {
 
         let translated = translate_body("$x.text", &ctx).expect("translates");
         assert!(translated.contains(".nth(0)"), "{translated}");
+
+        // The sequential counterpart — `(pred x=A)? A?`, both on the rule's own
+        // path — *is* a hazard: the follower may consume the only token while the
+        // label is unset. Cardinality alone cannot tell these two apart, which is
+        // what `choice_branch` exists for.
+        let mut sequential = rule("s");
+        let sequential_ref = |label: Option<&str>| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "A".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            stable_accessor: true,
+            choice_branch: None,
+        };
+        sequential.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![sequential_ref(Some("x")), sequential_ref(None)],
+            children: BTreeMap::new(),
+            leading_target: Some("A".to_owned()),
+        });
+        let m = model(vec![sequential]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let error = translate_body("$x.text", &ctx).expect_err("sequential follower shadows");
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
     }
 
     /// A list label repeated within one alternative is the ordinary
@@ -1618,6 +1693,7 @@ mod tests {
             is_list: true,
             cardinality: ChildCardinality { min: 1, max: None },
             stable_accessor: true,
+            choice_branch: None,
         };
         let token_ref = ElementRef {
             label: None,
@@ -1630,6 +1706,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let mut statement = rule("s");
         for (index, refs) in [
@@ -1680,6 +1757,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         let translate = |second: Vec<ElementRef>| {
             let mut statement = rule("s");
@@ -1737,6 +1815,7 @@ mod tests {
                 max: Some(1),
             },
             stable_accessor: true,
+            choice_branch: None,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1814,6 +1893,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
                 ElementRef {
                     label: Some("ids".to_owned()),
@@ -1823,6 +1903,7 @@ mod tests {
                     is_list: true,
                     cardinality: ChildCardinality { min: 1, max: None },
                     stable_accessor: true,
+                    choice_branch: None,
                 },
             ],
             children: BTreeMap::new(),
