@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.20.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.19.1...v0.20.1) (2026-07-27)
+
+
+### chore
+
+* release 0.20.1 ([09cf717](https://github.com/ophi-dev/antlr-rust-runtime/commit/09cf7179b8b66dec040be6a413b3be814a24158f))
+
+
+### Features
+
+* **semir:** support stack-valued member state so inline [@lexer](https://github.com/lexer)::members grammars need no hooks ([#226](https://github.com/ophi-dev/antlr-rust-runtime/issues/226)) ([8f961ff](https://github.com/ophi-dev/antlr-rust-runtime/commit/8f961ff71055e20809f18876cc6aeb19d95ca685)), closes [#206](https://github.com/ophi-dev/antlr-rust-runtime/issues/206)
+
+
+### Bug Fixes
+
+* **codegen:** expose combined literal token constants ([#228](https://github.com/ophi-dev/antlr-rust-runtime/issues/228)) ([f25c79b](https://github.com/ophi-dev/antlr-rust-runtime/commit/f25c79b6b5acb3e571623218abe4f31b49cb4daa))
+* **codegen:** keep token labels stable through recovery ([#235](https://github.com/ophi-dev/antlr-rust-runtime/issues/235)) ([d08d62f](https://github.com/ophi-dev/antlr-rust-runtime/commit/d08d62f5213c0446bba0aa39c1067671e958397a)), closes [#213](https://github.com/ophi-dev/antlr-rust-runtime/issues/213)
+* **parser:** notify listeners for fatal entry errors ([#234](https://github.com/ophi-dev/antlr-rust-runtime/issues/234)) ([332251a](https://github.com/ophi-dev/antlr-rust-runtime/commit/332251a101cf95264db5ef6bcc42766d4d9415d3))
+
+
+### Performance Improvements
+
+* **codegen:** derive stored invocation states lazily ([#227](https://github.com/ophi-dev/antlr-rust-runtime/issues/227)) ([541311e](https://github.com/ophi-dev/antlr-rust-runtime/commit/541311ef08d5b3c8dd30acb0c2ea865c5aa34a61))
+* **codegen:** lower untranslated parser predicates as generatable Unknown templates ([#218](https://github.com/ophi-dev/antlr-rust-runtime/issues/218)) ([84fda7d](https://github.com/ophi-dev/antlr-rust-runtime/commit/84fda7db278b66ca8936d09cfc3f55fbf2549236))
+* **codegen:** route costly left-recursive parses through the ATN ([#231](https://github.com/ophi-dev/antlr-rust-runtime/issues/231)) ([32bf468](https://github.com/ophi-dev/antlr-rust-runtime/commit/32bf46832117fe54e835e9d463022228397e3d89))
+* **runtime:** share generated recognizer metadata ([#220](https://github.com/ophi-dev/antlr-rust-runtime/issues/220)) ([1098f6f](https://github.com/ophi-dev/antlr-rust-runtime/commit/1098f6f0809c2f9c2510d2cdd2018a1bc3337a34))
+
 ## [0.19.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.19.0...v0.19.1) (2026-07-26)
 
 
