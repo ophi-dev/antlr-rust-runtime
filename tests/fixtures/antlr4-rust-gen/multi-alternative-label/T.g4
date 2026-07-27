@@ -66,6 +66,12 @@ branch_rival
     : (left = unary | right = unary) NUM
     ;
 
+// Extra grouping levels are syntactically inert, so a label buried under them
+// must still defeat the token-group collapse that would discard it.
+nested_group
+    : ((deep = IDENT))? NUM
+    ;
+
 LESS
     : '<'
     ;

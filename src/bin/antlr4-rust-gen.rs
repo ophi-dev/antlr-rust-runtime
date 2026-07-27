@@ -2881,15 +2881,23 @@ fn structural_block_token_types(block: &Block, vocabulary: &Vocabulary) -> Vec<i
     token_types.into_iter().collect()
 }
 
-/// Whether any element directly inside `block` carries a label, i.e. the block
+/// Whether any element anywhere inside `block` carries a label, i.e. the block
 /// is a grouping wrapper around labeled elements (`(x=A)?`) rather than a
 /// labeled token group (`x=(A | B)`).
+///
+/// The search descends nested blocks: extra grouping levels (`((x=A))?`) are
+/// syntactically inert, so a label buried under them must still prevent the
+/// collapse that would discard it.
 fn structural_block_labels_inside(block: &Block) -> bool {
     block
         .alternatives
         .iter()
         .flat_map(|alternative| &alternative.elements)
-        .any(|element| element.label.is_some())
+        .any(|element| {
+            element.label.is_some()
+                || matches!(&element.kind, ElementKind::Block(nested)
+                    if structural_block_labels_inside(nested))
+        })
 }
 
 fn structural_terminal_child_target(
@@ -14865,6 +14873,14 @@ mod tests {
                 "rival same-target labels across branches must decline {label}\n{rival}"
             );
         }
+
+        // A label buried under redundant grouping levels still reaches the
+        // surface — the collapse check descends nested blocks.
+        let nested = context("NestedGroupContext");
+        assert!(
+            nested.contains("pub fn deep("),
+            "a label under extra grouping levels must still emit an accessor\n{nested}"
+        );
     }
 
     #[test]

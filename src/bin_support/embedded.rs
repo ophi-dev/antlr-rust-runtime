@@ -360,12 +360,19 @@ impl TranslationCtx<'_> {
     /// Resolves a label to `(ref, occurrence-among-same-target-in-alt)`.
     ///
     /// The occurrence is a positional index into the flattened CST children, so
-    /// it only means anything when the number of same-target children ahead of
-    /// the label is fixed. Refs drawn from sibling branches of a choice are
-    /// mutually exclusive and report `min: 0` — counting them would index past
-    /// the children the parse actually built. Such a label is reported
-    /// unresolved so the caller fails loudly instead of translating to a read
-    /// that silently yields the wrong element.
+    /// it only means anything when the label's position among same-target
+    /// children is fixed. Two things make it float, and either one reports the
+    /// label unresolved so the caller fails loudly rather than translating to a
+    /// read that silently yields the wrong element:
+    ///
+    /// * a preceding ref with inexact cardinality — refs drawn from sibling
+    ///   branches of a choice are mutually exclusive and report `min: 0`, so
+    ///   counting them would index past the children the parse built;
+    /// * an *optional* label with a following same-target child, which slides
+    ///   into the label's position whenever the label itself is absent.
+    ///
+    /// List and block labels are exempt: their reads iterate or take the last
+    /// terminal child, so they never consult the occurrence index.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
         let alts: Vec<&AltModel> = self
@@ -374,7 +381,18 @@ impl TranslationCtx<'_> {
             .map_or_else(|| rule.alts.iter().collect(), |alt| vec![alt]);
         for alt in alts {
             let mut occurrence_by_target: BTreeMap<&str, Option<usize>> = BTreeMap::new();
-            for element in &alt.refs {
+            for (position, element) in alt.refs.iter().enumerate() {
+                let labeled = element.label.as_deref() == Some(label);
+                // Token groups and wildcards carry no target to count against,
+                // and their reads ignore the index, so they neither consume nor
+                // contribute to an occurrence bucket. Sharing the empty-target
+                // bucket would let unrelated groups poison each other.
+                if element.target.is_empty() || element.is_list {
+                    if labeled {
+                        return Some((element.clone(), 0));
+                    }
+                    continue;
+                }
                 let occurrence = occurrence_by_target
                     .entry(element.target.as_str())
                     .or_insert(Some(0));
@@ -387,7 +405,15 @@ impl TranslationCtx<'_> {
                     }
                     _ => None,
                 };
-                if element.label.as_deref() == Some(label) {
+                if labeled {
+                    let shadowed_when_absent = element.cardinality.min == 0
+                        && alt.refs[position + 1..].iter().any(|following| {
+                            following.target == element.target
+                                && following.cardinality.max != Some(0)
+                        });
+                    if shadowed_when_absent {
+                        return None;
+                    }
                     return current.map(|current| (element.clone(), current));
                 }
             }
@@ -959,6 +985,85 @@ mod tests {
         let error = translate_body("$x.text", &ctx).expect_err("must not translate");
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert!(error.to_string().contains("cannot translate $x"), "{error}");
+    }
+
+    /// An *optional* label with a following same-target child has no fixed
+    /// position either: in `r : ({false}? x=A)? A {$x...}` the mandatory `A`
+    /// slides into `nth(0)` whenever the optional group is skipped, so the
+    /// action would receive a value for an unset label.
+    #[test]
+    fn optional_labels_shadowed_by_a_following_child_stay_unresolved() {
+        let mut statement = rule("s");
+        let token_ref = |label: Option<&str>, min| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: "A".to_owned(),
+            token_types: vec![1],
+            is_block: false,
+            is_list: false,
+            cardinality: ChildCardinality { min, max: Some(1) },
+            stable_accessor: true,
+        };
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            // `x=A?` then a mandatory `A`.
+            refs: vec![token_ref(Some("x"), 0), token_ref(None, 1)],
+            children: BTreeMap::new(),
+            leading_target: Some("A".to_owned()),
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let error = translate_body("$x.text", &ctx).expect_err("must not translate");
+        assert!(error.to_string().contains("cannot translate $x"), "{error}");
+    }
+
+    /// Token groups carry no target, so they must not share one occurrence
+    /// bucket: an optional disjoint group ahead of a labeled group
+    /// (`r : (A | B)? x=(C | D) {$x...}`) must not poison it. Block-label reads
+    /// take the last terminal child and never consult the index at all.
+    #[test]
+    fn disjoint_token_groups_do_not_poison_a_later_block_label() {
+        let mut statement = rule("s");
+        let group_ref = |label: Option<&str>, token_types: Vec<i32>, min| ElementRef {
+            label: label.map(ToOwned::to_owned),
+            target: String::new(),
+            token_types,
+            is_block: true,
+            is_list: false,
+            cardinality: ChildCardinality { min, max: Some(1) },
+            stable_accessor: true,
+        };
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                group_ref(None, vec![1, 2], 0),
+                group_ref(Some("x"), vec![3, 4], 1),
+            ],
+            children: BTreeMap::new(),
+            leading_target: None,
+        });
+        let m = model(vec![statement]);
+        let toks = tokens(&[("A", 1), ("B", 2), ("C", 3), ("D", 4)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$x.text", &ctx).expect("translates");
+        assert!(translated.contains("terminal_children"), "{translated}");
+        assert!(translated.contains(".last()"), "{translated}");
     }
 
     #[test]
