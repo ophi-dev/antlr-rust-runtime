@@ -1185,6 +1185,12 @@ impl TranslationCtx<'_> {
                 .filter(|candidate| {
                     !candidate.token_types.is_empty()
                         && on_action_path(candidate)
+                        // Only children already matched when the action runs affect
+                        // its read. For a *forward* label (`A {$x.text} B? x=(C|D)`)
+                        // the prefix is entirely in the future, so counting `B?`
+                        // made the index inexact and fell back to `last()` — which
+                        // returns the already-matched `A`.
+                        && matched_at_action(candidate)
                         // A ref in a branch this label cannot reach never precedes it:
                         // in `(x=A | x='a')` the sibling declaration is not a prefix
                         // terminal of the literal's path.

@@ -15550,6 +15550,12 @@ mod tests {
                 "a token-only choice holding an action keeps its branch spans",
             ),
             (
+                "ForwardBlockLabel",
+                "x",
+                true,
+                "a forward label's prefix is entirely in the action's future, so it cannot make the index inexact",
+            ),
+            (
                 "OptionalGroupSharedWithLabel",
                 "x",
                 true,
