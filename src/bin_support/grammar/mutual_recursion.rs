@@ -51,6 +51,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
+use super::action::{ActionReferenceKind, action_references};
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarKind, GrammarUnit,
     ModelIdAllocator, ModelNodeId, Quantifier, Rule, RuleCall, RuleId, RuleKind,
@@ -144,10 +145,16 @@ struct CyclePlan {
 
 #[derive(Debug)]
 struct PlannedAlternative {
-    /// Alternative whose *options*, label and commands the result inherits. For
-    /// a spliced alternative this is the satellite's alternative, because that
-    /// is where `<assoc=right>` and friends live.
-    attributes_from: AlternativeId,
+    /// The original hub alternative this one descends from. Its `#label` and
+    /// commands are authored API naming this alternative *position* in the hub,
+    /// so the result inherits them — dropping a caller's `#ViaSatellite` would
+    /// silently delete its generated context and listener callbacks.
+    label_from: AlternativeId,
+    /// The alternative whose *options* the result inherits: the last satellite
+    /// alternative spliced in, because that is where `<assoc=right>` is
+    /// declared and it describes the operator this alternative now carries.
+    /// Equal to `label_from` until a splice happens.
+    options_from: AlternativeId,
     /// Alternative the elements were last taken from, for provenance.
     origin: AlternativeId,
     elements: Vec<Element>,
@@ -215,11 +222,7 @@ fn classify_corner(
                     };
                 }
                 // The corner is a cycle member: it must be bare to be spliced.
-                let bare = element.quantifier == Quantifier::One
-                    && element.label.is_none()
-                    && call.arguments.is_none()
-                    && element.options.is_empty();
-                return if bare {
+                return if element.quantifier == Quantifier::One && bare_reference(element, call) {
                     Corner::Bare { index, target }
                 } else {
                     Corner::Unusable
@@ -245,6 +248,15 @@ fn corner_enters_cycle(
     )
 }
 
+/// The single definition of a "bare" rule reference — the only kind either
+/// corner derivation may substitute or split. Shared by [`classify_corner`] and
+/// [`planned_corner`] so the two cannot drift apart: a label would dangle in
+/// actions once the element is gone, arguments have nowhere to go once the
+/// callee is inlined, and element options would be silently discarded.
+const fn bare_reference(element: &Element, call: &RuleCall) -> bool {
+    element.label.is_none() && call.arguments.is_none() && element.options.is_empty()
+}
+
 /// Decide the whole rewrite for one cycle, or decline. Mutates nothing.
 fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option<CyclePlan> {
     let rules = rules_by_id(unit);
@@ -253,6 +265,11 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
     }
     let cycle_set: BTreeSet<RuleId> = cycle.iter().copied().collect();
     let hub_id = choose_hub(unit, cycle, &cycle_set, grammar)?;
+    // Note: a *nullable* hub is fine — Roslyn's `pattern` is one
+    // (`recursive_pattern` is all-optional) and ANTLR accepts the collapsed
+    // grammar; the ill-founded shapes nullability could smuggle in (an
+    // epsilon-only alternative, a token-free self-loop) are declined by
+    // `planned_hub_is_directly_rewritable` on the planned result instead.
 
     // Requirements::InlinableSatellite — check before planning any splice, so a
     // satellite carrying behaviour we would drop declines the whole cycle.
@@ -269,7 +286,8 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
         .alternatives
         .iter()
         .map(|alternative| PlannedAlternative {
-            attributes_from: alternative.id,
+            label_from: alternative.id,
+            options_from: alternative.id,
             origin: alternative.id,
             elements: alternative.elements.clone(),
             verbatim: true,
@@ -279,9 +297,9 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
     let budget = substitution_budget(&cycle_set, &rules);
     let mut steps: usize = 0;
     while let Some(position) = planned.iter().position(|candidate| {
-        matches!(
+        !matches!(
             planned_corner(candidate, hub_id, &cycle_set, grammar),
-            PlannedCorner::Optional { .. } | PlannedCorner::Satellite { .. }
+            PlannedCorner::Settled
         )
     }) {
         steps += 1;
@@ -290,10 +308,25 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
             return None;
         }
         let replacement = match planned_corner(&planned[position], hub_id, &cycle_set, grammar) {
-            PlannedCorner::Optional { index } => split_optional(&planned[position], index),
+            PlannedCorner::Optional { index, target } => {
+                // The absent branch deletes the element; any surviving action
+                // that names the corner's rule (`$e.text`) would dangle.
+                if remaining_actions_reference(
+                    &planned[position].elements,
+                    index,
+                    &rules[&target].name,
+                ) {
+                    return None;
+                }
+                split_optional(&planned[position], index)
+            }
             PlannedCorner::Satellite { index, target } => {
                 splice_satellite(&planned[position], index, rules[&target])?
             }
+            // The corner enters the cycle but cannot be substituted or split
+            // (quantified, labelled, argument- or option-bearing): the cycle
+            // is out of the tractable subclass.
+            PlannedCorner::Blocked => return None,
             PlannedCorner::Settled => unreachable!("position was found to need work"),
         };
         // Splice in place: the expansions occupy the slot of the alternative
@@ -302,12 +335,19 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
         planned.splice(position..=position, replacement);
     }
 
-    // Requirements::DirectlyRewritable
-    if !planned_hub_is_directly_rewritable(&planned, hub_id, grammar) {
+    // A plan that did no work would be reapplied verbatim on every iteration of
+    // the driver loop — the cycle lives somewhere this pass cannot reach (for
+    // example inside a nested block), so decline it.
+    if steps == 0 {
         return None;
     }
 
-    let removable = removable_satellites(unit, cycle, hub_id, grammar.names);
+    // Requirements::DirectlyRewritable
+    if !planned_hub_is_directly_rewritable(&planned, hub_id, &cycle_set, grammar) {
+        return None;
+    }
+
+    let removable = removable_satellites(unit, cycle, hub_id, &planned, grammar.names);
     Some(CyclePlan {
         hub: hub_id,
         alternatives: planned,
@@ -317,10 +357,13 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
 
 /// What still needs doing to a planned alternative before the hub is direct.
 enum PlannedCorner {
-    /// A leading optional call to a cycle member at `index`, to be split.
-    Optional { index: usize },
+    /// A leading optional call to cycle member `target` at `index`, to be split.
+    Optional { index: usize, target: RuleId },
     /// A bare call to satellite `target` at `index`, to be spliced.
     Satellite { index: usize, target: RuleId },
+    /// The corner enters the cycle but is not substitutable: quantified with
+    /// `*`/`+`, nongreedy-optional, labelled, argument- or option-bearing.
+    Blocked,
     /// Nothing to do: base case, or already a hub self-reference.
     Settled,
 }
@@ -341,36 +384,30 @@ fn planned_corner(
                 if !cycle_set.contains(&target) {
                     return PlannedCorner::Settled;
                 }
-                // A leading `X?` where X is in the cycle: split it into the
+                // A leading greedy `X?` where X is in the cycle: split it into
                 // present and absent branches (union-preserving) so the present
                 // branch becomes a well-formed recursive corner. This applies to
-                // the hub itself too — C#'s `expr? '..' expr?` is exactly that
+                // the hub itself — C#'s `expr? '..' expr?` is exactly that
                 // shape — so it is checked before the self-reference test below.
-                // Only a bare, unlabelled optional qualifies: a labelled one
-                // would leave `$label` dangling in the absent branch.
-                if matches!(element.quantifier, Quantifier::Optional { .. })
-                    && element.label.is_none()
-                    && call.arguments.is_none()
+                // A nongreedy `X??` prefers the absent branch, which the split
+                // order would invert, so it is Blocked instead; a labelled or
+                // option-bearing optional would lose those in the absent branch.
+                if matches!(element.quantifier, Quantifier::Optional { greedy: true })
+                    && bare_reference(element, call)
                 {
-                    return PlannedCorner::Optional { index };
+                    return PlannedCorner::Optional { index, target };
                 }
-                // A non-optional hub self-reference is the goal state, not
-                // something to substitute: recursing on it would never
-                // terminate.
-                if target == hub_id {
+                // A plain hub self-reference is the goal state, not something
+                // to substitute: recursing on it would never terminate. The
+                // direct rewriter keys on the call itself (labels included, via
+                // its deleted-label machinery), so mirror that.
+                if target == hub_id && element.quantifier == Quantifier::One {
                     return PlannedCorner::Settled;
                 }
-                if element.quantifier != Quantifier::One {
-                    // `*`/`+`/labelled/argument corners are not substitutable;
-                    // planning already vetted the originals, but a spliced body
-                    // can introduce one, so settle and let the final
-                    // directly-rewritable gate decline.
-                    return PlannedCorner::Settled;
+                if element.quantifier == Quantifier::One && bare_reference(element, call) {
+                    return PlannedCorner::Satellite { index, target };
                 }
-                if element.label.is_some() || call.arguments.is_some() {
-                    return PlannedCorner::Settled;
-                }
-                return PlannedCorner::Satellite { index, target };
+                return PlannedCorner::Blocked;
             }
             _ => return PlannedCorner::Settled,
         }
@@ -378,8 +415,53 @@ fn planned_corner(
     PlannedCorner::Settled
 }
 
+/// Whether any action or predicate among `elements` (other than the corner at
+/// `skip` itself, and descending into nested blocks) references `rule_name` —
+/// e.g. `$s.text` after the `s` element has been spliced away.
+fn remaining_actions_reference(elements: &[Element], skip: usize, rule_name: &str) -> bool {
+    elements.iter().enumerate().any(|(index, element)| {
+        if index == skip {
+            return false;
+        }
+        element_actions_reference(element, rule_name)
+    })
+}
+
+fn element_actions_reference(element: &Element, rule_name: &str) -> bool {
+    let mut bodies: Vec<&str> = Vec::new();
+    match &element.kind {
+        ElementKind::Action { body, .. } => bodies.push(body),
+        ElementKind::Predicate { body, fail, .. } => {
+            bodies.push(body);
+            if let Some(fail) = fail.as_deref() {
+                bodies.push(fail);
+            }
+        }
+        ElementKind::Block(block) => {
+            return block.alternatives.iter().any(|alternative| {
+                alternative
+                    .elements
+                    .iter()
+                    .any(|nested| element_actions_reference(nested, rule_name))
+            });
+        }
+        _ => {}
+    }
+    bodies.into_iter().any(|body| {
+        action_references(body)
+            .iter()
+            .any(|reference| match reference.kind {
+                ActionReferenceKind::Attribute { name, .. } => name == rule_name,
+                ActionReferenceKind::Qualified { name, .. } => name == rule_name,
+                ActionReferenceKind::NonLocal { rule, .. } => rule == rule_name,
+            })
+    })
+}
+
 /// `α X? β` becomes `α X β | α β`, preserving order (present branch first, as
-/// the authored greedy `?` prefers matching).
+/// the authored greedy `?` prefers matching). Both products keep the caller's
+/// `#label` — ANTLR permits the same label on multiple alternatives (they share
+/// one context class), which is the faithful reading of a split.
 fn split_optional(candidate: &PlannedAlternative, index: usize) -> Vec<PlannedAlternative> {
     let mut present = candidate.elements.clone();
     if let Some(element) = present.get_mut(index) {
@@ -389,13 +471,15 @@ fn split_optional(candidate: &PlannedAlternative, index: usize) -> Vec<PlannedAl
     absent.remove(index);
     vec![
         PlannedAlternative {
-            attributes_from: candidate.attributes_from,
+            label_from: candidate.label_from,
+            options_from: candidate.options_from,
             origin: candidate.origin,
             elements: present,
             verbatim: false,
         },
         PlannedAlternative {
-            attributes_from: candidate.attributes_from,
+            label_from: candidate.label_from,
+            options_from: candidate.options_from,
             origin: candidate.origin,
             elements: absent,
             verbatim: false,
@@ -411,6 +495,11 @@ fn splice_satellite(
     index: usize,
     satellite: &Rule,
 ) -> Option<Vec<PlannedAlternative>> {
+    // Deleting the corner element severs any `$satellite.attr` reference an
+    // action in the surviving prefix/suffix makes by rule name.
+    if remaining_actions_reference(&candidate.elements, index, &satellite.name) {
+        return None;
+    }
     // Requirements::BareCorner already established that `index` holds a bare
     // call; the caller's remaining elements are kept verbatim around it.
     let prefix = &candidate.elements[..index];
@@ -428,9 +517,11 @@ fn splice_satellite(
         elements.extend(source.elements.iter().cloned());
         elements.extend(suffix.iter().cloned());
         expansions.push(PlannedAlternative {
-            // Take options from the satellite alternative: `<assoc=right>` is
-            // declared there and drives the direct rewriter's associativity.
-            attributes_from: source.id,
+            // The caller's `#label` names this hub position and survives; the
+            // *options* come from the satellite alternative, because that is
+            // where `<assoc=right>` is declared for the operator being inlined.
+            label_from: candidate.label_from,
+            options_from: source.id,
             origin: source.id,
             elements,
             verbatim: false,
@@ -440,16 +531,28 @@ fn splice_satellite(
 }
 
 fn labels_collide(prefix: &[Element], suffix: &[Element], spliced: &[Element]) -> bool {
-    let caller: BTreeSet<&str> = prefix
-        .iter()
-        .chain(suffix)
-        .filter_map(|element| element.label.as_ref())
-        .map(|label| label.name.as_str())
-        .collect();
-    spliced
-        .iter()
-        .filter_map(|element| element.label.as_ref())
-        .any(|label| caller.contains(label.name.as_str()))
+    let mut caller = BTreeSet::new();
+    collect_labels(prefix, &mut caller);
+    collect_labels(suffix, &mut caller);
+    let mut satellite = BTreeSet::new();
+    collect_labels(spliced, &mut satellite);
+    !caller.is_disjoint(&satellite)
+}
+
+/// Every label name bound in `elements`, descending into nested blocks —
+/// separately-valid label scopes become one scope after a splice, so collisions
+/// anywhere in either tree matter.
+fn collect_labels<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
+    for element in elements {
+        if let Some(label) = &element.label {
+            out.insert(label.name.as_str());
+        }
+        if let ElementKind::Block(nested) = &element.kind {
+            for alternative in &nested.alternatives {
+                collect_labels(&alternative.elements, out);
+            }
+        }
+    }
 }
 
 /// A satellite may only be inlined if nothing rule-level would be lost. Rule
@@ -473,42 +576,59 @@ fn satellite_is_inlinable(satellite: &Rule) -> bool {
             .all(|alternative| alternative.label.is_none())
 }
 
-/// Whether the planned hub is a shape [`super::left_recursion`] accepts: at
-/// least one primary and one recursive alternative, every recursive alternative
-/// a bare hub reference with something after it, and no argument-bearing
-/// self-reference.
+/// Whether the planned hub is a shape [`super::left_recursion`] accepts.
+///
+/// The downstream classifier keys recursion on the **literal first element**
+/// (`classify_rule` uses `.first()`), so this gate mirrors that exactly rather
+/// than skipping leading actions: an alternative like `{pred} hub '+' ID` is
+/// *not* recognisably recursive downstream, would land in the primary block
+/// still left-recursive, and must therefore decline here — which the
+/// corner-closure check below does uniformly for every non-recursive
+/// alternative, covering epsilon prefixes, nested blocks and any leftover
+/// cycle-member corner in one place.
 fn planned_hub_is_directly_rewritable(
     planned: &[PlannedAlternative],
     hub_id: RuleId,
+    cycle_set: &BTreeSet<RuleId>,
     grammar: Grammar<'_>,
 ) -> bool {
     let mut has_primary = false;
     let mut has_recursive = false;
     for candidate in planned {
         let elements = &candidate.elements;
+        // No argument-bearing self-reference anywhere (mirrors G4R001).
         if elements.iter().any(|element| {
             hub_call(element, hub_id, grammar).is_some_and(|call| call.arguments.is_some())
         }) {
             return false;
         }
-        let first_significant = elements
-            .iter()
-            .position(|element| !is_epsilon_only(element))
-            .filter(|index| is_hub_call(&elements[*index], hub_id, grammar));
-        let last_significant = elements
-            .iter()
-            .rposition(|element| !is_epsilon_only(element));
-        let last_recursive = last_significant
-            .and_then(|index| elements.get(index))
-            .is_some_and(|element| is_hub_call(element, hub_id, grammar));
-        match (first_significant, last_significant) {
-            // A bare `hub` with nothing significant after it is a nonconforming
-            // self-loop, exactly as the direct rewriter treats it.
-            (Some(first), Some(last)) if first == last => return false,
-            (Some(_), Some(_)) => has_recursive = true,
-            (Some(_), None) => return false,
-            (None, _) if last_recursive => has_recursive = true,
-            (None, _) => has_primary = true,
+        let Some(last_significant) = elements.iter().rposition(|e| !is_epsilon_only(e)) else {
+            // An epsilon-only alternative would make the precedence hub
+            // nullable; the original hub was not.
+            return false;
+        };
+        if elements
+            .first()
+            .is_some_and(|element| is_hub_call(element, hub_id, grammar))
+        {
+            // Recursive (Binary/Suffix) form. A bare `hub` with nothing
+            // significant after it is a nonconforming self-loop, exactly as
+            // the direct rewriter treats it.
+            if last_significant == 0 {
+                return false;
+            }
+            has_recursive = true;
+        } else {
+            // Primary/Prefix bucket. Its left-corner closure must not re-enter
+            // the cycle: the downstream rewriter would file it as a primary
+            // alternative and the committed hub would still be left-recursive,
+            // failing later with a diagnostic naming the wrong rule set.
+            let mut corners = BTreeSet::new();
+            collect_left_corner_calls(elements, grammar, &mut corners);
+            if corners.iter().any(|corner| cycle_set.contains(corner)) {
+                return false;
+            }
+            has_primary = true;
         }
     }
     has_primary && has_recursive
@@ -559,12 +679,28 @@ fn apply_plan(
     let alternatives = plan
         .alternatives
         .iter()
-        .enumerate()
-        .map(|(index, planned)| {
-            let source = attributes
-                .get(&planned.attributes_from)
+        .map(|planned| {
+            // The caller's alternative supplies the `#label`, commands and
+            // position identity; the satellite's supplies the options
+            // (`<assoc=right>` describes the operator that was inlined). Where
+            // both declare an option, the satellite's wins — it is the one the
+            // direct rewriter will read for this alternative's operator.
+            let label_source = attributes
+                .get(&planned.label_from)
                 .or(template.as_ref())
                 .expect("hub has at least one alternative");
+            let options_source = attributes
+                .get(&planned.options_from)
+                .unwrap_or(label_source);
+            let mut options = options_source.options.clone();
+            for option in &label_source.options {
+                if !options
+                    .iter()
+                    .any(|existing| existing.name.value == option.name.value)
+                {
+                    options.push(option.clone());
+                }
+            }
             let id = if planned.verbatim {
                 // An untouched hub alternative keeps its identity, so unrelated
                 // provenance and label bindings stay valid.
@@ -585,15 +721,14 @@ fn apply_plan(
             } else {
                 renumber_elements(planned.elements.clone(), ids, provenance)
             };
-            let _ = index;
             Alternative {
                 id,
                 elements,
-                label: source.label.clone(),
-                options: source.options.clone(),
-                commands: source.commands.clone(),
-                syntax: source.syntax,
-                span: source.span.clone(),
+                label: label_source.label.clone(),
+                options,
+                commands: label_source.commands.clone(),
+                syntax: label_source.syntax,
+                span: label_source.span.clone(),
             }
         })
         .collect::<Vec<_>>();
@@ -689,12 +824,17 @@ fn externally_referenced(
 }
 
 /// Satellites that can be safely removed: no rule that will be *retained*
-/// references them. Computed to a fixpoint so a retained satellite pulls its own
+/// references them. The hub's contribution is taken from the **planned**
+/// alternatives, not its current body — verbatim alternatives and spliced
+/// suffixes can keep satellite calls alive (`t : arr | t '?' arr`,
+/// `e : s s | ID`), and deleting such a satellite would leave a dangling rule
+/// reference. Computed to a fixpoint so a retained satellite pulls its own
 /// dependencies back in.
 fn removable_satellites(
     unit: &GrammarUnit,
     cycle: &Cycle,
     hub_id: RuleId,
+    planned: &[PlannedAlternative],
     names: &BTreeMap<String, RuleId>,
 ) -> BTreeSet<RuleId> {
     let mut removable = cycle
@@ -704,17 +844,21 @@ fn removable_satellites(
         .collect::<BTreeSet<_>>();
     loop {
         let mut referenced = BTreeSet::new();
-        for rule in &unit.rules {
-            // The hub's own body is about to be replaced wholesale, so its
-            // current references do not keep a satellite alive.
-            if removable.contains(&rule.id) || rule.id == hub_id {
-                continue;
-            }
-            collect_calls_into(&rule.block, names, &mut |target| {
+        {
+            let mut sink = |target: RuleId| {
                 if removable.contains(&target) {
                     referenced.insert(target);
                 }
-            });
+            };
+            for candidate in planned {
+                collect_calls_in_elements(&candidate.elements, names, &mut sink);
+            }
+            for rule in &unit.rules {
+                if removable.contains(&rule.id) || rule.id == hub_id {
+                    continue;
+                }
+                collect_calls_into(&rule.block, names, &mut sink);
+            }
         }
         if referenced.is_empty() {
             return removable;
@@ -750,7 +894,7 @@ fn left_corner_cycles(unit: &GrammarUnit, grammar: Grammar<'_>) -> Vec<Cycle> {
     for rule in &unit.rules {
         let mut corners = BTreeSet::new();
         for alternative in &rule.block.alternatives {
-            collect_left_corner_calls(alternative, grammar, &mut corners);
+            collect_left_corner_calls(&alternative.elements, grammar, &mut corners);
         }
         for target in corners {
             if let (Some(source), Some(target)) = (nodes.get(&rule.id), nodes.get(&target)) {
@@ -776,15 +920,15 @@ fn left_corner_cycles(unit: &GrammarUnit, grammar: Grammar<'_>) -> Vec<Cycle> {
     cycles
 }
 
-/// Collect every rule reachable in left-corner position from `alternative`
+/// Collect every rule reachable in left-corner position from `elements`
 /// (through leading epsilon/nullable/optional elements), so the SCC graph
 /// captures the full left-corner relation the ATN detector uses.
 fn collect_left_corner_calls(
-    alternative: &Alternative,
+    elements: &[Element],
     grammar: Grammar<'_>,
     result: &mut BTreeSet<RuleId>,
 ) {
-    for element in &alternative.elements {
+    for element in elements {
         match &element.kind {
             ElementKind::Action { .. } | ElementKind::Predicate { .. } | ElementKind::Epsilon => {}
             ElementKind::RuleCall(call) => {
@@ -802,7 +946,7 @@ fn collect_left_corner_calls(
             }
             ElementKind::Block(block) => {
                 for nested in &block.alternatives {
-                    collect_left_corner_calls(nested, grammar, result);
+                    collect_left_corner_calls(&nested.elements, grammar, result);
                 }
                 let skippable = matches!(
                     element.quantifier,
@@ -823,16 +967,24 @@ fn collect_calls_into(
     sink: &mut impl FnMut(RuleId),
 ) {
     for alternative in &block.alternatives {
-        for element in &alternative.elements {
-            match &element.kind {
-                ElementKind::RuleCall(call) => {
-                    if let Some(target) = names.get(&call.name) {
-                        sink(*target);
-                    }
+        collect_calls_in_elements(&alternative.elements, names, sink);
+    }
+}
+
+fn collect_calls_in_elements(
+    elements: &[Element],
+    names: &BTreeMap<String, RuleId>,
+    sink: &mut impl FnMut(RuleId),
+) {
+    for element in elements {
+        match &element.kind {
+            ElementKind::RuleCall(call) => {
+                if let Some(target) = names.get(&call.name) {
+                    sink(*target);
                 }
-                ElementKind::Block(nested) => collect_calls_into(nested, names, sink),
-                _ => {}
             }
+            ElementKind::Block(nested) => collect_calls_into(nested, names, sink),
+            _ => {}
         }
     }
 }
@@ -1077,6 +1229,10 @@ mod tests {
                     let _ = write!(out, "<assoc={}> ", assoc.value.value);
                 }
                 out.push_str(&render_elements(&alternative.elements));
+                if let Some(label) = &alternative.label {
+                    use std::fmt::Write as _;
+                    let _ = write!(out, " #{}", label.value);
+                }
                 out.push('\n');
             }
         }
@@ -1369,6 +1525,121 @@ mod tests {
             "parser grammar P; \
              e : s x=ID | ID ; \
              s : e '+' x=ID ;",
+        );
+    }
+
+    #[test]
+    fn terminates_and_declines_when_no_corner_is_reducible() {
+        // The only cycle-entering corner is a block, which is never spliced. A
+        // plan that makes no step must decline rather than spin: this test
+        // hangs (and times out) if the zero-step guard regresses.
+        assert_declined(
+            "parser grammar P; \
+             e : (s | ID) | e '+' e ; \
+             s : e '*' e ;",
+        );
+    }
+
+    #[test]
+    fn retains_satellite_still_referenced_by_the_planned_hub() {
+        // Only the *corner* occurrence of `s` is consumed by the splice; the
+        // second `s` survives in the planned suffix, so `s` must be retained
+        // even though no rule outside the cycle references it.
+        let unit = rewritten(
+            "parser grammar P; \
+             e : s s | ID ; \
+             s : e '+' ID ;",
+        );
+        assert!(
+            unit.rules.iter().any(|rule| rule.name == "s"),
+            "satellite referenced by the planned hub body is retained"
+        );
+        insta::assert_snapshot!("suffix_satellite_retained", render(&unit));
+    }
+
+    #[test]
+    fn retains_satellite_referenced_from_an_unspliced_alternative() {
+        // The hub's second alternative keeps its `arr` reference verbatim (it
+        // is not a left corner), so deleting `arr` would leave a dangling call.
+        let unit = rewritten(
+            "parser grammar P; \
+             t : arr | t '?' arr | ID ; \
+             arr : t '[' ']' ;",
+        );
+        assert!(
+            unit.rules.iter().any(|rule| rule.name == "arr"),
+            "satellite referenced by an unspliced alternative is retained"
+        );
+        insta::assert_snapshot!("verbatim_alt_satellite_retained", render(&unit));
+    }
+
+    #[test]
+    fn preserves_the_caller_alternative_label() {
+        // The `#ViaSatellite` label names the *hub's* alternative — authored
+        // API surface that must survive the splice (the satellite has no say).
+        let unit = rewritten(
+            "parser grammar P; \
+             e : s # ViaSatellite | ID # Atom ; \
+             s : e '+' ID ;",
+        );
+        insta::assert_snapshot!("caller_alt_label_preserved", render(&unit));
+    }
+
+    #[test]
+    fn splitting_an_optional_keeps_the_label_on_both_products() {
+        // ANTLR accepts the same `#label` on multiple alternatives (they share
+        // one context class), so both split products keep the caller's label.
+        let unit = rewritten(
+            "parser grammar P; \
+             e : e '+' e # Add | r # Range | ID # Atom ; \
+             r : e? '..' ;",
+        );
+        insta::assert_snapshot!("split_label_on_both_products", render(&unit));
+    }
+
+    #[test]
+    fn declines_predicate_prefixed_satellite_alternative() {
+        // Splicing would give the hub `{pred}? e '+' ID`, whose literal first
+        // element is a predicate — the direct rewriter files that under
+        // *primary*, leaving the recursion undetected. The gate must mirror
+        // that reading and decline before anything is touched.
+        assert_declined(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : {true}? e '+' ID ;",
+        );
+    }
+
+    #[test]
+    fn declines_nongreedy_optional_corner() {
+        // `e??` prefers the absent branch; the greedy split `e rest | rest`
+        // would invert that preference, so only greedy optionals are split.
+        assert_declined(
+            "parser grammar P; \
+             e : r | ID ; \
+             r : e?? '..' ;",
+        );
+    }
+
+    #[test]
+    fn declines_when_a_surviving_action_references_the_satellite() {
+        // `$s.text` resolves against the corner element by rule name; deleting
+        // the corner would leave the reference dangling.
+        assert_declined(
+            "parser grammar P; \
+             e : s { let _x = $s.text; } | ID ; \
+             s : e '+' ID ;",
+        );
+    }
+
+    #[test]
+    fn declines_when_a_split_absent_branch_is_a_bare_self_loop() {
+        // `s : e?` splits into `e` (a token-free self-loop) and epsilon; the
+        // direct rewriter accepts neither, so the plan declines up front.
+        assert_declined(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : e? ;",
         );
     }
 
