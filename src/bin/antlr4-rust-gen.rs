@@ -4032,6 +4032,10 @@ fn generated_adaptive_atn_routing_excluding(
     let mut probe_candidate_rules = vec![BTreeSet::new(); rules.len()];
 
     for seed in seeds {
+        // Keep the seed eligible when it is entered directly or through a
+        // cheaper caller. Calls from an eligible wrapper use the probe mapping
+        // below instead, so the wrapper remains the retry boundary there.
+        candidates[seed] = true;
         let mut region = vec![false; rules.len()];
         region[seed] = true;
         let wrappers = rules
@@ -4050,13 +4054,9 @@ fn generated_adaptive_atn_routing_excluding(
                     .map(|_| rule_index)
             })
             .collect::<Vec<_>>();
-        if wrappers.is_empty() {
-            candidates[seed] = true;
-        } else {
-            for wrapper in wrappers {
-                candidates[wrapper] = true;
-                probe_candidate_rules[seed].insert(wrapper);
-            }
+        for wrapper in wrappers {
+            candidates[wrapper] = true;
+            probe_candidate_rules[seed].insert(wrapper);
         }
     }
     exclude_forced_generated_rules(&mut candidates, force_generated);
@@ -6474,6 +6474,7 @@ fn render_generated_step(
             };
             let from_generated_call =
                 format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
+            let mut probes_enclosing_candidate = false;
             let generated_child_call = if render_context
                 .direct_generated_rule_calls
                 .get(*rule_index)
@@ -6490,12 +6491,13 @@ fn render_generated_step(
                     .get(render_context.current_rule_index)
                     .copied()
                     .flatten();
-                let dispatch =
-                    if caller_candidate_slot.is_some_and(|slot| probe_slots.contains(&slot)) {
-                        "adaptive_probe_dispatch"
-                    } else {
-                        "dispatch"
-                    };
+                probes_enclosing_candidate =
+                    caller_candidate_slot.is_some_and(|slot| probe_slots.contains(&slot));
+                let dispatch = if probes_enclosing_candidate {
+                    "adaptive_probe_dispatch"
+                } else {
+                    "dispatch"
+                };
                 format!(
                     "self.parse_generated_rule_{rule_index}_{dispatch}({precedence}, false).map_err(GeneratedRuleError::into_error)"
                 )
@@ -6517,6 +6519,11 @@ fn render_generated_step(
                 // cap or a registered parse listener flips it to the generated
                 // body, the only path that enforces the cap and fires events.
                 from_generated_call
+            } else if probes_enclosing_candidate {
+                // The child is also a candidate for direct entry paths, but
+                // this call belongs to an enclosing wrapper candidate. Probe
+                // that wrapper and keep it as the sole retry boundary.
+                generated_child_call
             } else if let Some(slot) = render_context
                 .adaptive_atn_preferred_rule_slots
                 .get(*rule_index)
@@ -13589,8 +13596,8 @@ mod tests {
             "an expensive wrapper should become the candidate boundary"
         );
         assert!(
-            !preferred[1],
-            "an expensive LR leaf should not overlap its eligible wrapper"
+            preferred[1],
+            "an expensive LR seed must remain eligible for direct entry paths"
         );
         assert!(
             !preferred[2],
@@ -13756,6 +13763,9 @@ mod tests {
             "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Fatal);"
         ));
         assert!(rendered.contains("self.parse_generated_rule_1_adaptive_probe_dispatch(0, false)"));
+        assert!(rendered.contains(
+            "1 if !self.adaptive_atn_preferred_rules[1] => Some(self.parse_generated_rule_1_adaptive_dispatch(precedence, allow_fallback, None))"
+        ));
         assert!(rendered.contains(
             "ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
         ));

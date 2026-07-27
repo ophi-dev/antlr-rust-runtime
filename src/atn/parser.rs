@@ -702,11 +702,11 @@ impl<'a> ParserAtnSimulator<'a> {
         &self.store.decision_to_dfa
     }
 
-    /// Returns adaptive-call and closure-work counters for trained decisions.
+    /// Returns adaptive-call and closure-work counters for stable decisions.
     ///
-    /// A call contributes only when its decision DFA was already non-empty at
-    /// call entry, so first-population work cannot make an unrelated candidate
-    /// look expensive.
+    /// A call contributes only when its decision DFA was already non-empty and
+    /// did not learn states, edges, or start mappings during the call. This
+    /// excludes both first and incremental population from steady-state work.
     #[doc(hidden)]
     pub const fn adaptive_prediction_work(&self) -> Option<(usize, usize)> {
         if self.has_trained_decision {
@@ -938,16 +938,29 @@ impl<'a> ParserAtnSimulator<'a> {
         merge_cache: &mut PredictionWorkspace,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let decision = request.decision;
-        self.measure_adaptive_work = self
+        let learning_revision = self
             .store
             .decision_to_dfa
             .get(decision)
-            .is_some_and(|dfa| !dfa.is_empty());
+            .filter(|dfa| !dfa.is_empty())
+            .map(ParserDfa::learning_revision);
+        let work_start = (self.adaptive_calls, self.adaptive_closure_work);
+        self.measure_adaptive_work = learning_revision.is_some();
         if self.measure_adaptive_work {
             self.adaptive_calls = self.adaptive_calls.saturating_add(1);
         }
         let result = self.adaptive_predict_stream_inner_impl(request, input, merge_cache);
         self.measure_adaptive_work = false;
+        if let Some(learning_revision) = learning_revision
+            && self
+                .store
+                .decision_to_dfa
+                .get(decision)
+                .map(ParserDfa::learning_revision)
+                != Some(learning_revision)
+        {
+            (self.adaptive_calls, self.adaptive_closure_work) = work_start;
+        }
         self.has_trained_decision |= self
             .store
             .decision_to_dfa
@@ -2392,6 +2405,38 @@ mod tests {
             .adaptive_prediction_work()
             .expect("trained decision work is measurable");
         assert_eq!(after_warm_decision.0, after_first_decision.0 + 1);
+    }
+
+    #[test]
+    fn adaptive_atn_preference_excludes_incremental_population_per_decision() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+        let after_first_path = simulator
+            .adaptive_prediction_work()
+            .expect("the decision is partially trained");
+        let transitions_after_first_path = simulator.decision_dfas()[0].stats().transitions;
+
+        assert_eq!(simulator.adaptive_predict(0, [1, 3]), Ok(2));
+        assert!(
+            simulator.decision_dfas()[0].stats().transitions > transitions_after_first_path,
+            "the second input must extend the partially populated DFA"
+        );
+        assert_eq!(
+            simulator.adaptive_prediction_work(),
+            Some(after_first_path),
+            "incremental DFA construction must not enter the routing counters"
+        );
+
+        assert_eq!(simulator.adaptive_predict(0, [1, 3]), Ok(2));
+        assert_eq!(
+            simulator
+                .adaptive_prediction_work()
+                .expect("the repeated path is stable")
+                .0,
+            after_first_path.0 + 1
+        );
     }
 
     #[test]
