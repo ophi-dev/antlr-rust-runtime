@@ -921,6 +921,15 @@ impl TranslationCtx<'_> {
             if left.0.is_block == right.0.is_block {
                 return left.1 == right.1;
             }
+            // The mixed-mode merge works because both sides lower to the same
+            // *scalar* `nth(0)`. A list read has no such common form: token mode
+            // yields an iterator (`child_tokens(A)`), block mode a `String` — it
+            // resolves `target` against `ctx.token_types`, and a literal target
+            // (`xs+='a'`) is not a key there, so it falls through to the positional
+            // block read. Merging the two emitted `.collect()` on a `String`.
+            if left.0.is_list {
+                return false;
+            }
             return left.1 == 0
                 && right.1 == 0
                 && left.0.leading_terminal
@@ -1437,26 +1446,40 @@ impl TranslationCtx<'_> {
         } else {
             element.cardinality.min == 0
         };
+        // A sibling branch's child cannot slide into the label's slot *within a
+        // parse that bound the label* — the two never coexist. It is still a hazard
+        // when the read may run with the label unset, which is when the action is
+        // not inside the branch that separates them. That has to be judged per
+        // *choice*: a rule-wide flag would let an action confined to some unrelated
+        // later choice exempt an earlier sibling
+        // (`({false}? x=A | A) (B {$x} | C)`).
+        let excluded_by_confinement = |candidate: &ElementRef| {
+            !candidate.can_coexist_with(element)
+                && Self::action_inside_separating_branch(
+                    element,
+                    candidate,
+                    action_branches.as_deref(),
+                )
+        };
         let shadowed_when_absent = element_optional_here
-            && after.iter().any(|candidate| {
+            && (after.iter().any(|candidate| {
                 !declares_label(candidate)
                     && same_target(candidate)
                     && matched_at_action(candidate)
-                    // A sibling branch's child cannot slide into the label's slot
-                    // *within a parse that bound the label* — the two never coexist.
-                    // It is still a hazard when the read may run with the label
-                    // unset, which is when the action is not inside the branch that
-                    // separates them. That has to be judged per *choice*: a
-                    // rule-wide flag would let an action confined to some unrelated
-                    // later choice exempt an earlier sibling
-                    // (`({false}? x=A | A) (B {$x} | C)`).
-                    && (candidate.can_coexist_with(element)
-                        || !Self::action_inside_separating_branch(
-                            element,
-                            candidate,
-                            action_branches.as_deref(),
-                        ))
-            });
+                    && !excluded_by_confinement(candidate)
+            })
+            // A same-target sibling *before* the label impersonates it just as well:
+            // in `(A | x=A) {$x}` the unlabeled `A` is the only child of its type on
+            // its own branch, so `child_tokens(A).nth(0)` reports it. Only
+            // non-coexisting refs matter here — a ref the label coexists with is a
+            // genuine prefix and is already folded into `occurrence`.
+            || before.iter().any(|candidate| {
+                !declares_label(candidate)
+                    && same_target(candidate)
+                    && matched_at_action(candidate)
+                    && !candidate.can_coexist_with(element)
+                    && !excluded_by_confinement(candidate)
+            }));
         (!shadowed_when_absent).then_some((element.clone(), occurrence))
     }
 }
@@ -1694,6 +1717,18 @@ fn translate_element_read(
                 "__ctx.child_tokens(self.base.parse_tree_storage(), self.base.token_store(), {token_type})"
             ));
         }
+        // A list label whose target names neither a rule nor a token type has no
+        // iterator form: the block read below picks *one* terminal and renders it as
+        // a `String`, so falling through emitted `.collect()` on a `String` for
+        // `xs+='a'` (a literal is not a `token_types` key). Decline instead of
+        // generating code that does not compile.
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "cannot translate list label ${} in embedded action: {body}",
+                element.label.as_deref().unwrap_or_default()
+            ),
+        ));
     }
     if element.is_block {
         // A labeled `(...)` block over tokens: `$myset.stop` / `$myset.text` read

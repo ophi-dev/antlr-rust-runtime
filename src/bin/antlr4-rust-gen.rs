@@ -2882,6 +2882,9 @@ fn collect_structural_context_refs_with_cardinality(
                 } else {
                     cardinality
                 };
+                // Where the expanded refs start, so the terminal state can be read
+                // back off what the branches actually emitted (below).
+                let refs_before_block = refs.len();
                 for (branch, alternative) in block.alternatives.iter().enumerate() {
                     // Tag each branch of a *choice* with `(block id, branch)` so
                     // consumers can tell mutually exclusive refs from sequential
@@ -2940,6 +2943,24 @@ fn collect_structural_context_refs_with_cardinality(
                         },
                         vocabulary,
                     );
+                }
+                // An expanded block still matched terminals, and the collapsibility
+                // helper below cannot see them: `structural_block_token_types`
+                // returns empty for any block that is not one-element-per-branch, so
+                // `(B y=C? | )` reported no tokens and left the *following* element
+                // marked as leading. That false state then let a mixed
+                // token/literal merge through in `(B y=C? | ) x=A | x='a'`.
+                //
+                // Read it back off the refs the branches actually emitted instead.
+                // `leading_terminal` is a *claim* that the element is the first
+                // terminal — which is what makes a block-positional index and a
+                // same-type index agree at 0 — so it has to hold on every path. Any
+                // branch that *can* match a terminal falsifies it, hence `any` over
+                // `cardinality.max != Some(0)` rather than agreement across branches.
+                if refs[refs_before_block..].iter().any(|candidate| {
+                    !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
+                }) {
+                    seen_terminal = true;
                 }
             }
             ElementKind::Set { inverted, elements } => {
@@ -15595,6 +15616,30 @@ mod tests {
                 "x",
                 false,
                 "mixed-mode occurrence zero coincides only when no terminal precedes either side",
+            ),
+            (
+                "PrecedingSiblingBranch",
+                "x",
+                false,
+                "a same-target sibling *before* the label impersonates it as readily as one after",
+            ),
+            (
+                "ExpandedBlockTerminalState",
+                "x",
+                false,
+                "an expanded block still matched a terminal, so what follows it is not leading",
+            ),
+            (
+                "ListAliasAcrossModes",
+                "xs",
+                false,
+                "a list read has no form common to token and block mode, so aliases cannot merge",
+            ),
+            (
+                "ListLabelWithoutIterator",
+                "xs",
+                false,
+                "a list label whose target names no rule or token type has no iterator read",
             ),
             // Resolves: valid reads that must not be rejected.
             (
