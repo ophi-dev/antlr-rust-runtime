@@ -27,6 +27,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: None,
                 branch_local_cardinality: ChildCardinality {
                     min: 1,
@@ -52,6 +53,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: Some(
                     (
                         135,
@@ -82,6 +84,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: Some(
                     (
                         146,
@@ -138,6 +141,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: None,
                 branch_local_cardinality: ChildCardinality {
                     min: 1,
@@ -163,6 +167,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: Some(
                     (
                         190,
@@ -193,6 +198,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: Some(
                     (
                         201,
@@ -249,6 +255,7 @@ expression: "model.rules[1].alts"
                 stable_accessor: true,
                 choice_branch: [],
                 choice_arity: [],
+                choice_spans: [],
                 span: Some(
                     (
                         238,

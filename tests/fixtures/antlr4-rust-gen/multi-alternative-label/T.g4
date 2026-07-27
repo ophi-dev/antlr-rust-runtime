@@ -72,6 +72,19 @@ exhaustive_prefix
     : (first = unary | second = unary) pick = unary NUM
     ;
 
+// One label declared over mutually exclusive branches at the same occurrence: the
+// accessor's unioned token set selects whichever token the parse bound, so a
+// single positional read serves both.
+merged_rivals
+    : (pick = IDENT | pick = NUM) NUM
+    ;
+
+// A label behind a sibling branch: restricting to the label's own path leaves one
+// preceding `unary`, so the accessor is emitted at that fixed position.
+path_restricted
+    : (unary tail = unary | NUM) NUM
+    ;
+
 // Nested exhaustive choices: every path still yields exactly one `unary` before
 // the label, so the inner choice's agreed count rolls up into the outer branch
 // and the accessor survives.

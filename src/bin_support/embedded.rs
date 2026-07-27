@@ -92,6 +92,12 @@ pub(crate) struct ElementRef {
     /// `(a=A | )` would otherwise look like a one-branch choice that always
     /// yields an `A`.
     pub(crate) choice_arity: Vec<usize>,
+    /// Byte span of each enclosing choice *block*, in the same order as
+    /// `choice_branch`. An action lies inside a branch only when its offset falls
+    /// within the block's span — refs alone cannot tell `(A | xs+=A) {…}` (action
+    /// after the group) from `(A x=A {…} | B)` (action inside it), since both put
+    /// branch refs on either side of the action.
+    pub(crate) choice_spans: Vec<(usize, usize)>,
     /// Byte span of the element in the grammar source, when known. A mid-rule
     /// action executes at *its* source position, so only refs that start before
     /// the action's offset have been matched when its body runs.
@@ -423,6 +429,17 @@ impl TranslationCtx<'_> {
     ///   read cannot also serve.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
+        if self.site == ActionSite::Init {
+            // An `@init` body runs at rule entry, before any child exists, so every
+            // read over children is empty and nothing can pollute it. Applying the
+            // after-rule hazards here would reject valid actions.
+            return rule
+                .alts
+                .iter()
+                .flat_map(|alt| alt.refs.iter())
+                .find(|element| element.label.as_deref() == Some(label))
+                .map(|element| (element.clone(), 0));
+        }
         if let Some((offset, alt)) = self
             .body_offset
             .and_then(|offset| rule.alt_at(offset).map(|alt| (offset, alt)))
@@ -475,11 +492,22 @@ impl TranslationCtx<'_> {
     /// Whether `alt` builds a child that the read for `element` would select,
     /// even though `alt` does not declare the label.
     fn alt_can_satisfy_read(alt: &AltModel, element: &ElementRef, occurrence: usize) -> bool {
-        if element.target.is_empty() {
-            // Block reads take the last terminal child, so any terminal matches.
-            return alt.refs.iter().any(|candidate| {
-                !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
-            });
+        // Route on `is_block`, matching `translate_element_read`: a *literal* label
+        // (`x='a'`) is block-mode yet keeps a non-empty source target, so keying on
+        // an empty target here would fall through to token-type matching while the
+        // read actually ignores token type entirely.
+        if element.is_block {
+            // A positional block read selects a terminal by index, so the
+            // alternative can satisfy it whenever it builds a terminal there.
+            return alt
+                .refs
+                .iter()
+                .filter(|candidate| {
+                    !candidate.token_types.is_empty() && candidate.cardinality.max != Some(0)
+                })
+                .any(|candidate| {
+                    Self::exact_terminal_index(alt, candidate).is_none_or(|at| at == occurrence)
+                });
         }
         // The read queries by token *type*, so a differently-spelled terminal with
         // the same type is the same child (`A : 'a';` makes `A` and `'a'` one).
@@ -537,35 +565,60 @@ impl TranslationCtx<'_> {
             .refs
             .iter()
             .position(|candidate| std::ptr::eq(candidate, element))?;
-        Self::exact_terminal_count(alt.refs[..position].iter().filter(|candidate| {
-            !candidate.token_types.is_empty() && candidate.can_coexist_with(element)
-        }))
+        Self::exact_child_count(
+            alt.refs[..position].iter().filter(|candidate| {
+                !candidate.token_types.is_empty() && candidate.can_coexist_with(element)
+            }),
+            true,
+        )
     }
 
-    /// Total terminals contributed by `refs`, or `None` when not fixed. Refs are
-    /// grouped by their innermost choice so an *exhaustive* choice counts once
-    /// rather than per branch; the choice is exact only when every branch it has
-    /// contributes the same number.
-    fn exact_terminal_count<'a>(refs: impl Iterator<Item = &'a ElementRef>) -> Option<usize> {
+    /// Total children contributed by `refs`, or `None` when that total is not the
+    /// same on every parse.
+    ///
+    /// Refs are grouped by their enclosing choices and folded **innermost-first**:
+    /// once a choice's branches agree, its count is attributed to the enclosing
+    /// branch that contains it, so nested exhaustive choices
+    /// (`((a=A | b=A) | c=A)`) stay exact while nested *differing* ones
+    /// (`((a=A | b=B) C | D)`) correctly do not.
+    ///
+    /// `restricted_to_one_path` says the caller already filtered `refs` down to a
+    /// single parse path. Cross-branch agreement is then meaningless — the other
+    /// branches were removed on purpose — so each surviving branch simply counts.
+    fn exact_child_count<'a>(
+        refs: impl Iterator<Item = &'a ElementRef>,
+        restricted_to_one_path: bool,
+    ) -> Option<usize> {
         let refs = refs.collect::<Vec<_>>();
         let mut total = 0_usize;
         let mut per_branch: BTreeMap<(usize, usize), Option<usize>> = BTreeMap::new();
-        let mut branches_seen: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
-        // Recorded arity, so an empty alternative (which emits no ref) still counts
-        // toward the branches that must agree.
+        // Arity is recorded, not observed: an *empty* alternative emits no ref, so
+        // `(a=A | )` would otherwise look like a one-branch choice.
         let mut arity_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut depth_of_choice: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut ancestry: BTreeMap<(usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
         for candidate in &refs {
-            for &(choice, branch) in &candidate.choice_branch {
-                branches_seen.entry(choice).or_default().insert(branch);
-            }
-            for (&(choice, _), &arity) in
-                candidate.choice_branch.iter().zip(&candidate.choice_arity)
+            for (depth, (&(choice, branch), &arity)) in candidate
+                .choice_branch
+                .iter()
+                .zip(&candidate.choice_arity)
+                .enumerate()
             {
                 arity_of_choice.insert(choice, arity);
+                // A choice's depth is where it sits in the ancestry; take the
+                // *shallowest* sighting, since that is its real nesting level
+                // (a deeper ref lists it at the same index, never a lower one).
+                depth_of_choice
+                    .entry(choice)
+                    .and_modify(|existing| *existing = (*existing).min(depth))
+                    .or_insert(depth);
+                ancestry.insert((choice, branch), candidate.choice_branch[..=depth].to_vec());
             }
         }
         for candidate in &refs {
             let max = candidate.cardinality.max?;
+            // Within its own branch a ref contributes its branch-local count; the
+            // `min: 0` that branch membership imposes is not optionality.
             let local = candidate.branch_local_cardinality;
             let exact = (local.min == max && local.max == Some(max)).then_some(max);
             match candidate.choice_branch.last() {
@@ -579,22 +632,58 @@ impl TranslationCtx<'_> {
                 }
             }
         }
-        let mut by_choice: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for ((choice, _), count) in per_branch {
-            by_choice.entry(choice).or_default().push(count?);
-        }
-        for (choice, counts) in by_choice {
-            let expected = arity_of_choice
-                .get(&choice)
-                .copied()
-                .unwrap_or_else(|| branches_seen.get(&choice).map_or(0, BTreeSet::len));
-            let first = counts.first().copied()?;
-            // Every branch must agree *and* be accounted for — `(A A | B)` has
-            // branch counts 2 and 1, so the prefix is not a fixed position.
-            if counts.len() != expected || counts.iter().any(|count| *count != first) {
-                return None;
+        // Deepest choices first, so an inner result rolls up into its parent branch.
+        // The list is rebuilt from `per_branch` each pass, because folding an inner
+        // choice *creates* an entry for its parent that must then fold in turn.
+        let mut processed: BTreeSet<usize> = BTreeSet::new();
+        // Deepest unprocessed choice still holding entries. Folding one creates an
+        // entry for its parent, so the candidate set is re-examined every pass.
+        while let Some(choice) = per_branch
+            .keys()
+            .map(|(choice, _)| *choice)
+            .filter(|choice| !processed.contains(choice))
+            .max_by_key(|choice| depth_of_choice.get(choice).copied().unwrap_or(0))
+        {
+            processed.insert(choice);
+            let counts = per_branch
+                .iter()
+                .filter(|((candidate, _), _)| *candidate == choice)
+                .map(|((_, branch), count)| (*branch, *count))
+                .collect::<Vec<_>>();
+            if counts.is_empty() {
+                continue;
             }
-            total = total.saturating_add(first);
+            let agreed = if restricted_to_one_path {
+                // One path survives, so there is nothing to agree with.
+                counts.iter().try_fold(0_usize, |sum, (_, count)| {
+                    Some(sum.saturating_add((*count)?))
+                })?
+            } else {
+                let expected = arity_of_choice.get(&choice).copied()?;
+                let first = counts.first().and_then(|(_, count)| *count)?;
+                if counts.len() != expected || counts.iter().any(|(_, count)| *count != Some(first))
+                {
+                    return None;
+                }
+                first
+            };
+            let parent = counts.first().and_then(|(branch, _)| {
+                ancestry.get(&(choice, *branch)).and_then(|chain| {
+                    chain
+                        .split_last()
+                        .and_then(|(_, rest)| rest.last().copied())
+                })
+            });
+            for (branch, _) in &counts {
+                per_branch.remove(&(choice, *branch));
+            }
+            match parent {
+                Some(parent_key) => {
+                    let slot = per_branch.entry(parent_key).or_insert(Some(0));
+                    *slot = slot.map(|sum| sum.saturating_add(agreed));
+                }
+                None => total = total.saturating_add(agreed),
+            }
         }
         Some(total)
     }
@@ -656,24 +745,44 @@ impl TranslationCtx<'_> {
         // The choice ancestry the action itself sits in, derived from spans: the
         // action belongs to the innermost branch whose refs bracket its offset.
         // Refs from any *other* branch of those choices cannot have run.
+        // The choice branches that syntactically *enclose* the action. A branch
+        // encloses it only when the branch has a ref before the action AND no
+        // sibling branch of the same choice has a ref after it — a sibling ref
+        // afterwards means the choice is still open, i.e. the action follows the
+        // whole group rather than sitting inside one branch. Nearest-preceding-ref
+        // alone gets `(A | xs+=A) {…}` wrong, marking the action as confined to the
+        // final branch when it actually runs for either.
+        // The choice branches that syntactically enclose the action: those whose
+        // *block* span contains the action's offset. Ref spans alone cannot decide
+        // this — `(A | xs+=A) {…}` and `(A x=A {…} | B)` both put branch refs on
+        // either side of the action — but the block's own extent can: in the first
+        // the action sits after the closing paren, in the second inside it.
         let action_branches = action_offset.map(|offset| {
-            // The *nearest* preceding ref, by source position — not the deepest.
-            // Taking the deepest would keep a closed-over branch's ancestry after
-            // the choice ends: in `(A A | B) x=(C | D) {…}` the second `A` is
-            // deeper than `x`, and treating the action as still inside that branch
-            // would count both `A`s as matched.
-            alt.refs
-                .iter()
-                .filter_map(|candidate| {
-                    candidate
-                        .span
-                        .filter(|(start, _)| *start < offset)
-                        .map(|(start, _)| (start, &candidate.choice_branch))
-                })
-                .max_by_key(|(start, _)| *start)
-                .map(|(_, branches)| branches.clone())
-                .unwrap_or_default()
+            let mut enclosing: Vec<(usize, usize)> = Vec::new();
+            for candidate in &alt.refs {
+                let inside_all = candidate
+                    .choice_spans
+                    .iter()
+                    .all(|&(start, end)| start <= offset && offset < end);
+                if !inside_all || candidate.choice_branch.is_empty() {
+                    continue;
+                }
+                // Only the branch actually containing the action counts, so require
+                // the candidate itself to be positioned around it.
+                let brackets = candidate.span.is_some_and(|(start, _)| start < offset);
+                if brackets {
+                    for &key in &candidate.choice_branch {
+                        if !enclosing.contains(&key) {
+                            enclosing.push(key);
+                        }
+                    }
+                }
+            }
+            enclosing
         });
+        let branch_confined = action_branches
+            .as_ref()
+            .is_some_and(|branches| !branches.is_empty());
         // Whether a ref can have run before the action, given that ancestry. An
         // action after the whole choice (`(x=A | A) {$x}`) has no branch tag, so
         // every branch counts; one written inside a branch excludes its siblings —
@@ -762,9 +871,14 @@ impl TranslationCtx<'_> {
             // terminals matched ahead of the block on this parse path — every
             // terminal counts, not just ones sharing the block's token set, since
             // each is a distinct child of the same context.
-            let terminals_before = Self::exact_terminal_count(before.iter().filter(|candidate| {
-                !candidate.token_types.is_empty() && on_action_path(candidate)
-            }));
+            // `on_action_path` already narrowed these to one parse path (when the
+            // action is inside a branch), so branches that survive simply count.
+            let terminals_before = Self::exact_child_count(
+                before.iter().filter(|candidate| {
+                    !candidate.token_types.is_empty() && on_action_path(candidate)
+                }),
+                branch_confined,
+            );
             // Without a fixed index the read falls back to the most recent
             // terminal, which is only right when nothing has been matched since.
             // A sibling branch that puts a terminal at the same index supplies the
@@ -817,21 +931,27 @@ impl TranslationCtx<'_> {
                 .iter()
                 .any(|token_type| element.token_types.contains(token_type))
         };
-        let occurrence = before
-            .iter()
-            .filter(|candidate| counts_toward_occurrence(candidate))
-            .try_fold(0_usize, |total, candidate| {
-                let max = candidate.cardinality.max?;
-                // A group only *sometimes* yields a matching child, so its count
-                // is exact only when every member is one the read selects.
-                let all_match = candidate
+        // A token *group* only sometimes yields a matching child, so its count is
+        // exact only when every member is one the read selects.
+        if before.iter().any(|candidate| {
+            counts_toward_occurrence(candidate)
+                && !candidate.token_types.is_empty()
+                && !candidate
                     .token_types
                     .iter()
-                    .all(|token_type| element.token_types.contains(token_type));
-                (candidate.cardinality.min == max
-                    && (candidate.token_types.is_empty() || all_match))
-                    .then(|| total.saturating_add(max))
-            })?;
+                    .all(|token_type| element.token_types.contains(token_type))
+        }) {
+            return None;
+        }
+        // Count only children on the label's own parse path, and — when the action
+        // is confined to a branch — count the surviving branch as that path rather
+        // than demanding agreement from branches already filtered out.
+        let occurrence = Self::exact_child_count(
+            before.iter().filter(|candidate| {
+                counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
+            }),
+            true,
+        )?;
         // An optional label is displaced by a following same-target child that can
         // slide into its position, whether that child is mandatory (`x=A? A`) or
         // optional (`(pred x=A)? A?` — the follower may consume the only token).
@@ -973,6 +1093,7 @@ fn translate_reference(
             stable_accessor: false,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -990,6 +1111,7 @@ fn translate_reference(
             stable_accessor: false,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1343,6 +1465,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1356,6 +1479,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1400,13 +1524,16 @@ mod tests {
     #[test]
     fn inexact_preceding_refs_leave_labels_unresolved_instead_of_misindexing() {
         let mut statement = rule("s");
+        // `r : (e | x=e) {…}`: the two refs are *sequential* here, not branches of
+        // one choice — an unlabeled `e` genuinely precedes the label on the same
+        // path, which is what leaves its position unfixed. (The mutually exclusive
+        // spelling is covered by `sibling_branch_children_do_not_shadow_an_optional_label`.)
         let branch_ref = |label: Option<&str>| ElementRef {
             label: label.map(ToOwned::to_owned),
             target: "e".to_owned(),
             token_types: Vec::new(),
             is_block: false,
             is_list: false,
-            // Sibling branches of a choice are mutually exclusive.
             cardinality: ChildCardinality {
                 min: 0,
                 max: Some(1),
@@ -1414,8 +1541,13 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
-            branch_local_cardinality: ChildCardinality::ONE,
+            // Optional on its own path, so the count ahead of the label floats.
+            branch_local_cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1462,6 +1594,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1506,6 +1639,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality { min, max: Some(1) },
         };
@@ -1551,6 +1685,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1567,6 +1702,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1624,6 +1760,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1637,6 +1774,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -1692,6 +1830,7 @@ mod tests {
                         stable_accessor: true,
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
+                        choice_spans: Vec::new(),
                         span: Some((10, 20)),
                         branch_local_cardinality: ChildCardinality::ONE,
                     },
@@ -1708,6 +1847,7 @@ mod tests {
                         stable_accessor: true,
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
+                        choice_spans: Vec::new(),
                         span: Some((30, 31)),
                         branch_local_cardinality: ChildCardinality::ONE,
                     },
@@ -1759,6 +1899,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1818,6 +1959,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: vec![(5, branch)],
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1878,6 +2020,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1930,6 +2073,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -1989,6 +2133,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2029,6 +2174,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2097,6 +2243,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2113,6 +2260,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2139,6 +2287,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: branches,
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2188,6 +2337,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: vec![(3, branch)],
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2251,6 +2401,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2268,6 +2419,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2313,6 +2465,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: vec![(7, branch)],
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2358,6 +2511,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2402,6 +2556,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2418,6 +2573,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2472,6 +2628,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2533,6 +2690,7 @@ mod tests {
             stable_accessor: true,
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
+            choice_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
         };
@@ -2614,6 +2772,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },
@@ -2627,6 +2786,7 @@ mod tests {
                     stable_accessor: true,
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
+                    choice_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
                 },

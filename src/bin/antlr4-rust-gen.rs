@@ -2591,6 +2591,7 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         stable_accessor: true,
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
+                        choice_spans: Vec::new(),
                         span: None,
                         branch_local_cardinality: embedded::ChildCardinality::ONE,
                     }
@@ -2666,6 +2667,7 @@ fn collect_structural_context_refs(
             branch_local_cardinality: embedded::ChildCardinality::ONE,
             choice_branch: &[],
             choice_arity: &[],
+            choice_spans: &[],
         },
         vocabulary,
     );
@@ -2681,6 +2683,7 @@ struct StructuralRefContext<'a> {
     branch_local_cardinality: embedded::ChildCardinality,
     choice_branch: &'a [(usize, usize)],
     choice_arity: &'a [usize],
+    choice_spans: &'a [(usize, usize)],
 }
 
 fn collect_structural_context_refs_with_cardinality(
@@ -2695,6 +2698,7 @@ fn collect_structural_context_refs_with_cardinality(
         branch_local_cardinality,
         choice_branch,
         choice_arity,
+        choice_spans,
     } = context;
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
@@ -2724,6 +2728,7 @@ fn collect_structural_context_refs_with_cardinality(
                 stable_accessor,
                 choice_branch: choice_branch.to_vec(),
                 choice_arity: choice_arity.to_vec(),
+                choice_spans: choice_spans.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -2741,6 +2746,7 @@ fn collect_structural_context_refs_with_cardinality(
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
                     choice_arity: choice_arity.to_vec(),
+                    choice_spans: choice_spans.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2769,6 +2775,7 @@ fn collect_structural_context_refs_with_cardinality(
                         stable_accessor,
                         choice_branch: choice_branch.to_vec(),
                         choice_arity: choice_arity.to_vec(),
+                        choice_spans: choice_spans.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2788,6 +2795,7 @@ fn collect_structural_context_refs_with_cardinality(
                         stable_accessor: false,
                         choice_branch: choice_branch.to_vec(),
                         choice_arity: choice_arity.to_vec(),
+                        choice_spans: choice_spans.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
@@ -2817,9 +2825,14 @@ fn collect_structural_context_refs_with_cardinality(
                     // keeps whatever tag it inherited.
                     let mut nested_branch = choice_branch.to_vec();
                     let mut nested_arity = choice_arity.to_vec();
+                    let mut nested_spans = choice_spans.to_vec();
                     if block.alternatives.len() > 1 {
                         nested_branch.push((block.syntax.index(), branch));
                         nested_arity.push(block.alternatives.len());
+                        nested_spans.push((
+                            block.span.bytes.start as usize,
+                            block.span.bytes.end as usize,
+                        ));
                     }
                     collect_structural_context_refs_with_cardinality(
                         &alternative.elements,
@@ -2832,6 +2845,7 @@ fn collect_structural_context_refs_with_cardinality(
                             branch_local_cardinality: branch_local,
                             choice_branch: &nested_branch,
                             choice_arity: &nested_arity,
+                            choice_spans: &nested_spans,
                         },
                         vocabulary,
                     );
@@ -2848,6 +2862,7 @@ fn collect_structural_context_refs_with_cardinality(
                     stable_accessor,
                     choice_branch: choice_branch.to_vec(),
                     choice_arity: choice_arity.to_vec(),
+                    choice_spans: choice_spans.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
@@ -2865,6 +2880,7 @@ fn collect_structural_context_refs_with_cardinality(
                 stable_accessor: false,
                 choice_branch: choice_branch.to_vec(),
                 choice_arity: choice_arity.to_vec(),
+                choice_spans: choice_spans.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
@@ -9077,6 +9093,7 @@ fn context_label_accessor(
         stable_accessor: true,
         choice_branch: Vec::new(),
         choice_arity: Vec::new(),
+        choice_spans: Vec::new(),
         span: None,
         branch_local_cardinality: embedded::ChildCardinality::ONE,
     };
@@ -9146,8 +9163,13 @@ fn context_label_selector(
     // position this accessor reads, but on a parse where the label is unset —
     // `(left=unary | right=unary)` would let `right()` return `left`'s child.
     // Positional lookup cannot tell them apart, so decline.
+    // Another *declaration* of the same label is not an impostor — it binds the
+    // label too, and `context_label_accessor` already proved the declarations share
+    // one read. Only an unlabeled (or differently-labeled) sibling child can be
+    // mistaken for this label's.
     let sibling_supplies_target = alternative.refs.iter().any(|element| {
-        !element.can_coexist_with(labeled)
+        element.label.as_deref() != Some(label)
+            && !element.can_coexist_with(labeled)
             && context_ref_can_match_target(element, target)
             && element.cardinality.max != Some(0)
     });
@@ -9164,8 +9186,26 @@ fn context_label_selector(
         });
         return (!has_unlabeled_target).then_some(ContextLabelSelector::AllAfter(start));
     }
+    // Several declarations can share one positional read when they are mutually
+    // exclusive and each sits at the same occurrence — `(x=A | x=B)` binds exactly
+    // one token on every parse, and the accessor's unioned token set selects it.
     if matching.len() != 1 {
-        return None;
+        let mutually_exclusive = matching.iter().enumerate().all(|(index, (_, left))| {
+            matching[index + 1..]
+                .iter()
+                .all(|(_, right)| !left.can_coexist_with(right))
+        });
+        let positions = matching
+            .iter()
+            .map(|(position, element)| {
+                exact_target_cardinality_on_path(&alternative.refs[..*position], target, element)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let agreed = positions.first().copied()?;
+        if !mutually_exclusive || positions.iter().any(|position| *position != agreed) {
+            return None;
+        }
+        return Some(ContextLabelSelector::Nth(agreed));
     }
     let element = matching[0].1;
     if !element.cardinality.is_repeated() {
@@ -9217,6 +9257,10 @@ fn exact_target_cardinality_on_path(
     target: &embedded::ElementRef,
     path: &embedded::ElementRef,
 ) -> Option<usize> {
+    // Filtering to one path and then demanding cross-branch agreement are mutually
+    // exclusive: the other branches were removed deliberately, so requiring them to
+    // contribute would reject `(A x=A | B)`, where the retained `A` still carries
+    // the choice's full arity of two.
     // A ref in a branch `path` cannot reach never precedes it, so drop those
     // before counting: in `(left=unary | right=unary)` the `left` ref must not
     // shift `right` to occurrence 1.
@@ -9224,6 +9268,20 @@ fn exact_target_cardinality_on_path(
         .iter()
         .filter(|element| element.can_coexist_with(path))
         .cloned()
+        .map(|mut element| {
+            // Drop the branch tags shared with `path`: on this path those branches
+            // are taken, so their refs count as plain sequential children rather
+            // than alternatives awaiting cross-branch agreement.
+            element
+                .choice_branch
+                .retain(|(choice, _)| !path.choice_branch.iter().any(|(taken, _)| taken == choice));
+            let keep = element.choice_branch.len();
+            element.choice_arity.truncate(keep);
+            element.choice_spans.truncate(keep);
+            // Their cardinality on this path is the branch-local one.
+            element.cardinality = element.branch_local_cardinality;
+            element
+        })
         .collect::<Vec<_>>();
     exact_target_cardinality(&reachable, target)
 }
@@ -15113,6 +15171,17 @@ mod tests {
         insta::assert_snapshot!(
             "multi_alternative_label_optional_prefix_context",
             context("OptionalPrefixContext")
+        );
+        // One label over mutually exclusive branches merges into a single read; and
+        // restricting to the label's own path lets a sibling branch be ignored
+        // rather than demanded.
+        insta::assert_snapshot!(
+            "multi_alternative_label_merged_rivals_context",
+            context("MergedRivalsContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_path_restricted_context",
+            context("PathRestrictedContext")
         );
         // Nesting the exhaustive choice keeps the count fixed: the inner choice's
         // agreed contribution rolls up into the outer branch.
