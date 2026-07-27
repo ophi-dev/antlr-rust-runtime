@@ -98,6 +98,23 @@ pub(crate) struct ElementRef {
     /// after the group) from `(A x=A {…} | B)` (action inside it), since both put
     /// branch refs on either side of the action.
     pub(crate) choice_spans: Vec<(usize, usize)>,
+    /// Cardinality with every *enclosing* quantifier and choice split treated as
+    /// satisfied — only this element's own EBNF suffix applies. An action inside
+    /// `(A x=A {…})?` runs only when the group matched, so on that path the
+    /// preceding `A` is exactly-once even though both `cardinality` and
+    /// `branch_local_cardinality` report `0..1` from the group's `?`.
+    pub(crate) group_local_cardinality: ChildCardinality,
+    /// Byte spans of *every* enclosing block, including single-alternative groups
+    /// that `choice_spans` omits. An action inside such a group only runs when the
+    /// group was taken, so refs sharing the group have run even though their
+    /// cardinality reports `min: 0` from the group's `?`.
+    pub(crate) group_spans: Vec<(usize, usize)>,
+    /// Byte span of each enclosing choice *alternative* (the branch itself), in the
+    /// same order as `choice_branch`. Lets an action be attributed to the branch
+    /// whose text contains it, including a branch holding only actions or
+    /// predicates — such a branch emits no `ElementRef` at all, so ref spans alone
+    /// would attribute the action to a neighbouring branch.
+    pub(crate) branch_spans: Vec<(usize, usize)>,
     /// Byte span of the element in the grammar source, when known. A mid-rule
     /// action executes at *its* source position, so only refs that start before
     /// the action's offset have been matched when its body runs.
@@ -564,7 +581,7 @@ impl TranslationCtx<'_> {
                 candidate.choice_arity.truncate(keep);
                 candidate.choice_spans.truncate(keep);
                 if candidate.choice_branch.is_empty() {
-                    candidate.cardinality = candidate.branch_local_cardinality;
+                    candidate.cardinality = candidate.group_local_cardinality;
                 }
                 candidate
             })
@@ -771,11 +788,19 @@ impl TranslationCtx<'_> {
         if left.0.is_list != right.0.is_list {
             return false;
         }
-        // Token-backed resolutions are equivalent when they query the same token
-        // type, regardless of source form: `x=A` resolves in token mode while
-        // `x='a'` is block mode, yet both lower to `child_tokens(A)`.
+        // Token-backed resolutions can be equivalent across source forms (`x=A` is
+        // token-mode, `x='a'` is block-mode) because both lower to the same
+        // `child_tokens(A)` query — but their occurrences are counted in different
+        // units: a block read indexes *every* terminal child, a token read only
+        // same-type children. Comparing the raw numbers merged `x='a' | A x=A`,
+        // where each side reports 1 but means a different child. Both must
+        // therefore agree on the occurrence *and*, when the modes differ, that
+        // occurrence must be zero — the one index where the two systems coincide.
         if !left.0.token_types.is_empty() && left.0.token_types == right.0.token_types {
-            return left.1 == right.1;
+            if left.1 != right.1 {
+                return false;
+            }
+            return left.0.is_block == right.0.is_block || left.1 == 0;
         }
         if left.0.is_block != right.0.is_block {
             return false;
@@ -851,47 +876,40 @@ impl TranslationCtx<'_> {
             // offset and no ref of a *later* sibling does — source order means a
             // later branch having started implies the action is past this one.
             let mut chosen: Vec<(usize, usize)> = Vec::new();
-            let mut choices: Vec<usize> = Vec::new();
+            // Every (choice, branch) whose *branch text* contains the action. This
+            // reads the branch's own span rather than inferring from ref positions,
+            // so a branch holding only an action or predicate — which emits no
+            // `ElementRef` — is still identified (`x=A? (A | {$x.text})`).
             for candidate in &alt.refs {
-                for &(choice, _) in &candidate.choice_branch {
-                    if !choices.contains(&choice) {
-                        choices.push(choice);
+                for ((&key, &(branch_start, branch_end)), &(choice_start, choice_end)) in candidate
+                    .choice_branch
+                    .iter()
+                    .zip(&candidate.branch_spans)
+                    .zip(&candidate.choice_spans)
+                {
+                    let inside_choice = choice_start <= offset && offset < choice_end;
+                    let inside_branch = branch_start <= offset && offset < branch_end;
+                    if inside_choice && inside_branch && !chosen.contains(&key) {
+                        chosen.push(key);
                     }
                 }
             }
-            for choice in choices {
-                // Only choices whose block encloses the action are in play.
-                let encloses = alt.refs.iter().any(|candidate| {
-                    candidate
-                        .choice_branch
-                        .iter()
-                        .zip(&candidate.choice_spans)
-                        .any(|(&(candidate_choice, _), &(start, end))| {
-                            candidate_choice == choice && start <= offset && offset < end
-                        })
-                });
-                if !encloses {
-                    continue;
-                }
-                let started_before = |branch: usize| {
-                    alt.refs.iter().any(|candidate| {
-                        candidate.span.is_some_and(|(start, _)| start < offset)
-                            && candidate
-                                .choice_branch
-                                .iter()
-                                .any(|&(c, b)| c == choice && b == branch)
-                    })
-                };
-                let branches = alt
-                    .refs
-                    .iter()
-                    .flat_map(|candidate| candidate.choice_branch.iter())
-                    .filter(|&&(c, _)| c == choice)
-                    .map(|&(_, b)| b)
-                    .collect::<BTreeSet<_>>();
-                // The last branch that has started is the one containing the action.
-                if let Some(branch) = branches.into_iter().rfind(|&branch| started_before(branch)) {
-                    chosen.push((choice, branch));
+            // A choice enclosing the action but with no branch claiming it means the
+            // action sits in a ref-free branch: nothing of that branch has matched,
+            // so record it as its own branch so siblings are excluded.
+            for candidate in &alt.refs {
+                for (&(choice, _), &(choice_start, choice_end)) in
+                    candidate.choice_branch.iter().zip(&candidate.choice_spans)
+                {
+                    if choice_start <= offset
+                        && offset < choice_end
+                        && !chosen
+                            .iter()
+                            .any(|&(chosen_choice, _)| chosen_choice == choice)
+                    {
+                        // usize::MAX marks "a branch with no refs of its own".
+                        chosen.push((choice, usize::MAX));
+                    }
                 }
             }
             chosen
@@ -899,6 +917,19 @@ impl TranslationCtx<'_> {
         let branch_confined = action_branches
             .as_ref()
             .is_some_and(|branches| !branches.is_empty());
+        // A ref inside an enclosing group that the action also sits inside has run:
+        // the action only executes when that group was taken. Its cardinality still
+        // reports `min: 0` from the group's `?`, so use the branch-local figure for
+        // those refs — `(A x=A {…})?` has exactly one `A` before the label whenever
+        // the action runs at all.
+        let on_taken_group = |candidate: &ElementRef| {
+            action_offset.is_some_and(|offset| {
+                candidate
+                    .group_spans
+                    .iter()
+                    .any(|&(start, end)| start <= offset && offset < end)
+            })
+        };
         // Whether a ref can have run before the action, given that ancestry. An
         // action after the whole choice (`(x=A | A) {$x}`) has no branch tag, so
         // every branch counts; one written inside a branch excludes its siblings —
@@ -1020,7 +1051,12 @@ impl TranslationCtx<'_> {
                 // ROOT J: a fixed index is not enough when the label is *optional* —
                 // `x=(A | B)? C {…}` puts `C` at index 0 whenever the block is
                 // absent, so the read would report it as the label's token.
-                if element.cardinality.min == 0
+                let optional_here = if on_taken_group(element) {
+                    element.group_local_cardinality.min == 0
+                } else {
+                    element.cardinality.min == 0
+                };
+                if optional_here
                     && after.iter().any(|candidate| {
                         !candidate.token_types.is_empty()
                             && candidate.cardinality.max != Some(0)
@@ -1082,9 +1118,23 @@ impl TranslationCtx<'_> {
         // is confined to a branch — count the surviving branch as that path rather
         // than demanding agreement from branches already filtered out.
         let occurrence = Self::exact_child_count(
-            before.iter().filter(|candidate| {
-                counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
-            }),
+            before
+                .iter()
+                .filter(|candidate| {
+                    counts_toward_occurrence(candidate) && candidate.can_coexist_with(element)
+                })
+                .cloned()
+                .map(|mut candidate| {
+                    if on_taken_group(&candidate) {
+                        // The enclosing group is taken on the action's path, so the
+                        // group's own quantifier no longer relaxes this ref.
+                        candidate.cardinality = candidate.group_local_cardinality;
+                        candidate.branch_local_cardinality = candidate.group_local_cardinality;
+                    }
+                    candidate
+                })
+                .collect::<Vec<_>>()
+                .iter(),
             true,
         )?;
         // An optional label is displaced by a following same-target child that can
@@ -1098,7 +1148,15 @@ impl TranslationCtx<'_> {
         // exclude siblings for an action that runs after the whole choice.
         // Another *declaration* of the same label is not a shadow — it binds the
         // label too, and the guard above already proved they share one read.
-        let shadowed_when_absent = element.cardinality.min == 0
+        // The label's own `min: 0` may come from a group the action shares, in which
+        // case it is *not* optional relative to the action: `(A x=A {…})?` only runs
+        // the action when the group matched, so `x` is bound.
+        let element_optional_here = if on_taken_group(element) {
+            element.group_local_cardinality.min == 0
+        } else {
+            element.cardinality.min == 0
+        };
+        let shadowed_when_absent = element_optional_here
             && after.iter().any(|candidate| {
                 !declares_label(candidate) && same_target(candidate) && matched_at_action(candidate)
             });
@@ -1229,8 +1287,11 @@ fn translate_reference(
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let _ = target_rule;
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
@@ -1247,8 +1308,11 @@ fn translate_reference(
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
     }
@@ -1601,8 +1665,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
                 ElementRef {
                     label: Some("right".to_owned()),
@@ -1615,8 +1682,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
             ],
             children: BTreeMap::from([(
@@ -1677,9 +1747,15 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             // Optional on its own path, so the count ahead of the label floats.
             branch_local_cardinality: ChildCardinality {
+                min: 0,
+                max: Some(1),
+            },
+            group_local_cardinality: ChildCardinality {
                 min: 0,
                 max: Some(1),
             },
@@ -1730,8 +1806,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1775,8 +1854,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality { min, max: Some(1) },
+            group_local_cardinality: ChildCardinality { min, max: Some(1) },
         };
         statement.alts.push(AltModel {
             label: None,
@@ -1821,8 +1903,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let single_ref = ElementRef {
             label: Some("name".to_owned()),
@@ -1838,8 +1923,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let translate = |max| {
             let mut statement = rule("s");
@@ -1896,8 +1984,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
                 ElementRef {
                     label: Some("errors".to_owned()),
@@ -1910,8 +2001,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
             ],
             children: BTreeMap::new(),
@@ -1966,8 +2060,11 @@ mod tests {
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
                         choice_spans: Vec::new(),
+                        group_spans: Vec::new(),
+                        branch_spans: Vec::new(),
                         span: Some((10, 20)),
                         branch_local_cardinality: ChildCardinality::ONE,
+                        group_local_cardinality: ChildCardinality::ONE,
                     },
                     ElementRef {
                         label: None,
@@ -1983,8 +2080,11 @@ mod tests {
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
                         choice_spans: Vec::new(),
+                        group_spans: Vec::new(),
+                        branch_spans: Vec::new(),
                         span: Some((30, 31)),
                         branch_local_cardinality: ChildCardinality::ONE,
+                        group_local_cardinality: ChildCardinality::ONE,
                     },
                 ],
                 children: BTreeMap::new(),
@@ -2035,8 +2135,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -2095,8 +2198,11 @@ mod tests {
             choice_branch: vec![(5, branch)],
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let translate = |second: ElementRef, offset| {
             let mut statement = rule("s");
@@ -2156,8 +2262,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -2209,8 +2318,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let translate = |second: ElementRef| {
             let mut statement = rule("s");
@@ -2269,8 +2381,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -2310,8 +2425,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut choice = rule("s");
         for (index, refs) in [vec![block_ref(vec![1, 2])], vec![block_ref(vec![3, 4])]]
@@ -2379,8 +2497,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let error = translate(group_list, "$xs").expect_err("no target to iterate");
         assert!(error.contains("cannot translate $xs"), "{error}");
@@ -2396,8 +2517,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let error = translate(repeated_single, "$x.text").expect_err("no last-occurrence read");
         assert!(error.contains("cannot translate $x"), "{error}");
@@ -2423,8 +2547,11 @@ mod tests {
             choice_branch: branches,
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -2473,8 +2600,11 @@ mod tests {
             choice_branch: vec![(3, branch)],
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         statement.alts.push(AltModel {
@@ -2537,8 +2667,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
                 ElementRef {
                     label: None,
@@ -2555,8 +2688,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
             ],
             children: BTreeMap::new(),
@@ -2601,8 +2737,11 @@ mod tests {
             choice_branch: vec![(7, branch)],
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -2647,8 +2786,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: Some(span),
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         sequential.alts.push(AltModel {
             label: None,
@@ -2692,8 +2834,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let token_ref = ElementRef {
             label: None,
@@ -2709,8 +2854,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let mut statement = rule("s");
         for (index, refs) in [
@@ -2764,8 +2912,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         let translate = |second: Vec<ElementRef>| {
             let mut statement = rule("s");
@@ -2826,8 +2977,11 @@ mod tests {
             choice_branch: Vec::new(),
             choice_arity: Vec::new(),
             choice_spans: Vec::new(),
+            group_spans: Vec::new(),
+            branch_spans: Vec::new(),
             span: None,
             branch_local_cardinality: ChildCardinality::ONE,
+            group_local_cardinality: ChildCardinality::ONE,
         };
         statement.alts.push(AltModel {
             label: None,
@@ -2908,8 +3062,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
                 ElementRef {
                     label: Some("ids".to_owned()),
@@ -2922,8 +3079,11 @@ mod tests {
                     choice_branch: Vec::new(),
                     choice_arity: Vec::new(),
                     choice_spans: Vec::new(),
+                    group_spans: Vec::new(),
+                    branch_spans: Vec::new(),
                     span: None,
                     branch_local_cardinality: ChildCardinality::ONE,
+                    group_local_cardinality: ChildCardinality::ONE,
                 },
             ],
             children: BTreeMap::new(),

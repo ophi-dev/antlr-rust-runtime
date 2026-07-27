@@ -2592,8 +2592,11 @@ fn structural_rule_alternatives(rule: &Rule, vocabulary: &Vocabulary) -> Vec<emb
                         choice_branch: Vec::new(),
                         choice_arity: Vec::new(),
                         choice_spans: Vec::new(),
+                        group_spans: Vec::new(),
+                        branch_spans: Vec::new(),
                         span: None,
                         branch_local_cardinality: embedded::ChildCardinality::ONE,
+                        group_local_cardinality: embedded::ChildCardinality::ONE,
                     }
                 });
             Some(structural_alt_model(alternative, leading_ref, vocabulary))
@@ -2668,6 +2671,8 @@ fn collect_structural_context_refs(
             choice_branch: &[],
             choice_arity: &[],
             choice_spans: &[],
+            group_spans: &[],
+            branch_spans: &[],
         },
         vocabulary,
     );
@@ -2684,6 +2689,8 @@ struct StructuralRefContext<'a> {
     choice_branch: &'a [(usize, usize)],
     choice_arity: &'a [usize],
     choice_spans: &'a [(usize, usize)],
+    group_spans: &'a [(usize, usize)],
+    branch_spans: &'a [(usize, usize)],
 }
 
 fn collect_structural_context_refs_with_cardinality(
@@ -2699,6 +2706,8 @@ fn collect_structural_context_refs_with_cardinality(
         choice_branch,
         choice_arity,
         choice_spans,
+        group_spans,
+        branch_spans,
     } = context;
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
@@ -2729,11 +2738,17 @@ fn collect_structural_context_refs_with_cardinality(
                 choice_branch: choice_branch.to_vec(),
                 choice_arity: choice_arity.to_vec(),
                 choice_spans: choice_spans.to_vec(),
+                group_spans: group_spans.to_vec(),
+                branch_spans: branch_spans.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
                 )),
                 branch_local_cardinality: branch_local,
+                group_local_cardinality: quantified_cardinality(
+                    embedded::ChildCardinality::ONE,
+                    element.quantifier,
+                ),
             }),
             ElementKind::Terminal(terminal) => {
                 refs.push(embedded::ElementRef {
@@ -2747,11 +2762,17 @@ fn collect_structural_context_refs_with_cardinality(
                     choice_branch: choice_branch.to_vec(),
                     choice_arity: choice_arity.to_vec(),
                     choice_spans: choice_spans.to_vec(),
+                    group_spans: group_spans.to_vec(),
+                    branch_spans: branch_spans.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
                     )),
                     branch_local_cardinality: branch_local,
+                    group_local_cardinality: quantified_cardinality(
+                        embedded::ChildCardinality::ONE,
+                        element.quantifier,
+                    ),
                 });
             }
             ElementKind::Block(block) => {
@@ -2776,11 +2797,17 @@ fn collect_structural_context_refs_with_cardinality(
                         choice_branch: choice_branch.to_vec(),
                         choice_arity: choice_arity.to_vec(),
                         choice_spans: choice_spans.to_vec(),
+                        group_spans: group_spans.to_vec(),
+                        branch_spans: branch_spans.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
                         )),
                         branch_local_cardinality: branch_local,
+                        group_local_cardinality: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        ),
                     });
                     continue;
                 }
@@ -2796,11 +2823,17 @@ fn collect_structural_context_refs_with_cardinality(
                         choice_branch: choice_branch.to_vec(),
                         choice_arity: choice_arity.to_vec(),
                         choice_spans: choice_spans.to_vec(),
+                        group_spans: group_spans.to_vec(),
+                        branch_spans: branch_spans.to_vec(),
                         span: Some((
                             element.span.bytes.start as usize,
                             element.span.bytes.end as usize,
                         )),
                         branch_local_cardinality: branch_local,
+                        group_local_cardinality: quantified_cardinality(
+                            embedded::ChildCardinality::ONE,
+                            element.quantifier,
+                        ),
                     });
                 }
                 // Refs from one alternative of a *choice* are present only when
@@ -2826,12 +2859,23 @@ fn collect_structural_context_refs_with_cardinality(
                     let mut nested_branch = choice_branch.to_vec();
                     let mut nested_arity = choice_arity.to_vec();
                     let mut nested_spans = choice_spans.to_vec();
+                    // Every block counts here, single-alternative groups included.
+                    let mut nested_branch_spans = branch_spans.to_vec();
+                    let mut nested_groups = group_spans.to_vec();
+                    nested_groups.push((
+                        block.span.bytes.start as usize,
+                        block.span.bytes.end as usize,
+                    ));
                     if block.alternatives.len() > 1 {
                         nested_branch.push((block.syntax.index(), branch));
                         nested_arity.push(block.alternatives.len());
                         nested_spans.push((
                             block.span.bytes.start as usize,
                             block.span.bytes.end as usize,
+                        ));
+                        nested_branch_spans.push((
+                            alternative.span.bytes.start as usize,
+                            alternative.span.bytes.end as usize,
                         ));
                     }
                     collect_structural_context_refs_with_cardinality(
@@ -2846,6 +2890,8 @@ fn collect_structural_context_refs_with_cardinality(
                             choice_branch: &nested_branch,
                             choice_arity: &nested_arity,
                             choice_spans: &nested_spans,
+                            group_spans: &nested_groups,
+                            branch_spans: &nested_branch_spans,
                         },
                         vocabulary,
                     );
@@ -2863,11 +2909,17 @@ fn collect_structural_context_refs_with_cardinality(
                     choice_branch: choice_branch.to_vec(),
                     choice_arity: choice_arity.to_vec(),
                     choice_spans: choice_spans.to_vec(),
+                    group_spans: group_spans.to_vec(),
+                    branch_spans: branch_spans.to_vec(),
                     span: Some((
                         element.span.bytes.start as usize,
                         element.span.bytes.end as usize,
                     )),
                     branch_local_cardinality: branch_local,
+                    group_local_cardinality: quantified_cardinality(
+                        embedded::ChildCardinality::ONE,
+                        element.quantifier,
+                    ),
                 });
             }
             ElementKind::Range(..) if label.is_some() => refs.push(embedded::ElementRef {
@@ -2881,11 +2933,17 @@ fn collect_structural_context_refs_with_cardinality(
                 choice_branch: choice_branch.to_vec(),
                 choice_arity: choice_arity.to_vec(),
                 choice_spans: choice_spans.to_vec(),
+                group_spans: group_spans.to_vec(),
+                branch_spans: branch_spans.to_vec(),
                 span: Some((
                     element.span.bytes.start as usize,
                     element.span.bytes.end as usize,
                 )),
                 branch_local_cardinality: branch_local,
+                group_local_cardinality: quantified_cardinality(
+                    embedded::ChildCardinality::ONE,
+                    element.quantifier,
+                ),
             }),
             ElementKind::Range(..)
             | ElementKind::Action { .. }
@@ -9094,8 +9152,11 @@ fn context_label_accessor(
         choice_branch: Vec::new(),
         choice_arity: Vec::new(),
         choice_spans: Vec::new(),
+        group_spans: Vec::new(),
+        branch_spans: Vec::new(),
         span: None,
         branch_local_cardinality: embedded::ChildCardinality::ONE,
+        group_local_cardinality: embedded::ChildCardinality::ONE,
     };
     let mut selector = None;
     let mut cardinalities = Vec::with_capacity(alternatives.len());
@@ -9184,7 +9245,20 @@ fn context_label_selector(
                 && element.cardinality.max != Some(0)
                 && element.label.as_deref() != Some(label)
         });
-        return (!has_unlabeled_target).then_some(ContextLabelSelector::AllAfter(start));
+        // `AllAfter(start)` skips `start` children then takes the rest, so repeated
+        // declarations on one path are fine — the later ones fall inside the tail
+        // (`xs+=e (op xs+=e)*` skips 0 and collects every `e`). What it cannot serve
+        // is *mutually exclusive* declarations that begin at different offsets:
+        // `(A xs+=A | xs+=A)` needs skip 1 on one branch and 0 on the other.
+        let starts_agree = matching.iter().all(|(position, declaration)| {
+            if declaration.can_coexist_with(labeled) {
+                return true;
+            }
+            exact_target_cardinality_on_path(&alternative.refs[..*position], target, declaration)
+                == Some(start)
+        });
+        return (!has_unlabeled_target && starts_agree)
+            .then_some(ContextLabelSelector::AllAfter(start));
     }
     // Several declarations can share one positional read when they are mutually
     // exclusive and each sits at the same occurrence — `(x=A | x=B)` binds exactly
@@ -9204,6 +9278,24 @@ fn context_label_selector(
         let agreed = positions.first().copied()?;
         if !mutually_exclusive || positions.iter().any(|position| *position != agreed) {
             return None;
+        }
+        // Each declaration must also survive the single-label hazards: an *optional*
+        // one can be displaced by a following same-target child sliding into its
+        // slot, and the shared read cannot tell them apart either
+        // (`(x=A? B | x=B)` returns the unlabeled `B` when `x` is absent).
+        for (position, declaration) in matching {
+            // Optionality here means the *declaration's own* EBNF suffix — a `min: 0`
+            // that only reflects its branch possibly not being taken does not make it
+            // displaceable, since the read is chosen per branch anyway.
+            if declaration.branch_local_cardinality.min == 0
+                && alternative.refs[position + 1..].iter().any(|following| {
+                    context_ref_can_match_target(following, target)
+                        && following.cardinality.max != Some(0)
+                        && following.can_coexist_with(declaration)
+                })
+            {
+                return None;
+            }
         }
         // A *repeated* scalar declaration (`x=A+`) is overwritten each iteration, so
         // ANTLR exposes the last match — `nth` would pin the first.
