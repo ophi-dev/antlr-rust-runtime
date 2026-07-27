@@ -15314,6 +15314,161 @@ mod tests {
         }
     }
 
+    /// Every label shape whose *resolution outcome* this module decides, kept in
+    /// one place so a change to any guard shows up as a diff here rather than as a
+    /// silent behaviour change in a grammar nobody tests.
+    ///
+    /// A label resolves only when the read `translate_element_read` emits provably
+    /// selects that label's own element. `resolve` means the grammar generates;
+    /// `decline` means resolution fails loudly (`cannot translate $x`), which is
+    /// always preferable to a read that returns some *other* child. Each entry
+    /// records why, because the two outcomes are easy to swap by accident — most
+    /// of these were originally over-rejections introduced while fixing a
+    /// miscompile, or vice versa.
+    #[test]
+    fn label_resolution_corpus_matches_expected_outcomes() {
+        // (fixture, label, resolves, why). `label` is the accessor/read the case
+        // turns on: rendering succeeds either way for a grammar without actions, so
+        // a declined *accessor* shows up as the method being absent rather than as
+        // a render error.
+        const CORPUS: &[(&str, &str, bool, &str)] = &[
+            // Declines: the read would select a child the label never bound.
+            (
+                "SiblingUnlabeledSameTarget",
+                "xs",
+                false,
+                "an action after a choice runs for every branch, so a sibling's token is not the label's",
+            ),
+            (
+                "OptionalBlockFollowedByTerminal",
+                "x",
+                false,
+                "an absent optional block lets the follower occupy its index",
+            ),
+            (
+                "ActionAfterNestedChoice",
+                "xs",
+                false,
+                "a list read would fold in the sibling branch's child",
+            ),
+            (
+                "LiteralAliasDifferingOccurrence",
+                "x",
+                false,
+                "block and token reads index in different units, so occurrence 1 means different children",
+            ),
+            (
+                "MergedDeclarationOptionalFollower",
+                "x",
+                false,
+                "an absent optional declaration lets the follower slide into the merged read",
+            ),
+            (
+                "ListDeclarationsDifferingStart",
+                "xs",
+                false,
+                "one `AllAfter` skip cannot serve branches that begin at different offsets",
+            ),
+            // Resolves: valid reads that must not be rejected.
+            (
+                "LiteralAliasSameOccurrence",
+                "x",
+                true,
+                "block and token reads coincide at occurrence zero",
+            ),
+            (
+                "NestedChoiceSatisfiability",
+                "x",
+                true,
+                "nested choices fold rather than sum: the alternative builds one child",
+            ),
+            (
+                "RepeatedScalarMerge",
+                "x",
+                true,
+                "a repeated scalar label exposes its last match",
+            ),
+            (
+                "ActionInsideTakenGroup",
+                "x",
+                true,
+                "the enclosing group's quantifier is satisfied wherever the action runs",
+            ),
+            (
+                "ActionOnlyBranch",
+                "x",
+                true,
+                "a branch holding only an action still identifies itself by span",
+            ),
+            (
+                "InitActionBeforeChildren",
+                "xs",
+                true,
+                "an `@init` body runs before any child exists, so no read can be polluted",
+            ),
+            (
+                "ExhaustiveChoicePrefix",
+                "x",
+                true,
+                "an exhaustive choice contributes a fixed count",
+            ),
+            (
+                "NotSetLabelBeforeTerminal",
+                "t",
+                true,
+                "ANTLR's `Sets/ParserNotTokenWithLabel` shape",
+            ),
+            (
+                "ConjuredLiteralLabel",
+                "x",
+                true,
+                "ANTLR's `ParserErrors/ConjuringUpToken` shape",
+            ),
+        ];
+
+        let mut wrong = Vec::new();
+        for &(fixture, label, resolves, why) in CORPUS {
+            let data = parser_fixture_data(&format!("label-resolution/{fixture}.g4"));
+            let rendered = render_parser_with_options(
+                &format!("{fixture}Parser"),
+                &data,
+                ParserRenderOptions {
+                    embedded: true,
+                    ..ParserRenderOptions::default()
+                },
+            );
+            // Which signal reports the decision depends on how the fixture reads its
+            // label. A grammar whose *action* reads it fails to render outright when
+            // resolution declines; one that relies on the typed accessor renders
+            // either way, and the decision surfaces as the method's presence.
+            let source = fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/antlr4-rust-gen/label-resolution")
+                    .join(format!("{fixture}.g4")),
+            )
+            .expect("fixture should be readable");
+            let reads_via_action = source.contains(&format!("${label}"));
+            let resolved = rendered.as_ref().is_ok_and(|parser| {
+                reads_via_action || parser.contains(&format!("pub fn {label}("))
+            });
+            if resolved != resolves {
+                let outcome = if resolves { "resolve" } else { "decline" };
+                let error = rendered
+                    .err()
+                    .map(|error| error.to_string())
+                    .unwrap_or_default();
+                wrong.push(format!(
+                    "  {fixture} (${label}): expected {outcome} — {why} {error}"
+                ));
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "label resolution changed:\n{}",
+            wrong.join("\n")
+        );
+    }
+
     #[test]
     fn non_embedded_parser_action_disables_generated_rule() {
         let rendered =
