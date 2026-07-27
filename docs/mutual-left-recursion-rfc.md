@@ -49,7 +49,7 @@ precedence predicates. A left-recursive **cycle through two or more rules**
 never enters that path; it survives to `AnalysisPipeline`, where
 `LeftRecursionDetector` computes rule-start SCCs over the ATN and reports:
 
-```
+```text
 error(119): The following sets of rules are mutually left-recursive [a, b]
 ```
 
@@ -122,7 +122,8 @@ to the VB grammar emitter are reported upstream with fixes identified:
 [dotnet/roslyn#84633](https://github.com/dotnet/roslyn/issues/84633)
 (duplicate rules from a structure/node-kind name collision),
 [#84634](https://github.com/dotnet/roslyn/issues/84634) (lambda header dropped
-+ `End` markers swapped by positional kind-pairing),
+
+- `End` markers swapped by positional kind-pairing),
 [#84635](https://github.com/dotnet/roslyn/issues/84635) (the `'\='` escape),
 and [#84636](https://github.com/dotnet/roslyn/issues/84636) (required list
 children emitted `*` instead of `+`, which subsumes the `array_type` and
@@ -183,7 +184,7 @@ For each cycle *C*:
 2. **Expand leading optionals.** In every alternative of every member of *C*
    whose left corner is an *optional* reference `X?` with X ∈ *C*, rewrite
 
-   ```
+   ```text
    α X? β   →   α X β  |  α β        (α epsilon-only)
    ```
 
@@ -219,22 +220,45 @@ For each cycle *C*:
 
 ### 2.3 What the transform deliberately does not do
 
+Every item below is a **precondition tested before the model is touched**, not a
+repair attempted afterwards. That ordering is load-bearing: an earlier draft
+checked admissibility only after splicing and consequently dropped
+`<assoc=right>`, element labels, rule arguments and `*`-quantified corners,
+in one case emitting a left-associative tree where the reference tool emits a
+right-associative one. Deciding first turns each of those into a decline.
+
 - It does **not** handle cycles where no member has a token-consuming base
   alternative (`a: b; b: c; c: a | X` reduces to `a : a | X`, whose recursive
   alternative consumes nothing — the same shape ANTLR rejects as
-  `error(169)`/`NONCONFORMING_LR_RULE` in the immediate case). Declined at
-  step 4.
-- It does **not** accept argument-bearing recursion (`h '+' h[3]`), mirroring
-  the reference tool's own refusal.
-- It does **not** synthesize alternative labels. Inlined satellites lose
-  their per-rule context type (§4.3); labeling them would require labeling
-  *all* hub alternatives (`error(122)`: "must label all alternatives or
-  none"), which is a mechanical but API-affecting follow-up we chose to defer
-  rather than bundle.
+  `error(169)`/`NONCONFORMING_LR_RULE` in the immediate case).
+- It requires every substituted corner to be **bare**. A quantified corner
+  (`a : b* 'x'`) is not one satellite occurrence, so splicing a single body in
+  its place would silently drop the closure; a **labelled** corner (`x=b`) would
+  leave `$x` dangling in surviving actions; an **argument-bearing** corner
+  (`b[3]`) has nowhere to put its arguments once the callee is gone.
+- It declines a corner reachable only **past a nullable rule call**
+  (`a : n b`, `n :`), where which rule the author meant as the left corner is
+  genuinely ambiguous.
+- It declines a satellite carrying **rule-level state** — arguments, returns,
+  locals, `@init`/`@after`, `catch`/`finally`, rule options — since those attach
+  to the rule and vanish with it.
+- It does **not** synthesize alternative labels, and declines a satellite whose
+  alternatives are `#`-labelled. Inlined *unlabelled* satellites lose their
+  per-rule context type (§4.3); transferring an authored `#Add` would require
+  labelling *all* hub alternatives (`error(122)`: "must label all alternatives
+  or none"), a mechanical but API-affecting follow-up we chose to defer rather
+  than bundle. An authored label is API, so silently dropping it is not an
+  option — hence the decline.
+- It does **not** touch **lexer** grammars: precedence rewriting is a
+  parser-rule construct. (Left recursion in a lexer rule is invalid in ANTLR
+  either way — `error(119)`.)
 - It does **not** modify prediction, the ATN, or any runtime component. It is
   a source-model-to-source-model function running where
   `SemanticPipeline` invokes `LeftRecursiveRuleTransformer` in the reference
   tool — i.e. strictly before ATN construction.
+
+None of these preconditions excludes any cycle in the two Roslyn grammars (§3),
+which is the evidence that the subclass is narrow in the right places.
 
 ### 2.4 Precedence and associativity semantics of the result
 
@@ -291,6 +315,12 @@ Validation performed (all artifacts reproducible; ANTLR 4.13.2 as oracle):
 4. **Boundary probes.** Each declined shape was probed against the reference
    tool to confirm the decline mirrors an upstream refusal (`error(80)`,
    `error(122)`, `error(169)`) rather than our own limitation.
+5. **Decline is observable.** Thirteen unit tests, one per precondition of
+   §2.3, each asserting the model is byte-identical to its *pre-pass*
+   rendering, that no model IDs were consumed and no provenance recorded. A
+   CLI-level fixture additionally confirms a declined cycle still reports the
+   pre-existing cycle diagnostic naming the original rules, and emits no
+   parser artifact.
 
 ### 3.1 Replication on the Visual Basic grammar
 
@@ -344,14 +374,33 @@ Empirically, left-corner substitution reduced every cycle we probed that has
 a well-defined base case, *including* genuinely mutual `a ↔ b` cycles that
 are not hub-shaped (`a : b '+' a | ID; b : a '.' b | ID` reduces cleanly once
 `b` is substituted along the chain). The shapes that remain declined are
-exactly the shapes whose *immediate* images ANTLR also rejects. **Question to
-reviewers:** are there cycle families with well-defined alt-order semantics
-that this scheme mishandles rather than declines? Our gate should convert any
-such case into a decline, but a counterexample to *that* would be the most
-valuable review outcome. In particular we would welcome adversarial grammars
-where (i) substitution order changes the resulting alternative order, or
-(ii) a nullable satellite makes the left-corner relation diverge from the
-ATN-level relation `LeftRecursionDetector` computes.
+exactly the shapes whose *immediate* images ANTLR also rejects.
+
+We asked this question of our own automated reviewers first, and it was
+productive enough to be worth reporting, because it shows how the boundary was
+actually located. The exact two hazards anticipated below — substitution order
+changing alternative order, and a nullable prefix making the left-corner
+relation ambiguous — were both realised, alongside three more:
+
+| Adversarial shape | Failure it caused |
+|---|---|
+| `expr : power \| ID; power : <assoc=right> expr '^' expr` | `<assoc=right>` dropped → **left**-associative tree where the reference tool gives right-associative |
+| `a : b* 'x'; b : a 'b'` | `b*` replaced by one satellite body → closure lost, accepted language changed |
+| `a : n b; b : a 'b'; n :` | corner *decided* as `b`, *spliced* at `n` |
+| `e : s \| e '+' e; s : e '*' e` | spliced alternatives appended rather than positioned → precedence reordered |
+| `e : x=s \| ID; s : e '+' ID` (also `s[int x]`, `s @init{}`, `s : … #Add`) | labels, arguments, rule-level actions silently dropped |
+
+Every one traced to a single architectural error — admissibility was checked
+*after* mutation, and the corner's identity was derived twice — and every one is
+now a decline or a correct rewrite (§2.3). The lesson generalises beyond this
+pass: for a transform whose contract is "provably correct or nothing", the
+decision must be a pure function of the untouched input.
+
+**Question that remains open to reviewers:** with the preconditions of §2.3 in
+force, is there a cycle family with well-defined alt-order semantics that the
+gate *accepts* but transforms wrongly? A counterexample to that would be the
+most valuable outcome of this RFC; the shapes above are now regression tests
+rather than open risks.
 
 ### 4.2 Hub choice
 

@@ -110,18 +110,38 @@ the hub (Binary/Suffix). Empirically (§4) this covers:
 - **Multi-alternative satellites** — a satellite with several alternatives
   contributes each alternative to the hub.
 
-We **reject** (with a specific `G4Rxxx` diagnostic, not a transform) when:
+We **decline** — leaving the grammar bit-for-bit unchanged, so the existing
+ATN-level `G4A005` cycle diagnostic reports it exactly as it does today — when
+any of the following holds. Each is a precondition checked *before* the model is
+touched, and each has a dedicated decline test:
 
-- A recursive call in the cycle **carries arguments** (`hub[3]`). ANTLR itself
-  rejects this shape (`error(80)`); precedence rewriting is undefined with
-  argument-bearing recursion.
-- The hub mixes **labeled and unlabeled alternatives** after substitution.
-  ANTLR requires all-or-none alternative labels per rule (`error(122)`);
-  synthesizing labels for spliced satellites is possible but deferred (§8).
-- The cycle has **no non-recursive alternative** reachable (no base case) — the
-  language is empty/ill-founded. This reuses the existing `G4R002` check.
-- Substitution does not terminate in a bounded number of steps (defensive guard
-  against pathological grammars; see §6).
+- The grammar is a **lexer grammar**. Precedence rewriting is a parser-rule
+  construct; routing lexer rules through it produced an "unsupported embedded
+  lexer action" naming an action the grammar never declared. (Left-recursive
+  lexer rules are invalid in ANTLR regardless — `error(119)` — and diagnosing
+  them properly is tracked as issue #236.)
+- The cycle has **no token-consuming base alternative** — the language is
+  ill-founded. Mirrors ANTLR's `error(169)` for the immediate case.
+- A corner to be substituted is **not bare**: quantified (`b*`, `b+`),
+  **labelled** (`x=b`), or **argument-bearing** (`b[3]`). Splicing one satellite
+  body in place of `b*` would drop the closure and change the accepted language;
+  removing a labelled corner would leave `$x` dangling in surviving actions.
+- The corner sits **behind a nullable prefix** (`a : n b`, `n :`), so which rule
+  the author meant as the left corner is genuinely ambiguous. We decline rather
+  than guess.
+- A **satellite carries rule-level state** inlining would silently drop:
+  `arguments`, `returns`, `locals`, `throws`, `@init`/`@after`, `catch`,
+  `finally`, rule options, or `#`-labelled alternatives. The last also avoids
+  ANTLR's all-or-none alternative-label rule (`error(122)`); synthesizing labels
+  for spliced satellites remains deferred (§8).
+- Splicing would **merge two overlapping label scopes** (caller and satellite
+  both bind `x`), which would rebind caller actions to the satellite's element.
+- The resulting hub is not **Primary/Prefix/Binary/Suffix** throughout, or
+  substitution does not terminate within a bound (defensive; see §6).
+
+Because these are preconditions rather than post-hoc repairs, the pass either
+emits a grammar the conformance-verified direct-recursion path accepts, or it
+changes nothing — it can never accept-and-miscompile.
 
 ### 3.1 The leading-optional wrinkle
 
@@ -149,7 +169,7 @@ compiling and running the generated Java parser. Artifacts under
 stubs pointed at token names — the "minimal lexer adjustment"), ANTLR 4.13.2's
 *entire* remaining error output is one line:
 
-```
+```text
 error(119): The following sets of rules are mutually left-recursive
   [type, array_type, nullable_type, pointer_type]
   and [name, qualified_name]
