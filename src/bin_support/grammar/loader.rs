@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
+use antlr4_runtime::{CharStream as _, InputStream};
 
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
-use super::frontend::{SourceId, SourceSpan, parse_source, parse_source_recovering};
+use super::frontend::{SourceId, SourceSpan, parse_input_stream, parse_input_stream_recovering};
 use super::model::{
     GrammarId, ImportEdge, LoadedGrammarSet, LookupKind, LookupRecord, ParsedGrammarUnit,
     VocabularyEdge, VocabularySource,
@@ -150,8 +153,11 @@ impl Loader {
         if let Some(source) = self.sources.id_for_canonical_path(&canonical) {
             return self.grammar_for_source.get(&source).copied();
         }
-        let text = match fs::read_to_string(&canonical) {
-            Ok(text) => text,
+        let logical_path = user_spelling.unwrap_or(path).to_path_buf();
+        let input = match fs::File::open(&canonical).and_then(|file| {
+            InputStream::from_reader_with_source_name(file, logical_path.to_string_lossy())
+        }) {
+            Ok(input) => input,
             Err(error) => {
                 self.diagnostics.push(Diagnostic::error(
                     "G4L002",
@@ -161,10 +167,12 @@ impl Loader {
                 return None;
             }
         };
+        let source_text = input
+            .source_text()
+            .expect("InputStream always exposes its complete source text");
         let source = self.sources.next_id();
-        let logical_path = user_spelling.unwrap_or(path).to_path_buf();
         let file = if recover_syntax {
-            match parse_source_recovering(source, logical_path.clone(), text) {
+            match parse_input_stream_recovering(source, logical_path.clone(), input) {
                 Ok(recovered) => {
                     let has_diagnostics = !recovered.diagnostics.is_empty();
                     self.diagnostics.extend(
@@ -182,16 +190,16 @@ impl Loader {
                 }
                 Err(error) => {
                     self.record_frontend_error(&error);
-                    self.retain_failed_source(canonical, source, logical_path);
+                    self.retain_failed_source(canonical, source, logical_path, source_text);
                     return None;
                 }
             }
         } else {
-            match parse_source(source, logical_path.clone(), text) {
+            match parse_input_stream(source, logical_path.clone(), input) {
                 Ok(file) => file,
                 Err(error) => {
                     self.record_frontend_error(&error);
-                    self.retain_failed_source(canonical, source, logical_path);
+                    self.retain_failed_source(canonical, source, logical_path, source_text);
                     return None;
                 }
             }
@@ -215,8 +223,8 @@ impl Loader {
         canonical_path: PathBuf,
         source: SourceId,
         logical_path: PathBuf,
+        text: Rc<str>,
     ) {
-        let text = fs::read_to_string(&canonical_path).unwrap_or_default();
         self.sources
             .insert_failed(canonical_path, source, logical_path, text)
             .expect("canonical path checked before parsing");

@@ -1,11 +1,12 @@
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use antlr4_runtime::{
-    AsRuleNode, CommonTokenStream, ErrorListener, InputStream, Node, NodeId, NodeKind, Parser,
-    Recognizer, TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
+    AsRuleNode, CharStream as _, CommonTokenStream, ErrorListener, InputStream, Node, NodeId,
+    NodeKind, Parser, Recognizer, TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
 };
 
 use super::generated::antlr_v4_lexer::{
@@ -143,7 +144,7 @@ impl Iterator for CstDescendants<'_> {
 pub(crate) struct SourceFile {
     id: SourceId,
     logical_path: PathBuf,
-    text: Box<str>,
+    text: Rc<str>,
     line_starts: Box<[u32]>,
     tokens: Box<[SyntaxToken]>,
     trivia: Box<[u32]>,
@@ -265,7 +266,18 @@ pub(crate) fn parse_source(
     logical_path: impl Into<PathBuf>,
     text: impl Into<Box<str>>,
 ) -> Result<SourceFile, FrontendError> {
-    let recovered = parse_source_recovering(source, logical_path, text)?;
+    let logical_path = logical_path.into();
+    let text = text.into();
+    let input = InputStream::with_source_name(&text, logical_path.to_string_lossy());
+    parse_input_stream(source, logical_path, input)
+}
+
+pub(crate) fn parse_input_stream(
+    source: SourceId,
+    logical_path: impl Into<PathBuf>,
+    input: InputStream,
+) -> Result<SourceFile, FrontendError> {
+    let recovered = parse_input_stream_recovering(source, logical_path, input)?;
     if recovered.diagnostics.is_empty() {
         Ok(recovered.file)
     } else {
@@ -282,8 +294,20 @@ pub(crate) fn parse_source_recovering(
 ) -> Result<RecoveredSource, FrontendError> {
     let logical_path = logical_path.into();
     let text = text.into();
-    let line_starts = line_starts(source, &text)?;
     let input = InputStream::with_source_name(&text, logical_path.to_string_lossy());
+    parse_input_stream_recovering(source, logical_path, input)
+}
+
+pub(crate) fn parse_input_stream_recovering(
+    source: SourceId,
+    logical_path: impl Into<PathBuf>,
+    input: InputStream,
+) -> Result<RecoveredSource, FrontendError> {
+    let logical_path = logical_path.into();
+    let text = input
+        .source_text()
+        .expect("InputStream always exposes its complete source text");
+    let line_starts = line_starts(source, &text)?;
     let mut lexer = AntlRv4Lexer::with_hooks(input, LexerAdaptor::default());
     lexer.remove_error_listeners();
     let mut token_stream = CommonTokenStream::try_new(lexer).map_err(|error| FrontendError {
