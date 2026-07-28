@@ -1,0 +1,29 @@
+[default]
+extend-ignore-re = [
+    "(?Rm)^.*(#|//)\\s*cspell:disable-line$",
+    "(?Rm)^.*(<!--|#|//)\\s*spellchecker:disable-line(-->|\\n)?$",
+    "(?i)(https?|file|mailto|s3):\\/\\/[^\\s]+",
+    "(?i)arn:[^\\s]+",
+    "(?s)(<!--|#|//)\\s*spell-checker:\\s*disable.*?\\n\\s*(<!--|#|//)\\s*spell-checker:\\s*enable",
+    "(?s)(<!--|#|//)\\s*spellchecker:off.*?\\n\\s*(<!--|#|//)\\s*spellchecker:on",
+    "np.arange",
+    # Go module pseudo-version suffixes: 14-digit UTC timestamp + 12-char commit
+    # hash (e.g. v0.0.0-20240121214520-5f936abd7ae8). Hex hashes occasionally spell
+    # English-like fragments ("abd"), which typos flags as misspellings in go.mod.
+    "[0-9]{14}-[0-9a-f]{12}",
+]
+
+[default.extend-words]
+# Intentional typo example in _docs/rules/buildkit/UndefinedVar.mdx
+PAHT = "PAHT"
+# Intentional typo examples in tally/invalid-onbuild-trigger rule docs and tests
+COPPY = "COPPY"
+RUNN  = "RUNN"
+
+[files]
+extend-exclude = [
+    "**/*.g4",
+    "src/snapshots/**",
+    "tests/fixtures/**",
+]
+ignore-vcs = true

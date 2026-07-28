@@ -1,0 +1,21 @@
+[global]
+disable = ["MD036", "MD058"]
+# exclude = []
+
+[MD013]
+code-blocks = false
+headings    = false
+line_length = 150
+reflow      = true
+
+[MD031]
+
+[MD040]
+
+[MD060]
+max-width = 0         # Uses MD013's line-length (100)
+style     = "aligned"
+
+# Headings: ATX-style (# Heading) - Prettier converts setext to ATX
+[MD003]
+style = "atx"
