@@ -4179,9 +4179,6 @@ struct PortableLocalStepRender<'a> {
     required_generated_rules: &'a BTreeSet<usize>,
 }
 
-/// Complete LOOK(1) dispatch intervals per alternative, keyed by decision.
-type Ll1DecisionArms = BTreeMap<usize, Vec<Vec<(i32, i32)>>>;
-
 /// Mode-independent decision routing produced by [`classify_decisions`].
 ///
 /// Embedded mode reads its Java-parity LL(1) tables through
@@ -4191,36 +4188,23 @@ type Ll1DecisionArms = BTreeMap<usize, Vec<Vec<(i32, i32)>>>;
 /// with the flag unset so default rendering is untouched.
 #[derive(Clone, Copy, Default)]
 struct DecisionRoutingRender<'a> {
-    ll1_decision_arms: Option<&'a Ll1DecisionArms>,
+    ll1_dispatch_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
     fixed_lookahead_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
 }
 
-impl DecisionRoutingRender<'_> {
+impl<'a> DecisionRoutingRender<'a> {
     /// Static dispatch table for a decision: the fixed-LL(k) trie when the
-    /// probe proved one, else a depth-1 table from the tool's complete
+    /// probe proved one, else the depth-1 table from the tool's complete
     /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
-    /// switch through [`EmbeddedStepRender`]). Both render through the same
-    /// sync-first dispatch shape.
-    fn static_dispatch_table(self, decision: usize) -> Option<FixedLookaheadTable> {
-        if let Some(table) = self
-            .fixed_lookahead_tables
+    /// switch through [`EmbeddedStepRender`]). Both are pre-restricted to
+    /// sync-no-op lookahead and render through the same dispatch shape.
+    fn static_dispatch_table(self, decision: usize) -> Option<&'a FixedLookaheadTable> {
+        self.fixed_lookahead_tables
             .and_then(|tables| tables.get(&decision))
-        {
-            return Some(table.clone());
-        }
-        let arms = self.ll1_decision_arms?.get(&decision)?;
-        Some(FixedLookaheadTable {
-            lookahead: 1,
-            root: FixedLookaheadNode::Probe(
-                arms.iter()
-                    .enumerate()
-                    .filter(|(_, intervals)| !intervals.is_empty())
-                    .map(|(index, intervals)| {
-                        (intervals.clone(), FixedLookaheadNode::Alt(index + 1))
-                    })
-                    .collect(),
-            ),
-        })
+            .or_else(|| {
+                self.ll1_dispatch_tables
+                    .and_then(|tables| tables.get(&decision))
+            })
     }
 }
 
@@ -7206,7 +7190,7 @@ fn render_generated_decision(
             &pad,
             state,
             decision,
-            &table,
+            table,
             render_context,
             "false",
         );
@@ -7357,14 +7341,15 @@ fn render_generated_ll1_then_adaptive_prediction(
 /// `--fixed-lookahead`: a static `la(1)..la(k)` dispatch trie whose hits
 /// commit an alternative without touching the simulator.
 ///
-/// The shape mirrors the adaptive body the table replaces, token for token
-/// on the error path: `sync_decision` runs FIRST (its context-aware
-/// single-token deletion must happen exactly where the untiered parser
-/// performs it — a table computed with context-free FOLLOW could otherwise
-/// swallow an invalid token into an exit arm and move the "extraneous
-/// input" report a rule higher), then the trie probes the post-sync
-/// lookahead, and a miss falls through to the decision's regular adaptive
-/// prediction.
+/// A hit skips the decision's recovery synchronization, which is safe
+/// because every first-token arm is pre-restricted to the decision's
+/// within-rule lookahead — exactly the set for which `sync_decision`
+/// early-returns without doing recovery work (the same shape the default
+/// partial fast path ships today). Every other token — including
+/// context-dependent loop exits, where synchronization performs real
+/// single-token deletion — falls through to the decision's regular
+/// sync + adaptive body, so error recovery happens exactly where the
+/// untiered parser performs it.
 #[allow(clippy::too_many_arguments)]
 fn render_generated_fixed_lookahead_prediction(
     out: &mut String,
@@ -7375,10 +7360,9 @@ fn render_generated_fixed_lookahead_prediction(
     render_context: GeneratedStepRenderContext<'_>,
     loop_sync_flag: &str,
 ) {
-    render_generated_sync_decision(out, pad, state, loop_sync_flag);
     writeln!(
         out,
-        "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        "{pad}let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
     write!(out, "{pad}let __fixed_lookahead_alt: Option<usize> = ")
@@ -7397,6 +7381,12 @@ fn render_generated_fixed_lookahead_prediction(
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
     let inner_pad = format!("{pad}    ");
+    render_generated_sync_decision(out, &inner_pad, state, loop_sync_flag);
+    writeln!(
+        out,
+        "{inner_pad}__decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
     if render_context
         .embedded
         .is_some_and(|embedded| embedded.adaptive_decision(decision))
@@ -7991,7 +7981,7 @@ fn render_generated_star_loop(
             &inner_pad,
             state,
             decision,
-            &table,
+            table,
             render_context,
             &loop_iter,
         );
@@ -8813,13 +8803,30 @@ fn classify_decisions(
             continue;
         }
         if decision_alt_looks_disjoint(&looks) {
-            classification.ll1_decision_arms.insert(
-                decision,
-                looks
-                    .iter()
-                    .map(|look| symbol_intervals(&look.symbols))
-                    .collect(),
-            );
+            let arms: Vec<Vec<(i32, i32)>> = looks
+                .iter()
+                .map(|look| symbol_intervals(&look.symbols))
+                .collect();
+            // With the opt-in flag, plain mode compiles the switch
+            // statically. Only arms over sync-no-op lookahead commit
+            // without the decision's recovery synchronization.
+            if fixed_lookahead.is_some() {
+                let root = FixedLookaheadNode::Probe(
+                    arms.iter()
+                        .enumerate()
+                        .filter(|(_, intervals)| !intervals.is_empty())
+                        .map(|(index, intervals)| {
+                            (intervals.clone(), FixedLookaheadNode::Alt(index + 1))
+                        })
+                        .collect(),
+                );
+                if let Some(root) = restrict_dispatch_to_sync_noop(atn, state, root) {
+                    classification
+                        .ll1_dispatch_tables
+                        .insert(decision, FixedLookaheadTable { lookahead: 1, root });
+                }
+            }
+            classification.ll1_decision_arms.insert(decision, arms);
             classification
                 .report_rows
                 .push(report(DecisionTierReport::Ll1));
@@ -8832,10 +8839,21 @@ fn classify_decisions(
         for depth in 2..=max_lookahead {
             match fixed_lookahead_table(atn, state, depth) {
                 FixedLookaheadOutcome::Table(table) => {
-                    classification
-                        .fixed_lookahead_tables
-                        .insert(decision, table);
-                    tier = DecisionTierReport::Fixed { lookahead: depth };
+                    match restrict_dispatch_to_sync_noop(atn, state, table.root) {
+                        Some(root) => {
+                            classification.fixed_lookahead_tables.insert(
+                                decision,
+                                FixedLookaheadTable {
+                                    lookahead: table.lookahead,
+                                    root,
+                                },
+                            );
+                            tier = DecisionTierReport::Fixed { lookahead: depth };
+                        }
+                        None => {
+                            tier = DecisionTierReport::adaptive(AdaptiveReason::SyncBound, depth);
+                        }
+                    }
                     break;
                 }
                 FixedLookaheadOutcome::NotDisjoint => {}
@@ -8854,6 +8872,103 @@ fn classify_decisions(
     Ok(classification)
 }
 
+/// Restricts a dispatch trie's first-token arms to the decision's
+/// within-rule lookahead — the exact set for which the runtime's
+/// `sync_decision` early-returns without recovery work — so a table hit can
+/// commit without running the synchronization the untiered parser would
+/// no-op through, while every other token falls through to the full
+/// sync + adaptive body. Returns `None` when no arm survives.
+fn restrict_dispatch_to_sync_noop(
+    atn: &ParserAtn,
+    state: ParserAtnState<'_>,
+    root: FixedLookaheadNode,
+) -> Option<FixedLookaheadNode> {
+    let allowed = sync_noop_symbol_intervals(atn, state);
+    let FixedLookaheadNode::Probe(arms) = root else {
+        // A rootless commit would skip synchronization for every token;
+        // decline (decision states always probe, so this is defensive).
+        return None;
+    };
+    let arms: Vec<(Vec<(i32, i32)>, FixedLookaheadNode)> = arms
+        .into_iter()
+        .filter_map(|(intervals, child)| {
+            let restricted = intersect_interval_sets(&intervals, &allowed);
+            (!restricted.is_empty()).then_some((restricted, child))
+        })
+        .collect();
+    (!arms.is_empty()).then_some(FixedLookaheadNode::Probe(arms))
+}
+
+/// The decision state's within-rule lookahead: the union of every
+/// alternative's FIRST set bounded at the owning rule's stop state,
+/// mirroring the runtime's `transition_first_set`, whose per-transition
+/// sets are exactly `sync_decision`'s early-return condition.
+fn sync_noop_symbol_intervals(atn: &ParserAtn, state: ParserAtnState<'_>) -> Vec<(i32, i32)> {
+    let Some(rule_index) = state.rule_index() else {
+        return Vec::new();
+    };
+    let Some(rule_stop) = atn.rule_to_stop_state().get(rule_index) else {
+        return Vec::new();
+    };
+    let mut ctx = GeneratedFirstSetCtx::default();
+    let mut symbols = BTreeSet::new();
+    for transition in state.transitions() {
+        let direct = generated_transition_symbols(transition, atn.max_token_type());
+        if !direct.is_empty() {
+            symbols.extend(direct);
+            continue;
+        }
+        match transition.data() {
+            ParserTransitionData::Rule {
+                target,
+                rule_index: child_rule,
+                follow_state,
+                ..
+            } => {
+                let Some(child_stop) = atn.rule_to_stop_state().get(child_rule) else {
+                    continue;
+                };
+                let child = generated_rule_first_set(atn, target, child_stop, &mut ctx);
+                symbols.extend(child.symbols.iter().copied());
+                if child.nullable {
+                    let follow = generated_rule_first_set(atn, follow_state, rule_stop, &mut ctx);
+                    symbols.extend(follow.symbols.iter().copied());
+                }
+            }
+            ParserTransitionData::Epsilon { target }
+            | ParserTransitionData::Action { target, .. }
+            | ParserTransitionData::Predicate { target, .. }
+            | ParserTransitionData::Precedence { target, .. } => {
+                let first = generated_rule_first_set(atn, target, rule_stop, &mut ctx);
+                symbols.extend(first.symbols.iter().copied());
+            }
+            _ => {}
+        }
+    }
+    symbol_intervals(&symbols)
+}
+
+/// Intersection of two sorted disjoint interval sets.
+fn intersect_interval_sets(left: &[(i32, i32)], right: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    let mut result = Vec::new();
+    let (mut left_index, mut right_index) = (0, 0);
+    while left_index < left.len() && right_index < right.len() {
+        let (left_start, left_stop) = left[left_index];
+        let (right_start, right_stop) = right[right_index];
+        let start = left_start.max(right_start);
+        let stop = left_stop.min(right_stop);
+        if start <= stop {
+            result.push((start, stop));
+        }
+        if left_stop < right_stop {
+            left_index += 1;
+        } else {
+            right_index += 1;
+        }
+    }
+    result
+}
+
 /// Tool-side decision classification (see [`classify_decisions`]).
 #[derive(Debug, Default)]
 struct DecisionClassification {
@@ -8867,8 +8982,12 @@ struct DecisionClassification {
     /// fast-path/LL(1) analyses, so legit input never falls through to the
     /// simulator (Java's switch never does).
     ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+    /// `--fixed-lookahead` in plain mode: depth-1 static dispatch for the
+    /// LL(1) decisions above, restricted to sync-no-op lookahead.
+    ll1_dispatch_tables: BTreeMap<usize, FixedLookaheadTable>,
     /// `--fixed-lookahead`: static dispatch tables for decisions whose
-    /// LOOK(k) languages are pairwise disjoint at some 2 <= k <= flag.
+    /// LOOK(k) languages are pairwise disjoint at some 2 <= k <= flag,
+    /// restricted to sync-no-op lookahead.
     fixed_lookahead_tables: BTreeMap<usize, FixedLookaheadTable>,
     /// Per-decision tier verdicts for the `decisions.json` manifest.
     report_rows: Vec<DecisionReportRow>,
@@ -8925,6 +9044,11 @@ enum AdaptiveReason {
     NotDisjoint,
     /// The fixed-lookahead walk exceeded its rectangle or step budget.
     Budget,
+    /// Disjointness was proven, but every first-token dispatch symbol lies
+    /// outside the decision's within-rule lookahead — the region where
+    /// recovery synchronization is a provable no-op — so no arm survives
+    /// the sync-safety restriction.
+    SyncBound,
 }
 
 impl AdaptiveReason {
@@ -8936,6 +9060,7 @@ impl AdaptiveReason {
             Self::EmptyLook => "empty-look",
             Self::NotDisjoint => "not-disjoint",
             Self::Budget => "budget-exceeded",
+            Self::SyncBound => "sync-bound",
         }
     }
 }
@@ -11713,16 +11838,16 @@ fn parser_decision_classification(
 
 /// Step-render view over the opt-in `--fixed-lookahead` routing. Embedded
 /// mode reads its LL(1) switch tables through `EmbeddedStepRender`; the
-/// routing copy of the arms is for plain mode, where static LL(1) switches
+/// depth-1 dispatch tables are for plain mode, where static LL(1) switches
 /// are part of the opt-in flag.
 fn decision_routing_render<'a>(
     classification: Option<&'a DecisionClassification>,
     options: ParserRenderOptions<'_>,
 ) -> DecisionRoutingRender<'a> {
     DecisionRoutingRender {
-        ll1_decision_arms: classification
+        ll1_dispatch_tables: classification
             .filter(|_| !options.embedded && options.fixed_lookahead.is_some())
-            .map(|classification| &classification.ll1_decision_arms),
+            .map(|classification| &classification.ll1_dispatch_tables),
         fixed_lookahead_tables: classification
             .filter(|_| options.fixed_lookahead.is_some_and(|depth| depth >= 2))
             .map(|classification| &classification.fixed_lookahead_tables),
@@ -18949,7 +19074,7 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
     }
 
     #[test]
-    fn fixed_lookahead_dispatch_probes_second_token_after_sync() {
+    fn fixed_lookahead_dispatch_commits_bare_and_syncs_on_miss() {
         let data = parser_fixture_data("fixed-lookahead/T.g4");
         let without_flag = render_parser("T", &data).expect("parser renders");
         assert!(!without_flag.contains("__fixed_lookahead_alt"));
@@ -18967,11 +19092,48 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
             .find("let __fixed_lookahead_alt")
             .expect("fixed dispatch rendered");
         assert!(rendered.contains("match self.base.la(2)"));
-        // The context-aware sync must run before the table probes the
-        // lookahead — recovery deletes extraneous tokens exactly where the
-        // untiered parser would.
-        let sync_before_dispatch = rendered[..dispatch_start].rfind("sync_decision");
-        assert!(sync_before_dispatch.is_some());
+        // A table hit commits without recovery synchronization — its arms
+        // are restricted to lookahead where `sync_decision` provably
+        // no-ops — so the decision's sync must render only in the miss
+        // arm, after the dispatch.
+        let preceding = &rendered[dispatch_start.saturating_sub(400)..dispatch_start];
+        assert!(!preceding.contains("sync_decision"));
+        assert!(rendered[dispatch_start..].contains("sync_decision"));
+    }
+
+    #[test]
+    fn fixed_lookahead_arms_stay_inside_sync_noop_lookahead() {
+        // Every emitted dispatch arm must lie inside the decision's
+        // within-rule lookahead: outside it, `sync_decision` performs real
+        // recovery work (context-aware single-token deletion) that a bare
+        // table hit would skip, moving error reports between rules.
+        let data = parser_fixture_data("fixed-lookahead/T.g4");
+        let atn = data.parser_atn().expect("parser atn").clone();
+        let classification = classify_decisions(&data, Some(2)).expect("classification succeeds");
+        assert!(!classification.ll1_dispatch_tables.is_empty());
+        let tables = classification
+            .ll1_dispatch_tables
+            .iter()
+            .chain(classification.fixed_lookahead_tables.iter());
+        for (decision, table) in tables {
+            let state_number = atn
+                .decision_to_state()
+                .iter()
+                .nth(*decision)
+                .expect("decision state number");
+            let state = atn.state(state_number).expect("decision state");
+            let allowed = sync_noop_symbol_intervals(&atn, state);
+            let FixedLookaheadNode::Probe(arms) = &table.root else {
+                panic!("decision tables always probe la(1)");
+            };
+            for (intervals, _) in arms {
+                assert_eq!(
+                    &intersect_interval_sets(intervals, &allowed),
+                    intervals,
+                    "decision {decision}: arm {intervals:?} escapes sync-no-op set {allowed:?}"
+                );
+            }
+        }
     }
 
     #[test]

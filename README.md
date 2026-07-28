@@ -601,6 +601,44 @@ inline at their ATN action/predicate coordinates. This is the mode the
 conformance harness uses after rendering descriptor grammars through
 `Rust.test.stg` (see below).
 
+### Decision Tiers and `--fixed-lookahead`
+
+ANTLR always generates an adaptive `ALL(*)` recognizer: every decision point
+carries prediction machinery and a learned DFA cache, even when one token of
+lookahead already settles it. Like the Java tool, `antlr4-rust-gen`
+classifies every parser decision and ports Java's tiering: decisions whose
+alternatives' LOOK(1) sets are pairwise disjoint compile to plain token
+switches, and only the rest run adaptive prediction.
+
+Every generation writes a **`decisions.json`** manifest next to
+`semantics.json` reporting the tier of each decision — `ll1`, `fixed`
+(see below), or `adaptive` with the reason it needs the simulator
+(`non-greedy`, `precedence`, `predicate`, `empty-look`, `not-disjoint`,
+`budget-exceeded`) — so you can see exactly which parts of a grammar pay for
+`ALL(*)` and why:
+
+```json
+{"decision": 4, "rule": "namespace_", "state": 113, "tier": "fixed", "lookahead": 2}
+```
+
+The opt-in **`--fixed-lookahead <k>`** flag (off by default) goes one tier
+further than Java: decisions that are not LL(1) but whose lookahead
+languages are pairwise disjoint within `k` tokens compile into a static
+nested `match` over `la(1) .. la(k)` — no simulator, no DFA warming, no
+per-decision cache. In plain (non-embedded) mode the flag also compiles the
+Java-parity LL(1) switches statically. Behavior is preserved by
+construction: error-recovery sync runs before the dispatch table exactly
+where the untiered parser performs it, and any lookahead outside the proven
+language falls through to the decision's regular adaptive body. The
+classification is deterministic and idempotent; predicate-guarded,
+non-greedy, and precedence decisions always stay adaptive.
+
+`grammars-v4` examples: Thrift classifies 53 of 54 decisions LL(1) and the
+last (`namespace_`) fixed-LL(2) — with `--fixed-lookahead 2` the whole
+parser runs prediction-free. Rego adds two fixed-LL(2) tables (`regoElse`,
+and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
+10 genuinely ambiguous decisions staying adaptive.
+
 ### Binary and Byte-Oriented Parsing
 
 ANTLR grammars can parse binary formats, not just text. The convention the
