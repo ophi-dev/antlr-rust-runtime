@@ -14,11 +14,6 @@ extend-ignore-re = [
 ]
 
 [default.extend-words]
-# Intentional typo example in _docs/rules/buildkit/UndefinedVar.mdx
-PAHT = "PAHT"
-# Intentional typo examples in tally/invalid-onbuild-trigger rule docs and tests
-COPPY = "COPPY"
-RUNN  = "RUNN"
 
 [files]
 extend-exclude = [
