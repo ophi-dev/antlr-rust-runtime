@@ -38,11 +38,9 @@
 //! // Zero-copy from an in-memory buffer (e.g. bytes read off a socket):
 //! let stream = ByteStream::new(&packet[..]);
 //!
-//! // Feed it to any generated lexer built from a byte-oriented grammar.
-//! let lexer = FooLexer::new(stream);
-//! let tokens = CommonTokenStream::new(lexer);
-//! let mut parser = FooParser::new(tokens);
-//! let tree = parser.entry_rule()?;
+//! // Feed it to any generated parser built from a byte-oriented grammar.
+//! let parsed =
+//!     foo_parser::parse_stream(stream, FooLexer::new, FooParser::entry_rule)?;
 //! ```
 //!
 //! Write lexer rules against the byte range, e.g. `BYTE : ' ' .. 'ÿ';`. A

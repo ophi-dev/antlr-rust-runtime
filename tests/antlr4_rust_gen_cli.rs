@@ -697,8 +697,11 @@ fn combined_literal_tokens_are_public_and_lexable() {
 #[cfg(test)]
 mod combined_literal_tests {
     use super::t_lexer::TLexer;
-    use super::t_parser::TParser;
-    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+    use super::t_parser::{self, TParser};
+    use antlr4_runtime::{
+        ByteStream, CommonTokenStream, InputStream, Parser as _, Token as _,
+    };
+    use std::io::Cursor;
 
     #[test]
     fn recognizes_implicit_literal_rules() {
@@ -707,6 +710,34 @@ mod combined_literal_tests {
         let mut parser = TParser::new(tokens);
         parser.greeting().expect("literal input should parse");
         assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn generated_helpers_accept_named_text_and_byte_streams() {
+        let input = InputStream::from_reader_with_source_name(
+            Cursor::new(b"hello Alice world"),
+            "greeting.txt",
+        )
+        .expect("in-memory UTF-8 should be readable");
+        let output =
+            t_parser::parse_stream_with_parser(input, TLexer::new, TParser::greeting)
+                .expect("named text stream should parse");
+        assert_eq!(output.parser.number_of_syntax_errors(), 0);
+        assert!(
+            output
+                .parser
+                .token_store()
+                .iter()
+                .all(|token| token.source_name() == "greeting.txt")
+        );
+
+        let parsed = t_parser::parse_stream(
+            ByteStream::new(b"hello Alice world".to_vec()),
+            TLexer::new,
+            TParser::greeting,
+        )
+        .expect("byte stream should parse through the generic helper");
+        assert_eq!(parsed.tokens().len(), 4);
     }
 }
 "#,
