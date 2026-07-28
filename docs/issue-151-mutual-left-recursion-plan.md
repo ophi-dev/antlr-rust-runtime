@@ -297,10 +297,14 @@ Input: the integrated parser model (`Vec<GrammarUnit>`), `TransformAnalysis`.
    generated-code comments can trace an inlined alternative back to its original
    satellite rule. Attribution is split per planned alternative: the `#label`
    and lexer commands come from the *hub* alternative (they name that
-   alternative position — authored API surface), while alternative options come
-   from the *satellite* alternative that supplied the operator (`<assoc=right>`
-   is declared there and drives the direct rewriter), the satellite winning
-   name conflicts. Element labels and `$`-attribute references from satellite
+   alternative position — authored API surface), while alternative options
+   **accumulate along the splice chain** — the hub alternative's options
+   unioned with those of every satellite alternative spliced into the
+   position, because `<assoc=right>` rides on the alternative that declares
+   the operator, which may sit behind an alias-shaped satellite
+   (`a : <assoc=right> b '^' e ; b : e ;`). Two alternatives declaring the
+   same option with different values along one chain is ambiguous, so the
+   cycle declines. Element labels and `$`-attribute references from satellite
    bodies are preserved.
 
 The pass then hands off to `rewrite_immediate_left_recursion`, unchanged.

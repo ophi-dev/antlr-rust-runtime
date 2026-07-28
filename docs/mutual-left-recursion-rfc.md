@@ -437,6 +437,13 @@ explicitly (the `#label` names the hub's alternative position, the
 downstream classifier's literal-first reading and backstops every
 non-recursive alternative with a left-corner-closure check; zero-step plans,
 nongreedy corners and corners still referenced by surviving actions decline.
+A follow-up round caught the *chained* form of the associativity hazard —
+`e : a | ID; a : <assoc=right> b '^' e; b : e;`, where the final alias splice
+(`b : e`) overwrote the previously collected `<assoc=right>` and flipped
+`x^y^z` to left-associative. Options therefore **accumulate across the whole
+splice chain** (hub alternative unioned with every satellite alternative
+merged into the position) rather than being attributed to any single source;
+a chain declaring the same option with two values declines as ambiguous.
 One reviewer claim was *refuted* by the reference oracle rather than fixed:
 the optional split places the same `#label` on both product alternatives, and
 ANTLR accepts that (both map to one context class) — the split is exactly as
