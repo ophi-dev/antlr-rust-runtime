@@ -9366,15 +9366,15 @@ impl FixedLookaheadWalk<'_> {
                     self.segment(target, ctx, busy, called_rules, prefix, out)?;
                 }
                 _ => {
-                    // Terminal edge: enumerate the vocabulary through the
-                    // shared `matches` so atoms, ranges, sets, negations and
-                    // wildcards agree with the simulator exactly.
-                    let mut symbols = BTreeSet::new();
-                    for symbol in TOKEN_EOF..=self.atn.max_token_type() {
-                        if transition.matches(symbol, 1, self.atn.max_token_type()) {
-                            symbols.insert(symbol);
-                        }
-                    }
+                    // Terminal edge: expand the transition's own
+                    // label/range/set data — the same expansion the
+                    // within-rule FIRST walks use, and identical to the
+                    // simulator's `matches` for every terminal kind —
+                    // instead of probing the whole vocabulary per visit
+                    // (this walk revisits edges across segments and
+                    // probed depths, so a vocabulary scan multiplies).
+                    let mut symbols =
+                        generated_transition_symbols(transition, self.atn.max_token_type());
                     // A consumed EOF pins every later position to EOF, so
                     // split it out of the deeper walk.
                     if symbols.remove(&TOKEN_EOF) {
