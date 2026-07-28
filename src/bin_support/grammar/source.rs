@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use super::frontend::{SourceFile, SourceId};
 
@@ -14,7 +15,7 @@ pub(crate) struct SourceSet {
 #[derive(Debug)]
 struct FailedSource {
     logical_path: PathBuf,
-    text: Box<str>,
+    text: Rc<str>,
 }
 
 impl SourceSet {
@@ -39,7 +40,7 @@ impl SourceSet {
         canonical_path: PathBuf,
         source: SourceId,
         logical_path: PathBuf,
-        text: String,
+        text: Rc<str>,
     ) -> Result<(), SourceId> {
         if let Some(id) = self.by_canonical_path.get(&canonical_path) {
             return Err(*id);
@@ -49,13 +50,8 @@ impl SourceSet {
             .insert(canonical_path.clone(), source);
         self.canonical_paths.push(canonical_path);
         self.files.push(None);
-        self.failed_sources.insert(
-            source,
-            FailedSource {
-                logical_path,
-                text: text.into_boxed_str(),
-            },
-        );
+        self.failed_sources
+            .insert(source, FailedSource { logical_path, text });
         Ok(())
     }
 

@@ -1,4 +1,5 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
+use std::io;
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -147,6 +148,33 @@ impl InputData {
 }
 
 impl InputStream {
+    /// Creates a character stream by draining UTF-8 text from a
+    /// [`std::io::Read`], using ANTLR's unknown source name placeholder.
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O error produced while reading, including
+    /// [`io::ErrorKind::InvalidData`] when the input is not valid UTF-8.
+    pub fn from_reader(reader: impl io::Read) -> io::Result<Self> {
+        Self::from_reader_with_source_name(reader, UNKNOWN_SOURCE_NAME)
+    }
+
+    /// Creates a named character stream by draining UTF-8 text from a
+    /// [`std::io::Read`].
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O error produced while reading, including
+    /// [`io::ErrorKind::InvalidData`] when the input is not valid UTF-8.
+    pub fn from_reader_with_source_name(
+        mut reader: impl io::Read,
+        source_name: impl Into<String>,
+    ) -> io::Result<Self> {
+        let mut input = String::new();
+        reader.read_to_string(&mut input)?;
+        Ok(Self::with_source_name(input, source_name))
+    }
+
     /// Creates a character stream from UTF-8 text using ANTLR's unknown source
     /// name placeholder.
     pub fn new(input: impl AsRef<str>) -> Self {
@@ -371,5 +399,29 @@ mod tests {
             .apply(4, 7),
             (6, 3)
         );
+    }
+
+    #[test]
+    fn reader_constructors_decode_utf8_and_preserve_source_names() {
+        let mut named = InputStream::from_reader_with_source_name(
+            io::Cursor::new("aβ\n".as_bytes()),
+            "sample.txt",
+        )
+        .expect("in-memory UTF-8 should be readable");
+        assert_eq!(named.source_name(), "sample.txt");
+        assert_eq!(named.size(), 3);
+        assert_eq!(named.la(2), 'β' as i32);
+
+        let unnamed = InputStream::from_reader(io::Cursor::new(b"text"))
+            .expect("in-memory UTF-8 should be readable");
+        assert_eq!(unnamed.source_name(), UNKNOWN_SOURCE_NAME);
+        assert_eq!(unnamed.text(TextInterval::new(0, 3)), "text");
+    }
+
+    #[test]
+    fn reader_constructor_rejects_invalid_utf8() {
+        let error = InputStream::from_reader(io::Cursor::new([0xFF]))
+            .expect_err("invalid UTF-8 must not produce a character stream");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     }
 }

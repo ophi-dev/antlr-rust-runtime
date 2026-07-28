@@ -89,9 +89,32 @@ assert!(tree.text().contains("fun"));
 assert!(!tokens.tokens().is_empty());
 ```
 
-The generated helper is additive. The explicit path is still available when the
-caller needs to name the input source, adjust parser options, or attach custom
-error handling before the entry rule:
+Use `parse_stream` to parse directly from a Rust reader while retaining the
+input's source name:
+
+```rust
+use std::fs::File;
+use antlr4_runtime::InputStream;
+use generated::kotlin_lexer::KotlinLexer;
+use generated::kotlin_parser::{self, KotlinParser};
+
+let path = std::path::Path::new("Main.kt");
+let input = InputStream::from_reader_with_source_name(
+    File::open(path).expect("Kotlin source should open"),
+    path.display().to_string(),
+)
+.expect("Kotlin source should be UTF-8");
+let parsed = kotlin_parser::parse_stream(input, KotlinLexer::new, KotlinParser::kotlin_file)
+    .expect("entry rule parses");
+assert!(parsed.tree().text().contains("fun"));
+```
+
+`InputStream::from_reader` also accepts stdin, sockets, cursors, and other
+`std::io::Read` implementations when no explicit source name is needed.
+
+The generated helpers are additive. The explicit path remains available when
+the caller needs to adjust parser options or attach custom error handling before
+the entry rule:
 
 ```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};
@@ -105,4 +128,5 @@ let tree = parser.kotlin_file().expect("entry rule parses");
 assert!(tree.text().contains("fun"));
 ```
 
-Validated locally: the generated Kotlin lexer emits real tokens and the generated parser recognizes the `parser.kotlin_file()` entry rule for `fun main() {}`.
+Validated locally: the generated Kotlin lexer emits real tokens and the generated parser recognizes the `parser.kotlin_file()` entry rule for
+`fun main() {}`.

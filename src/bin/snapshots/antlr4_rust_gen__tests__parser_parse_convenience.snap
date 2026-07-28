@@ -1,0 +1,85 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: "render_parser_parse_convenience(\"TParser\")"
+---
+/// Result from [`parse_with_parser`] or [`parse_stream_with_parser`].
+///
+/// Keeps the generated parser available after the entry rule runs so callers
+/// can inspect diagnostics or recover the parser-owned token stream.
+#[derive(Debug)]
+pub struct TParserParseOutput<R, L>
+where
+    L: TokenSource,
+{
+    pub result: R,
+    pub parser: TParser<L>,
+}
+
+/// Parses UTF-8 text by constructing the lexer, token stream, parser, and
+/// caller-selected entry rule in one call.
+///
+/// Pass the generated lexer constructor and a parser entry rule, for example
+/// `parse(src, MyGrammarLexer::new, TParser::file)`.
+///
+/// The returned [`antlr4_runtime::ParsedFile`] owns the canonical token store,
+/// flat CST storage, and entry-rule root.
+/// Use [`parse_with_parser`] instead when the caller also needs parser
+/// diagnostics after the entry rule runs.
+pub fn parse<L: TokenSource>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
+{
+    parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)
+}
+
+/// Parses UTF-8 text like [`parse`] while returning the parser after the entry
+/// rule has run.
+///
+/// This keeps the compact generated setup path available for callers that also
+/// need `Parser::number_of_syntax_errors()` or `TParser::into_token_stream()`.
+pub fn parse_with_parser<L: TokenSource, R>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<R, antlr4_runtime::AntlrError>,
+) -> Result<TParserParseOutput<R, L>, antlr4_runtime::AntlrError>
+{
+    parse_stream_with_parser(
+        antlr4_runtime::InputStream::new(input.as_ref()),
+        lexer,
+        entry,
+    )
+}
+
+/// Parses a caller-provided character stream by constructing the lexer, token
+/// stream, parser, and caller-selected entry rule in one call.
+///
+/// Unlike [`parse`], this accepts any [`antlr4_runtime::CharStream`], including
+/// a named [`antlr4_runtime::InputStream`] or a byte-oriented
+/// [`antlr4_runtime::ByteStream`].
+pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
+{
+    let TParserParseOutput { result, parser } =
+        parse_stream_with_parser(input, lexer, entry)?;
+    Ok(parser.into_parsed_file(result))
+}
+
+/// Parses a caller-provided character stream like [`parse_stream`] while
+/// returning the parser after the entry rule has run.
+pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<R, antlr4_runtime::AntlrError>,
+) -> Result<TParserParseOutput<R, L>, antlr4_runtime::AntlrError>
+{
+    let lexer = lexer(input);
+    let tokens = CommonTokenStream::new(lexer);
+    let mut parser = TParser::new(tokens);
+    let result = entry(&mut parser)?;
+    Ok(TParserParseOutput { result, parser })
+}

@@ -13512,12 +13512,12 @@ fn render_parser_base_initialization(
     out
 }
 
-/// Renders the parser-module convenience that wires text input through the
-/// caller-selected lexer, token stream, parser, and entry rule in one call.
+/// Renders parser-module conveniences that wire text or a caller-provided
+/// character stream through the lexer, token stream, parser, and entry rule.
 fn render_parser_parse_convenience(type_name: &str) -> String {
     let output_type_name = format!("{type_name}ParseOutput");
     format!(
-        r#"/// Result from [`parse_with_parser`].
+        r#"/// Result from [`parse_with_parser`] or [`parse_stream_with_parser`].
 ///
 /// Keeps the generated parser available after the entry rule runs so callers
 /// can inspect diagnostics or recover the parser-owned token stream.
@@ -13546,8 +13546,7 @@ pub fn parse<L: TokenSource>(
     entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
 ) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
 {{
-    let {output_type_name} {{ result, parser }} = parse_with_parser(input, lexer, entry)?;
-    Ok(parser.into_parsed_file(result))
+    parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)
 }}
 
 /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
@@ -13561,7 +13560,39 @@ pub fn parse_with_parser<L: TokenSource, R>(
     entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
 ) -> Result<{output_type_name}<R, L>, antlr4_runtime::AntlrError>
 {{
-    let lexer = lexer(antlr4_runtime::InputStream::new(input.as_ref()));
+    parse_stream_with_parser(
+        antlr4_runtime::InputStream::new(input.as_ref()),
+        lexer,
+        entry,
+    )
+}}
+
+/// Parses a caller-provided character stream by constructing the lexer, token
+/// stream, parser, and caller-selected entry rule in one call.
+///
+/// Unlike [`parse`], this accepts any [`antlr4_runtime::CharStream`], including
+/// a named [`antlr4_runtime::InputStream`] or a byte-oriented
+/// [`antlr4_runtime::ByteStream`].
+pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
+{{
+    let {output_type_name} {{ result, parser }} =
+        parse_stream_with_parser(input, lexer, entry)?;
+    Ok(parser.into_parsed_file(result))
+}}
+
+/// Parses a caller-provided character stream like [`parse_stream`] while
+/// returning the parser after the entry rule has run.
+pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
+) -> Result<{output_type_name}<R, L>, antlr4_runtime::AntlrError>
+{{
+    let lexer = lexer(input);
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = {type_name}::new(tokens);
     let result = entry(&mut parser)?;
@@ -16156,11 +16187,22 @@ mod tests {
         let rendered =
             render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
+        insta::assert_snapshot!(
+            "parser_parse_convenience",
+            render_parser_parse_convenience("TParser")
+        );
         assert!(rendered.contains("pub struct TParserParseOutput<R, L>"));
         assert!(rendered.contains("pub result: R,"));
         assert!(rendered.contains("pub parser: TParser<L>,"));
         assert!(rendered.contains("pub fn parse<L: TokenSource>("));
         assert!(rendered.contains("pub fn parse_with_parser<L: TokenSource, R>("));
+        assert!(
+            rendered
+                .contains("pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(")
+        );
+        assert!(rendered.contains(
+            "pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R>("
+        ));
         assert!(
             !rendered
                 .contains(") -> Result<R, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,")
@@ -16169,12 +16211,15 @@ mod tests {
             ") -> Result<TParserParseOutput<R, L>, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,"
         ));
         assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
-        assert!(rendered.contains("antlr4_runtime::InputStream::new(input.as_ref())"));
+        assert!(rendered.contains(
+            "parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)"
+        ));
+        assert!(rendered.contains("let lexer = lexer(input);"));
         assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
         assert!(rendered.contains("let result = entry(&mut parser)?;"));
         assert!(rendered.contains("Ok(TParserParseOutput { result, parser })"));
         assert!(rendered.contains(
-            "let TParserParseOutput { result, parser } = parse_with_parser(input, lexer, entry)?;"
+            "parse_stream_with_parser(\n        antlr4_runtime::InputStream::new(input.as_ref()),"
         ));
         assert!(rendered.contains("Ok(parser.into_parsed_file(result))"));
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<L>) -> Self"));

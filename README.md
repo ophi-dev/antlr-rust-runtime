@@ -183,8 +183,28 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
-Or construct each layer explicitly when you need to set source names, parser
-options, or custom error handling before invoking the entry rule:
+Use `parse_stream` with a preconstructed `CharStream` when parsing a file,
+preserving its source name, or supplying a custom stream implementation:
+
+```rust
+use std::fs::File;
+use antlr4_runtime::InputStream;
+use generated::json_lexer::JsonLexer;
+use generated::json_parser::{self, JsonParser};
+
+let input = InputStream::from_reader_with_source_name(
+    File::open(path)?,
+    path.display().to_string(),
+)?;
+let parsed = json_parser::parse_stream(input, JsonLexer::new, JsonParser::json)?;
+```
+
+`InputStream::from_reader` accepts any `std::io::Read` and validates UTF-8.
+`parse_stream_with_parser` is the corresponding stream-based helper when the
+caller also needs the parser afterward.
+
+Construct each layer explicitly when you need parser options or custom error
+handling before invoking the entry rule:
 
 ```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};
@@ -593,7 +613,13 @@ byte value (`0..=255`). It is generic over the
 backing store — `ByteStream::new(vec)` owns, `ByteStream::new(&buf[..])` borrows
 a network buffer zero-copy, and `ByteStream::from_reader(file)?` drains any
 `std::io::Read`. Because the bytes are not text, `text()` renders a matched span
-as lowercase hex.
+as lowercase hex. Generated parser modules accept it through `parse_stream`, so
+binary inputs retain the same compact lexer/token-stream/parser setup as text:
+
+```rust
+let input = ByteStream::from_reader(file)?;
+let parsed = midi_parser::parse_stream(input, MidiLexer::new, MidiParser::file)?;
+```
 
 Length-prefixed formats ("read N, then consume N bytes") are data-dependent, so
 a pure grammar cannot frame them alone — the same constraint ANTLR's `bencoding`
