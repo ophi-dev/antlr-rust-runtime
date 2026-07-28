@@ -4,7 +4,7 @@ use super::diagnostic::Diagnostic;
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarUnit, LeftRecursionInfo,
     LeftRecursiveAlternativeKind, ModelIdAllocator, ModelNodeId, Quantifier,
-    RemovedLeftRecursiveLabel, Rule, RuleId,
+    RemovedLeftRecursiveLabel, Rule, RuleId, RuleKind,
 };
 use super::provenance::{LeftRecursionRole, Origin, ProvenanceIndex, Tombstone};
 
@@ -17,7 +17,9 @@ pub(crate) fn rewrite_immediate_left_recursion(
     let mut rewritten_names = BTreeSet::new();
     for unit in units.iter_mut() {
         for rule in &mut unit.rules {
-            if matches!(classify_rule(rule), RuleClassification::NotLeftRecursive) {
+            if rule.kind != RuleKind::Parser
+                || matches!(classify_rule(rule), RuleClassification::NotLeftRecursive)
+            {
                 continue;
             }
             match rewrite_rule(rule, ids, provenance) {

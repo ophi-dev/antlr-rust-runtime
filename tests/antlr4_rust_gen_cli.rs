@@ -2209,6 +2209,35 @@ fn invalid_source_emits_diagnostics_without_partial_outputs() {
     );
 }
 
+/// Issue #236: lexer left-corner cycles are grammar errors, not parser
+/// precedence rules. Diagnose direct and mutual cycles before DFA construction;
+/// ordinary recursion after a consuming transition remains covered by the
+/// `lexer-recursion` ATN parity fixture.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn lexer_left_recursion_reports_each_cycle_without_partial_outputs() {
+    let temp = temporary_directory("lexer-left-recursion");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/lexer-left-recursion/LexerLeftRecursion.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    assert_eq!(utf8(&output.stdout), "");
+    let stderr = utf8(&output.stderr).replace(
+        grammar
+            .to_str()
+            .expect("fixture path should be valid Unicode"),
+        "<grammar>",
+    );
+    insta::assert_snapshot!("lexer_left_recursion_diagnostics", stderr);
+    assert!(!out.exists(), "failed compilation emitted output");
+}
+
 #[test]
 fn imported_source_diagnostics_report_the_import_path() {
     let temp = temporary_directory("imported-diagnostic");

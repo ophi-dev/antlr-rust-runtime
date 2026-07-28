@@ -1896,8 +1896,8 @@ mod tests {
         // Precedence rewriting is a parser-rule construct. Routing a lexer SCC
         // through it produced an "unsupported embedded lexer action" naming an
         // action the grammar never declared. Left-recursive lexer rules are
-        // invalid in ANTLR regardless (error(119)); diagnosing them properly is
-        // tracked separately as issue #236.
+        // invalid in ANTLR regardless (error(119)); lexer ATN analysis reports
+        // their left-corner cycles as G4A005 (issue #236).
         let mut fixture = parse(
             "lexer grammar L; \
              A : B 'a' | 'x' ; \

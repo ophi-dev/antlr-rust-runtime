@@ -80,7 +80,7 @@ pub(crate) fn analyze_parser(
     }
 
     let nullable_rule_indices = nullable_rule_indices(graph);
-    let recursive_components = indirect_left_recursive_components(graph, &nullable_rule_indices);
+    let recursive_components = left_recursive_components(graph, &nullable_rule_indices);
     diagnostics.extend(recursion_diagnostics(grammar, &recursive_components));
     if has_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
@@ -247,7 +247,7 @@ fn epsilon_reaches(
     false
 }
 
-fn indirect_left_recursive_components(
+pub(super) fn left_recursive_components(
     graph: &FinalizedAtnGraph,
     nullable_rules: &BTreeSet<usize>,
 ) -> Vec<Vec<RuleId>> {
@@ -340,7 +340,10 @@ fn collect_left_corners(
     }
 }
 
-fn recursion_diagnostics(grammar: &SemanticGrammar, components: &[Vec<RuleId>]) -> Vec<Diagnostic> {
+pub(super) fn recursion_diagnostics(
+    grammar: &SemanticGrammar,
+    components: &[Vec<RuleId>],
+) -> Vec<Diagnostic> {
     let rules = grammar
         .unit
         .rules
