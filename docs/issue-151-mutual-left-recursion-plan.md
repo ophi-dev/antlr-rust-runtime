@@ -138,11 +138,20 @@ touched, and each has a dedicated decline test:
   so it omits the required arguments; rewriting would delete the invalid call
   before semantic call validation could reject it. Declining lets the real
   missing-argument diagnostic surface.
-- A satellite's embedded **action or predicate binds the rule's own context**
-  (`$ctx`, `$text`, `$start`, `$stop`, or the rule's own name): transplanted
-  into the hub it would silently rebind to the hub's context. References to
-  the satellite's own element labels are fine — the element travels with the
-  action.
+- The satellite carries **any embedded action or predicate**. Semantic bodies
+  are owned by their rule and alternative: `$ctx` (and the semantic-context
+  parameter itself) means the satellite's context, and the embedded-action
+  pipeline resolves `$`-references against the enclosing alternative's source
+  span — neither survives transplantation into the hub. Pattern-matching the
+  body for the references that happen to break would be target-language
+  -specific and incomplete, so any inline semantics decline. Actions in the
+  *hub's* alternatives are unaffected — a rebuilt caller alternative keeps its
+  own span identity.
+- After substitution, a recursive alternative's **tail is nullable**
+  (`e : e n | ID` with `n : ;`): the direct rewriter rejects a left-recursive
+  alternative that can be followed by the empty string, and it would do so
+  against the transformed rule. Declining keeps the diagnostic on the
+  authored cycle.
 - Merging would **capture an implicit reference**: an action on one side of
   the splice names a token, rule or label the other side introduces (`$ID`
   binds by occurrence within its alternative, so a satellite body arriving
@@ -306,7 +315,10 @@ Input: the integrated parser model (`Vec<GrammarUnit>`), `TransformAnalysis`.
    verbatim, survives) plus every retained rule. A satellite referenced
    externally (`array_type`) is kept as a non-recursive copy: its body already
    refers to the hub, which is now the precedence rule, so external callers see
-   an ordinary rule.
+   an ordinary rule. Symbol-conflict validation reads a snapshot of the units
+   taken *before* this pass runs, so a conflict involving a deleted satellite's
+   name (`e returns [i32 s]` vs rule `s`) is still reported against the
+   authored grammar.
 7. **Provenance + labels.** Record substitution provenance so diagnostics and
    generated-code comments can trace an inlined alternative back to its original
    satellite rule. Attribution is split per planned alternative: the `#label`

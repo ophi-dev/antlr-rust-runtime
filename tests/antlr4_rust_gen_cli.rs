@@ -3252,3 +3252,32 @@ fn undecidable_mutual_left_recursion_still_reports_the_cycle() {
         "no parser artifact should be emitted for a declined cycle"
     );
 }
+
+#[test]
+fn symbol_conflicts_are_reported_against_the_authored_grammar() {
+    // The mutual-left-recursion rewrite deletes hub-only satellites, and a
+    // return value named after one (`e returns [i32 s]` vs rule `s`) must
+    // still be reported: symbol validation reads a snapshot taken before the
+    // rewrite runs.
+    let temp = temporary_directory("mutual-left-recursion-symbol-clash");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/mutual-left-recursion/ReturnsClash.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "a symbol conflict must fail generation even when the conflicting rule \
+         is a deletable cycle satellite\nstdout: {}",
+        utf8(&output.stdout)
+    );
+    let stderr = utf8(&output.stderr);
+    assert!(
+        stderr.contains("G4S057"),
+        "the return-value/rule-name conflict must be diagnosed: {stderr}"
+    );
+}

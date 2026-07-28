@@ -256,13 +256,23 @@ right-associative one. Deciding first turns each of those into a decline.
   so they omit the required arguments, and rewriting would delete the invalid
   call before argument validation sees it. Declining lets the genuine
   missing-argument diagnostic surface instead.
-- It declines a satellite whose embedded **actions bind the rule's own
-  context** (`$ctx`, `$text`, `$start`, `$stop`, or the rule's name) —
-  transplanting them would rebind those references to the hub's context — and
-  any splice where an action on one side references a token, rule or label
-  name the **other side introduces** (implicit references bind by occurrence
-  within their alternative, so the merge would capture them). Actions bound
-  only to their own alternative's element labels move safely.
+- It declines a satellite carrying **any embedded action or predicate**.
+  Semantic bodies are owned by their rule and alternative — `$ctx` means the
+  satellite's context, and `$`-references resolve against the enclosing
+  alternative's identity — and neither survives transplantation into the hub.
+  (Filtering bodies for the specific references that break would be
+  target-language-specific and incomplete.) Actions in the *hub's* own
+  alternatives are unaffected. It likewise declines any splice where an
+  action on one side references a token, rule or label name the **other side
+  introduces** (implicit references bind by occurrence within their
+  alternative, so the merge would capture them).
+- It declines a substitution that leaves a recursive alternative with a
+  **nullable tail** (`e : e n | ID`, `n : ;`) — the immediate-form rewrite
+  rejects a left-recursive alternative that can be followed by the empty
+  string, and the diagnostic must describe the authored cycle, not the
+  transformed rule. Symbol validation likewise reads the *pre-transform*
+  grammar, so a name conflict involving a deleted satellite
+  (`e returns [int s]` vs rule `s`) still surfaces.
 - It declines a corner reachable only **past a nullable rule call**
   (`a : n b`, `n :`), where which rule the author meant as the left corner is
   genuinely ambiguous.

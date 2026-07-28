@@ -184,15 +184,19 @@ struct PlannedAlternative {
 ///   both the decision and the splice.
 /// * `InlinableSatellite` — satellites carry no rule-level attributes that
 ///   inlining would drop, no alternative labels that would collide, and no
-///   embedded action or predicate bound to the rule's own context (`$ctx`,
-///   `$text`, `$start`, `$stop`, or the rule's own name), which transplanting
-///   would silently rebind to the hub's context.
+///   embedded actions or predicates at all: semantic bodies are owned by their
+///   rule and alternative (`$ctx` means the satellite's context; `$`-references
+///   resolve against the enclosing alternative), and that ownership does not
+///   survive transplantation into the hub.
 /// * `NoRebinding` — merging the caller's and satellite's element lists must
 ///   not rebind anything: explicit label scopes must not overlap, and no
 ///   action on either side may reference a token, rule or label name the other
 ///   side introduces (`$ID` binds by occurrence within its alternative).
 /// * `DirectlyRewritable` — the resulting hub is Primary/Prefix/Binary/Suffix
-///   throughout, as [`super::left_recursion`] requires.
+///   throughout, as [`super::left_recursion`] requires, and every recursive
+///   alternative's tail can consume input (a nullable tail is a
+///   left-recursive alternative followed by the empty string, which the
+///   direct rewriter rejects).
 /// * `Converges` — substitution terminates within a bound.
 struct Requirements;
 
@@ -700,24 +704,33 @@ fn satellite_is_inlinable(satellite: &Rule) -> bool {
             .alternatives
             .iter()
             .all(|alternative| alternative.label.is_none())
-        && !satellite_actions_bind_context(satellite)
+        && !satellite_has_embedded_semantics(satellite)
 }
 
-/// Whether an embedded action or predicate inside `satellite` references the
-/// rule's own context — `$ctx`, `$text`, `$start`, `$stop`, or the rule itself
-/// by name. Those references bind to the *enclosing* rule; transplanted into
-/// the hub they would silently rebind to the hub's context (a `$ctx` that
-/// meant the satellite's context becomes the hub's), so such satellites
-/// decline. References to the satellite's own element labels are fine — the
-/// labelled element travels with the action.
-fn satellite_actions_bind_context(satellite: &Rule) -> bool {
-    satellite.block.alternatives.iter().any(|alternative| {
-        alternative.elements.iter().any(|element| {
-            ["ctx", "text", "start", "stop", satellite.name.as_str()]
+/// Whether the satellite carries any embedded action or predicate at all.
+/// Semantic bodies are *owned* by their rule and alternative: `$ctx` (and the
+/// semantic-context parameter itself) means the satellite's context, and the
+/// embedded-action pipeline resolves `$`-references against the enclosing
+/// alternative's source span — none of which survives transplantation into the
+/// hub. Rather than pattern-match the body for the references that happen to
+/// break (a target-language-specific and inherently incomplete test), any
+/// satellite with inline semantics declines.
+fn satellite_has_embedded_semantics(satellite: &Rule) -> bool {
+    fn elements_have_semantics(elements: &[Element]) -> bool {
+        elements.iter().any(|element| match &element.kind {
+            ElementKind::Action { .. } | ElementKind::Predicate { .. } => true,
+            ElementKind::Block(nested) => nested
+                .alternatives
                 .iter()
-                .any(|name| element_actions_reference(element, name))
+                .any(|alternative| elements_have_semantics(&alternative.elements)),
+            _ => false,
         })
-    })
+    }
+    satellite
+        .block
+        .alternatives
+        .iter()
+        .any(|alternative| elements_have_semantics(&alternative.elements))
 }
 
 /// Whether the planned hub is a shape [`super::left_recursion`] accepts.
@@ -759,6 +772,17 @@ fn planned_hub_is_directly_rewritable(
             // significant after it is a nonconforming self-loop, exactly as
             // the direct rewriter treats it.
             if last_significant == 0 {
+                return false;
+            }
+            // The recursive remainder must consume input: a nullable tail
+            // (`e : e n | ID` with `n : ;`) would commit a rewrite the direct
+            // pass then rejects ("can be followed by the empty string"),
+            // reporting against the transformed rule instead of the authored
+            // cycle.
+            if elements[1..]
+                .iter()
+                .all(|element| element_nullable(element, grammar.names, grammar.nullable))
+            {
                 return false;
             }
             has_recursive = true;
@@ -1829,16 +1853,31 @@ mod tests {
     }
 
     #[test]
-    fn satellite_action_bound_to_its_own_label_still_splices() {
-        // `$i` names the satellite's own labelled element, which travels with
-        // the action — no context or occurrence rebinding, so the splice is
-        // safe and must not over-decline.
-        let unit = rewritten(
+    fn declines_any_satellite_with_embedded_semantics() {
+        // Even an action bound only to the satellite's own labelled element
+        // does not survive transplantation: the embedded-action pipeline
+        // resolves `$i` against the enclosing alternative's source span, and
+        // the spliced alternative carries the hub's. Semantic bodies are owned
+        // by their rule, so any satellite with inline semantics declines.
+        assert_declined(
             "parser grammar P; \
              e : s | ID ; \
              s : e '+' i=ID { let _t = $i.text; } ;",
         );
-        insta::assert_snapshot!("own_label_action_spliced", render(&unit));
+    }
+
+    #[test]
+    fn declines_nullable_recursive_tail() {
+        // After splicing, the hub alternative would be `e n` with nullable
+        // `n` — a left-recursive alternative that can be followed by the
+        // empty string, which the direct rewriter rejects. Declining keeps
+        // the diagnostic on the authored cycle instead of the rewritten rule.
+        assert_declined(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : e n ; \
+             n : ;",
+        );
     }
 
     #[test]
