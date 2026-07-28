@@ -1,79 +1,27 @@
 name: Claude Code Review
 
-# Runs only after CI ("Clippy and Unit Tests") has gone green for the same
-# commit, so the reviewer never spends turns re-litigating mechanics the
-# compiler already settled.
-#
-# `workflow_run` is a *default-branch* trigger: GitHub reads this file from the
-# default branch and ignores the copy on a PR branch. Two consequences worth
-# remembering: a PR that edits this file cannot exercise its own changes (they
-# take effect only once merged), and the run's `GITHUB_SHA`/`GITHUB_REF` point at
-# the default branch rather than the PR head.
-#
-# CI itself also runs on `push` to main; this review must stay PR-only, so the
-# job filters on `workflow_run.event == 'pull_request'` below.
-#
-# This uses `claude-code-base-action` rather than the higher-level
-# `claude-code-action`. The wrapper derives its PR context from the webhook
-# payload and rejects anything that is not a PR/issue event: it classifies
-# `workflow_run` as an *automation* event with no PR entity, so `track_progress`
-# throws outright ("only supported for events: pull_request, …"),
-# `use_sticky_comment` is gated behind `isPullRequestEvent` and silently no-ops,
-# and no tracking comment is wired up (`claudeCommentId: undefined`), which
-# removes the `update_claude_comment` tool. The base action has none of that
-# event-shape validation — it installs Claude Code, runs a prompt, and reports a
-# `conclusion` output — so the sticky/progress comment is re-implemented here
-# with a few `gh api` calls against the PR number resolved below.
-#
-# The wrapper's GitHub *identity* had to be re-implemented too. Before running
-# anything, `claude-code-action` trades the job's OIDC token for a Claude GitHub
-# App installation token, so every comment it writes is attributed to
-# `claude[bot]` rather than to `github-actions[bot]`. That exchange lives in the
-# wrapper (`src/github/token.ts`), not in the base action, so it is not an input
-# this workflow can set — see "Mint a Claude GitHub App token" below.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-
-env:
-  # Marker hidden in the comment body so re-runs find and update the same
-  # comment instead of posting a new one (this is what `use_sticky_comment`
-  # does upstream). An HTML comment is invisible in rendered markdown but comes
-  # back verbatim through the API, so it is a reliable key.
-  STICKY_MARKER: "<!-- claude-code-review:sticky -->"
-  # Second marker, carried only by the "reviewing…" placeholder body. The
-  # finalizer at the end of the job keys on it to tell "this run never wrote a
-  # verdict" from "a verdict is already here", without pattern-matching prose.
-  # Lives on line 2 so first-line STICKY_MARKER lookup is unaffected.
-  PROGRESS_SENTINEL: "<!-- claude-code-review:in-progress -->"
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Four independent gates, all required:
-    #   * `event == 'pull_request'` — drop the push-to-main CI runs. CI triggers
-    #     on both; a review only makes sense on a PR.
-    #   * `conclusion == 'success'` — `completed` fires for failure/cancelled/
-    #     skipped too. Reviewing a red commit wastes a review on code that is
-    #     about to change.
-    #   * `head_repository.full_name == github.repository` — same-repo branches
-    #     only; fork PRs are deliberately not reviewed. This is what lets the
-    #     rest of the job be simple: pushing a branch to this repo requires write
-    #     access, so the PR author is already trusted and the head can be checked
-    #     out and treated as ordinary first-party code. `workflow_run` grants the
-    #     base repo's secrets, so a fork head would be untrusted code running
-    #     with those secrets ("pwn request"). Skipping forks is the honest trade:
-    #     an external contribution gets no automated review (the job reports
-    #     "skipped", neutral, and never starts) rather than a weakened one.
-    #   * `actor.type != 'Bot'` — skips release-please's ophiarch[bot], Renovate,
-    #     Dependabot, …: a review adds nothing on an automated release or
-    #     dependency bump. `workflow_run.actor` is who caused the CI run, which
-    #     for a bot-authored PR is the bot itself.
-    if: >-
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_repository.full_name == github.repository &&
-      github.event.workflow_run.actor.type != 'Bot'
+    # Skip bot-authored PRs (release-please's ophiarch[bot], Renovate,
+    # Dependabot, …). A review adds no value on an automated release commit or
+    # dependency bump, and claude-code-action@v1 hard-fails on a Bot actor
+    # ("Workflow initiated by non-human actor") — so without this guard those
+    # PRs get a red ✗ after ~7 min of wasted toolchain setup. A job-level `if`
+    # skips cleanly instead: the job reports "skipped" (neutral, not failed) and
+    # never starts, so it neither blocks the PR nor burns CI minutes.
+    # `user.type` is the same field the action keys on ("Actor type: Bot") and
+    # is more robust than matching a "[bot]" login suffix.
+    if: github.event.pull_request.user.type != 'Bot'
 
     runs-on: ubuntu-latest
     permissions:
@@ -81,300 +29,15 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
-      # `gh run cancel` on the quota path needs this. Note the repo's default
-      # workflow token is read-only, so this block is load-bearing.
-      actions: write
 
-    # Serialize reviews per PR. Two successful CI completions for the same PR can
-    # overlap (push twice in quick succession), and both jobs would resolve the
-    # same PR number, reuse the same sticky comment, and PATCH it — so whichever
-    # Claude run finished last would win, which is not necessarily the newest
-    # commit. Cancelling the in-flight run keeps one reviewer per PR.
-    #
-    # Keyed on the head branch rather than the PR number: `workflow_run` has no PR
-    # object, and the group must be resolvable before any step runs. One branch
-    # maps to at most one open PR here, so this is equivalent in practice.
     concurrency:
-      group: code-review-${{ github.event.workflow_run.head_branch }}
+      group: code-review-${{ github.event.pull_request.number }}
       cancel-in-progress: true
 
     steps:
-      # `workflow_run` carries no PR object, so recover the number from the
-      # payload, falling back to a head-SHA lookup for the case where the array
-      # arrives empty.
-      - name: Resolve pull request number
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          PAYLOAD_PR: ${{ toJSON(github.event.workflow_run.pull_requests) }}
-        run: |
-          set -euo pipefail
-
-          number="$(jq -r 'if type == "array" and length > 0 then .[0].number else empty end' <<<"$PAYLOAD_PR")"
-
-          if [[ -z "$number" ]]; then
-            echo "No PR in payload; searching by head SHA $HEAD_SHA (branch '$HEAD_BRANCH')."
-            # No `|| true` here: the endpoint already exits 0 with an empty array
-            # when no PR matches, so a nonzero exit means a real failure (auth,
-            # rate limit, transient 5xx). Swallowing that would report
-            # found=false and let the job go green as if the PR did not exist.
-            number="$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
-              --header 'Accept: application/vnd.github+json' \
-              --jq 'map(select(.state == "open")) | if length > 0 then .[0].number else empty end')"
-          fi
-
-          if [[ -z "$number" ]]; then
-            # Not an error: the PR may have merged or closed while CI ran.
-            echo "No open pull request found for $HEAD_SHA — nothing to review."
-            echo "found=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # One lookup answers three questions the payload cannot.
-          #
-          # The payload's `pull_requests[]` fast path carries only a number, so it
-          # skips the fallback's `state == "open"` filter entirely — and `head.sha`
-          # is unchanged by closing or merging, so checking the SHA alone would
-          # happily review a PR that ended while CI ran.
-          read -r current_head current_state current_draft < <(
-            gh api "repos/$GH_REPO/pulls/$number" \
-              --jq '"\(.head.sha) \(.state) \(.draft)"'
-          )
-
-          # 1. Still open? The PR may have merged or closed during CI.
-          if [[ "$current_state" != "open" ]]; then
-            echo "PR #$number is $current_state — nothing to review."
-            echo "found=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # 2. Ready for review? CI's trigger is a bare `pull_request:`, which
-          #    includes drafts, so without this a work-in-progress PR burns a full
-          #    review and quota. The previous `pull_request` trigger got this from
-          #    its `types: [..., ready_for_review]` filter; `workflow_run` has no
-          #    equivalent, so it has to be checked here. Marking a draft ready
-          #    fires no CI run by itself, but any later push does.
-          if [[ "$current_draft" == "true" ]]; then
-            echo "PR #$number is a draft — deferring review until it is ready."
-            echo "found=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # 3. Still the tip? `workflow_run` completions can arrive out of commit
-          #    order (push twice, the older CI finishes second), and the payload
-          #    gives a number with no freshness guarantee — so an older green run
-          #    would review an obsolete commit and overwrite a newer verdict.
-          #    Concurrency alone does not cover this: the runs may not overlap.
-          if [[ "$current_head" != "$HEAD_SHA" ]]; then
-            echo "PR #$number has moved on (head is ${current_head:0:7}, this run is ${HEAD_SHA:0:7}) — skipping stale review."
-            echo "found=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "Reviewing pull request #$number at $HEAD_SHA"
-          echo "found=true" >>"$GITHUB_OUTPUT"
-          echo "number=$number" >>"$GITHUB_OUTPUT"
-
-      # Restore the `claude[bot]` authorship the wrapper action gave us for free.
-      #
-      # Two hops, both of which the wrapper does internally:
-      #   1. Mint a GitHub OIDC token for this job. The audience is not the
-      #      default (`https://github.com/<owner>`) but the literal string
-      #      `claude-code-github-action` — Anthropic validates that `aud` claim,
-      #      so a default-audience token is rejected.
-      #   2. POST it as a bearer to Anthropic's exchange endpoint, which replies
-      #      with a GitHub App *installation* token for the Claude GitHub App
-      #      installed on this repo. Any `gh`/API call carrying it is attributed
-      #      to `claude[bot]`.
-      #
-      # The optional JSON body narrows the token's permissions; omitting it takes
-      # the upstream default of contents/pull-requests/issues: write. That is
-      # exactly what the comment steps need, and deliberately *not* a superset of
-      # the job's own grants — note it carries no `actions: write`, so the quota
-      # path's `gh run cancel` keeps using `github.token` below.
-      #
-      # `continue-on-error` plus the `||` fallbacks make identity strictly
-      # cosmetic: if the App is uninstalled, the endpoint changes, or the network
-      # blips, every later step falls back to `github.token` and the review still
-      # publishes as `github-actions[bot]`. Losing the avatar must never cost a
-      # review. Requires `id-token: write` (already granted).
-      - name: Mint a Claude GitHub App token
-        id: app-token
-        if: steps.pr.outputs.found == 'true'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-
-          # `ACTIONS_ID_TOKEN_REQUEST_{URL,TOKEN}` are injected into the step's
-          # process environment by the runner when `id-token: write` is granted.
-          # They are read here as plain shell variables, deliberately NOT mapped
-          # in through the `env` expression context: that context exposes only
-          # variables declared in the workflow, job, or step, so mapping these
-          # would expand to the empty string and the exchange would never even be
-          # attempted. `@actions/core`'s `getIDToken` reads them from
-          # `process.env` for the same reason.
-          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
-            echo "::warning::No OIDC request context; falling back to the workflow token."
-            exit 0
-          fi
-
-          # Both calls write their body to a file and are judged by curl's exit
-          # code. Two things this avoids, both verified against curl 8.7:
-          #   * Never pipe curl's stdout into jq. Under `-sS --retry` curl writes
-          #     "Warning: Transient problem … will retry" to *stderr*, so a
-          #     `2>&1` capture splices that prose into the JSON and breaks the
-          #     parse of a call that actually succeeded on its second attempt.
-          #   * Never use `-w '%{http_code}'` as the success signal. On a
-          #     connection-teardown retry curl emits the write-out template once
-          #     *per attempt*, so the capture reads "000200" rather than "200"
-          #     and no plain status comparison matches — a single transient blip
-          #     would silently cost us the identity.
-          # `--fail-with-body` makes a 4xx/5xx a nonzero exit *and* still saves
-          # the error JSON, so the diagnostics below survive.
-          #
-          # `--retry-connrefused` rather than `--retry-all-errors`: retries cover
-          # transient transport faults (curl already retries 5xx/429 by default),
-          # while an auth or workflow-validation 401 is permanent — retrying it
-          # four times only delays the fallback and fills the log with the same
-          # error. Retries here are also why the body must be re-read after each
-          # call rather than cached.
-          body="$(mktemp)"
-
-          # The audience must be `claude-code-github-action`, not the default
-          # `https://github.com/<owner>` — Anthropic validates the `aud` claim.
-          # The runner's URL already carries a query string (`?api-version=2.0`),
-          # hence `&` rather than `?`.
-          if ! curl --fail-with-body -sS --retry 3 --retry-connrefused \
-              --connect-timeout 5 --max-time 30 \
-              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-              -o "$body" \
-              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=claude-code-github-action"; then
-            echo "::warning::Could not mint an OIDC token; falling back to the workflow token."
-            rm -f "$body"
-            exit 0
-          fi
-
-          oidc="$(jq -r '.value // empty' <"$body" 2>/dev/null || true)"
-
-          if [[ -z "$oidc" ]]; then
-            echo "::warning::OIDC response carried no token; falling back to the workflow token."
-            rm -f "$body"
-            exit 0
-          fi
-
-          if ! curl --fail-with-body -sS --retry 3 --retry-connrefused \
-              --connect-timeout 5 --max-time 30 \
-              -X POST \
-              -H "Authorization: Bearer $oidc" \
-              -o "$body" \
-              https://api.anthropic.com/api/github/github-app-token-exchange; then
-            # The failure worth naming: the exchange only issues a token for a
-            # workflow that exists on the default branch, so a PR that adds or
-            # edits this file cannot mint one until it merges (reported as
-            # `workflow_not_found_on_default_branch`, or a 401 "workflow
-            # validation failed").
-            echo "::warning::App token exchange failed; falling back to the workflow token. $(jq -r '.error.message // .message // "no message"' <"$body" 2>/dev/null || true)"
-            rm -f "$body"
-            exit 0
-          fi
-
-          # Upstream accepts either key, so mirror that rather than guessing.
-          token="$(jq -r '.token // .app_token // empty' <"$body" 2>/dev/null || true)"
-
-          if [[ -z "$token" ]]; then
-            echo "::warning::Exchange returned no token; falling back to the workflow token."
-            rm -f "$body"
-            exit 0
-          fi
-
-          # Mask before anything else can echo it, then hand it to later steps as
-          # an output. Masking is what makes the step output safe to use: it is
-          # applied to the whole job's log stream, not just this step.
-          echo "::add-mask::$token"
-          echo "token=$token" >>"$GITHUB_OUTPUT"
-          rm -f "$body"
-          echo "Minted a Claude GitHub App token; comments will post as claude[bot]."
-
-      # The sticky/progress comment, re-implemented. Upstream's tracking comment
-      # is just a short markdown body with a spinner and a job-run link; the
-      # "sticky" behavior is a list-comments scan that updates a previous comment
-      # instead of adding another. Posting it up front also gives the reviewer a
-      # comment ID to edit, replacing the `update_claude_comment` MCP tool.
-      - name: Post or reuse progress comment
-        id: comment
-        if: steps.pr.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-
-          body="$(printf '%s\n%s\n\n%s\n\n%s\n' \
-            "$STICKY_MARKER" \
-            "$PROGRESS_SENTINEL" \
-            "**Claude Code is reviewing this pull request…**" \
-            "Reviewing \`${HEAD_SHA:0:7}\` (CI green) · [View job run]($RUN_URL)")"
-
-          # Find a previous review comment by its hidden marker. --paginate so the
-          # marker is still found on long threads.
-          #
-          # Two guards, both of which bite in practice:
-          #   * `(split("\n")[0] // "")` — the default has to come *after* the
-          #     index, not on `.body`: an empty or null body splits to `[]`, so
-          #     `[0]` is null and `startswith` raises "requires string inputs",
-          #     which `set -e` turns into an aborted step.
-          #   * the marker must be on the FIRST line (`startswith`), and the
-          #     comment must be ours (`user.type == "Bot"`). Matching the marker
-          #     anywhere in any comment lets a human who merely quotes it — likely
-          #     on a PR that documents this workflow — get their comment silently
-          #     overwritten by the review.
-          #
-          # First-line HTML markers are the convention already used by the other
-          # bots on this repo (`<!-- mehen-metrics -->`, `<!-- cpd-report -->`).
-          existing="$(gh api --paginate \
-            "repos/$GH_REPO/issues/$PR_NUMBER/comments" \
-            --jq "map(select(
-                    (((.body // \"\") | split(\"\n\")[0] // \"\") | startswith(\"$STICKY_MARKER\"))
-                    and (.user.type == \"Bot\")
-                  )) | if length > 0 then last.id else empty end")"
-
-          if [[ -n "$existing" ]]; then
-            echo "Reusing existing review comment $existing"
-            gh api --method PATCH "repos/$GH_REPO/issues/comments/$existing" \
-              --field body="$body" --jq '.id' >/dev/null
-            id="$existing"
-          else
-            echo "Creating a new review comment"
-            id="$(gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" \
-              --field body="$body" --jq '.id')"
-          fi
-
-          echo "id=$id" >>"$GITHUB_OUTPUT"
-
-      # Check out the PR head itself, at the workspace root, so the reviewer
-      # works in an ordinary checkout of the proposed code — CLAUDE.md, project
-      # settings and the changed files all resolve the way they do locally.
-      #
-      # Safe here because the job is gated to same-repo branches: pushing one
-      # requires write access. Fork PRs never reach this step (see the job `if`).
-      #
-      # Pinned to `head_sha` rather than the branch name so the tree reviewed is
-      # exactly the one CI went green on — a push landing mid-review cannot swap
-      # the code out from under the verdict.
-      #
-      # `fetch-depth: 0` brings full history and all branches, which the review
-      # relies on for `git log`/`git blame` and for diffing against the base.
-      - name: Checkout PR head
-        if: steps.pr.outputs.found == 'true'
+      - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       # This runtime is a port of ANTLR's reference implementation, so a faithful
@@ -387,45 +50,37 @@ jobs:
       # the reviewer reads source, not git history. The directory name is
       # deliberately non-hidden so ripgrep-backed search (Grep) descends into it.
       - name: Checkout upstream ANTLR (reference for review comparisons)
-        if: steps.pr.outputs.found == 'true'
         uses: actions/checkout@v7
         with:
           repository: antlr/antlr4
           ref: "4.13.2"
           path: antlr-upstream
           fetch-depth: 1
-          persist-credentials: false
 
       - name: Install Dependencies
-        if: steps.pr.outputs.found == 'true'
         run: |
           sudo apt-get update
           sudo apt install linux-tools-common linux-tools-generic "linux-tools-$(uname -r)"
 
       - name: Install stable Rust
-        if: steps.pr.outputs.found == 'true'
         run: |
           rustup toolchain install --profile minimal --no-self-update
           rustup default stable
 
       - name: install cargo binstall
-        if: steps.pr.outputs.found == 'true'
         run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
       - name: Install Flamegraph
-        if: steps.pr.outputs.found == 'true'
         run: |
           cargo binstall -y flamegraph
           echo "-1" | sudo tee /proc/sys/kernel/perf_event_paranoid
 
       - uses: actions/setup-java@v5
-        if: steps.pr.outputs.found == 'true'
         with:
           distribution: "temurin"
           java-version: "25"
 
       - name: Install uv with
-        if: steps.pr.outputs.found == 'true'
         uses: astral-sh/setup-uv@v9.0.0
         with:
           python-version: "3.12"
@@ -433,51 +88,51 @@ jobs:
           ignore-nothing-to-cache: "true"
           activate-environment: "true"
 
-      # Pinned to a commit SHA rather than a tag: the standalone repo is
-      # auto-synced from the claude-code-action monorepo and its newest tag
-      # (v0.0.63) predates the `claude_args`, `plugins` and `plugin_marketplaces`
-      # inputs this workflow needs — GitHub ignores unknown inputs silently, so a
-      # tag pin would fail quietly rather than loudly. This SHA is
-      # claude-code-base-action main @ 2026-07-25 (sync of base-action@be7b93b).
       - name: Run Claude Code Review
         id: claude-review
-        if: steps.pr.outputs.found == 'true'
-        # Do not fail the job here. A quota/weekly-limit 429 is not a code
-        # problem and must not red-flag the PR; the classify step below decides
-        # between cancelling (limit) and failing (genuine error).
-        continue-on-error: true
-        uses: anthropics/claude-code-base-action@e257d767763882223c40b615cbbe0d26ca75a981
+        uses: anthropics/claude-code-action@v1
         env:
           CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
-          # Available to the reviewer's `gh` calls for editing its own comment.
-          # The Claude App token when the exchange succeeded, so the published
-          # review is attributed to `claude[bot]`; the workflow token otherwise.
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
+          # When track_progress is enabled:
+          # - Creates a tracking comment with progress checkboxes
+          # - Includes all PR context (comments, attachments, images)
+          # - Updates progress as the review proceeds
+          # - Marks as completed when done
+          track_progress: true
+          # Deliver the review through a single reused comment instead of a new one
+          # each run.
+          use_sticky_comment: true
           claude_args: |
             --effort max
             --model "claude-opus-5[1m]"
             --no-chrome
             --dangerously-skip-permissions
             --max-turns 50
+          plugins: "code-review@claude-code-plugins"
 
+          # The trailing directive fixes a CI-only stall: the review skill fans out to
+          # parallel sub-agents, and on its final turn the model would emit "I'll wait
+          # for the agents to report…" and end the turn (stop_reason: end_turn) — but in
+          # a non-interactive batch there is no async resume, so the consolidated review
+          # was never posted even though every sub-agent had already returned. Forbid the
+          # yield: sub-agent results are available synchronously in-session.
           prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ steps.pr.outputs.number }}
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
-            CI IS ALREADY GREEN: this run is gated on the CI workflow having
-            succeeded for this exact commit (${{ github.event.workflow_run.head_sha }}) —
-            `cargo clippy --locked --all-targets --all-features -- -D warnings`,
-            the full `cargo test` suite under coverage, and the direct-codegen
-            fixture validation all passed. Do not build, test, typecheck, lint,
-            or otherwise re-verify those mechanics, and do not report findings a
-            compiler, clippy, or a failing test would already have caught
+            CI unit tests, formatting and clippy are run in a dedicated workflow
+            - it is NOT your concern! Do not build, test, typecheck, lint,
+            or otherwise re-verify those mechanics, and do not report findings
+            a compiler, clippy, or a failing test would already have caught
             (missing imports, type errors, formatting, unused variables). Spend
             the budget on what CI cannot see: logic and algorithmic correctness,
             ANTLR parity, unsafe/panic paths, API and semantic regressions,
-            missing test coverage for the new behavior, and CLAUDE.md adherence.
+            missing test coverage for the new behavior. If an outcome of this review
+            will be a counter-proposal of s different but simpler or more correct
+            feature system design - great, raise that concern (do not implement nor
+            commit the code however).
 
             UPSTREAM REFERENCE: This crate ports ANTLR (antlr/antlr4). A read-only
             checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`
@@ -487,254 +142,29 @@ jobs:
             against it and cite the upstream file:line. Flag unintended divergence
             from ANTLR semantics; treat documented deviations as intentional.
 
-            THE CHECKOUT: the working directory is a full checkout of this PR's
-            head commit (${{ github.event.workflow_run.head_sha }}) with complete
-            git history, so read and grep files directly and use `git log` /
-            `git blame` freely. `gh pr diff ${{ steps.pr.outputs.number }}` gives
-            the change set.
-
-            HOW TO PUBLISH THE REVIEW: a progress comment has already been posted
-            on the PR as comment ID ${{ steps.comment.outputs.id }}. Deliver your
-            consolidated review by *editing that comment* (this keeps one comment
-            per PR across re-runs instead of piling new ones up):
-
-            ```
-            gh api --method PATCH \
-              repos/${{ github.repository }}/issues/comments/${{ steps.comment.outputs.id }} \
-              --field body=@review.md
-            ```
-
-            Start the file with the exact line `${{ env.STICKY_MARKER }}` so later
-            runs find and reuse this same comment; without it a re-run posts a
-            duplicate. Then your review. Do NOT use `gh pr comment` — that adds a
-            new comment.
+            DX and performance - are two major targets of this runtime. Flag
+            non-idiomatic Rust in generated parser or potential performance regressions
+            which arent explicitly mentioned - our consumers should enjoy working
+            with the code our codegen outputs and trust the speed it delivers.
 
             IMPORTANT (non-interactive CI run): You cannot pause and resume. Any
             sub-agents you spawn return their results synchronously within this same
             session — never end your turn saying you will "wait for" them. Once their
-            results are in hand, immediately validate the candidate findings and
-            PATCH the comment as above before finishing. The task is not complete
-            until that edit has landed.
+            results are in hand, immediately validate the candidate findings and post
+            the consolidated review via update_claude_comment before finishing. The
+            task is not complete until the consolidated review has been posted.
 
-      # Always preserve the raw Claude execution JSON so any run can be diagnosed
+      # Always preserve the raw Claude execution JSON (the action logs it to
+      # ${{ runner.temp }}/claude-execution-output.json) so any run can be diagnosed
       # without re-triggering — including "completed but didn't post the review"
-      # cases that exit 0. Uploaded by path, since the step output can be empty
-      # when the first API turn errors out.
+      # cases that exit 0. Uploaded by path — the step output can be empty when the
+      # first API turn errors out. if-no-files-found: warn covers the validation-skip
+      # path, which exits before the log file is written.
       - name: Upload Claude execution log
-        if: always() && steps.pr.outputs.found == 'true'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: claude-review-log-${{ steps.pr.outputs.number }}-${{ github.run_attempt }}
+          name: claude-review-log-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: warn
           retention-days: 14
-
-      # The head check in `Resolve pull request number` happens before dependency
-      # setup and a 10–20 minute review, so a push can land in between: the
-      # verdict then describes commit A while the PR is at B. Concurrency does not
-      # close this — it can only cancel this run once B's *successful* CI starts
-      # another review, so if B's CI fails or is cancelled the stale verdict
-      # silently stands as the latest word on an unreviewed B.
-      #
-      # Re-check at publish time and, when the head has moved, replace the verdict
-      # with a pointer to the run instead of leaving it to masquerade as current.
-      # The full review text stays available in the uploaded execution log.
-      #
-      # Runs before the quota classifier so a 429 (which never publishes a
-      # verdict) is left to that step, and only when the review reported success.
-      - name: Discard the verdict if the PR head moved during review
-        if: >-
-          steps.pr.outputs.found == 'true' &&
-          steps.claude-review.outputs.conclusion == 'success'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          COMMENT_ID: ${{ steps.comment.outputs.id }}
-          REVIEWED_SHA: ${{ github.event.workflow_run.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-
-          current_head="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
-
-          if [[ "$current_head" == "$REVIEWED_SHA" ]]; then
-            echo "PR #$PR_NUMBER is still at ${REVIEWED_SHA:0:7} — verdict stands."
-            exit 0
-          fi
-
-          echo "PR #$PR_NUMBER moved ${REVIEWED_SHA:0:7} -> ${current_head:0:7} during the review; retracting the verdict."
-          body="$(printf '%s\n\n%s\n\n%s\n' \
-            "$STICKY_MARKER" \
-            "**Claude Code review superseded.**" \
-            "This review covered \`${REVIEWED_SHA:0:7}\`, but the pull request has since moved to \`${current_head:0:7}\`. The findings may no longer apply, so they are not shown here — see the [job run]($RUN_URL) for the full text. A new review runs once CI passes on the current head.")"
-
-          gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
-            --field body="$body" --jq '.id' >/dev/null
-
-      # Distinguish "we ran out of quota" from "the review genuinely broke".
-      #
-      # The execution log is a JSON *array* of SDK messages; the run's verdict
-      # lives in the element with `type == "result"`, which carries
-      # `api_error_status` (429 on a rate/weekly limit) and a human-readable
-      # `result` string ("You've hit your weekly limit · resets …").
-      #
-      # On 429 the run cancels itself rather than failing: a cancelled run reads
-      # as "did not happen" instead of planting a red ✗ on a PR whose code is
-      # fine, and it leaves no failed required-check to re-run. Any other error
-      # still fails loudly.
-      #
-      # `conclusion` is a real base-action output (the wrapper action has none),
-      # so gate on it directly and fall back to the step outcome.
-      - name: Classify review outcome
-        if: >-
-          steps.pr.outputs.found == 'true' &&
-          (steps.claude-review.outputs.conclusion == 'failure' ||
-           steps.claude-review.outcome == 'failure')
-        env:
-          # Comment edits go out as `claude[bot]` when available…
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          # …but `gh run cancel` needs `actions: write`, which the App token does
-          # not carry (its grants are contents/pull-requests/issues), so that one
-          # call is passed the workflow token explicitly below.
-          WORKFLOW_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          COMMENT_ID: ${{ steps.comment.outputs.id }}
-          # Prefer the action's own output; fall back to the documented path for
-          # the case where the step failed before setting outputs.
-          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
-        run: |
-          set -euo pipefail
-
-          if [[ ! -f "$EXECUTION_FILE" ]]; then
-            echo "::error::Claude review failed and no execution log was written at $EXECUTION_FILE."
-            exit 1
-          fi
-
-          # The log is a JSON *array* of SDK messages, so select the element with
-          # `type == "result"` rather than reading the root object. `// empty`
-          # keeps a missing field from printing "null", and `last` takes the final
-          # verdict in the unexpected multi-result case.
-          #
-          # Treat an unparseable log as a genuine failure, but say so explicitly:
-          # bare `set -e` would abort here with only jq's "parse error" and no
-          # annotation, which reads as a mystery in the Actions UI.
-          if ! verdict="$(jq -r '
-                [.[]? | select(.type? == "result")] | last
-                | "\(.api_error_status? // "")\t\(.result? // "")"
-              ' "$EXECUTION_FILE" 2>&1)"; then
-            echo "::error::Could not parse the Claude execution log at $EXECUTION_FILE: $verdict"
-            exit 1
-          fi
-
-          status="${verdict%%$'\t'*}"
-          message="${verdict#*$'\t'}"
-
-          if [[ "$status" != "429" ]]; then
-            echo "::error::Claude review failed (api_error_status='${status:-none}'): ${message:-see the uploaded execution log}"
-            exit 1
-          fi
-
-          echo "::notice::Claude usage limit reached — cancelling this run instead of failing the PR. ${message:-}"
-
-          # Leave the progress comment in a truthful state rather than a permanent
-          # "reviewing…". Keep the marker so the next run reuses this comment.
-          if [[ -n "${COMMENT_ID:-}" ]]; then
-            body="$(printf '%s\n\n%s\n\n%s\n' \
-              "$STICKY_MARKER" \
-              "**Claude Code review skipped — usage limit reached.**" \
-              "> ${message:-Anthropic API returned HTTP 429 (rate/quota limit).} Re-run the workflow once the quota resets.")"
-            gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
-              --field body="$body" --jq '.id' >/dev/null || \
-              echo "::warning::Could not update the progress comment."
-          fi
-
-          {
-            echo "### Claude Code Review skipped — usage limit reached"
-            echo
-            echo "> ${message:-Anthropic API returned HTTP 429 (rate/quota limit).}"
-            echo
-            echo "This run cancelled itself so the pull request is not marked failed."
-            echo "Re-run this workflow once the quota resets."
-          } >>"$GITHUB_STEP_SUMMARY"
-
-          # Cancellation is asynchronous: the API returns 202 (queued) and the
-          # runner is torn down shortly after. Block afterwards so this step does
-          # not exit 0 and let the job report a misleading green check while the
-          # cancel is still in flight.
-          GH_TOKEN="$WORKFLOW_TOKEN" gh run cancel "$RUN_ID" --repo "$GH_REPO" || \
-            echo "::warning::gh run cancel returned non-zero; relying on the queued cancellation."
-
-          echo "Cancellation requested; waiting for the runner to stop."
-          sleep 120
-
-          # Reaching this line means the cancellation never took effect. Exit 0
-          # rather than 1: the code under review is fine, and a red ✗ here is the
-          # precise outcome this whole step exists to avoid. The ::warning:: plus
-          # the step summary above keep it visible instead of silent.
-          echo "::warning::Cancellation did not take effect within 120s; ending the job without failing the pull request."
-
-      # Never leave the comment stuck on "Claude Code is reviewing…". Several
-      # paths end the job without writing a verdict: an auth error or API 5xx, a
-      # malformed result, a crashed/timed-out runner, or a cancelled run. The
-      # review itself and the quota path both replace the placeholder, so this
-      # only fires when neither did — detected by the sentinel still being
-      # present, rather than by matching the placeholder's prose.
-      #
-      # `always()` so it also runs on failure and cancellation, and it must never
-      # fail the job itself: the comment is cosmetic next to the real outcome.
-      - name: Finalize progress comment
-        if: always() && steps.comment.outputs.id != ''
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMENT_ID: ${{ steps.comment.outputs.id }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          set -euo pipefail
-
-          current="$(gh api "repos/$GH_REPO/issues/comments/$COMMENT_ID" --jq '.body // ""')"
-
-          if [[ "$current" != *"$PROGRESS_SENTINEL"* ]]; then
-            echo "Comment already carries a verdict — leaving it alone."
-            exit 0
-          fi
-
-          echo "Comment is still the in-progress placeholder; marking it as ended (job status: $JOB_STATUS)."
-          body="$(printf '%s\n\n%s\n\n%s\n' \
-            "$STICKY_MARKER" \
-            "**Claude Code review did not complete** (job status: \`$JOB_STATUS\`)." \
-            "No review was produced. See the [job run]($RUN_URL) — the execution log is attached as an artifact. Re-run to try again.")"
-
-          gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
-            --field body="$body" --jq '.id' >/dev/null
-
-      # Hand the App token back once the job is done with it, as the wrapper
-      # action does. Installation tokens stay valid for about an hour while this
-      # job runs 10–20 minutes, so revoking closes the remaining window instead
-      # of leaving a live credential to expire on its own.
-      #
-      # Must be the LAST step: every comment-writing step above authenticates
-      # with this token, and revoking before them would make their `gh` calls
-      # fail. `always()` so failed and cancelled runs revoke too, and
-      # `continue-on-error` so cleanup never turns a good review red.
-      - name: Revoke the Claude GitHub App token
-        if: always() && steps.app-token.outputs.token != ''
-        continue-on-error: true
-        env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -euo pipefail
-
-          curl -sS -X DELETE \
-            --connect-timeout 5 --max-time 10 \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $APP_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL:-https://api.github.com}/installation/token" >/dev/null || \
-            echo "::warning::Could not revoke the app token; it expires on its own within the hour."
