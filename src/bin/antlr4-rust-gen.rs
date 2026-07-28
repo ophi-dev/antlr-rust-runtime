@@ -72,7 +72,7 @@ pub use self::__antlr4_rust_generated::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = match Args::parse()? {
-        CliCommand::Generate(args) => args,
+        CliCommand::Generate(args) => *args,
         CliCommand::Help => {
             let mut stdout = io::stdout().lock();
             writeln!(stdout, "{}", usage())?;
@@ -2145,7 +2145,7 @@ struct Args {
 }
 
 enum CliCommand {
-    Generate(Args),
+    Generate(Box<Args>),
     Help,
     Version,
 }
@@ -2246,7 +2246,7 @@ impl Args {
             ));
         }
 
-        Ok(CliCommand::Generate(Self {
+        Ok(CliCommand::Generate(Box::new(Self {
             roots,
             library_directories,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
@@ -2260,7 +2260,7 @@ impl Args {
             generate_visitor,
             embedded_actions,
             fixed_lookahead,
-        }))
+        })))
     }
 }
 
@@ -4179,6 +4179,9 @@ struct PortableLocalStepRender<'a> {
     required_generated_rules: &'a BTreeSet<usize>,
 }
 
+/// Complete LOOK(1) dispatch intervals per alternative, keyed by decision.
+type Ll1DecisionArms = BTreeMap<usize, Vec<Vec<(i32, i32)>>>;
+
 /// Mode-independent decision routing produced by [`classify_decisions`].
 ///
 /// Embedded mode reads its Java-parity LL(1) tables through
@@ -4188,7 +4191,7 @@ struct PortableLocalStepRender<'a> {
 /// with the flag unset so default rendering is untouched.
 #[derive(Clone, Copy, Default)]
 struct DecisionRoutingRender<'a> {
-    ll1_decision_arms: Option<&'a BTreeMap<usize, Vec<Vec<(i32, i32)>>>>,
+    ll1_decision_arms: Option<&'a Ll1DecisionArms>,
     fixed_lookahead_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
 }
 
@@ -4198,7 +4201,7 @@ impl DecisionRoutingRender<'_> {
     /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
     /// switch through [`EmbeddedStepRender`]). Both render through the same
     /// sync-first dispatch shape.
-    fn static_dispatch_table(&self, decision: usize) -> Option<FixedLookaheadTable> {
+    fn static_dispatch_table(self, decision: usize) -> Option<FixedLookaheadTable> {
         if let Some(table) = self
             .fixed_lookahead_tables
             .and_then(|tables| tables.get(&decision))
@@ -6090,7 +6093,6 @@ impl GeneratedRuleError {{
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn render_generated_rule_routing(
     rules: &[Option<GeneratedParserRule>],
     rule_names: &[String],
@@ -7363,6 +7365,7 @@ fn render_generated_ll1_then_adaptive_prediction(
 /// input" report a rule higher), then the trie probes the post-sync
 /// lookahead, and a miss falls through to the decision's regular adaptive
 /// prediction.
+#[allow(clippy::too_many_arguments)]
 fn render_generated_fixed_lookahead_prediction(
     out: &mut String,
     pad: &str,
@@ -9172,7 +9175,7 @@ impl FixedLookaheadWalk<'_> {
         Ok(rectangles)
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     fn segment(
         &mut self,
         state_number: usize,
@@ -11693,6 +11696,65 @@ const fn render_compile_parse_tree_pattern_method() -> &'static str {
 "#
 }
 
+/// Decision classification for parser rendering: computed whenever a
+/// consumer needs it — embedded mode routes decisions by the tool
+/// classification (Java parity), and `--fixed-lookahead` compiles static
+/// dispatch in either mode.
+fn parser_decision_classification(
+    data: &CodegenData<'_>,
+    options: ParserRenderOptions<'_>,
+) -> io::Result<Option<DecisionClassification>> {
+    if options.embedded || options.fixed_lookahead.is_some() {
+        Ok(Some(classify_decisions(data, options.fixed_lookahead)?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Step-render view over the opt-in `--fixed-lookahead` routing. Embedded
+/// mode reads its LL(1) switch tables through `EmbeddedStepRender`; the
+/// routing copy of the arms is for plain mode, where static LL(1) switches
+/// are part of the opt-in flag.
+fn decision_routing_render<'a>(
+    classification: Option<&'a DecisionClassification>,
+    options: ParserRenderOptions<'_>,
+) -> DecisionRoutingRender<'a> {
+    DecisionRoutingRender {
+        ll1_decision_arms: classification
+            .filter(|_| !options.embedded && options.fixed_lookahead.is_some())
+            .map(|classification| &classification.ll1_decision_arms),
+        fixed_lookahead_tables: classification
+            .filter(|_| options.fixed_lookahead.is_some_and(|depth| depth >= 2))
+            .map(|classification| &classification.fixed_lookahead_tables),
+    }
+}
+
+/// Builds the mode-specific action/attribute surface: embedded mode
+/// translates and splices the grammar's real Rust action/predicate bodies
+/// (rendered through the target `.test.stg`) instead of recognizing
+/// template markup; plain mode builds the structural surface.
+fn parser_render_surfaces(
+    data: &CodegenData<'_>,
+    type_name: &str,
+    grammar_name: &str,
+    options: ParserRenderOptions<'_>,
+    decision_classification: Option<&DecisionClassification>,
+) -> io::Result<(Option<EmbeddedParserData>, Option<EmbeddedParserData>)> {
+    if options.embedded {
+        let embedded = build_embedded_parser_data(
+            data,
+            type_name,
+            grammar_name,
+            options,
+            decision_classification.expect("decision classification is computed for embedded mode"),
+        )?;
+        Ok((Some(embedded), None))
+    } else {
+        let surface = build_structural_parser_surface(data, grammar_name, options)?;
+        Ok((None, Some(surface)))
+    }
+}
+
 fn render_parser_with_options(
     grammar_name: &str,
     data: &CodegenData<'_>,
@@ -11711,50 +11773,16 @@ fn render_parser_with_options(
     // Decision routing: embedded mode always follows the tool
     // classification (Java parity); `--fixed-lookahead` additionally
     // compiles static dispatch for provable decisions in either mode.
-    let decision_classification = if options.embedded || options.fixed_lookahead.is_some() {
-        Some(classify_decisions(data, options.fixed_lookahead)?)
-    } else {
-        None
-    };
-    // Embedded mode: the grammar carries real Rust action/predicate bodies
-    // (rendered through the target `.test.stg`); translate and splice them
-    // instead of recognizing template markup.
-    let embedded_data = if options.embedded {
-        Some(build_embedded_parser_data(
-            data,
-            &type_name,
-            grammar_name,
-            options,
-            decision_classification
-                .as_ref()
-                .expect("decision classification is computed for embedded mode"),
-        )?)
-    } else {
-        None
-    };
-    let structural_surface = if options.embedded {
-        None
-    } else {
-        Some(build_structural_parser_surface(
-            data,
-            grammar_name,
-            options,
-        )?)
-    };
+    let decision_classification = parser_decision_classification(data, options)?;
+    let (embedded_data, structural_surface) = parser_render_surfaces(
+        data,
+        &type_name,
+        grammar_name,
+        options,
+        decision_classification.as_ref(),
+    )?;
     let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
-    let decision_routing = DecisionRoutingRender {
-        // Embedded mode reads its LL(1) switch tables through
-        // `EmbeddedStepRender`; the routing copy is for plain mode, where
-        // static LL(1) switches are part of the opt-in flag.
-        ll1_decision_arms: decision_classification
-            .as_ref()
-            .filter(|_| !options.embedded && options.fixed_lookahead.is_some())
-            .map(|classification| &classification.ll1_decision_arms),
-        fixed_lookahead_tables: decision_classification
-            .as_ref()
-            .filter(|_| options.fixed_lookahead.is_some_and(|depth| depth >= 2))
-            .map(|classification| &classification.fixed_lookahead_tables),
-    };
+    let decision_routing = decision_routing_render(decision_classification.as_ref(), options);
     let mut portable_local_data = if options.embedded {
         PortableLocalData::default()
     } else {
