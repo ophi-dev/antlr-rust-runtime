@@ -123,12 +123,23 @@ touched, and each has a dedicated decline test:
 - The cycle has **no token-consuming base alternative** — the language is
   ill-founded. Mirrors ANTLR's `error(169)` for the immediate case.
 - A corner to be substituted is **not bare**: quantified (`b*`, `b+`),
-  **labelled** (`x=b`), or **argument-bearing** (`b[3]`). Splicing one satellite
-  body in place of `b*` would drop the closure and change the accepted language;
-  removing a labelled corner would leave `$x` dangling in surviving actions.
+  **labelled** (`x=b`), **argument-bearing** (`b[3]`), or carrying element
+  options. Splicing one satellite body in place of `b*` would drop the closure
+  and change the accepted language; removing a labelled corner would leave `$x`
+  dangling in surviving actions. One shared predicate defines "bare" for every
+  corner derivation, so the checks cannot drift apart.
+- The corner is a **nongreedy optional** (`b??`). The split emits the present
+  branch first — the greedy preference — which would invert the authored
+  nongreedy ordering, so only greedy optionals are split.
+- A surviving **action or predicate references the removed rule by name**
+  (`$b.text` after the `b` corner is spliced away, on either the splice or the
+  optional-split path); the reference would dangle.
 - The corner sits **behind a nullable prefix** (`a : n b`, `n :`), so which rule
   the author meant as the left corner is genuinely ambiguous. We decline rather
   than guess.
+- The plan would make **no substitution step at all** (the cycle runs through a
+  position this pass cannot rewrite, e.g. a corner inside a nested block). A
+  zero-step plan would otherwise be re-selected verbatim forever.
 - A **satellite carries rule-level state** inlining would silently drop:
   `arguments`, `returns`, `locals`, `throws`, `@init`/`@after`, `catch`,
   `finally`, rule options, or `#`-labelled alternatives. The last also avoids
@@ -274,14 +285,23 @@ Input: the integrated parser model (`Vec<GrammarUnit>`), `TransformAnalysis`.
    alternative is Nonconforming (args, etc.), reject the whole cycle with a
    specific diagnostic and leave the model untouched (the ATN-level `G4A005`
    backstop will then fire, or the specific new diagnostic supersedes it).
-6. **Retire satellites.** Delete satellites referenced only within the cycle.
-   Retain a non-recursive copy for any satellite referenced externally
-   (`array_type`): its body already refers to the hub, which is now the
-   precedence rule, so external callers see an ordinary rule.
+6. **Retire satellites.** Delete a satellite only when nothing that survives
+   still calls it: removability is computed against the *planned* hub
+   alternatives (substitution consumes only the corner occurrence — a second
+   reference in the same alternative, or in an alternative the plan keeps
+   verbatim, survives) plus every retained rule. A satellite referenced
+   externally (`array_type`) is kept as a non-recursive copy: its body already
+   refers to the hub, which is now the precedence rule, so external callers see
+   an ordinary rule.
 7. **Provenance + labels.** Record substitution provenance so diagnostics and
    generated-code comments can trace an inlined alternative back to its original
-   satellite rule. Preserve element labels and `$`-attribute references from
-   satellite bodies.
+   satellite rule. Attribution is split per planned alternative: the `#label`
+   and lexer commands come from the *hub* alternative (they name that
+   alternative position — authored API surface), while alternative options come
+   from the *satellite* alternative that supplied the operator (`<assoc=right>`
+   is declared there and drives the direct rewriter), the satellite winning
+   name conflicts. Element labels and `$`-attribute references from satellite
+   bodies are preserved.
 
 The pass then hands off to `rewrite_immediate_left_recursion`, unchanged.
 

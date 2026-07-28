@@ -191,6 +191,9 @@ For each cycle *C*:
    is required because the immediate-recursion pattern (both ANTLR's and ours)
    demands a non-optional recursive left corner. C#'s
    `range_expression : expression? '..' expression?` is the live instance.
+   Only *greedy* optionals are expanded — the split's present-branch-first
+   order is the greedy preference, so a nongreedy `X??` corner **declines** —
+   and the expansion declines if a surviving action still references `X`.
 
 3. **Substitute to the hub (left-corner inlining).** Maintain a worklist of
    *H*'s alternatives. For each alternative whose left corner is a satellite
@@ -206,12 +209,20 @@ For each cycle *C*:
    *primary*, *prefix*, *binary*, or *suffix*; at least one primary and one
    recursive alternative must exist; no recursive reference may carry
    arguments; a bare `H : H | …` self-loop (the image of an epsilon-only
-   cycle) is nonconforming. If the gate fails, **decline: the grammar is left
-   bit-for-bit unchanged**, and the existing SCC detector reports
-   `error(119)` exactly as today.
+   cycle) is nonconforming. Recursion is keyed on the **literal first
+   element** — the classifier's reading — not on the first
+   token-consuming one, and every alternative filed as primary is
+   additionally checked to have a left-corner closure disjoint from *C*, so
+   nothing still left-recursive can slip through as a "primary". If the gate
+   fails, **decline: the grammar is left bit-for-bit unchanged**, and the
+   existing SCC detector reports `error(119)` exactly as today.
 
 5. **Commit.** Install the rebuilt hub. Delete satellites no retained rule
-   references (computed to a fixpoint). A satellite referenced from outside
+   references — where "retained" includes the **rebuilt hub body itself**:
+   substitution consumes only the corner occurrence of a satellite, so a
+   second reference in the same alternative (`e : s s | ID`) or in an
+   alternative left verbatim (`t : arr | t '?' arr | ID`) keeps that
+   satellite alive. A satellite referenced from outside
    the cycle (`array_type`) is retained verbatim: its body references *H*,
    which is now an ordinary immediate-left-recursive rule, so the external
    caller is unaffected. Then hand the grammar to the *unchanged* immediate
@@ -234,10 +245,20 @@ right-associative one. Deciding first turns each of those into a decline.
   (`a : b* 'x'`) is not one satellite occurrence, so splicing a single body in
   its place would silently drop the closure; a **labelled** corner (`x=b`) would
   leave `$x` dangling in surviving actions; an **argument-bearing** corner
-  (`b[3]`) has nowhere to put its arguments once the callee is gone.
+  (`b[3]`) has nowhere to put its arguments once the callee is gone; an
+  **option-bearing** corner would have its options silently discarded. One
+  shared predicate defines "bare" for every corner derivation.
+- It declines a corner that a surviving **action still references by rule
+  name** (`$b.text` after the `b` element is spliced or split away) — the
+  reference would dangle — and it declines **nongreedy** optional corners
+  (§2.2 step 2).
 - It declines a corner reachable only **past a nullable rule call**
   (`a : n b`, `n :`), where which rule the author meant as the left corner is
   genuinely ambiguous.
+- It declines a cycle for which the planner can make **no substitution step**
+  (the cycle enters through a position the transform does not rewrite, such
+  as a corner inside a nested block): a zero-step plan would otherwise be
+  re-selected forever.
 - It declines a satellite carrying **rule-level state** — arguments, returns,
   locals, `@init`/`@after`, `catch`/`finally`, rule options — since those attach
   to the rule and vanish with it.
@@ -394,6 +415,32 @@ Every one traced to a single architectural error — admissibility was checked
 now a decline or a correct rewrite (§2.3). The lesson generalises beyond this
 pass: for a transform whose contract is "provably correct or nothing", the
 decision must be a pure function of the untouched input.
+
+A second review round then probed the rewritten, decide-first implementation
+and located a further family, all in the *bookkeeping* that accompanies the
+splice rather than in the splice itself:
+
+| Adversarial shape | Failure it caused |
+|---|---|
+| `e : (s \| ID) \| e '+' e; s : e '*' e` | a plan that made no substitution step was re-selected verbatim forever (non-termination) |
+| `e : s s \| ID; s : e '+' ID` (also `t : arr \| t '?' arr; arr : t '[' ']'`) | removability judged against the *original* hub body → the surviving non-corner reference dangled after the satellite was deleted |
+| `e : s #ViaSatellite \| ID #Atom; s : e '+' ID` | spliced alternative took the satellite's (empty) label → the authored context class silently vanished |
+| `e : s \| ID; s : {p}? e '+' ID` | admissibility gate skipped the leading predicate while the downstream classifier keys on the literal first element → committed, then failed naming the wrong rule set |
+| `r : e?? '..'` | nongreedy optional split with the greedy branch order → authored match preference inverted |
+| `e : s {… $s.text …} \| ID; s : e '+' ID` | corner deleted while a surviving action still referenced it by rule name |
+
+The shared root cause this time: each decision read the original model where it
+had to read the *planned* one (or vice versa). Removability is now computed
+against the planned alternatives; label and option attribution is split
+explicitly (the `#label` names the hub's alternative position, the
+`<assoc=…>` option describes the satellite's operator); the gate mirrors the
+downstream classifier's literal-first reading and backstops every
+non-recursive alternative with a left-corner-closure check; zero-step plans,
+nongreedy corners and corners still referenced by surviving actions decline.
+One reviewer claim was *refuted* by the reference oracle rather than fixed:
+the optional split places the same `#label` on both product alternatives, and
+ANTLR accepts that (both map to one context class) — the split is exactly as
+label-preserving as the reference tool requires.
 
 **Question that remains open to reviewers:** with the preconditions of §2.3 in
 force, is there a cycle family with well-defined alt-order semantics that the
