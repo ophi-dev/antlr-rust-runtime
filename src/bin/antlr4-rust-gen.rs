@@ -9177,6 +9177,23 @@ struct ContextLabelSelection {
     compatible_last_after: Option<usize>,
 }
 
+fn reconcile_context_label_selections(
+    selections: &[ContextLabelSelection],
+) -> Option<ContextLabelSelector> {
+    let first = selections.first()?;
+    if selections
+        .iter()
+        .all(|selection| selection.preferred == first.preferred)
+    {
+        return Some(first.preferred);
+    }
+    let skip = first.compatible_last_after?;
+    selections
+        .iter()
+        .all(|selection| selection.compatible_last_after == Some(skip))
+        .then_some(ContextLabelSelector::LastAfter(skip))
+}
+
 fn context_label_accessors(
     rule: &embedded::RuleModel,
     alternative_label: Option<&str>,
@@ -9286,19 +9303,7 @@ fn context_label_accessor(
         });
     }
 
-    let first_selection = selections.first()?;
-    let selector = if selections
-        .iter()
-        .all(|selection| selection.preferred == first_selection.preferred)
-    {
-        first_selection.preferred
-    } else {
-        let skip = first_selection.compatible_last_after?;
-        selections
-            .iter()
-            .all(|selection| selection.compatible_last_after == Some(skip))
-            .then_some(ContextLabelSelector::LastAfter(skip))?
-    };
+    let selector = reconcile_context_label_selections(&selections)?;
     let mut cardinality = choice_cardinality(&cardinalities);
     if !is_list {
         cardinality = embedded::ChildCardinality {
@@ -13598,6 +13603,16 @@ mod tests {
     use super::*;
     use antlr4_runtime::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 
+    fn rendered_context_impl<'a>(rendered: &'a str, name: &str) -> &'a str {
+        rendered
+            .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+            .unwrap_or_else(|| panic!("{name} impl"))
+            .1
+            .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+            .unwrap_or_else(|| panic!("{name} display impl"))
+            .0
+    }
+
     #[test]
     fn renders_module_level_metadata_helpers() {
         let rendered = render_metadata("TParser", &minimal_parser_data());
@@ -15430,41 +15445,101 @@ mod tests {
         );
         insta::assert_snapshot!("multi_alternative_label_shadowed_context", shadowed_context);
 
-        let context = |name: &str| {
-            rendered
-                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
-                .unwrap_or_else(|| panic!("{name} impl"))
-                .1
-                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
-                .unwrap_or_else(|| panic!("{name} display impl"))
-                .0
-                .to_owned()
-        };
-
         // A following union member under the same optional block cannot outlive
         // the label, so the ordinary positional read remains faithful.
         insta::assert_snapshot!(
             "multi_alternative_label_shared_optional_block_context",
-            context("SharedOptionalBlockContext")
+            rendered_context_impl(&rendered, "SharedOptionalBlockContext")
         );
         // A direct `?` on the label breaks that coupling and must still decline.
         insta::assert_snapshot!(
             "multi_alternative_label_direct_optional_in_shared_block_context",
-            context("DirectOptionalInSharedBlockContext")
+            rendered_context_impl(&rendered, "DirectOptionalInSharedBlockContext")
         );
         // A repeated and a non-repeated declaration can share a last-match read
         // only when neither alternative has a later union member.
         insta::assert_snapshot!(
             "multi_alternative_label_mixed_repetition_context",
-            context("MixedRepetitionContext")
+            rendered_context_impl(&rendered, "MixedRepetitionContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_prefixed_mixed_repetition_context",
-            context("PrefixedMixedRepetitionContext")
+            rendered_context_impl(&rendered, "PrefixedMixedRepetitionContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_mixed_repetition_followed_context",
-            context("MixedRepetitionFollowedContext")
+            rendered_context_impl(&rendered, "MixedRepetitionFollowedContext")
+        );
+    }
+
+    #[test]
+    fn context_label_selection_reconciliation_covers_each_compatibility_path() {
+        let selection = |preferred, compatible_last_after| ContextLabelSelection {
+            preferred,
+            compatible_last_after,
+        };
+        let unanimous_nth = [
+            selection(ContextLabelSelector::Nth(2), None),
+            selection(ContextLabelSelector::Nth(2), Some(2)),
+        ];
+        let unanimous_list = [
+            selection(ContextLabelSelector::AllAfter(1), None),
+            selection(ContextLabelSelector::AllAfter(1), None),
+        ];
+        let promote_zero = [
+            selection(ContextLabelSelector::Nth(0), Some(0)),
+            selection(ContextLabelSelector::LastAfter(0), Some(0)),
+        ];
+        let promote_one = [
+            selection(ContextLabelSelector::LastAfter(1), Some(1)),
+            selection(ContextLabelSelector::Nth(1), Some(1)),
+        ];
+        let different_skips = [
+            selection(ContextLabelSelector::Nth(0), Some(0)),
+            selection(ContextLabelSelector::LastAfter(1), Some(1)),
+        ];
+        let unsafe_nth = [
+            selection(ContextLabelSelector::Nth(0), None),
+            selection(ContextLabelSelector::LastAfter(0), Some(0)),
+        ];
+        let incompatible_modes = [
+            selection(ContextLabelSelector::Nth(0), Some(0)),
+            selection(ContextLabelSelector::AllAfter(0), None),
+        ];
+
+        insta::assert_debug_snapshot!(
+            "context_label_selection_reconciliation",
+            [
+                ("empty", reconcile_context_label_selections(&[])),
+                (
+                    "unanimous nth",
+                    reconcile_context_label_selections(&unanimous_nth),
+                ),
+                (
+                    "unanimous list",
+                    reconcile_context_label_selections(&unanimous_list),
+                ),
+                (
+                    "promote zero",
+                    reconcile_context_label_selections(&promote_zero),
+                ),
+                (
+                    "promote one",
+                    reconcile_context_label_selections(&promote_one),
+                ),
+                (
+                    "different skips",
+                    reconcile_context_label_selections(&different_skips),
+                ),
+                (
+                    "unsafe nth",
+                    reconcile_context_label_selections(&unsafe_nth),
+                ),
+                (
+                    "incompatible modes",
+                    reconcile_context_label_selections(&incompatible_modes),
+                ),
+            ]
         );
     }
 
@@ -15477,37 +15552,26 @@ mod tests {
         let data = parser_fixture_data("multi-alternative-label/T.g4");
         let rendered = render_parser("TParser", &data).expect("parser should render");
 
-        let context = |name: &str| {
-            rendered
-                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
-                .unwrap_or_else(|| panic!("{name} impl"))
-                .1
-                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
-                .unwrap_or_else(|| panic!("{name} display impl"))
-                .0
-                .to_owned()
-        };
-
         // `(doc = IDENT)? (oneway = STAR | IN errors += unary ...)?`: the labels
         // sit inside unlabeled grouping blocks, so collapsing each block into
         // one token-group ref would swallow them.
         insta::assert_snapshot!(
             "multi_alternative_label_grouped_context",
-            context("GroupedContext")
+            rendered_context_impl(&rendered, "GroupedContext")
         );
 
         // `name = unary ... errors += unary`: a single and a list label on the
         // same rule must each resolve past the other's children.
         insta::assert_snapshot!(
             "multi_alternative_label_mixed_context",
-            context("MixedContext")
+            rendered_context_impl(&rendered, "MixedContext")
         );
 
         // A label buried under redundant grouping levels still reaches the
         // surface — the collapse check descends nested blocks.
         insta::assert_snapshot!(
             "multi_alternative_label_nested_group_context",
-            context("NestedGroupContext")
+            rendered_context_impl(&rendered, "NestedGroupContext")
         );
 
         // The three declining shapes are snapshotted whole rather than probed
@@ -15527,35 +15591,35 @@ mod tests {
         // child ahead of the label).
         insta::assert_snapshot!(
             "multi_alternative_label_exhaustive_prefix_context",
-            context("ExhaustivePrefixContext")
+            rendered_context_impl(&rendered, "ExhaustivePrefixContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_overlapping_group_context",
-            context("OverlappingGroupContext")
+            rendered_context_impl(&rendered, "OverlappingGroupContext")
         );
         // Making that same choice optional removes the fixed position, so the
         // following label loses its accessor — the branch-local cardinality is
         // what distinguishes the two.
         insta::assert_snapshot!(
             "multi_alternative_label_optional_prefix_context",
-            context("OptionalPrefixContext")
+            rendered_context_impl(&rendered, "OptionalPrefixContext")
         );
         // One label over mutually exclusive branches merges into a single read; and
         // restricting to the label's own path lets a sibling branch be ignored
         // rather than demanded.
         insta::assert_snapshot!(
             "multi_alternative_label_merged_rivals_context",
-            context("MergedRivalsContext")
+            rendered_context_impl(&rendered, "MergedRivalsContext")
         );
         // Repeated scalar declarations merge as a *last*-match read, since ANTLR
         // overwrites a scalar label on every iteration.
         insta::assert_snapshot!(
             "multi_alternative_label_merged_repeats_context",
-            context("MergedRepeatsContext")
+            rendered_context_impl(&rendered, "MergedRepeatsContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_path_restricted_context",
-            context("PathRestrictedContext")
+            rendered_context_impl(&rendered, "PathRestrictedContext")
         );
         // Two ways the on-path restriction can overstate what it knows, both
         // declining as a result:
@@ -15568,17 +15632,17 @@ mod tests {
         //   exhaustive two-way one and the prefix count is wrongly fixed at 1.
         insta::assert_snapshot!(
             "multi_alternative_label_closed_repeat_prefix_context",
-            context("ClosedRepeatPrefixContext")
+            rendered_context_impl(&rendered, "ClosedRepeatPrefixContext")
         );
         insta::assert_snapshot!(
             "multi_alternative_label_inner_choice_arity_context",
-            context("InnerChoiceArityContext")
+            rendered_context_impl(&rendered, "InnerChoiceArityContext")
         );
         // Nesting the exhaustive choice keeps the count fixed: the inner choice's
         // agreed contribution rolls up into the outer branch.
         insta::assert_snapshot!(
             "multi_alternative_label_nested_exhaustive_prefix_context",
-            context("NestedExhaustivePrefixContext")
+            rendered_context_impl(&rendered, "NestedExhaustivePrefixContext")
         );
 
         for (name, snapshot) in [
@@ -15595,7 +15659,7 @@ mod tests {
                 "multi_alternative_label_branch_rival_context",
             ),
         ] {
-            insta::assert_snapshot!(snapshot, context(name));
+            insta::assert_snapshot!(snapshot, rendered_context_impl(&rendered, name));
         }
     }
 
