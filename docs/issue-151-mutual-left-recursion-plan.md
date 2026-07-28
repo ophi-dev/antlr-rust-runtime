@@ -134,6 +134,20 @@ touched, and each has a dedicated decline test:
 - A surviving **action or predicate references the removed rule by name**
   (`$b.text` after the `b` corner is spliced away, on either the splice or the
   optional-split path); the reference would dangle.
+- The **hub declares arguments** (`e[int x]`). Every in-cycle corner is bare,
+  so it omits the required arguments; rewriting would delete the invalid call
+  before semantic call validation could reject it. Declining lets the real
+  missing-argument diagnostic surface.
+- A satellite's embedded **action or predicate binds the rule's own context**
+  (`$ctx`, `$text`, `$start`, `$stop`, or the rule's own name): transplanted
+  into the hub it would silently rebind to the hub's context. References to
+  the satellite's own element labels are fine — the element travels with the
+  action.
+- Merging would **capture an implicit reference**: an action on one side of
+  the splice names a token, rule or label the other side introduces (`$ID`
+  binds by occurrence within its alternative, so a satellite body arriving
+  ahead of a caller action with another `ID` would capture the caller's
+  `$ID`). Inert duplicate occurrences without action references are fine.
 - The corner sits **behind a nullable prefix** (`a : n b`, `n :`), so which rule
   the author meant as the left corner is genuinely ambiguous. We decline rather
   than guess.

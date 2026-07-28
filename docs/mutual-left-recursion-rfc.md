@@ -252,6 +252,17 @@ right-associative one. Deciding first turns each of those into a decline.
   name** (`$b.text` after the `b` element is spliced or split away) — the
   reference would dangle — and it declines **nongreedy** optional corners
   (§2.2 step 2).
+- It declines a **parameterized hub** (`e[int x]`): in-cycle corners are bare,
+  so they omit the required arguments, and rewriting would delete the invalid
+  call before argument validation sees it. Declining lets the genuine
+  missing-argument diagnostic surface instead.
+- It declines a satellite whose embedded **actions bind the rule's own
+  context** (`$ctx`, `$text`, `$start`, `$stop`, or the rule's name) —
+  transplanting them would rebind those references to the hub's context — and
+  any splice where an action on one side references a token, rule or label
+  name the **other side introduces** (implicit references bind by occurrence
+  within their alternative, so the merge would capture them). Actions bound
+  only to their own alternative's element labels move safely.
 - It declines a corner reachable only **past a nullable rule call**
   (`a : n b`, `n :`), where which rule the author meant as the left corner is
   genuinely ambiguous.

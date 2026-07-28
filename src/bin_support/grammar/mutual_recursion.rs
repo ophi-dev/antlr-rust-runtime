@@ -55,6 +55,7 @@ use super::action::{ActionReferenceKind, action_references};
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarKind, GrammarUnit,
     ModelIdAllocator, ModelNodeId, OptionDecl, Quantifier, Rule, RuleCall, RuleId, RuleKind,
+    Terminal,
 };
 use super::provenance::{Origin, ProvenanceIndex, SyntheticReason};
 
@@ -173,12 +174,23 @@ struct PlannedAlternative {
 /// * `ParserGrammarOnly` — lexer rules never reach here.
 /// * `HasTokenConsumingBase` — some member has an alternative whose left corner
 ///   leaves the cycle, else the language is empty.
+/// * `UnparameterizedHub` — the hub declares no arguments: every in-cycle
+///   corner is bare by `BareCorner`, so it necessarily omits a parameterized
+///   hub's required arguments, and the splice would launder that
+///   missing-argument error into silently default-initialized attributes.
 /// * `BareCorner` — every corner we substitute is an unquantified, unlabelled,
 ///   argument-free call, preceded only by actions/predicates/epsilon. This is
 ///   the single notion of "the left corner": one index, computed once, used for
 ///   both the decision and the splice.
 /// * `InlinableSatellite` — satellites carry no rule-level attributes that
-///   inlining would drop, and no alternative labels that would collide.
+///   inlining would drop, no alternative labels that would collide, and no
+///   embedded action or predicate bound to the rule's own context (`$ctx`,
+///   `$text`, `$start`, `$stop`, or the rule's own name), which transplanting
+///   would silently rebind to the hub's context.
+/// * `NoRebinding` — merging the caller's and satellite's element lists must
+///   not rebind anything: explicit label scopes must not overlap, and no
+///   action on either side may reference a token, rule or label name the other
+///   side introduces (`$ID` binds by occurrence within its alternative).
 /// * `DirectlyRewritable` — the resulting hub is Primary/Prefix/Binary/Suffix
 ///   throughout, as [`super::left_recursion`] requires.
 /// * `Converges` — substitution terminates within a bound.
@@ -274,6 +286,13 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
     // grammar; the ill-founded shapes nullability could smuggle in (an
     // epsilon-only alternative, a token-free self-loop) are declined by
     // `planned_hub_is_directly_rewritable` on the planned result instead.
+    //
+    // Requirements::UnparameterizedHub — semantic call validation runs after
+    // this pass, so rewriting a parameterized hub would delete the very
+    // argument-less corner calls that validation should reject.
+    if rules[&hub_id].arguments.is_some() {
+        return None;
+    }
 
     // Requirements::InlinableSatellite — check before planning any splice, so a
     // satellite carrying behaviour we would drop declines the whole cycle.
@@ -516,6 +535,15 @@ fn splice_satellite(
         if labels_collide(prefix, suffix, &source.elements) {
             return None;
         }
+        // Requirements::NoRebinding — implicit references bind by occurrence
+        // within the alternative: a caller action's `$ID` means the caller's
+        // own `ID` occurrence, and a satellite body arriving in front of it
+        // with another `ID` would capture the reference (and vice versa).
+        // Decline when either side's actions name anything the other side
+        // introduces.
+        if implicit_bindings_collide(prefix, suffix, &source.elements) {
+            return None;
+        }
         // The options of every alternative merged into this position apply to
         // the flattened result: an `<assoc=right>` declared on an operator
         // alternative must survive a later alias splice (`b : e`). Two
@@ -573,6 +601,86 @@ fn collect_labels<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
     }
 }
 
+/// Whether merging the caller's surviving elements with a satellite
+/// alternative would capture an *implicit* action reference: an action on one
+/// side names a token, rule or label that the other side introduces as an
+/// element. Only names actually referenced by an action matter — inert
+/// duplicate occurrences (`e : s s`) are fine.
+fn implicit_bindings_collide(prefix: &[Element], suffix: &[Element], spliced: &[Element]) -> bool {
+    let mut caller_refs = BTreeSet::new();
+    action_reference_names(prefix, &mut caller_refs);
+    action_reference_names(suffix, &mut caller_refs);
+    let mut satellite_intro = BTreeSet::new();
+    bindable_names(spliced, &mut satellite_intro);
+    if !caller_refs.is_disjoint(&satellite_intro) {
+        return true;
+    }
+    let mut satellite_refs = BTreeSet::new();
+    action_reference_names(spliced, &mut satellite_refs);
+    let mut caller_intro = BTreeSet::new();
+    bindable_names(prefix, &mut caller_intro);
+    bindable_names(suffix, &mut caller_intro);
+    !satellite_refs.is_disjoint(&caller_intro)
+}
+
+/// Every simple `$name` / `$name.attr` reference made by actions and
+/// predicates among `elements`, descending nested blocks.
+fn action_reference_names<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
+    for element in elements {
+        let mut bodies: Vec<&str> = Vec::new();
+        match &element.kind {
+            ElementKind::Action { body, .. } => bodies.push(body),
+            ElementKind::Predicate { body, fail, .. } => {
+                bodies.push(body);
+                if let Some(fail) = fail.as_deref() {
+                    bodies.push(fail);
+                }
+            }
+            ElementKind::Block(nested) => {
+                for alternative in &nested.alternatives {
+                    action_reference_names(&alternative.elements, out);
+                }
+            }
+            _ => {}
+        }
+        for body in bodies {
+            for reference in action_references(body) {
+                match reference.kind {
+                    ActionReferenceKind::Attribute { name, .. }
+                    | ActionReferenceKind::Qualified { name, .. } => {
+                        out.insert(name);
+                    }
+                    ActionReferenceKind::NonLocal { .. } => {}
+                }
+            }
+        }
+    }
+}
+
+/// Every name an action can bind by occurrence within an alternative: element
+/// labels, token names, and rule-call names, descending nested blocks.
+fn bindable_names<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
+    for element in elements {
+        if let Some(label) = &element.label {
+            out.insert(label.name.as_str());
+        }
+        match &element.kind {
+            ElementKind::RuleCall(call) => {
+                out.insert(call.name.as_str());
+            }
+            ElementKind::Terminal(Terminal::Token(token)) => {
+                out.insert(token.as_str());
+            }
+            ElementKind::Block(nested) => {
+                for alternative in &nested.alternatives {
+                    bindable_names(&alternative.elements, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// A satellite may only be inlined if nothing rule-level would be lost. Rule
 /// arguments/returns/locals, `@init`/`@after` actions, `catch`/`finally`
 /// handlers and `#`-labelled alternatives all attach to the *rule*, and vanish
@@ -592,6 +700,24 @@ fn satellite_is_inlinable(satellite: &Rule) -> bool {
             .alternatives
             .iter()
             .all(|alternative| alternative.label.is_none())
+        && !satellite_actions_bind_context(satellite)
+}
+
+/// Whether an embedded action or predicate inside `satellite` references the
+/// rule's own context — `$ctx`, `$text`, `$start`, `$stop`, or the rule itself
+/// by name. Those references bind to the *enclosing* rule; transplanted into
+/// the hub they would silently rebind to the hub's context (a `$ctx` that
+/// meant the satellite's context becomes the hub's), so such satellites
+/// decline. References to the satellite's own element labels are fine — the
+/// labelled element travels with the action.
+fn satellite_actions_bind_context(satellite: &Rule) -> bool {
+    satellite.block.alternatives.iter().any(|alternative| {
+        alternative.elements.iter().any(|element| {
+            ["ctx", "text", "start", "stop", satellite.name.as_str()]
+                .iter()
+                .any(|name| element_actions_reference(element, name))
+        })
+    })
 }
 
 /// Whether the planned hub is a shape [`super::left_recursion`] accepts.
@@ -1664,6 +1790,55 @@ mod tests {
              e : s { let _x = $s.text; } | ID ; \
              s : e '+' ID ;",
         );
+    }
+
+    #[test]
+    fn declines_parameterized_hub() {
+        // Every in-cycle corner is bare, so it omits the hub's required
+        // arguments; rewriting would delete the argument-less call before
+        // semantic call validation could reject it, leaving the parameter
+        // silently default-initialized.
+        assert_declined(
+            "parser grammar P; \
+             e[i32 x] : s | ID ; \
+             s : e '+' ID ;",
+        );
+    }
+
+    #[test]
+    fn declines_satellite_action_bound_to_its_rule_context() {
+        // `$ctx` inside the satellite means the satellite's context; spliced
+        // into the hub it would silently mean the hub's instead.
+        assert_declined(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : e '+' ID { let _r = $ctx; } ;",
+        );
+    }
+
+    #[test]
+    fn declines_when_a_splice_would_capture_an_implicit_reference() {
+        // The caller's `$ID` names its own trailing `ID` occurrence; the
+        // satellite body arriving in front of the action introduces another
+        // `ID` that would capture the reference.
+        assert_declined(
+            "parser grammar P; \
+             e : s { let _t = $ID.text; } ID | INT ; \
+             s : e '+' ID ;",
+        );
+    }
+
+    #[test]
+    fn satellite_action_bound_to_its_own_label_still_splices() {
+        // `$i` names the satellite's own labelled element, which travels with
+        // the action — no context or occurrence rebinding, so the splice is
+        // safe and must not over-decline.
+        let unit = rewritten(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : e '+' i=ID { let _t = $i.text; } ;",
+        );
+        insta::assert_snapshot!("own_label_action_spliced", render(&unit));
     }
 
     #[test]
