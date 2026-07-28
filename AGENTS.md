@@ -81,6 +81,13 @@ on `--jobs` parallel workers (default `min(cores, 8)`), each with its own cargo 
 prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon. `ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"` forwards extra generator flags
 for opt-in-tier sweeps.
 
+Every `antlr4-rust-gen` run also writes a `decisions.json` manifest next to
+`semantics.json`, reporting each parser decision's tier (`ll1` / `fixed` /
+`adaptive` + reason). The opt-in `--fixed-lookahead <k>` flag compiles
+decisions provable within `k` tokens into static dispatch tables; hits commit
+bare only on within-rule (sync-no-op) lookahead and a miss falls through to
+the regular sync + adaptive body (see the README "Decision Tiers" section).
+
 ### The rendered (embedded-actions) pipeline
 
 The harness runs descriptors the way every official ANTLR target does:

@@ -152,7 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             enforce_sem_unknown(args.sem_unknown, &entries)?;
             enforce_require_full_semantics(args.require_full_semantics, &entries)?;
             let grammar_name = compiled.semantic.recognizer.name.clone();
-            let module = render_parser_with_options(
+            let (module, decision_report_rows) = render_parser_with_decision_report(
                 &grammar_name,
                 &data,
                 ParserRenderOptions {
@@ -166,11 +166,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             )?;
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
-            let classification = classify_decisions(&data, args.fixed_lookahead)?;
             decision_report_grammars.push(DecisionReportGrammar {
                 name: grammar_name.clone(),
                 rule_names: data.rule_names.clone(),
-                rows: classification.report_rows,
+                rows: decision_report_rows,
             });
             manifest_grammars.push(("parser", grammar_name, entries));
         }
@@ -1677,10 +1676,13 @@ fn render_decisions_manifest(
 ) -> String {
     let mut out = String::new();
     out.push_str("{\n  \"version\": 1,\n");
+    // `null` when the flag is unset: flag-off and `--fixed-lookahead 1`
+    // emit different parsers (only the latter compiles static LL(1)
+    // dispatch), so the manifest must not conflate them.
     let _ = writeln!(
         out,
         "  \"fixedLookahead\": {},",
-        fixed_lookahead.unwrap_or(1)
+        json_optional_number(fixed_lookahead)
     );
     out.push_str("  \"grammars\": [");
     for (grammar_position, grammar) in grammars.iter().enumerate() {
@@ -11821,36 +11823,21 @@ const fn render_compile_parse_tree_pattern_method() -> &'static str {
 "#
 }
 
-/// Decision classification for parser rendering: computed whenever a
-/// consumer needs it — embedded mode routes decisions by the tool
-/// classification (Java parity), and `--fixed-lookahead` compiles static
-/// dispatch in either mode.
-fn parser_decision_classification(
-    data: &CodegenData<'_>,
-    options: ParserRenderOptions<'_>,
-) -> io::Result<Option<DecisionClassification>> {
-    if options.embedded || options.fixed_lookahead.is_some() {
-        Ok(Some(classify_decisions(data, options.fixed_lookahead)?))
-    } else {
-        Ok(None)
-    }
-}
-
 /// Step-render view over the opt-in `--fixed-lookahead` routing. Embedded
 /// mode reads its LL(1) switch tables through `EmbeddedStepRender`; the
 /// depth-1 dispatch tables are for plain mode, where static LL(1) switches
 /// are part of the opt-in flag.
 fn decision_routing_render<'a>(
-    classification: Option<&'a DecisionClassification>,
+    classification: &'a DecisionClassification,
     options: ParserRenderOptions<'_>,
 ) -> DecisionRoutingRender<'a> {
     DecisionRoutingRender {
-        ll1_dispatch_tables: classification
-            .filter(|_| !options.embedded && options.fixed_lookahead.is_some())
-            .map(|classification| &classification.ll1_dispatch_tables),
-        fixed_lookahead_tables: classification
-            .filter(|_| options.fixed_lookahead.is_some_and(|depth| depth >= 2))
-            .map(|classification| &classification.fixed_lookahead_tables),
+        ll1_dispatch_tables: (!options.embedded && options.fixed_lookahead.is_some())
+            .then_some(&classification.ll1_dispatch_tables),
+        fixed_lookahead_tables: options
+            .fixed_lookahead
+            .is_some_and(|depth| depth >= 2)
+            .then_some(&classification.fixed_lookahead_tables),
     }
 }
 
@@ -11863,7 +11850,7 @@ fn parser_render_surfaces(
     type_name: &str,
     grammar_name: &str,
     options: ParserRenderOptions<'_>,
-    decision_classification: Option<&DecisionClassification>,
+    decision_classification: &DecisionClassification,
 ) -> io::Result<(Option<EmbeddedParserData>, Option<EmbeddedParserData>)> {
     if options.embedded {
         let embedded = build_embedded_parser_data(
@@ -11871,7 +11858,7 @@ fn parser_render_surfaces(
             type_name,
             grammar_name,
             options,
-            decision_classification.expect("decision classification is computed for embedded mode"),
+            decision_classification,
         )?;
         Ok((Some(embedded), None))
     } else {
@@ -11880,11 +11867,26 @@ fn parser_render_surfaces(
     }
 }
 
+/// Test-facing wrapper over [`render_parser_with_decision_report`] for the
+/// many render assertions that never look at the manifest rows.
+#[cfg(test)]
 fn render_parser_with_options(
     grammar_name: &str,
     data: &CodegenData<'_>,
     options: ParserRenderOptions<'_>,
 ) -> io::Result<String> {
+    Ok(render_parser_with_decision_report(grammar_name, data, options)?.0)
+}
+
+/// [`render_parser_with_options`] plus the per-decision tier rows for the
+/// `decisions.json` manifest, so callers that emit the manifest reuse the
+/// classification the renderer already computed (the bounded LOOK(k)
+/// enumeration is the expensive part under `--fixed-lookahead`).
+fn render_parser_with_decision_report(
+    grammar_name: &str,
+    data: &CodegenData<'_>,
+    options: ParserRenderOptions<'_>,
+) -> io::Result<(String, Vec<DecisionReportRow>)> {
     let empty_patterns = SemPatternFile::default();
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
@@ -11897,17 +11899,19 @@ fn render_parser_with_options(
     let rule_constants = render_rule_constants(data);
     // Decision routing: embedded mode always follows the tool
     // classification (Java parity); `--fixed-lookahead` additionally
-    // compiles static dispatch for provable decisions in either mode.
-    let decision_classification = parser_decision_classification(data, options)?;
+    // compiles static dispatch for provable decisions in either mode. The
+    // classification also carries the tier rows this function returns for
+    // the `decisions.json` manifest.
+    let decision_classification = classify_decisions(data, options.fixed_lookahead)?;
     let (embedded_data, structural_surface) = parser_render_surfaces(
         data,
         &type_name,
         grammar_name,
         options,
-        decision_classification.as_ref(),
+        &decision_classification,
     )?;
     let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
-    let decision_routing = decision_routing_render(decision_classification.as_ref(), options);
+    let decision_routing = decision_routing_render(&decision_classification, options);
     let mut portable_local_data = if options.embedded {
         PortableLocalData::default()
     } else {
@@ -12106,7 +12110,7 @@ fn render_parser_with_options(
     } else {
         ""
     };
-    Ok(format!(
+    let module = format!(
         r#"{generated_header}use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
@@ -12468,7 +12472,8 @@ where
     fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {{ self.base.remove_parse_listeners() }}
 }}
 {generated_footer}"#
-    ))
+    );
+    Ok((module, decision_classification.report_rows))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19071,6 +19076,14 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
             }],
         );
         insta::assert_snapshot!("fixed_lookahead_decisions_manifest", manifest);
+
+        // Flag-off and `--fixed-lookahead 1` emit different parsers (only
+        // the latter compiles static LL(1) dispatch), so the manifest must
+        // not conflate them: unset renders as null.
+        let flag_off = render_decisions_manifest(None, &[]);
+        assert!(flag_off.contains("\"fixedLookahead\": null"));
+        let depth_one = render_decisions_manifest(Some(1), &[]);
+        assert!(depth_one.contains("\"fixedLookahead\": 1"));
     }
 
     #[test]
@@ -19096,8 +19109,13 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
         // are restricted to lookahead where `sync_decision` provably
         // no-ops — so the decision's sync must render only in the miss
         // arm, after the dispatch.
-        let preceding = &rendered[dispatch_start.saturating_sub(400)..dispatch_start];
-        assert!(!preceding.contains("sync_decision"));
+        // Anchor at the enclosing generated method so the checked window is
+        // defined by the generated structure (rule entry .. dispatch), not
+        // an arbitrary byte count that preamble growth could outrun.
+        let method_start = rendered[..dispatch_start]
+            .rfind("fn parse_generated_rule_")
+            .expect("dispatch is inside a generated rule method");
+        assert!(!rendered[method_start..dispatch_start].contains("sync_decision"));
         assert!(rendered[dispatch_start..].contains("sync_decision"));
     }
 
