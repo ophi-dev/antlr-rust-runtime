@@ -93,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut grammar_options = Vec::new();
     let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
+    let mut decision_report_grammars: Vec<DecisionReportGrammar> = Vec::new();
     let mut rendered_modules = BTreeMap::<PathBuf, String>::new();
     let mut emitted_lexers = BTreeSet::new();
     let mut emitted_parsers = BTreeSet::new();
@@ -161,9 +162,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     generate_visitor: args.generate_visitor,
                     sem_unknown: args.sem_unknown,
                     patterns: Some(&args.sem_patterns),
+                    fixed_lookahead: args.fixed_lookahead,
                 },
             )?;
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
+            let classification = classify_decisions(&data, args.fixed_lookahead)?;
+            decision_report_grammars.push(DecisionReportGrammar {
+                name: grammar_name.clone(),
+                rule_names: data.rule_names.clone(),
+                rows: classification.report_rows,
+            });
             manifest_grammars.push(("parser", grammar_name, entries));
         }
     }
@@ -179,6 +187,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(args.out_dir.join(path), module)?;
     }
     fs::write(args.out_dir.join("semantics.json"), manifest)?;
+    fs::write(
+        args.out_dir.join("decisions.json"),
+        render_decisions_manifest(args.fixed_lookahead, &decision_report_grammars),
+    )?;
     Ok(())
 }
 
@@ -1646,6 +1658,105 @@ fn render_semantics_manifest(
     out
 }
 
+/// Per-parser-grammar rows for the `decisions.json` manifest.
+struct DecisionReportGrammar {
+    name: String,
+    rule_names: Vec<String>,
+    rows: Vec<DecisionReportRow>,
+}
+
+/// Renders the `decisions.json` manifest: one row per parser decision with
+/// its classifier tier — `ll1` (Java compiles a token switch), `fixed`
+/// (`--fixed-lookahead` proved disjointness at `lookahead` tokens and a
+/// static dispatch table was emitted), or `adaptive` with the reason the
+/// decision keeps `adaptivePredict`. Deterministic: rows are in decision
+/// order, and the classifier itself is pure.
+fn render_decisions_manifest(
+    fixed_lookahead: Option<usize>,
+    grammars: &[DecisionReportGrammar],
+) -> String {
+    let mut out = String::new();
+    out.push_str("{\n  \"version\": 1,\n");
+    let _ = writeln!(
+        out,
+        "  \"fixedLookahead\": {},",
+        fixed_lookahead.unwrap_or(1)
+    );
+    out.push_str("  \"grammars\": [");
+    for (grammar_position, grammar) in grammars.iter().enumerate() {
+        if grammar_position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    {\n");
+        let _ = writeln!(out, "      \"name\": {},", json_string(&grammar.name));
+        let (mut ll1, mut fixed, mut adaptive) = (0_usize, 0_usize, 0_usize);
+        for row in &grammar.rows {
+            match row.tier {
+                DecisionTierReport::Ll1 => ll1 += 1,
+                DecisionTierReport::Fixed { .. } => fixed += 1,
+                DecisionTierReport::Adaptive { .. } => adaptive += 1,
+            }
+        }
+        let _ = writeln!(
+            out,
+            "      \"summary\": {{\"total\": {}, \"ll1\": {ll1}, \"fixed\": {fixed}, \"adaptive\": {adaptive}}},",
+            grammar.rows.len()
+        );
+        out.push_str("      \"decisions\": [");
+        for (row_position, row) in grammar.rows.iter().enumerate() {
+            if row_position > 0 {
+                out.push(',');
+            }
+            out.push_str("\n        ");
+            write_decision_report_row(&mut out, row, &grammar.rule_names);
+        }
+        if grammar.rows.is_empty() {
+            out.push_str("]\n    }");
+        } else {
+            out.push_str("\n      ]\n    }");
+        }
+    }
+    if grammars.is_empty() {
+        out.push_str("]\n}\n");
+    } else {
+        out.push_str("\n  ]\n}\n");
+    }
+    out
+}
+
+fn write_decision_report_row(out: &mut String, row: &DecisionReportRow, rule_names: &[String]) {
+    let rule_name = row
+        .rule_index
+        .and_then(|rule_index| rule_names.get(rule_index));
+    out.push('{');
+    let _ = write!(out, "\"decision\": {}", row.decision);
+    let _ = write!(
+        out,
+        ", \"rule\": {}",
+        json_optional_string(rule_name.map(String::as_str))
+    );
+    let _ = write!(out, ", \"state\": {}", row.state);
+    match row.tier {
+        DecisionTierReport::Ll1 => {
+            let _ = write!(out, ", \"tier\": \"ll1\"");
+        }
+        DecisionTierReport::Fixed { lookahead } => {
+            let _ = write!(out, ", \"tier\": \"fixed\", \"lookahead\": {lookahead}");
+        }
+        DecisionTierReport::Adaptive {
+            reason,
+            probed_lookahead,
+        } => {
+            let _ = write!(
+                out,
+                ", \"tier\": \"adaptive\", \"reason\": {}, \"probedLookahead\": {probed_lookahead}",
+                json_string(reason.manifest_name())
+            );
+        }
+    }
+    out.push('}');
+}
+
 fn write_grammar_option_entry(out: &mut String, entry: &GrammarOptionEntry) {
     out.push('{');
     let _ = write!(out, "\"name\": {}", json_string(&entry.key));
@@ -2026,6 +2137,11 @@ struct Args {
     /// bodies (rendered through a `.test.stg`); splice them verbatim after
     /// `$`-attribute translation instead of recognizing template markup.
     embedded_actions: bool,
+    /// `--fixed-lookahead <k>`: compile decisions whose alternatives are
+    /// pairwise disjoint within `k` tokens of lookahead into static dispatch
+    /// tables instead of adaptive prediction. `None` keeps the default
+    /// routing (Java parity).
+    fixed_lookahead: Option<usize>,
 }
 
 enum CliCommand {
@@ -2048,6 +2164,7 @@ impl Args {
         let mut option_hooks = BTreeSet::new();
         let mut generate_listener = true;
         let mut generate_visitor = false;
+        let mut fixed_lookahead = None;
         let mut positional_only = false;
 
         let mut iter = env::args().skip(1);
@@ -2094,6 +2211,22 @@ impl Args {
                     sem_unknown =
                         SemUnknownPolicy::parse_flag(&next_arg(&mut iter, "--sem-unknown")?)?;
                 }
+                "--fixed-lookahead" => {
+                    let value = next_arg(&mut iter, "--fixed-lookahead")?;
+                    let depth = value
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|depth| (1..=MAX_FIXED_LOOKAHEAD_FLAG).contains(depth));
+                    match depth {
+                        Some(depth) => fixed_lookahead = Some(depth),
+                        None => {
+                            return Err(format!(
+                                "--fixed-lookahead expects an integer between 1 and {MAX_FIXED_LOOKAHEAD_FLAG}; got {value}\n\n{}",
+                                usage()
+                            ));
+                        }
+                    }
+                }
                 "--help" | "-h" => return Ok(CliCommand::Help),
                 "--version" | "-V" => return Ok(CliCommand::Version),
                 other if other.starts_with("-I") && other.len() > 2 => {
@@ -2126,6 +2259,7 @@ impl Args {
             generate_listener,
             generate_visitor,
             embedded_actions,
+            fixed_lookahead,
         }))
     }
 }
@@ -2155,6 +2289,9 @@ Options:
   --sem-patterns FILE              Load semantic helper patterns
   --option-hook KEY=VALUE          Acknowledge an option implemented by caller hooks
   --require-full-semantics         Fail if any semantic coordinate or option is unsupported
+  --fixed-lookahead K              Compile decisions provable within K tokens of lookahead
+                                   into static dispatch tables (off by default; every
+                                   remaining decision keeps adaptive prediction)
   -V, --version                    Print version
   -h, --help                       Print this help"
         .to_owned()
@@ -4042,6 +4179,48 @@ struct PortableLocalStepRender<'a> {
     required_generated_rules: &'a BTreeSet<usize>,
 }
 
+/// Mode-independent decision routing produced by [`classify_decisions`].
+///
+/// Embedded mode reads its Java-parity LL(1) tables through
+/// [`EmbeddedStepRender`]; these fields carry the opt-in
+/// `--fixed-lookahead` routing: complete LL(1) switch tables for plain
+/// mode, and fixed-LL(k) dispatch tables for both modes. Both stay `None`
+/// with the flag unset so default rendering is untouched.
+#[derive(Clone, Copy, Default)]
+struct DecisionRoutingRender<'a> {
+    ll1_decision_arms: Option<&'a BTreeMap<usize, Vec<Vec<(i32, i32)>>>>,
+    fixed_lookahead_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
+}
+
+impl DecisionRoutingRender<'_> {
+    /// Static dispatch table for a decision: the fixed-LL(k) trie when the
+    /// probe proved one, else a depth-1 table from the tool's complete
+    /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
+    /// switch through [`EmbeddedStepRender`]). Both render through the same
+    /// sync-first dispatch shape.
+    fn static_dispatch_table(&self, decision: usize) -> Option<FixedLookaheadTable> {
+        if let Some(table) = self
+            .fixed_lookahead_tables
+            .and_then(|tables| tables.get(&decision))
+        {
+            return Some(table.clone());
+        }
+        let arms = self.ll1_decision_arms?.get(&decision)?;
+        Some(FixedLookaheadTable {
+            lookahead: 1,
+            root: FixedLookaheadNode::Probe(
+                arms.iter()
+                    .enumerate()
+                    .filter(|(_, intervals)| !intervals.is_empty())
+                    .map(|(index, intervals)| {
+                        (intervals.clone(), FixedLookaheadNode::Alt(index + 1))
+                    })
+                    .collect(),
+            ),
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 struct GeneratedStepRenderContext<'a> {
     current_rule_index: usize,
@@ -4049,6 +4228,8 @@ struct GeneratedStepRenderContext<'a> {
     embedded: Option<EmbeddedStepRender<'a>>,
     /// Portable raw-grammar boolean locals translated without embedded mode.
     portable_locals: Option<PortableLocalStepRender<'a>>,
+    /// Opt-in `--fixed-lookahead` static dispatch routing (both modes).
+    decision_routing: DecisionRoutingRender<'a>,
     inline_action_statements: &'a BTreeMap<usize, String>,
     track_alt_numbers: bool,
     track_context_alt_numbers: bool,
@@ -4102,6 +4283,9 @@ struct ParserRenderOptions<'a> {
     generate_visitor: bool,
     sem_unknown: SemUnknownPolicy,
     patterns: Option<&'a SemPatternFile>,
+    /// `--fixed-lookahead <k>`: compile decisions provable within `k`
+    /// tokens of lookahead into static dispatch tables.
+    fixed_lookahead: Option<usize>,
 }
 
 impl Default for ParserRenderOptions<'_> {
@@ -4113,6 +4297,7 @@ impl Default for ParserRenderOptions<'_> {
             generate_visitor: false,
             sem_unknown: SemUnknownPolicy::default(),
             patterns: None,
+            fixed_lookahead: None,
         }
     }
 }
@@ -5823,6 +6008,7 @@ fn render_generated_rule_dispatch(
         false,
         None,
         None,
+        DecisionRoutingRender::default(),
     )
 }
 
@@ -5904,6 +6090,7 @@ impl GeneratedRuleError {{
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn render_generated_rule_routing(
     rules: &[Option<GeneratedParserRule>],
     rule_names: &[String],
@@ -5912,6 +6099,7 @@ fn render_generated_rule_routing(
     track_context_alt_numbers: bool,
     embedded: Option<EmbeddedStepRender<'_>>,
     portable_locals: Option<PortableLocalStepRender<'_>>,
+    decision_routing: DecisionRoutingRender<'_>,
 ) -> (String, usize) {
     let direct_generated_rule_calls = rules.iter().map(Option::is_some).collect::<Vec<_>>();
     let preferred_rule_count = generated_adaptive_atn_preferred_rule_count(
@@ -5928,6 +6116,7 @@ fn render_generated_rule_routing(
         track_context_alt_numbers,
         embedded,
         portable_locals,
+        decision_routing,
     );
     (dispatch, preferred_rule_count)
 }
@@ -5942,6 +6131,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     track_context_alt_numbers: bool,
     embedded: Option<EmbeddedStepRender<'_>>,
     portable_locals: Option<PortableLocalStepRender<'_>>,
+    decision_routing: DecisionRoutingRender<'_>,
 ) -> String {
     let mut out = String::new();
     let force_generated_rules = generated_force_generated_rules(
@@ -6017,6 +6207,7 @@ fn render_generated_rule_dispatch_with_rule_names(
         current_rule_index: usize::MAX,
         embedded,
         portable_locals,
+        decision_routing,
         inline_action_statements,
         track_alt_numbers,
         track_context_alt_numbers,
@@ -6991,13 +7182,33 @@ fn render_generated_decision(
         alts,
     } = decision_info;
     let pad = "    ".repeat(indent);
+    // Opt-in `--fixed-lookahead` static dispatch replaces the prediction
+    // block entirely; its fall-through arm renders the decision's regular
+    // adaptive body, so unproven lookahead behaves exactly as untiered.
+    let static_table = (!allow_semantic_context && !force_context)
+        .then(|| {
+            render_context
+                .decision_routing
+                .static_dispatch_table(decision)
+        })
+        .flatten();
     // A tool-LL(1) decision dispatches on the tool's complete LOOK table
     // (exit alternatives included), like Java's switch compilation.
     let tool_fast_path = render_context
         .embedded
         .and_then(|embedded| embedded.tool_ll1_fast_path(decision));
     let fast_path = tool_fast_path.as_ref().or(fast_path);
-    if let Some(fast_path) = fast_path.filter(|_| {
+    if let Some(table) = static_table {
+        render_generated_fixed_lookahead_prediction(
+            out,
+            &pad,
+            state,
+            decision,
+            &table,
+            render_context,
+            "false",
+        );
+    } else if let Some(fast_path) = fast_path.filter(|_| {
         !allow_semantic_context
             && !force_context
             && !render_context
@@ -7139,6 +7350,88 @@ fn render_generated_ll1_then_adaptive_prediction(
     writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
     render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 1);
     writeln!(out, "{pad}}}{suffix}").expect("writing to a string cannot fail");
+}
+
+/// `--fixed-lookahead`: a static `la(1)..la(k)` dispatch trie whose hits
+/// commit an alternative without touching the simulator.
+///
+/// The shape mirrors the adaptive body the table replaces, token for token
+/// on the error path: `sync_decision` runs FIRST (its context-aware
+/// single-token deletion must happen exactly where the untiered parser
+/// performs it — a table computed with context-free FOLLOW could otherwise
+/// swallow an invalid token into an exit arm and move the "extraneous
+/// input" report a rule higher), then the trie probes the post-sync
+/// lookahead, and a miss falls through to the decision's regular adaptive
+/// prediction.
+fn render_generated_fixed_lookahead_prediction(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    decision: usize,
+    table: &FixedLookaheadTable,
+    render_context: GeneratedStepRenderContext<'_>,
+    loop_sync_flag: &str,
+) {
+    render_generated_sync_decision(out, pad, state, loop_sync_flag);
+    writeln!(
+        out,
+        "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    write!(out, "{pad}let __fixed_lookahead_alt: Option<usize> = ")
+        .expect("writing to a string cannot fail");
+    render_fixed_lookahead_node(out, pad, &table.root, 1);
+    writeln!(out, ";").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}let __prediction = if let Some(__fixed_lookahead_alt) = __fixed_lookahead_alt {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    antlr4_runtime::ParserAtnPrediction {{ alt: __fixed_lookahead_alt, requires_full_context: false, has_semantic_context: false, diagnostic: None }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    let inner_pad = format!("{pad}    ");
+    if render_context
+        .embedded
+        .is_some_and(|embedded| embedded.adaptive_decision(decision))
+    {
+        render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 1);
+    } else {
+        render_generated_ll1_then_adaptive_prediction(out, &inner_pad, state, decision, false);
+    }
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+/// Renders one dispatch-trie node as an expression. `node_pad` is the
+/// indentation of the node's closing brace; `depth` is the 1-based
+/// lookahead position this node probes.
+fn render_fixed_lookahead_node(
+    out: &mut String,
+    node_pad: &str,
+    node: &FixedLookaheadNode,
+    depth: usize,
+) {
+    match node {
+        FixedLookaheadNode::Alt(alt) => {
+            write!(out, "Some({alt})").expect("writing to a string cannot fail");
+        }
+        FixedLookaheadNode::Probe(arms) => {
+            writeln!(out, "match self.base.la({depth}) {{")
+                .expect("writing to a string cannot fail");
+            let arm_pad = format!("{node_pad}    ");
+            for (intervals, child) in arms {
+                let patterns = render_i32_match_patterns(intervals);
+                write!(out, "{arm_pad}{patterns} => ").expect("writing to a string cannot fail");
+                render_fixed_lookahead_node(out, &arm_pad, child, depth + 1);
+                writeln!(out, ",").expect("writing to a string cannot fail");
+            }
+            writeln!(out, "{arm_pad}_ => None,").expect("writing to a string cannot fail");
+            write!(out, "{node_pad}}}").expect("writing to a string cannot fail");
+        }
+    }
 }
 
 fn render_generated_decision_diagnostic_report(
@@ -7663,6 +7956,16 @@ fn render_generated_star_loop(
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
+    // Opt-in `--fixed-lookahead` static dispatch (see
+    // `render_generated_decision`); the miss arm renders the loop's regular
+    // adaptive body.
+    let static_table = (!allow_semantic_context && !force_context)
+        .then(|| {
+            render_context
+                .decision_routing
+                .static_dispatch_table(decision)
+        })
+        .flatten();
     // A tool-LL(1) loop decision dispatches on the tool's complete LOOK
     // table (exit alternative included), like Java's switch-driven loops.
     let tool_fast_path = render_context
@@ -7679,7 +7982,17 @@ fn render_generated_star_loop(
         .expect("writing to a string cannot fail");
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
     let inner_pad = format!("{pad}    ");
-    if let Some(fast_path) = fast_path.filter(|_| {
+    if let Some(table) = static_table {
+        render_generated_fixed_lookahead_prediction(
+            out,
+            &inner_pad,
+            state,
+            decision,
+            &table,
+            render_context,
+            &loop_iter,
+        );
+    } else if let Some(fast_path) = fast_path.filter(|_| {
         !allow_semantic_context
             && !force_context
             && !render_context
@@ -8388,6 +8701,25 @@ struct DecisionAltLook {
     hit_pred: bool,
 }
 
+/// Upper bound accepted by `--fixed-lookahead`. Dispatch-table size and
+/// analysis cost grow with depth; beyond a few tokens the tier stops paying
+/// for itself, so cap the flag rather than let a typo explode generation.
+const MAX_FIXED_LOOKAHEAD_FLAG: usize = 8;
+/// Per-alternative cap on lookahead rectangles gathered by the fixed-LL(k)
+/// walk. This is an *analysis* budget: generous enough that ordinary
+/// decisions get an honest disjoint / not-disjoint verdict (fan-outy
+/// recursive regions need thousands of rectangles at depth 2-3), while the
+/// emitted code size is bounded separately by the table-arm budget.
+const FIXED_LOOKAHEAD_RECTANGLE_BUDGET: usize = 8192;
+/// Per-alternative cap on total walk steps (closure visits), guarding
+/// against pathological ATN regions; deterministic by construction.
+const FIXED_LOOKAHEAD_STEP_BUDGET: usize = 200_000;
+/// Cap on total dispatch-trie arms actually emitted for one decision. A
+/// disjointness proof over a huge rectangle set would compile into an
+/// unreasonably large `match`; past this size the adaptive simulator's
+/// learned DFA is the better engine, so decline the table.
+const FIXED_LOOKAHEAD_TABLE_ARM_BUDGET: usize = 256;
+
 /// Ports the ANTLR tool's `AnalysisPipeline` classification: the decisions
 /// whose alternatives' LOOK(1) sets are not pairwise disjoint (or hit a
 /// predicate, or come up empty). Java compiles LL(1)-disjoint decisions to
@@ -8395,19 +8727,52 @@ struct DecisionAltLook {
 /// other decision through `adaptivePredict`, the only place DFA states are
 /// learned and full-context diagnostics fire. `dumpDFA` and diagnostic
 /// output therefore only match Java when the generated routing agrees.
-fn tool_decision_analysis(data: &CodegenData<'_>) -> io::Result<ToolDecisionAnalysis> {
+///
+/// On top of that Java-parity split, `--fixed-lookahead k` (k >= 2) probes
+/// the residual `adaptivePredict` decisions with a bounded LOOK(k) walk and
+/// compiles the ones whose k-token lookahead languages are pairwise disjoint
+/// into static dispatch tables ([`FixedLookaheadTable`]). Every tier verdict
+/// is recorded in [`DecisionClassification::report_rows`] for the
+/// `decisions.json` manifest.
+fn classify_decisions(
+    data: &CodegenData<'_>,
+    fixed_lookahead: Option<usize>,
+) -> io::Result<DecisionClassification> {
     let atn = data.parser_atn()?;
-    let mut analysis = ToolDecisionAnalysis::default();
+    let max_lookahead = fixed_lookahead.unwrap_or(1);
+    let mut classification = DecisionClassification::default();
     for (decision, state_number) in atn.decision_to_state().iter().enumerate() {
         let Some(state) = atn.state(state_number) else {
             continue;
+        };
+        let report = |tier: DecisionTierReport| DecisionReportRow {
+            decision,
+            state: state_number,
+            rule_index: state.rule_index(),
+            tier,
         };
         // The tool never LL(1)-compiles non-greedy or left-recursion
         // precedence decisions, disjoint LOOK or not — Java always emits
         // `adaptivePredict` for them (a token switch would make a
         // non-greedy loop greedy).
-        if state.non_greedy() || state.precedence_rule_decision() {
-            analysis.adaptive_decisions.insert(decision);
+        if state.non_greedy() {
+            classification.adaptive_decisions.insert(decision);
+            classification
+                .report_rows
+                .push(report(DecisionTierReport::adaptive(
+                    AdaptiveReason::NonGreedy,
+                    0,
+                )));
+            continue;
+        }
+        if state.precedence_rule_decision() {
+            classification.adaptive_decisions.insert(decision);
+            classification
+                .report_rows
+                .push(report(DecisionTierReport::adaptive(
+                    AdaptiveReason::Precedence,
+                    0,
+                )));
             continue;
         }
         let looks: Vec<DecisionAltLook> = state
@@ -8424,31 +8789,517 @@ fn tool_decision_analysis(data: &CodegenData<'_>) -> io::Result<ToolDecisionAnal
                 look
             })
             .collect();
+        if looks.iter().any(|look| look.hit_pred) {
+            classification.adaptive_decisions.insert(decision);
+            classification
+                .report_rows
+                .push(report(DecisionTierReport::adaptive(
+                    AdaptiveReason::Predicate,
+                    1,
+                )));
+            continue;
+        }
+        if looks.iter().any(|look| look.symbols.is_empty()) {
+            classification.adaptive_decisions.insert(decision);
+            classification
+                .report_rows
+                .push(report(DecisionTierReport::adaptive(
+                    AdaptiveReason::EmptyLook,
+                    1,
+                )));
+            continue;
+        }
         if decision_alt_looks_disjoint(&looks) {
-            analysis.ll1_decision_arms.insert(
+            classification.ll1_decision_arms.insert(
                 decision,
                 looks
                     .iter()
                     .map(|look| symbol_intervals(&look.symbols))
                     .collect(),
             );
-        } else {
-            analysis.adaptive_decisions.insert(decision);
+            classification
+                .report_rows
+                .push(report(DecisionTierReport::Ll1));
+            continue;
         }
+        // Not LL(1): Java parity keeps the decision adaptive. With the
+        // opt-in flag, probe increasing fixed depths before giving up.
+        classification.adaptive_decisions.insert(decision);
+        let mut tier = DecisionTierReport::adaptive(AdaptiveReason::NotDisjoint, max_lookahead);
+        for depth in 2..=max_lookahead {
+            match fixed_lookahead_table(atn, state, depth) {
+                FixedLookaheadOutcome::Table(table) => {
+                    classification
+                        .fixed_lookahead_tables
+                        .insert(decision, table);
+                    tier = DecisionTierReport::Fixed { lookahead: depth };
+                    break;
+                }
+                FixedLookaheadOutcome::NotDisjoint => {}
+                FixedLookaheadOutcome::Predicate => {
+                    tier = DecisionTierReport::adaptive(AdaptiveReason::Predicate, depth);
+                    break;
+                }
+                FixedLookaheadOutcome::Budget => {
+                    tier = DecisionTierReport::adaptive(AdaptiveReason::Budget, depth);
+                    break;
+                }
+            }
+        }
+        classification.report_rows.push(report(tier));
     }
-    Ok(analysis)
+    Ok(classification)
 }
 
-/// Tool-side decision classification (see [`tool_decision_analysis`]).
+/// Tool-side decision classification (see [`classify_decisions`]).
 #[derive(Debug, Default)]
-struct ToolDecisionAnalysis {
-    /// Decisions Java compiles to `adaptivePredict` calls.
+struct DecisionClassification {
+    /// Decisions Java compiles to `adaptivePredict` calls. Decisions that
+    /// additionally earned a [`FixedLookaheadTable`] stay in this set: the
+    /// table's fall-through branch must render the same adaptive body the
+    /// decision would get without the table.
     adaptive_decisions: BTreeSet<usize>,
     /// Complete LOOK(1) dispatch intervals per alt for LL(1)-disjoint
     /// decisions — exit alternatives included, unlike the within-rule
     /// fast-path/LL(1) analyses, so legit input never falls through to the
     /// simulator (Java's switch never does).
     ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+    /// `--fixed-lookahead`: static dispatch tables for decisions whose
+    /// LOOK(k) languages are pairwise disjoint at some 2 <= k <= flag.
+    fixed_lookahead_tables: BTreeMap<usize, FixedLookaheadTable>,
+    /// Per-decision tier verdicts for the `decisions.json` manifest.
+    report_rows: Vec<DecisionReportRow>,
+}
+
+/// One decision's verdict for the `decisions.json` manifest.
+#[derive(Clone, Debug)]
+struct DecisionReportRow {
+    decision: usize,
+    state: usize,
+    rule_index: Option<usize>,
+    tier: DecisionTierReport,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DecisionTierReport {
+    /// LOOK(1)-disjoint: Java compiles a token switch; no prediction runs.
+    Ll1,
+    /// Disjoint at a fixed `lookahead` >= 2; static dispatch table emitted
+    /// (only reported when `--fixed-lookahead` enabled the probe).
+    Fixed { lookahead: usize },
+    /// Stays on adaptive prediction. `probed_lookahead` is the deepest
+    /// lookahead the classifier examined before settling on the reason.
+    Adaptive {
+        reason: AdaptiveReason,
+        probed_lookahead: usize,
+    },
+}
+
+impl DecisionTierReport {
+    const fn adaptive(reason: AdaptiveReason, probed_lookahead: usize) -> Self {
+        Self::Adaptive {
+            reason,
+            probed_lookahead,
+        }
+    }
+}
+
+/// Why a decision keeps `adaptivePredict` routing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdaptiveReason {
+    /// Non-greedy loop entry: a dispatch table would make it greedy.
+    NonGreedy,
+    /// Left-recursion precedence decision: gated on the runtime
+    /// precedence stack, invisible to token lookahead.
+    Precedence,
+    /// A semantic predicate guards lookahead-reachable paths; only the
+    /// simulator evaluates predicates during prediction.
+    Predicate,
+    /// Some alternative's lookahead set came up empty (Java nulls the
+    /// whole decision in `getDecisionLookahead`).
+    EmptyLook,
+    /// Lookahead languages stay overlapping at every probed depth.
+    NotDisjoint,
+    /// The fixed-lookahead walk exceeded its rectangle or step budget.
+    Budget,
+}
+
+impl AdaptiveReason {
+    const fn manifest_name(self) -> &'static str {
+        match self {
+            Self::NonGreedy => "non-greedy",
+            Self::Precedence => "precedence",
+            Self::Predicate => "predicate",
+            Self::EmptyLook => "empty-look",
+            Self::NotDisjoint => "not-disjoint",
+            Self::Budget => "budget-exceeded",
+        }
+    }
+}
+
+/// One k-token lookahead "rectangle": dimension `d` holds the interval set
+/// of tokens an ATN path can match at lookahead position `d + 1`. A
+/// rectangle denotes the cross product of its dimensions, and the union of
+/// an alternative's rectangles is exactly its LOOK(k) language: every path
+/// through the ATN consuming k terminal edges contributes the cross product
+/// of the sets those edges match, and every LOOK(k) word arises from such a
+/// path. Paths that reach end-of-input early pad the remaining dimensions
+/// with `{EOF}`, matching a token stream's behavior of returning EOF for
+/// every position past the end.
+type LookaheadRectangle = Vec<Vec<(i32, i32)>>;
+
+/// Static dispatch table for one fixed-LL(k) decision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FixedLookaheadTable {
+    lookahead: usize,
+    root: FixedLookaheadNode,
+}
+
+/// Dispatch trie over `la(1) .. la(k)`. Arms at each probe level are
+/// pairwise disjoint interval sets; lookahead words outside every arm fall
+/// through to the decision's regular adaptive body.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum FixedLookaheadNode {
+    /// Every surviving rectangle belongs to this 1-based alternative; no
+    /// further lookahead is read.
+    Alt(usize),
+    /// Probe the next lookahead token and descend.
+    Probe(Vec<(Vec<(i32, i32)>, Self)>),
+}
+
+enum FixedLookaheadOutcome {
+    Table(FixedLookaheadTable),
+    NotDisjoint,
+    Predicate,
+    Budget,
+}
+
+/// Probes one decision at exactly `depth` tokens of lookahead: walks every
+/// alternative's LOOK(depth) rectangles, requires the alternatives'
+/// languages to be pairwise disjoint, and compiles the dispatch trie.
+fn fixed_lookahead_table(
+    atn: &ParserAtn,
+    state: ParserAtnState<'_>,
+    depth: usize,
+) -> FixedLookaheadOutcome {
+    let mut alt_rectangles: Vec<Vec<LookaheadRectangle>> = Vec::new();
+    for transition in state.transitions() {
+        let mut walk = FixedLookaheadWalk {
+            atn,
+            depth_limit: depth,
+            steps: 0,
+        };
+        match walk.alt_rectangles(transition.target()) {
+            Ok(rectangles) if rectangles.is_empty() => {
+                // No k-token word reaches here (only possible through walk
+                // pruning); without a complete language the table would be
+                // unsound, so keep the decision adaptive.
+                return FixedLookaheadOutcome::NotDisjoint;
+            }
+            Ok(rectangles) => alt_rectangles.push(rectangles),
+            Err(FixedWalkBail::Predicate) => return FixedLookaheadOutcome::Predicate,
+            Err(FixedWalkBail::Budget) => return FixedLookaheadOutcome::Budget,
+        }
+    }
+    for (left, left_rectangles) in alt_rectangles.iter().enumerate() {
+        for right_rectangles in alt_rectangles.iter().skip(left + 1) {
+            let overlap = left_rectangles.iter().any(|left_rectangle| {
+                right_rectangles
+                    .iter()
+                    .any(|right_rectangle| rectangles_overlap(left_rectangle, right_rectangle))
+            });
+            if overlap {
+                return FixedLookaheadOutcome::NotDisjoint;
+            }
+        }
+    }
+    let items: Vec<(usize, &LookaheadRectangle)> = alt_rectangles
+        .iter()
+        .enumerate()
+        .flat_map(|(index, rectangles)| {
+            rectangles
+                .iter()
+                .map(move |rectangle| (index + 1, rectangle))
+        })
+        .collect();
+    match build_fixed_lookahead_node(&items, 0, depth) {
+        Some(root) => {
+            // A valid proof can still compile into an unreasonably large
+            // `match`; past the arm budget the simulator's learned DFA is
+            // the better engine.
+            if fixed_lookahead_node_arm_count(&root) > FIXED_LOOKAHEAD_TABLE_ARM_BUDGET {
+                return FixedLookaheadOutcome::Budget;
+            }
+            FixedLookaheadOutcome::Table(FixedLookaheadTable {
+                lookahead: depth,
+                root,
+            })
+        }
+        // Unreachable when disjointness holds; decline defensively rather
+        // than emit a table the proof does not cover.
+        None => FixedLookaheadOutcome::NotDisjoint,
+    }
+}
+
+/// Total dispatch arms across the trie (leaves plus probe arms), the size
+/// proxy for the emitted `match` code.
+fn fixed_lookahead_node_arm_count(node: &FixedLookaheadNode) -> usize {
+    match node {
+        FixedLookaheadNode::Alt(_) => 1,
+        FixedLookaheadNode::Probe(arms) => arms
+            .iter()
+            .map(|(_, child)| 1 + fixed_lookahead_node_arm_count(child))
+            .sum(),
+    }
+}
+
+/// Two k-dimensional rectangles overlap iff every dimension's interval
+/// sets intersect.
+fn rectangles_overlap(left: &LookaheadRectangle, right: &LookaheadRectangle) -> bool {
+    left.iter()
+        .zip(right.iter())
+        .all(|(left_set, right_set)| interval_sets_intersect(left_set, right_set))
+}
+
+/// Whether two sorted disjoint interval sets share any symbol.
+fn interval_sets_intersect(left: &[(i32, i32)], right: &[(i32, i32)]) -> bool {
+    let (mut left_index, mut right_index) = (0, 0);
+    while left_index < left.len() && right_index < right.len() {
+        let (left_start, left_stop) = left[left_index];
+        let (right_start, right_stop) = right[right_index];
+        if left_stop < right_start {
+            left_index += 1;
+        } else if right_stop < left_start {
+            right_index += 1;
+        } else {
+            return true;
+        }
+    }
+    false
+}
+
+/// Builds the dispatch trie for `items` (1-based alt, rectangle) from
+/// dimension `dim`. Returns `None` only if two alternatives still share a
+/// full lookahead word — impossible once pairwise disjointness holds, but
+/// declining beats emitting a table the proof does not cover.
+fn build_fixed_lookahead_node(
+    items: &[(usize, &LookaheadRectangle)],
+    dim: usize,
+    depth: usize,
+) -> Option<FixedLookaheadNode> {
+    let first_alt = items.first().map(|(alt, _)| *alt)?;
+    if items.iter().all(|(alt, _)| *alt == first_alt) {
+        return Some(FixedLookaheadNode::Alt(first_alt));
+    }
+    if dim >= depth {
+        return None;
+    }
+    // Atomize this dimension: split the token space at every interval
+    // boundary so each atom is covered by a fixed subset of rectangles.
+    let mut bounds = BTreeSet::new();
+    for (_, rectangle) in items {
+        for (start, stop) in &rectangle[dim] {
+            bounds.insert(*start);
+            bounds.insert(stop.checked_add(1)?);
+        }
+    }
+    let bounds: Vec<i32> = bounds.into_iter().collect();
+    let mut arms: Vec<(Vec<(i32, i32)>, FixedLookaheadNode)> = Vec::new();
+    for window in bounds.windows(2) {
+        let (atom_start, atom_stop) = (window[0], window[1] - 1);
+        let covering: Vec<(usize, &LookaheadRectangle)> = items
+            .iter()
+            .filter(|(_, rectangle)| {
+                interval_sets_intersect(&rectangle[dim], &[(atom_start, atom_start)])
+            })
+            .copied()
+            .collect();
+        if covering.is_empty() {
+            continue;
+        }
+        let child = build_fixed_lookahead_node(&covering, dim + 1, depth)?;
+        match arms.iter_mut().find(|(_, existing)| *existing == child) {
+            Some((intervals, _)) => push_coalesced_interval(intervals, atom_start, atom_stop),
+            None => arms.push((vec![(atom_start, atom_stop)], child)),
+        }
+    }
+    Some(FixedLookaheadNode::Probe(arms))
+}
+
+/// Appends `[start, stop]` to a sorted interval list, merging with the
+/// previous interval when adjacent (atoms arrive in ascending order).
+fn push_coalesced_interval(intervals: &mut Vec<(i32, i32)>, start: i32, stop: i32) {
+    match intervals.last_mut() {
+        Some((_, last_stop)) if *last_stop + 1 == start => *last_stop = stop,
+        _ => intervals.push((start, stop)),
+    }
+}
+
+enum FixedWalkBail {
+    Predicate,
+    Budget,
+}
+
+/// Bounded LOOK(k) enumeration for one decision alternative.
+///
+/// Follows [`DecisionLookWalk`]'s structure — the same rule-stop return
+/// handling, empty-context FOLLOW fallthrough, and per-closure recursion
+/// guards — but keeps walking through consuming edges until `depth_limit`
+/// tokens accumulate. The busy set and called-rule guard reset at every
+/// consumed token (they cut epsilon cycles inside one closure segment;
+/// re-entering a rule after consuming input is legitimate recursion), while
+/// the simulated call stack carries across segments. Predicate or
+/// precedence edges abort the alternative: only the simulator can evaluate
+/// them during prediction, so any decision they guard stays adaptive.
+struct FixedLookaheadWalk<'a> {
+    atn: &'a ParserAtn,
+    depth_limit: usize,
+    steps: usize,
+}
+
+impl FixedLookaheadWalk<'_> {
+    fn alt_rectangles(&mut self, start: usize) -> Result<Vec<LookaheadRectangle>, FixedWalkBail> {
+        let mut rectangles = Vec::new();
+        let rule_count = self.atn.rule_to_start_state().len();
+        self.segment(
+            start,
+            &mut Vec::new(),
+            &mut BTreeSet::new(),
+            &mut vec![false; rule_count],
+            &[],
+            &mut rectangles,
+        )?;
+        Ok(rectangles)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn segment(
+        &mut self,
+        state_number: usize,
+        ctx: &mut Vec<usize>,
+        busy: &mut BTreeSet<(usize, Vec<usize>)>,
+        called_rules: &mut Vec<bool>,
+        prefix: &[Vec<(i32, i32)>],
+        out: &mut Vec<LookaheadRectangle>,
+    ) -> Result<(), FixedWalkBail> {
+        self.steps += 1;
+        if self.steps > FIXED_LOOKAHEAD_STEP_BUDGET {
+            return Err(FixedWalkBail::Budget);
+        }
+        if !busy.insert((state_number, ctx.clone())) {
+            return Ok(());
+        }
+        let Some(state) = self.atn.state(state_number) else {
+            return Ok(());
+        };
+        if state.kind() == AtnStateKind::RuleStop {
+            if let Some(return_state) = ctx.pop() {
+                let cleared = state
+                    .rule_index()
+                    .map(|rule| std::mem::replace(&mut called_rules[rule], false));
+                let result = self.segment(return_state, ctx, busy, called_rules, prefix, out);
+                if let (Some(rule), Some(flag)) = (state.rule_index(), cleared) {
+                    called_rules[rule] = flag;
+                }
+                ctx.push(return_state);
+                return result;
+            }
+            if state.transitions().is_empty() {
+                // Escaped the start rule's stop state: every remaining
+                // lookahead position reads EOF.
+                self.emit_eof_padded(prefix.to_vec(), out)?;
+                return Ok(());
+            }
+        }
+        for transition in state.transitions() {
+            match transition.data() {
+                ParserTransitionData::Rule {
+                    target,
+                    rule_index,
+                    follow_state,
+                    ..
+                } => {
+                    if called_rules.get(rule_index).copied().unwrap_or(true) {
+                        continue;
+                    }
+                    called_rules[rule_index] = true;
+                    ctx.push(follow_state);
+                    let result = self.segment(target, ctx, busy, called_rules, prefix, out);
+                    ctx.pop();
+                    called_rules[rule_index] = false;
+                    result?;
+                }
+                ParserTransitionData::Predicate { .. }
+                | ParserTransitionData::Precedence { .. } => {
+                    return Err(FixedWalkBail::Predicate);
+                }
+                ParserTransitionData::Epsilon { target }
+                | ParserTransitionData::Action { target, .. } => {
+                    self.segment(target, ctx, busy, called_rules, prefix, out)?;
+                }
+                _ => {
+                    // Terminal edge: enumerate the vocabulary through the
+                    // shared `matches` so atoms, ranges, sets, negations and
+                    // wildcards agree with the simulator exactly.
+                    let mut symbols = BTreeSet::new();
+                    for symbol in TOKEN_EOF..=self.atn.max_token_type() {
+                        if transition.matches(symbol, 1, self.atn.max_token_type()) {
+                            symbols.insert(symbol);
+                        }
+                    }
+                    // A consumed EOF pins every later position to EOF, so
+                    // split it out of the deeper walk.
+                    if symbols.remove(&TOKEN_EOF) {
+                        let mut rectangle = prefix.to_vec();
+                        rectangle.push(vec![(TOKEN_EOF, TOKEN_EOF)]);
+                        self.emit_eof_padded(rectangle, out)?;
+                    }
+                    if symbols.is_empty() {
+                        continue;
+                    }
+                    let mut extended = prefix.to_vec();
+                    extended.push(symbol_intervals(&symbols));
+                    if extended.len() == self.depth_limit {
+                        push_rectangle(out, extended)?;
+                    } else {
+                        // Token consumed: fresh closure guards, same stack.
+                        let rule_count = called_rules.len();
+                        self.segment(
+                            transition.target(),
+                            ctx,
+                            &mut BTreeSet::new(),
+                            &mut vec![false; rule_count],
+                            &extended,
+                            out,
+                        )?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_eof_padded(
+        &self,
+        mut rectangle: LookaheadRectangle,
+        out: &mut Vec<LookaheadRectangle>,
+    ) -> Result<(), FixedWalkBail> {
+        while rectangle.len() < self.depth_limit {
+            rectangle.push(vec![(TOKEN_EOF, TOKEN_EOF)]);
+        }
+        push_rectangle(out, rectangle)
+    }
+}
+
+fn push_rectangle(
+    out: &mut Vec<LookaheadRectangle>,
+    rectangle: LookaheadRectangle,
+) -> Result<(), FixedWalkBail> {
+    if out.len() >= FIXED_LOOKAHEAD_RECTANGLE_BUDGET {
+        return Err(FixedWalkBail::Budget);
+    }
+    out.push(rectangle);
+    Ok(())
 }
 
 /// Collapses a sorted symbol set into inclusive intervals.
@@ -8568,6 +9419,7 @@ fn build_embedded_parser_data(
     type_name: &str,
     grammar_name: &str,
     options: ParserRenderOptions<'_>,
+    decisions: &DecisionClassification,
 ) -> io::Result<EmbeddedParserData> {
     let model = structural_embedded_model(data, true)?;
     let token_types: BTreeMap<String, i32> = data
@@ -8585,15 +9437,14 @@ fn build_embedded_parser_data(
         post_process_embedded(body, translated, type_name)
     };
 
-    let decision_analysis = tool_decision_analysis(data)?;
     let mut out = EmbeddedParserData {
         rule_has_attrs: model
             .rules
             .iter()
             .map(embedded::RuleModel::has_attrs)
             .collect(),
-        adaptive_decisions: decision_analysis.adaptive_decisions,
-        ll1_decision_arms: decision_analysis.ll1_decision_arms,
+        adaptive_decisions: decisions.adaptive_decisions.clone(),
+        ll1_decision_arms: decisions.ll1_decision_arms.clone(),
         ..EmbeddedParserData::default()
     };
 
@@ -10857,6 +11708,14 @@ fn render_parser_with_options(
     let parser_atn_data = render_u32_slice(parser_atn.packed_words());
     let token_constants = render_token_constants(data);
     let rule_constants = render_rule_constants(data);
+    // Decision routing: embedded mode always follows the tool
+    // classification (Java parity); `--fixed-lookahead` additionally
+    // compiles static dispatch for provable decisions in either mode.
+    let decision_classification = if options.embedded || options.fixed_lookahead.is_some() {
+        Some(classify_decisions(data, options.fixed_lookahead)?)
+    } else {
+        None
+    };
     // Embedded mode: the grammar carries real Rust action/predicate bodies
     // (rendered through the target `.test.stg`); translate and splice them
     // instead of recognizing template markup.
@@ -10866,6 +11725,9 @@ fn render_parser_with_options(
             &type_name,
             grammar_name,
             options,
+            decision_classification
+                .as_ref()
+                .expect("decision classification is computed for embedded mode"),
         )?)
     } else {
         None
@@ -10880,6 +11742,19 @@ fn render_parser_with_options(
         )?)
     };
     let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
+    let decision_routing = DecisionRoutingRender {
+        // Embedded mode reads its LL(1) switch tables through
+        // `EmbeddedStepRender`; the routing copy is for plain mode, where
+        // static LL(1) switches are part of the opt-in flag.
+        ll1_decision_arms: decision_classification
+            .as_ref()
+            .filter(|_| !options.embedded && options.fixed_lookahead.is_some())
+            .map(|classification| &classification.ll1_decision_arms),
+        fixed_lookahead_tables: decision_classification
+            .as_ref()
+            .filter(|_| options.fixed_lookahead.is_some_and(|depth| depth >= 2))
+            .map(|classification| &classification.fixed_lookahead_tables),
+    };
     let mut portable_local_data = if options.embedded {
         PortableLocalData::default()
     } else {
@@ -10996,6 +11871,7 @@ fn render_parser_with_options(
             track_context_alt_numbers,
             embedded_step_render,
             portable_step_render,
+            decision_routing,
         );
     let unknown_policy_literal = parser_unknown_policy_literal(options.sem_unknown);
     let parse_rule_fallback = render_parser_parse_rule_fallback(
@@ -14456,6 +15332,7 @@ mod tests {
             false,
             None,
             None,
+            DecisionRoutingRender::default(),
         );
 
         // ATN-preferred children route through `parse_rule_precedence_from_generated`:
@@ -14494,6 +15371,7 @@ mod tests {
             false,
             None,
             None,
+            DecisionRoutingRender::default(),
         );
 
         // A configured depth cap overrides the ATN preference: only generated
@@ -14629,6 +15507,7 @@ mod tests {
                 rule_arg0: &rule_arg0,
             }),
             None,
+            DecisionRoutingRender::default(),
         );
 
         assert!(!rendered.contains("if self.generated_only()"));
@@ -14963,6 +15842,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -14996,6 +15876,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -15177,9 +16058,15 @@ mod tests {
             structural_embedded_model(&data, false).expect("structural model should resolve");
         insta::assert_debug_snapshot!("left_recursive_label_alternatives", model.rules[1].alts);
 
-        let embedded =
-            build_embedded_parser_data(&data, "TParser", "T", ParserRenderOptions::default())
-                .expect("embedded actions should resolve deleted left-recursive labels");
+        let decisions = classify_decisions(&data, None).expect("decision classification");
+        let embedded = build_embedded_parser_data(
+            &data,
+            "TParser",
+            "T",
+            ParserRenderOptions::default(),
+            &decisions,
+        )
+        .expect("embedded actions should resolve deleted left-recursive labels");
         insta::assert_debug_snapshot!("left_recursive_label_actions", embedded.inline_actions);
     }
 
@@ -16474,6 +17361,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16526,6 +17414,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16591,6 +17480,7 @@ mod tests {
                     predicates: &predicates,
                     required_generated_rules: &required_generated_rules,
                 }),
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &inline_actions,
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16638,6 +17528,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16685,6 +17576,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16732,6 +17624,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16786,6 +17679,7 @@ mod tests {
                     predicates: &predicates,
                     required_generated_rules: &required_generated_rules,
                 }),
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -16843,6 +17737,7 @@ mod tests {
                 current_rule_index: 0,
                 embedded: None,
                 portable_locals: None,
+                decision_routing: DecisionRoutingRender::default(),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 track_context_alt_numbers: false,
@@ -17959,6 +18854,96 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
 
     fn portable_bool_parser_data() -> CodegenData<'static> {
         parser_fixture_data("portable-bool/S.g4")
+    }
+
+    #[test]
+    fn fixed_lookahead_classifier_tiers_thrift_like_decision() {
+        let data = parser_fixture_data("fixed-lookahead/T.g4");
+
+        // Flag off: Java-parity classification only. The `a` decision's
+        // first two alternatives share 'ns', so it stays adaptive.
+        let default_classification =
+            classify_decisions(&data, None).expect("classification succeeds");
+        assert!(default_classification.fixed_lookahead_tables.is_empty());
+        assert_eq!(default_classification.adaptive_decisions.len(), 1);
+        let adaptive_row = default_classification
+            .report_rows
+            .iter()
+            .find(|row| matches!(row.tier, DecisionTierReport::Adaptive { .. }))
+            .expect("one adaptive row");
+        assert_eq!(
+            adaptive_row.tier,
+            DecisionTierReport::Adaptive {
+                reason: AdaptiveReason::NotDisjoint,
+                probed_lookahead: 1,
+            }
+        );
+
+        // Flag on: the same decision is provably LL(2) and earns a table;
+        // it stays in `adaptive_decisions` so its miss arm renders the
+        // adaptive body it would have without the table.
+        let classification = classify_decisions(&data, Some(2)).expect("classification succeeds");
+        assert_eq!(classification.fixed_lookahead_tables.len(), 1);
+        let (decision, table) = classification
+            .fixed_lookahead_tables
+            .iter()
+            .next()
+            .expect("one fixed table");
+        assert!(classification.adaptive_decisions.contains(decision));
+        assert_eq!(table.lookahead, 2);
+        insta::assert_debug_snapshot!("fixed_lookahead_thrift_like_table", table);
+
+        // Deterministic and idempotent: same inputs, same classification.
+        let again = classify_decisions(&data, Some(2)).expect("classification succeeds");
+        assert_eq!(
+            format!("{:?}", classification.fixed_lookahead_tables),
+            format!("{:?}", again.fixed_lookahead_tables)
+        );
+        assert_eq!(
+            format!("{:?}", classification.report_rows),
+            format!("{:?}", again.report_rows)
+        );
+    }
+
+    #[test]
+    fn fixed_lookahead_manifest_reports_tiers() {
+        let data = parser_fixture_data("fixed-lookahead/T.g4");
+        let classification = classify_decisions(&data, Some(2)).expect("classification succeeds");
+        let manifest = render_decisions_manifest(
+            Some(2),
+            &[DecisionReportGrammar {
+                name: "T".to_owned(),
+                rule_names: data.rule_names,
+                rows: classification.report_rows,
+            }],
+        );
+        insta::assert_snapshot!("fixed_lookahead_decisions_manifest", manifest);
+    }
+
+    #[test]
+    fn fixed_lookahead_dispatch_probes_second_token_after_sync() {
+        let data = parser_fixture_data("fixed-lookahead/T.g4");
+        let without_flag = render_parser("T", &data).expect("parser renders");
+        assert!(!without_flag.contains("__fixed_lookahead_alt"));
+
+        let rendered = render_parser_with_options(
+            "T",
+            &data,
+            ParserRenderOptions {
+                fixed_lookahead: Some(2),
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("parser renders");
+        let dispatch_start = rendered
+            .find("let __fixed_lookahead_alt")
+            .expect("fixed dispatch rendered");
+        assert!(rendered.contains("match self.base.la(2)"));
+        // The context-aware sync must run before the table probes the
+        // lookahead — recovery deletes extraneous tokens exactly where the
+        // untiered parser would.
+        let sync_before_dispatch = rendered[..dispatch_start].rfind("sync_decision");
+        assert!(sync_before_dispatch.is_some());
     }
 
     #[test]

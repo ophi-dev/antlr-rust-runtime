@@ -1,0 +1,56 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: table
+---
+FixedLookaheadTable {
+    lookahead: 2,
+    root: Probe(
+        [
+            (
+                [
+                    (
+                        1,
+                        1,
+                    ),
+                ],
+                Probe(
+                    [
+                        (
+                            [
+                                (
+                                    2,
+                                    2,
+                                ),
+                            ],
+                            Alt(
+                                1,
+                            ),
+                        ),
+                        (
+                            [
+                                (
+                                    4,
+                                    4,
+                                ),
+                            ],
+                            Alt(
+                                2,
+                            ),
+                        ),
+                    ],
+                ),
+            ),
+            (
+                [
+                    (
+                        3,
+                        3,
+                    ),
+                ],
+                Alt(
+                    3,
+                ),
+            ),
+        ],
+    ),
+}
