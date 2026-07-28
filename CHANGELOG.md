@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.21.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.20.1...v0.21.0) (2026-07-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **codegen:** accept mutual (indirect) left recursion via hub inlining ([#151](https://github.com/ophi-dev/antlr-rust-runtime/issues/151)) (#221)
+
+### Features
+
+* **codegen:** accept mutual (indirect) left recursion via hub inlining ([#151](https://github.com/ophi-dev/antlr-rust-runtime/issues/151)) ([#221](https://github.com/ophi-dev/antlr-rust-runtime/issues/221)) ([61930e9](https://github.com/ophi-dev/antlr-rust-runtime/commit/61930e9ad05d04b7d801b5650b516c235a01ddd0))
+
+
+### Bug Fixes
+
+* clamp max turns for code review prompt ([f5e2f85](https://github.com/ophi-dev/antlr-rust-runtime/commit/f5e2f852941c7f6a1a45016e4d2bfa9a77c4acdc))
+* **codegen:** diagnose left-recursive lexer rules ([#243](https://github.com/ophi-dev/antlr-rust-runtime/issues/243)) ([e562413](https://github.com/ophi-dev/antlr-rust-runtime/commit/e562413ca6fc9babe67f852365ae2296d65781ad)), closes [#236](https://github.com/ophi-dev/antlr-rust-runtime/issues/236)
+* **codegen:** retain safe shared-label accessors ([#240](https://github.com/ophi-dev/antlr-rust-runtime/issues/240)) ([78506d1](https://github.com/ophi-dev/antlr-rust-runtime/commit/78506d1c094ea119d9a6d3dc5558062130626399))
+* unrelated extends removed ([9454ab9](https://github.com/ophi-dev/antlr-rust-runtime/commit/9454ab9fea7e83928fc3d8b81a30a87b2a06e2b7))
+
 ## [0.20.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.19.1...v0.20.1) (2026-07-27)
 
 
