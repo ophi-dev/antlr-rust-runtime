@@ -54,7 +54,7 @@ use petgraph::graph::DiGraph;
 use super::action::{ActionReferenceKind, action_references};
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarKind, GrammarUnit,
-    ModelIdAllocator, ModelNodeId, Quantifier, Rule, RuleCall, RuleId, RuleKind,
+    ModelIdAllocator, ModelNodeId, OptionDecl, Quantifier, Rule, RuleCall, RuleId, RuleKind,
 };
 use super::provenance::{Origin, ProvenanceIndex, SyntheticReason};
 
@@ -150,11 +150,15 @@ struct PlannedAlternative {
     /// so the result inherits them — dropping a caller's `#ViaSatellite` would
     /// silently delete its generated context and listener callbacks.
     label_from: AlternativeId,
-    /// The alternative whose *options* the result inherits: the last satellite
-    /// alternative spliced in, because that is where `<assoc=right>` is
-    /// declared and it describes the operator this alternative now carries.
-    /// Equal to `label_from` until a splice happens.
-    options_from: AlternativeId,
+    /// Alternative options accumulated along the splice chain: the hub
+    /// alternative's own options unioned with those of every satellite
+    /// alternative spliced into this position. `<assoc=right>` rides on the
+    /// alternative that declares the operator, which may sit behind an
+    /// alias-shaped satellite (`a : <assoc=right> b '^' e ; b : e ;`), so no
+    /// single source alternative can stand in for the set. Conflicting
+    /// declarations decline the cycle in [`splice_satellite`], keeping the
+    /// union unambiguous by construction.
+    options: Vec<OptionDecl>,
     /// Alternative the elements were last taken from, for provenance.
     origin: AlternativeId,
     elements: Vec<Element>,
@@ -287,7 +291,7 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
         .iter()
         .map(|alternative| PlannedAlternative {
             label_from: alternative.id,
-            options_from: alternative.id,
+            options: alternative.options.clone(),
             origin: alternative.id,
             elements: alternative.elements.clone(),
             verbatim: true,
@@ -472,14 +476,14 @@ fn split_optional(candidate: &PlannedAlternative, index: usize) -> Vec<PlannedAl
     vec![
         PlannedAlternative {
             label_from: candidate.label_from,
-            options_from: candidate.options_from,
+            options: candidate.options.clone(),
             origin: candidate.origin,
             elements: present,
             verbatim: false,
         },
         PlannedAlternative {
             label_from: candidate.label_from,
-            options_from: candidate.options_from,
+            options: candidate.options.clone(),
             origin: candidate.origin,
             elements: absent,
             verbatim: false,
@@ -512,16 +516,30 @@ fn splice_satellite(
         if labels_collide(prefix, suffix, &source.elements) {
             return None;
         }
+        // The options of every alternative merged into this position apply to
+        // the flattened result: an `<assoc=right>` declared on an operator
+        // alternative must survive a later alias splice (`b : e`). Two
+        // alternatives declaring the same option with different values is
+        // genuinely ambiguous, so decline rather than pick one.
+        let mut options = candidate.options.clone();
+        for option in &source.options {
+            match options
+                .iter()
+                .find(|existing| existing.name.value == option.name.value)
+            {
+                Some(existing) if existing.value.value != option.value.value => return None,
+                Some(_) => {}
+                None => options.push(option.clone()),
+            }
+        }
         let mut elements = Vec::with_capacity(prefix.len() + source.elements.len() + suffix.len());
         elements.extend(prefix.iter().cloned());
         elements.extend(source.elements.iter().cloned());
         elements.extend(suffix.iter().cloned());
         expansions.push(PlannedAlternative {
-            // The caller's `#label` names this hub position and survives; the
-            // *options* come from the satellite alternative, because that is
-            // where `<assoc=right>` is declared for the operator being inlined.
+            // The caller's `#label` names this hub position and survives.
             label_from: candidate.label_from,
-            options_from: source.id,
+            options,
             origin: source.id,
             elements,
             verbatim: false,
@@ -681,26 +699,14 @@ fn apply_plan(
         .iter()
         .map(|planned| {
             // The caller's alternative supplies the `#label`, commands and
-            // position identity; the satellite's supplies the options
-            // (`<assoc=right>` describes the operator that was inlined). Where
-            // both declare an option, the satellite's wins — it is the one the
-            // direct rewriter will read for this alternative's operator.
+            // position identity; the options were accumulated across the whole
+            // splice chain by `plan_cycle` (`<assoc=right>` describes the
+            // operator that was inlined, wherever in the chain it was
+            // declared).
             let label_source = attributes
                 .get(&planned.label_from)
                 .or(template.as_ref())
                 .expect("hub has at least one alternative");
-            let options_source = attributes
-                .get(&planned.options_from)
-                .unwrap_or(label_source);
-            let mut options = options_source.options.clone();
-            for option in &label_source.options {
-                if !options
-                    .iter()
-                    .any(|existing| existing.name.value == option.name.value)
-                {
-                    options.push(option.clone());
-                }
-            }
             let id = if planned.verbatim {
                 // An untouched hub alternative keeps its identity, so unrelated
                 // provenance and label bindings stay valid.
@@ -725,7 +731,7 @@ fn apply_plan(
                 id,
                 elements,
                 label: label_source.label.clone(),
-                options,
+                options: planned.options.clone(),
                 commands: label_source.commands.clone(),
                 syntax: label_source.syntax,
                 span: label_source.span.clone(),
@@ -1411,6 +1417,34 @@ mod tests {
              power : <assoc=right> expr '^' expr ;",
         );
         insta::assert_snapshot!("assoc_right_preserved", render(&unit));
+    }
+
+    #[test]
+    fn chained_alias_splice_carries_operator_options() {
+        // `<assoc=right>` is declared on `a`'s operator alternative, but the
+        // final splice in the chain is the alias `b : e`. Options accumulate
+        // across the whole chain, so the option must survive to the collapsed
+        // alternative — a later alias splice must not overwrite it.
+        let unit = rewritten(
+            "parser grammar P; \
+             e : a | ID ; \
+             a : <assoc=right> b '^' e ; \
+             b : e ;",
+        );
+        insta::assert_snapshot!("chained_assoc_carried", render(&unit));
+    }
+
+    #[test]
+    fn declines_conflicting_options_along_a_splice_chain() {
+        // Two alternatives in one chain declare the same option with different
+        // values; flattening them into one alternative would have to pick a
+        // winner, so the cycle declines instead.
+        assert_declined(
+            "parser grammar P; \
+             e : a | ID ; \
+             a : <assoc=right> b '^' e ; \
+             b : <assoc=left> e ;",
+        );
     }
 
     #[test]
