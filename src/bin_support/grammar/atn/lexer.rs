@@ -20,7 +20,7 @@ use super::super::model::{
 };
 use super::super::provenance::{Origin, ProvenanceIndex, SyntheticReason};
 use super::super::unicode::{property_ranges, simple_lowercase, simple_uppercase};
-use super::analysis::LookAnalyzer;
+use super::analysis::{LookAnalyzer, left_recursive_components, recursion_diagnostics};
 use super::build::{
     BuildGraph, BuildTransitionKind, BuildTransitionSpec, FinalizedAtnGraph, FinalizedTransition,
     FinalizedTransitionKind,
@@ -1285,6 +1285,12 @@ fn analyze_lexer(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<LexerAnalysis, CompilationError> {
     let nullable_indices = nullable_rule_indices(graph);
+    let left_recursion = left_recursive_components(graph, &nullable_indices);
+    diagnostics.extend(recursion_diagnostics(grammar, &left_recursion));
+    if has_errors(diagnostics) {
+        return Err(CompilationError::new(std::mem::take(diagnostics)));
+    }
+
     let recursive_components = recursive_rule_components(grammar);
     let analyzer = LookAnalyzer::new(graph);
     for (rule, start, stop) in closure_sites {
