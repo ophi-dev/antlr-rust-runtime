@@ -462,6 +462,7 @@ jobs:
             --model "claude-opus-5[1m]"
             --no-chrome
             --dangerously-skip-permissions
+            --max-turns 50
 
           prompt: |
             /code-review:code-review ${{ github.repository }}/pull/${{ steps.pr.outputs.number }}
