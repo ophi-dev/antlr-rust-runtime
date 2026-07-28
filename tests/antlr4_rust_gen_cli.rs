@@ -1032,6 +1032,75 @@ mod multi_alternative_label_tests {
             "the absent throws clause contributes no errors"
         );
     }
+
+    #[test]
+    fn shared_optional_block_keeps_its_label_accessor() {
+        let parsed = parse_rule("+*7", TParser::shared_optional_block);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("sharedOptionalBlock rule")
+            .downcast_ref::<SharedOptionalBlockContext>()
+            .expect("typed sharedOptionalBlock context");
+        assert_eq!(context.shared().expect("first alternative label").to_string(), "+");
+
+        let parsed = parse_rule("", TParser::shared_optional_block);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("sharedOptionalBlock rule")
+            .downcast_ref::<SharedOptionalBlockContext>()
+            .expect("typed sharedOptionalBlock context");
+        assert!(context.shared().is_none(), "skipped block leaves the label unset");
+
+        let parsed = parse_rule("*7", TParser::shared_optional_block);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("sharedOptionalBlock rule")
+            .downcast_ref::<SharedOptionalBlockContext>()
+            .expect("typed sharedOptionalBlock context");
+        assert_eq!(context.shared().expect("second alternative label").to_string(), "*");
+    }
+
+    #[test]
+    fn mixed_repetition_uses_the_last_assignment_on_both_alternatives() {
+        let parsed = parse_rule("+-7", TParser::mixed_repetition);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("mixedRepetition rule")
+            .downcast_ref::<MixedRepetitionContext>()
+            .expect("typed mixedRepetition context");
+        assert_eq!(context.latest().expect("repeated label").to_string(), "-");
+
+        let parsed = parse_rule("/7", TParser::mixed_repetition);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("mixedRepetition rule")
+            .downcast_ref::<MixedRepetitionContext>()
+            .expect("typed mixedRepetition context");
+        assert_eq!(context.latest().expect("single label").to_string(), "/");
+
+        let parsed = parse_rule("++-7", TParser::prefixed_mixed_repetition);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("prefixedMixedRepetition rule")
+            .downcast_ref::<PrefixedMixedRepetitionContext>()
+            .expect("typed prefixedMixedRepetition context");
+        assert_eq!(context.latest().expect("prefixed repeated label").to_string(), "-");
+
+        let parsed = parse_rule("*/7", TParser::prefixed_mixed_repetition);
+        let context = parsed
+            .tree()
+            .as_rule()
+            .expect("prefixedMixedRepetition rule")
+            .downcast_ref::<PrefixedMixedRepetitionContext>()
+            .expect("typed prefixedMixedRepetition context");
+        assert_eq!(context.latest().expect("prefixed single label").to_string(), "/");
+    }
 }
 "#,
     );

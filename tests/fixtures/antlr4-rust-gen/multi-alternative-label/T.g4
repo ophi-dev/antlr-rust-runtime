@@ -137,6 +137,42 @@ inner_choice_arity
     : ((unary | unary | param) tail = unary | NUM) NUM
     ;
 
+// Issue #214, shape 1: the labeled group and the following union member are
+// inside the same optional block. If the label is absent because the block was
+// skipped, the follower is absent too, so it cannot slide into the label's slot.
+shared_optional_block
+    : (shared = (PLUS | MINUS) STAR NUM)?
+    | shared = (STAR | SLASH) NUM
+    ;
+
+// Sharing an enclosing optional block is not enough when the labeled element
+// has its own `?`: the block may run, omit the label, and still emit `STAR`.
+direct_optional_in_shared_block
+    : (shared = (PLUS | MINUS)? STAR NUM)?
+    | shared = (STAR | SLASH) NUM
+    ;
+
+// Issue #214, shape 2: the first alternative needs last-assignment-wins while
+// the second has one occurrence. With no later union member, `last()` serves both.
+mixed_repetition
+    : latest = (PLUS | MINUS)+ NUM
+    | latest = (STAR | SLASH) NUM
+    ;
+
+// The same merge after one union-matching prefix proves the shared occurrence
+// is preserved rather than assuming every compatible selector starts at zero.
+prefixed_mixed_repetition
+    : PLUS latest = (PLUS | MINUS)+ NUM
+    | STAR latest = (STAR | SLASH) NUM
+    ;
+
+// The non-repeated alternative cannot be promoted to `last()` when a later
+// union member would replace the token it bound.
+mixed_repetition_followed
+    : latest = (PLUS | MINUS)+ NUM
+    | latest = (STAR | SLASH) STAR NUM
+    ;
+
 LESS
     : '<'
     ;

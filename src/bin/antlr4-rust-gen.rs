@@ -9170,6 +9170,13 @@ enum ContextLabelSelector {
     AllAfter(usize),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ContextLabelSelection {
+    preferred: ContextLabelSelector,
+    /// A last-match selector that is equivalent to `preferred`, when one exists.
+    compatible_last_after: Option<usize>,
+}
+
 fn context_label_accessors(
     rule: &embedded::RuleModel,
     alternative_label: Option<&str>,
@@ -9245,7 +9252,7 @@ fn context_label_accessor(
         branch_local_cardinality: embedded::ChildCardinality::ONE,
         group_local_cardinality: embedded::ChildCardinality::ONE,
     };
-    let mut selector = None;
+    let mut selections = Vec::with_capacity(alternatives.len());
     let mut cardinalities = Vec::with_capacity(alternatives.len());
     for alternative in alternatives {
         let matching = alternative
@@ -9269,12 +9276,9 @@ fn context_label_accessor(
             continue;
         }
 
-        let alternative_selector =
+        let alternative_selection =
             context_label_selector(alternative, &matching, &label, &reference, is_list)?;
-        if selector.is_some_and(|existing| existing != alternative_selector) {
-            return None;
-        }
-        selector = Some(alternative_selector);
+        selections.push(alternative_selection);
         cardinalities.push(if is_list {
             sum_child_cardinalities(matching.iter().map(|(_, element)| element.cardinality))
         } else {
@@ -9282,6 +9286,19 @@ fn context_label_accessor(
         });
     }
 
+    let first_selection = selections.first()?;
+    let selector = if selections
+        .iter()
+        .all(|selection| selection.preferred == first_selection.preferred)
+    {
+        first_selection.preferred
+    } else {
+        let skip = first_selection.compatible_last_after?;
+        selections
+            .iter()
+            .all(|selection| selection.compatible_last_after == Some(skip))
+            .then_some(ContextLabelSelector::LastAfter(skip))?
+    };
     let mut cardinality = choice_cardinality(&cardinalities);
     if !is_list {
         cardinality = embedded::ChildCardinality {
@@ -9294,7 +9311,7 @@ fn context_label_accessor(
         target: reference.target,
         token_types: reference.token_types,
         cardinality,
-        selector: selector?,
+        selector,
     })
 }
 
@@ -9304,7 +9321,7 @@ fn context_label_selector(
     label: &str,
     target: &embedded::ElementRef,
     is_list: bool,
-) -> Option<ContextLabelSelector> {
+) -> Option<ContextLabelSelection> {
     let first_position = matching[0].0;
     let labeled = matching[0].1;
     // A sibling branch that matches the same target supplies a child at the very
@@ -9382,8 +9399,10 @@ fn context_label_selector(
             exact_target_cardinality_on_path(&alternative.refs[..*position], target, declaration)
                 == Some(start)
         });
-        return (!has_unlabeled_target && starts_agree)
-            .then_some(ContextLabelSelector::AllAfter(start));
+        return (!has_unlabeled_target && starts_agree).then_some(ContextLabelSelection {
+            preferred: ContextLabelSelector::AllAfter(start),
+            compatible_last_after: None,
+        });
     }
     // Several declarations can share one positional read when they are mutually
     // exclusive and each sits at the same occurrence — `(x=A | x=B)` binds exactly
@@ -9427,24 +9446,30 @@ fn context_label_selector(
         // applies to every branch, so it is only sound when no branch has a matching
         // child *after* its declaration: in `(x=A A B | x=A+ C)` the first branch's
         // trailing unlabeled `A` would become the `last()`.
+        let followed = matching.iter().any(|(position, declaration)| {
+            alternative.refs[position + 1..].iter().any(|following| {
+                following.label.as_deref() != Some(label)
+                    && context_ref_can_match_target(following, target)
+                    && following.cardinality.max != Some(0)
+                    && following.can_coexist_with(declaration)
+            })
+        });
         if matching
             .iter()
             .any(|(_, element)| element.cardinality.is_repeated())
         {
-            let followed = matching.iter().any(|(position, declaration)| {
-                alternative.refs[position + 1..].iter().any(|following| {
-                    following.label.as_deref() != Some(label)
-                        && context_ref_can_match_target(following, target)
-                        && following.cardinality.max != Some(0)
-                        && following.can_coexist_with(declaration)
-                })
-            });
             if followed {
                 return None;
             }
-            return Some(ContextLabelSelector::LastAfter(agreed));
+            return Some(ContextLabelSelection {
+                preferred: ContextLabelSelector::LastAfter(agreed),
+                compatible_last_after: Some(agreed),
+            });
         }
-        return Some(ContextLabelSelector::Nth(agreed));
+        return Some(ContextLabelSelection {
+            preferred: ContextLabelSelector::Nth(agreed),
+            compatible_last_after: (!followed).then_some(agreed),
+        });
     }
     let element = matching[0].1;
     if !element.cardinality.is_repeated() {
@@ -9457,15 +9482,56 @@ fn context_label_selector(
                 .any(|following| {
                     context_ref_can_match_target(following, target)
                         && following.cardinality.max != Some(0)
+                        && following_can_shadow_absent_label(element, following)
                 });
-        return (!shadowed_when_absent).then_some(ContextLabelSelector::Nth(start));
-    }
-    let has_following_target = alternative.refs[first_position + 1..]
-        .iter()
-        .any(|following| {
-            context_ref_can_match_target(following, target) && following.cardinality.max != Some(0)
+        if shadowed_when_absent {
+            return None;
+        }
+        let followed = has_following_context_target(alternative, first_position, target);
+        return Some(ContextLabelSelection {
+            preferred: ContextLabelSelector::Nth(start),
+            compatible_last_after: (!followed).then_some(start),
         });
-    (!has_following_target).then_some(ContextLabelSelector::LastAfter(start))
+    }
+    let has_following_target = has_following_context_target(alternative, first_position, target);
+    (!has_following_target).then_some(ContextLabelSelection {
+        preferred: ContextLabelSelector::LastAfter(start),
+        compatible_last_after: Some(start),
+    })
+}
+
+fn has_following_context_target(
+    alternative: &embedded::AltModel,
+    position: usize,
+    target: &embedded::ElementRef,
+) -> bool {
+    alternative.refs[position + 1..].iter().any(|following| {
+        context_ref_can_match_target(following, target) && following.cardinality.max != Some(0)
+    })
+}
+
+fn following_can_shadow_absent_label(
+    label: &embedded::ElementRef,
+    following: &embedded::ElementRef,
+) -> bool {
+    // A direct suffix can omit the label while every enclosing block remains
+    // present, so no following ref is coupled to that absence.
+    if label.group_local_cardinality.min == 0 {
+        return true;
+    }
+    // Otherwise the label is optional only because an enclosing group can be
+    // absent or an enclosing choice can take another branch. A following ref
+    // under every such group and branch disappears with the label and cannot
+    // slide into its occurrence.
+    label
+        .group_spans
+        .iter()
+        .filter(|group| group.optional)
+        .any(|group| !following.group_spans.contains(group))
+        || label
+            .choice_branch
+            .iter()
+            .any(|branch| !following.choice_branch.contains(branch))
 }
 
 fn same_context_ref_target(left: &embedded::ElementRef, right: &embedded::ElementRef) -> bool {
@@ -15363,6 +15429,43 @@ mod tests {
             "optional labeled token shadowed by a following union match must drop its accessor\n{shadowed_context}"
         );
         insta::assert_snapshot!("multi_alternative_label_shadowed_context", shadowed_context);
+
+        let context = |name: &str| {
+            rendered
+                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+                .unwrap_or_else(|| panic!("{name} impl"))
+                .1
+                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+                .unwrap_or_else(|| panic!("{name} display impl"))
+                .0
+                .to_owned()
+        };
+
+        // A following union member under the same optional block cannot outlive
+        // the label, so the ordinary positional read remains faithful.
+        insta::assert_snapshot!(
+            "multi_alternative_label_shared_optional_block_context",
+            context("SharedOptionalBlockContext")
+        );
+        // A direct `?` on the label breaks that coupling and must still decline.
+        insta::assert_snapshot!(
+            "multi_alternative_label_direct_optional_in_shared_block_context",
+            context("DirectOptionalInSharedBlockContext")
+        );
+        // A repeated and a non-repeated declaration can share a last-match read
+        // only when neither alternative has a later union member.
+        insta::assert_snapshot!(
+            "multi_alternative_label_mixed_repetition_context",
+            context("MixedRepetitionContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_prefixed_mixed_repetition_context",
+            context("PrefixedMixedRepetitionContext")
+        );
+        insta::assert_snapshot!(
+            "multi_alternative_label_mixed_repetition_followed_context",
+            context("MixedRepetitionFollowedContext")
+        );
     }
 
     /// Issue #201: labels nested inside an unlabeled grouping block, and a
