@@ -81,6 +81,20 @@ fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
 }
 
+/// Lines of `haystack` containing `needle`, numbered, capped so a failure
+/// message stays readable when the subject is a large generated file.
+fn matching_lines(haystack: &str, needle: &str) -> String {
+    const LIMIT: usize = 20;
+    let hits = haystack
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.contains(needle))
+        .map(|(index, line)| format!("  {}: {}", index + 1, line.trim()))
+        .take(LIMIT)
+        .collect::<Vec<_>>();
+    hits.join("\n")
+}
+
 fn temporary_directory(label: &str) -> TempDirectory {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -3085,4 +3099,185 @@ mod parser_member_initializer_tests {
 "####;
 
     assert_generated_project(temp.path(), &["p_lexer.rs", "p_parser.rs"], test_source);
+}
+
+/// Issue #151: a grammar with mutual (indirect) left recursion — which ANTLR
+/// 4.13.2 rejects with error(119) — is reduced to direct left recursion and
+/// generates a working precedence-climbing parser. The fixture distills the
+/// tractable Roslyn cycle shapes: a hub-and-spoke expression cycle (including
+/// the leading-optional range operator) and a two-rule `name` cycle. The
+/// asserted trees are byte-identical to what ANTLR's own runtime produces from
+/// the equivalent hand-inlined grammar.
+#[test]
+fn mutual_left_recursion_is_reduced_to_a_working_precedence_parser() {
+    let temp = temporary_directory("mutual-left-recursion");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/mutual-left-recursion/MutualExpr.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "mutual left recursion should now compile, not error(119)\nstdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser =
+        fs::read_to_string(out.join("mutual_expr_parser.rs")).expect("parser should be emitted");
+    // Hub-only satellites collapse into their hub; the hub becomes a rule method.
+    // The generated parser is tens of thousands of lines, so failures report the
+    // matching lines rather than the whole file.
+    for collapsed in [
+        "add_expr",
+        "mul_expr",
+        "call_expr",
+        "range_expr",
+        "qualified_name",
+    ] {
+        let needle = format!("fn {collapsed}(");
+        let offenders = matching_lines(&parser, &needle);
+        assert!(
+            offenders.is_empty(),
+            "hub-only satellite {collapsed:?} should be inlined away, found:\n{offenders}"
+        );
+    }
+    for hub in ["fn expr(", "fn name(", "fn primary("] {
+        assert!(
+            parser.contains(hub),
+            "hub {hub:?} should survive; emitted rule methods:\n{}",
+            matching_lines(&parser, "    pub fn ")
+        );
+    }
+
+    assert_generated_project(
+        temp.path(),
+        &["mutual_expr_lexer.rs", "mutual_expr_parser.rs"],
+        r#"
+#[cfg(test)]
+mod mutual_left_recursion_tests {
+    use super::mutual_expr_lexer::MutualExprLexer;
+    use super::mutual_expr_parser::{parse, rule_names};
+    use antlr4_runtime::tree::{Node, NodeKind};
+
+    fn lisp(node: Node<'_>, names: &[&str], out: &mut String) {
+        match node.kind() {
+            NodeKind::Rule => {
+                let rule = node.as_rule().expect("rule node");
+                out.push('(');
+                out.push_str(names.get(rule.rule_index()).copied().unwrap_or("?"));
+                for child in rule.children() {
+                    out.push(' ');
+                    lisp(child, names, out);
+                }
+                out.push(')');
+            }
+            NodeKind::Terminal => out.push_str(&node.as_terminal().expect("terminal").text()),
+            NodeKind::Error => out.push_str("<error>"),
+        }
+    }
+
+    fn tree_of(src: &str) -> String {
+        let parsed = parse(src, MutualExprLexer::new, |p| p.expr())
+            .unwrap_or_else(|error| panic!("{src:?} should parse: {error}"));
+        let mut out = String::new();
+        lisp(parsed.tree(), rule_names(), &mut out);
+        out
+    }
+
+    #[test]
+    fn collapsed_cycles_match_antlr_trees() {
+        // Precedence-climbing over the collapsed hub (default alt-order
+        // precedence: `+` binds looser than `*`), left-associative.
+        assert_eq!(
+            tree_of("1+2*3"),
+            "(expr (expr (expr (primary 1)) + (expr (primary 2))) * (expr (primary 3)))"
+        );
+        // Two-rule name cycle collapsed to left-recursive `name`.
+        assert_eq!(tree_of("a.b.c"), "(expr (primary (name (name (name a) . b) . c)))");
+        // Leading-optional range operator split into `expr '..' expr?` + primary.
+        assert_eq!(
+            tree_of("x..y"),
+            "(expr (expr (primary (name x))) .. (expr (primary (name y))))"
+        );
+        assert_eq!(
+            tree_of("f()..g()"),
+            "(expr (expr (expr (primary (name f))) ( )) .. (expr (expr (primary (name g))) ( )))"
+        );
+    }
+}
+"#,
+    );
+}
+
+/// Issue #151, decline path: a cycle the transform must *not* rewrite still
+/// reports the pre-existing `G4A005` mutual-left-recursion diagnostic, naming
+/// both original rules. This is the guard that the transform is additive — it
+/// either produces a grammar the verified direct-recursion path accepts, or it
+/// changes nothing observable.
+#[test]
+fn undecidable_mutual_left_recursion_still_reports_the_cycle() {
+    let temp = temporary_directory("mutual-left-recursion-declined");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/mutual-left-recursion/DeclinedCycle.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "a declined cycle must not generate a parser\nstdout: {}",
+        utf8(&output.stdout)
+    );
+    let stderr = utf8(&output.stderr);
+    assert!(
+        stderr.contains("G4A005"),
+        "declining must fall through to the cycle detector: {stderr}"
+    );
+    // Both cycle members are still present and named, i.e. nothing was inlined
+    // or deleted on the way to the diagnostic.
+    assert!(
+        stderr.contains("mutually left-recursive rules: [a, b]"),
+        "the diagnostic must name the original rule set: {stderr}"
+    );
+    assert!(
+        !out.join("declined_cycle_parser.rs").exists(),
+        "no parser artifact should be emitted for a declined cycle"
+    );
+}
+
+#[test]
+fn symbol_conflicts_are_reported_against_the_authored_grammar() {
+    // The mutual-left-recursion rewrite deletes hub-only satellites, and a
+    // return value named after one (`e returns [i32 s]` vs rule `s`) must
+    // still be reported: symbol validation reads a snapshot taken before the
+    // rewrite runs.
+    let temp = temporary_directory("mutual-left-recursion-symbol-clash");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/mutual-left-recursion/ReturnsClash.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "a symbol conflict must fail generation even when the conflicting rule \
+         is a deletable cycle satellite\nstdout: {}",
+        utf8(&output.stdout)
+    );
+    let stderr = utf8(&output.stderr);
+    assert!(
+        stderr.contains("G4S057"),
+        "the return-value/rule-name conflict must be diagnosed: {stderr}"
+    );
 }

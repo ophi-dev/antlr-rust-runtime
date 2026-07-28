@@ -1,0 +1,12 @@
+---
+source: src/bin_support/grammar/mutual_recursion.rs
+expression: render(&unit)
+---
+t:
+  | t ''['' '']''
+  | t ''?''
+  | ID
+arr:
+  | t ''['' '']''
+new_arr:
+  | ''new'' arr
