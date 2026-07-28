@@ -2186,11 +2186,7 @@ impl<'a> CodegenData<'a> {
             literal_names: recognizer.literal_names.clone(),
             symbolic_names: recognizer.symbolic_names.clone(),
             rule_names: recognizer.rule_names.clone(),
-            channel_names: recognizer
-                .channel_names
-                .iter()
-                .map(|name| name.clone().unwrap_or_default())
-                .collect(),
+            channel_names: runtime_channel_names(&recognizer.channel_numbers),
             channel_numbers: recognizer.channel_numbers.clone(),
             mode_names: recognizer.mode_names.clone(),
             mode_numbers: recognizer.mode_numbers.clone(),
@@ -2211,11 +2207,7 @@ impl<'a> CodegenData<'a> {
             literal_names: recognizer.literal_names.clone(),
             symbolic_names: recognizer.symbolic_names.clone(),
             rule_names: recognizer.rule_names.clone(),
-            channel_names: recognizer
-                .channel_names
-                .iter()
-                .map(|name| name.clone().unwrap_or_default())
-                .collect(),
+            channel_names: runtime_channel_names(&recognizer.channel_numbers),
             channel_numbers: recognizer.channel_numbers.clone(),
             mode_names: recognizer.mode_names.clone(),
             mode_numbers: recognizer.mode_numbers.clone(),
@@ -2247,6 +2239,24 @@ impl<'a> CodegenData<'a> {
             )
         })
     }
+}
+
+/// Dense channel-name table indexed by runtime channel value, matching the
+/// Java target's generated `channelNames` array. The semantic model keeps the
+/// `.interp`-shaped vector (two `null` placeholder rows before user channels,
+/// a tool serialization quirk), so rebuild from the value map instead of
+/// copying it — otherwise a custom channel's display name lands at
+/// `value + 2` and `channel_names[value]` reads as empty.
+fn runtime_channel_names(channel_numbers: &BTreeMap<String, i32>) -> Vec<String> {
+    let mut names = vec![String::new(); channel_numbers.len()];
+    for (name, number) in channel_numbers {
+        let index = usize::try_from(*number).expect("channel value is non-negative");
+        if index >= names.len() {
+            names.resize(index + 1, String::new());
+        }
+        names[index].clone_from(name);
+    }
+    names
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -17949,6 +17959,24 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
 
     fn portable_bool_parser_data() -> CodegenData<'static> {
         parser_fixture_data("portable-bool/S.g4")
+    }
+
+    #[test]
+    fn runtime_channel_names_are_dense_by_value() {
+        // The semantic model keeps the `.interp`-shaped table (two `null`
+        // placeholder rows before user channels); the generated runtime
+        // metadata must instead match Java's dense `channelNames` array so
+        // `channel_names[value]` resolves the declared name.
+        let data = lexer_fixture_data("custom-channels/L.g4");
+        assert_eq!(
+            data.channel_names,
+            [
+                "DEFAULT_TOKEN_CHANNEL".to_owned(),
+                "HIDDEN".to_owned(),
+                "COMMENTS_AND_FORMATTING".to_owned(),
+            ]
+        );
+        assert_eq!(data.channel_numbers["COMMENTS_AND_FORMATTING"], 2);
     }
 
     #[test]
