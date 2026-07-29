@@ -888,6 +888,14 @@ fn generate_rust_modules(
         .arg(&rust_dir)
         .arg("--actions")
         .arg("embedded");
+    // Whitespace-split extra generator flags, e.g.
+    // `ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"` to sweep the
+    // conformance suite against opt-in codegen tiers.
+    if let Ok(extra_args) = env::var("ANTLR4_RUST_GEN_EXTRA_ARGS") {
+        for extra_arg in extra_args.split_whitespace() {
+            command.arg(extra_arg);
+        }
+    }
     run_checked(&mut command, "Rust metadata generator")?;
     Ok(rust_dir)
 }

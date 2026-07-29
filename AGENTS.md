@@ -75,7 +75,18 @@ The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fet
 cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
 
-Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Cases run on `--jobs` parallel workers (default `min(cores, 8)`), each with its own cargo target-dir stripe; the render driver and `antlr4-rust-gen` are prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon.
+Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and
+`ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Cases run
+on `--jobs` parallel workers (default `min(cores, 8)`), each with its own cargo target-dir stripe; the render driver and `antlr4-rust-gen` are
+prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon. `ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"` forwards extra generator flags
+for opt-in-tier sweeps.
+
+Every `antlr4-rust-gen` run also writes a `decisions.json` manifest next to
+`semantics.json`, reporting each parser decision's tier (`ll1` / `fixed` /
+`adaptive` + reason). The opt-in `--fixed-lookahead <k>` flag compiles
+decisions provable within `k` tokens into static dispatch tables; hits commit
+bare only on within-rule (sync-no-op) lookahead and a miss falls through to
+the regular sync + adaptive body (see the README "Decision Tiers" section).
 
 ### The rendered (embedded-actions) pipeline
 
@@ -106,7 +117,8 @@ cargo run --release --quiet --bin antlr4-runtime-testsuite -- --group LeftRecurs
 cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserErrors/SingleSetInsertion --keep
 ```
 
-Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with `Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.
+Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with
+`Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.
 
 ## Code coverage
 
@@ -200,7 +212,8 @@ only for small, stable values. Project specifics:
 
 ## CI parity
 
-CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing — `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
+CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing —
+`clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
 
 Validate `.github/workflows/*.yml` with `actionlint` (not a generic YAML linter);
 it shellchecks `run:` scripts too.
