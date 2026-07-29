@@ -1641,8 +1641,8 @@ mod tests {
         channel: i32,
         start: usize,
         stop: usize,
-        start_byte: usize,
-        stop_byte: usize,
+        start_byte: Option<usize>,
+        stop_byte: Option<usize>,
         line: usize,
         column: usize,
     }

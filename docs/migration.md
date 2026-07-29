@@ -6,6 +6,49 @@ generator changes. Generated lexers and parsers must use the same release of
 `antlr4-rust-gen --version` and compare the reported release with the
 `antlr-rust-runtime` dependency version.
 
+## Structured Syntax Error Events and Byte Spans
+
+`ErrorListener::syntax_error` now receives one `&SyntaxErrorEvent<'_>` instead
+of separate offending-token, line, column, message, and error arguments:
+
+```rust
+// Before
+fn syntax_error(
+    &mut self,
+    recognizer: &R,
+    offending: Option<TokenView<'_>>,
+    line: usize,
+    column: usize,
+    message: &str,
+    error: Option<&AntlrError>,
+);
+
+// After
+fn syntax_error(&mut self, recognizer: &R, event: &SyntaxErrorEvent<'_>);
+```
+
+Read `event.span` for the resolved half-open UTF-8 byte range. Lexer failures
+and parser diagnostics use the same event shape; streams and token sources that
+cannot resolve byte offsets leave the span as `None`.
+
+`Token::start_byte()` and `stop_byte()` now return `Option<usize>`, while
+`byte_span()` returns `Option<Range<usize>>`. `None` means the token source
+could not resolve exact byte offsets. Custom token sources must set
+Unicode-scalar and UTF-8 byte positions independently:
+
+```rust
+TokenSpec::explicit(token_type, text)
+    .with_span(scalar_start, scalar_stop)
+    .with_byte_span(byte_start, byte_end)
+```
+
+`TokenSpec::with_span` no longer assumes scalar indexes are byte offsets.
+Omit `with_byte_span` when no exact mapping exists.
+
+`TokenSourceError` gained an optional `span` and, like `SyntaxErrorEvent`, is
+non-exhaustive. Construct token-source diagnostics with
+`TokenSourceError::new(...).with_span(...)` instead of a struct literal.
+
 ## Recognizer Reuse Method Names
 
 Generated parsers now reserve `reset`, `set_token_stream`,

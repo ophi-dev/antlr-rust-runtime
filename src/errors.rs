@@ -34,6 +34,7 @@ pub enum AntlrError {
 
 /// Structured context for one recognizer diagnostic.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct SyntaxErrorEvent<'a> {
     /// Token the diagnostic is anchored to, when one exists.
     ///

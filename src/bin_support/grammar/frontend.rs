@@ -534,8 +534,14 @@ where
     token_stream
         .tokens()
         .map(|token| {
-            let start = u32::try_from(token.start_byte());
-            let end = u32::try_from(token.stop_byte());
+            let Some(bytes) = token.byte_span() else {
+                return Err(invalid_span(
+                    source,
+                    "token source did not provide a byte span",
+                ));
+            };
+            let start = u32::try_from(bytes.start);
+            let end = u32::try_from(bytes.end);
             let (Ok(start), Ok(end)) = (start, end) else {
                 return Err(invalid_span(source, "token byte span exceeds 4 GiB"));
             };

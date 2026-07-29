@@ -13152,14 +13152,13 @@ mod tests {
             self
         }
 
-        const fn with_span(mut self, start: usize, stop: usize) -> Self {
-            self.spec.start = start;
-            self.spec.stop = stop;
-            self.spec.start_byte = start;
-            self.spec.stop_byte = match stop.checked_add(1) {
-                Some(end) if end >= start => end,
-                Some(_) | None => start,
-            };
+        fn with_span(mut self, start: usize, stop: usize) -> Self {
+            self.spec = self.spec.with_span(start, stop);
+            self
+        }
+
+        fn with_byte_span(mut self, start: usize, stop: usize) -> Self {
+            self.spec = self.spec.with_byte_span(start, stop);
             self
         }
 
@@ -13211,12 +13210,12 @@ mod tests {
             &self.source_name
         }
 
-        fn start_byte(&self) -> usize {
-            self.spec.start_byte
+        fn start_byte(&self) -> Option<usize> {
+            (self.spec.start_byte != usize::MAX).then_some(self.spec.start_byte)
         }
 
-        fn stop_byte(&self) -> usize {
-            self.spec.stop_byte
+        fn stop_byte(&self) -> Option<usize> {
+            (self.spec.stop_byte != usize::MAX).then_some(self.spec.stop_byte)
         }
     }
 
@@ -13383,6 +13382,7 @@ mod tests {
             TestToken::new(7)
                 .with_text("oops")
                 .with_span(0, 3)
+                .with_byte_span(0, 4)
                 .with_position(1, 2),
             TestToken::eof("parser-test", 4, 1, 6),
         ]);
@@ -13418,7 +13418,10 @@ mod tests {
     #[test]
     fn recovery_diagnostics_preserve_unknown_custom_token_span() {
         let mut parser = mini_parser(vec![
-            TestToken::new(7).with_text("oops").with_position(1, 2),
+            TestToken::new(7)
+                .with_text("oops")
+                .with_span(0, 3)
+                .with_position(1, 2),
             TestToken::eof("parser-test", 4, 1, 6),
         ]);
         parser.remove_error_listeners();
@@ -17329,6 +17332,7 @@ mod tests {
             TestToken::new(2)
                 .with_text("y")
                 .with_span(0, 0)
+                .with_byte_span(0, 1)
                 .with_position(3, 5),
             TestToken::eof("parser-test", 1, 1, 1),
         ]);

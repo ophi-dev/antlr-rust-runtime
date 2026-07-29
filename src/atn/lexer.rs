@@ -2216,6 +2216,8 @@ where
 {
     let inclusive_stop = stop.saturating_sub(1);
     let text = display_error_text(&lexer.input().text(TextInterval::new(start, inclusive_stop)));
+    // Defensive callers that do not advance `stop` still identify one failing
+    // scalar; normal non-EOF recognition errors already pass `stop > start`.
     let scalar_end = stop.max(start.saturating_add(1));
     lexer.record_error_for_scalar_span(
         lexer.line(),
@@ -2315,7 +2317,7 @@ mod tests {
         record_token_recognition_error(&lexer, 1, 2);
         let errors = lexer.drain_errors();
         assert_eq!(errors.len(), 1);
-        lexer.notify_error_listeners((&errors[0]).into());
+        lexer.notify_error_listeners(SyntaxErrorEvent::from(&errors[0]));
 
         assert_eq!(*spans.lock().expect("recorded spans lock"), [Some(1..3)]);
     }

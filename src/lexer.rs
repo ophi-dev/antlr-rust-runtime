@@ -1757,14 +1757,23 @@ where
         self.force_interpreted
     }
 
-    /// Buffers a lexer diagnostic until the token stream consumer is ready to
-    /// emit errors in parser-compatible order.
+    /// Buffers a lexer diagnostic for the current token span until the token
+    /// stream consumer can emit it in parser-compatible order.
+    ///
+    /// `line` and `column` should identify the current token start. Use
+    /// [`Self::record_error_for_scalar_span`] when the diagnostic covers a
+    /// different input range.
     pub fn record_error(&self, line: usize, column: usize, message: impl Into<String>) {
         let scalar_span = self.token_start..self.input.index().max(self.token_start);
         self.record_error_for_scalar_span(line, column, message, scalar_span);
     }
 
-    pub(crate) fn record_error_for_scalar_span(
+    /// Buffers a lexer diagnostic for an explicit half-open Unicode-scalar span.
+    ///
+    /// The span is converted through [`CharStream::byte_interval`]. Streams
+    /// without an exact UTF-8 byte mapping leave the diagnostic byte span
+    /// unknown.
+    pub fn record_error_for_scalar_span(
         &self,
         line: usize,
         column: usize,
