@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.22.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.21.0...v0.22.0) (2026-07-29)
+
+
+### Features
+
+* **codegen:** per-decision tiers, decisions.json report, opt-in --fixed-lookahead static dispatch ([#150](https://github.com/ophi-dev/antlr-rust-runtime/issues/150)) ([#247](https://github.com/ophi-dev/antlr-rust-runtime/issues/247)) ([e54db40](https://github.com/ophi-dev/antlr-rust-runtime/commit/e54db40454bd960abe7acd6b182ec51ca33dd269))
+
+
+### Bug Fixes
+
+* remove max turns and challenge ([5709d03](https://github.com/ophi-dev/antlr-rust-runtime/commit/5709d038044249ac5ce1e64231e1d0b40460cc03))
+* restore official Claude Code review action ([bd743f5](https://github.com/ophi-dev/antlr-rust-runtime/commit/bd743f5dccf1a07cd6784cbfb892cfe0cde20b39))
+
 ## [0.21.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.20.1...v0.21.0) (2026-07-28)
 
 
