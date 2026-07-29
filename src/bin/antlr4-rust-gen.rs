@@ -842,6 +842,7 @@ fn parse_semantic_helper_call(body: &str, kind: SemanticsKind) -> Option<Semanti
     body = body
         .strip_prefix("this.")
         .or_else(|| body.strip_prefix("self."))
+        .or_else(|| body.strip_prefix("recog."))
         .unwrap_or(body);
     let open = body.find('(')?;
     let name = body[..open].trim();
@@ -19431,6 +19432,23 @@ lower = "pop_member(depths)"
 
     #[test]
     fn semantic_helper_calls_capture_kind_negation_and_literals() {
+        let expected = Some(SemanticHelperCall {
+            name: "isTypeName".to_owned(),
+            arguments: Vec::new(),
+            negated: false,
+        });
+        for body in [
+            "isTypeName()",
+            "this.isTypeName()",
+            "self.isTypeName()",
+            "recog.isTypeName()",
+        ] {
+            assert_eq!(
+                parse_semantic_helper_call(body, SemanticsKind::ParserPredicate),
+                expected,
+                "receiver form {body:?} should parse"
+            );
+        }
         assert_eq!(
             parse_semantic_helper_call(
                 r#"!this.matches("marker", true, -2)"#,
