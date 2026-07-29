@@ -1632,7 +1632,7 @@ where
     }
 
     fn eof_token_spec(&self) -> TokenSpec {
-        let byte_offset = self.eof_byte_offset().unwrap_or_else(|| self.input.index());
+        let byte_offset = self.eof_byte_offset().unwrap_or(usize::MAX);
         TokenSpec::eof(self.input.index(), byte_offset, self.line, self.column)
     }
 
@@ -1978,41 +1978,64 @@ mod tests {
     use crate::vocabulary::Vocabulary;
 
     #[derive(Clone, Debug)]
-    struct UnsharedInput(InputStream);
+    struct UnsharedInput {
+        input: InputStream,
+        maps_bytes: bool,
+    }
+
+    impl UnsharedInput {
+        fn mapped(input: InputStream) -> Self {
+            Self {
+                input,
+                maps_bytes: true,
+            }
+        }
+
+        fn scalar_only(input: InputStream) -> Self {
+            Self {
+                input,
+                maps_bytes: false,
+            }
+        }
+    }
 
     impl IntStream for UnsharedInput {
         fn consume(&mut self) {
-            self.0.consume();
+            self.input.consume();
         }
 
         fn la(&mut self, offset: isize) -> i32 {
-            self.0.la(offset)
+            self.input.la(offset)
         }
 
         fn index(&self) -> usize {
-            self.0.index()
+            self.input.index()
         }
 
         fn seek(&mut self, index: usize) {
-            self.0.seek(index);
+            self.input.seek(index);
         }
 
         fn size(&self) -> usize {
-            self.0.size()
+            self.input.size()
         }
 
         fn source_name(&self) -> &str {
-            self.0.source_name()
+            self.input.source_name()
         }
     }
 
     impl CharStream for UnsharedInput {
         fn text(&self, interval: TextInterval) -> String {
-            self.0.text(interval)
+            self.input.text(interval)
         }
 
         fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
-            self.0.byte_interval(interval)
+            if self.maps_bytes {
+                self.input.byte_interval(interval)
+            } else {
+                None
+            }
         }
     }
 
@@ -2039,6 +2062,30 @@ mod tests {
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
             @r#"(1, 0, Some("<EOF>"), Some(2..2))"#
+        );
+    }
+
+    #[test]
+    fn eof_token_has_no_byte_span_without_byte_mapping() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(UnsharedInput::scalar_only(InputStream::new("β")), data);
+        lexer.consume_char();
+
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer.eof_token(&mut sink).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
+
+        insta::assert_compact_debug_snapshot!(
+            (token.start(), token.stop(), token.text(), token.byte_span()),
+            @r#"(1, 0, Some("<EOF>"), None)"#
         );
     }
 
@@ -2110,7 +2157,7 @@ mod tests {
                 std::iter::empty::<Option<&str>>(),
             ),
         );
-        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("β")), data);
+        let mut lexer = BaseLexer::new(UnsharedInput::mapped(InputStream::new("β")), data);
         lexer.begin_token();
         lexer.consume_char();
 
@@ -2159,7 +2206,7 @@ mod tests {
                 std::iter::empty::<Option<&str>>(),
             ),
         );
-        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("a\nb")), data);
+        let mut lexer = BaseLexer::new(UnsharedInput::mapped(InputStream::new("a\nb")), data);
         lexer.begin_token();
 
         lexer.commit_position(0, 3);
