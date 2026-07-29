@@ -678,6 +678,50 @@ fn embedded_actions_keep_potentially_referenced_ladder_rules() {
 }
 
 #[test]
+fn embedded_rule_attributes_keep_potentially_referenced_ladder_contexts() {
+    let temp = temporary_directory("precedence-ladder-embedded-rule-attributes");
+    let grammar = temp.path().join("AttributeLadder.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar AttributeLadder;\n\
+         start returns [std::marker::PhantomData<fn() -> LowContext<'static>> saved]\n\
+             : high EOF;\n\
+         high: low ('+' low)*;\n\
+         low: atom ('*' atom)*;\n\
+         atom: INT;\n\
+         INT: [0-9]+;\n\
+         WS: [ \\t\\r\\n]+ -> skip;\n",
+    )
+    .expect("embedded-rule-attribute grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--optimize-precedence-ladders"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("attribute_ladder_parser.rs"))
+        .expect("parser should be emitted");
+    assert!(parser.contains("pub fn low("));
+    let manifest = fs::read_to_string(out.join("optimizations.json"))
+        .expect("optimization manifest should be emitted");
+    assert!(manifest.contains("\"changed\": false"), "{manifest}");
+    assert_generated_modules_compile(
+        temp.path(),
+        &["attribute_ladder_lexer.rs", "attribute_ladder_parser.rs"],
+    );
+}
+
+#[test]
 fn adaptive_atn_routing_generated_path_compiles() {
     let temp = temporary_directory("adaptive-atn-routing");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

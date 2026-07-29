@@ -817,7 +817,7 @@ fn observed_rule_contexts(
     let mut observed = BTreeSet::new();
     let mut has_opaque_target_code = false;
     for action in &unit.actions {
-        collect_action_rule_references(
+        collect_target_code_rule_references(
             &action.body,
             rules_by_name,
             &mut observed,
@@ -825,8 +825,21 @@ fn observed_rule_contexts(
         );
     }
     for rule in &unit.rules {
+        for clause in rule
+            .arguments
+            .iter()
+            .chain(rule.returns.iter())
+            .chain(rule.locals.iter())
+        {
+            collect_target_code_rule_references(
+                &clause.text,
+                rules_by_name,
+                &mut observed,
+                &mut has_opaque_target_code,
+            );
+        }
         for action in &rule.actions {
-            collect_action_rule_references(
+            collect_target_code_rule_references(
                 &action.body,
                 rules_by_name,
                 &mut observed,
@@ -834,7 +847,7 @@ fn observed_rule_contexts(
             );
         }
         for handler in &rule.catches {
-            collect_action_rule_references(
+            collect_target_code_rule_references(
                 &handler.body,
                 rules_by_name,
                 &mut observed,
@@ -842,7 +855,7 @@ fn observed_rule_contexts(
             );
         }
         if let Some(action) = &rule.finally_action {
-            collect_action_rule_references(
+            collect_target_code_rule_references(
                 &action.body,
                 rules_by_name,
                 &mut observed,
@@ -852,7 +865,7 @@ fn observed_rule_contexts(
         visit_elements(&rule.block, &mut |element| match &element.kind {
             ElementKind::RuleCall(call) => {
                 if let Some(arguments) = &call.arguments {
-                    collect_action_rule_references(
+                    collect_target_code_rule_references(
                         arguments,
                         rules_by_name,
                         &mut observed,
@@ -861,7 +874,7 @@ fn observed_rule_contexts(
                 }
             }
             ElementKind::Action { body, .. } => {
-                collect_action_rule_references(
+                collect_target_code_rule_references(
                     body,
                     rules_by_name,
                     &mut observed,
@@ -869,14 +882,14 @@ fn observed_rule_contexts(
                 );
             }
             ElementKind::Predicate { body, fail, .. } => {
-                collect_action_rule_references(
+                collect_target_code_rule_references(
                     body,
                     rules_by_name,
                     &mut observed,
                     &mut has_opaque_target_code,
                 );
                 if let Some(fail) = fail {
-                    collect_action_rule_references(
+                    collect_target_code_rule_references(
                         fail,
                         rules_by_name,
                         &mut observed,
@@ -897,7 +910,7 @@ fn observed_rule_contexts(
     observed
 }
 
-fn collect_action_rule_references(
+fn collect_target_code_rule_references(
     body: &str,
     rules_by_name: &BTreeMap<String, RuleId>,
     observed: &mut BTreeSet<RuleId>,
@@ -2001,6 +2014,38 @@ low : INT ;
         assert!(observed.contains(&rules_by_name["actionRule"]));
         assert!(observed.contains(&rules_by_name["argumentRule"]));
         assert_eq!(observed.len(), rules_by_name.len());
+    }
+
+    #[test]
+    fn opaque_rule_attribute_clauses_observe_every_rule_context() {
+        for declaration in [
+            "[LowContext value]",
+            "returns [LowContext value]",
+            "locals [LowContext value]",
+        ] {
+            let source = format!(
+                r#"
+parser grammar P;
+carrier {declaration} : high ;
+high : low ;
+low : INT ;
+"#,
+            );
+            let (grammar, _) = fixture(&source);
+            let unit = &grammar.units[0];
+            let rules_by_name = unit
+                .rules
+                .iter()
+                .map(|rule| (rule.name.clone(), rule.id))
+                .collect::<BTreeMap<_, _>>();
+            let observed = observed_rule_contexts(unit, &rules_by_name);
+
+            assert_eq!(
+                observed.len(),
+                rules_by_name.len(),
+                "declaration {declaration:?}"
+            );
+        }
     }
 
     fn fixture(text: &str) -> (TransformGrammar, ModelIdAllocator) {
