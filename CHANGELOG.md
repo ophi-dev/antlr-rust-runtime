@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.23.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.22.0...v0.23.0) (2026-07-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** ErrorListener::syntax_error now receives SyntaxErrorEvent; Token byte accessors return Option values; TokenSourceError includes span and diagnostic structs are non-exhaustive.
+
+### Features
+
+* **codegen:** collapse linear precedence ladders ([#252](https://github.com/ophi-dev/antlr-rust-runtime/issues/252)) ([5e109c8](https://github.com/ophi-dev/antlr-rust-runtime/commit/5e109c893b2f90ab91dc9b36f88fb7e903d426f9))
+* **runtime:** expose resolved byte spans to error listeners ([#257](https://github.com/ophi-dev/antlr-rust-runtime/issues/257)) ([b91b4ca](https://github.com/ophi-dev/antlr-rust-runtime/commit/b91b4ca55aaf0f097d5fc195fcafd1e8a19474c6))
+* support antlr4rust recog predicate receiver ([#249](https://github.com/ophi-dev/antlr-rust-runtime/issues/249)) ([45c56f4](https://github.com/ophi-dev/antlr-rust-runtime/commit/45c56f42428c0cc0464da72afbfdf490a110a4a6))
+
 ## [0.22.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.21.0...v0.22.0) (2026-07-29)
 
 
