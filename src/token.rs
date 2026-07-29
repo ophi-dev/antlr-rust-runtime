@@ -10,7 +10,8 @@ pub const HIDDEN_CHANNEL: i32 = 1;
 
 /// Largest source or location offset accepted by the compact token store.
 ///
-/// `u32::MAX` is reserved for ANTLR's synthetic `-1` source boundary.
+/// `u32::MAX` is reserved for unknown and ANTLR synthetic `-1` source
+/// boundaries.
 pub const MAX_TOKEN_OFFSET: usize = (u32::MAX - 1) as usize;
 
 #[repr(transparent)]
@@ -87,15 +88,19 @@ pub trait Token: fmt::Debug {
         TextInterval::new(self.start(), self.stop())
     }
 
-    /// Zero-based absolute start offset measured in UTF-8 bytes.
+    /// Zero-based absolute start offset measured in UTF-8 bytes, or
+    /// `usize::MAX` when the token source did not provide one.
     fn start_byte(&self) -> usize;
 
-    /// Zero-based exclusive end offset measured in UTF-8 bytes.
+    /// Zero-based exclusive end offset measured in UTF-8 bytes, or
+    /// `usize::MAX` when the token source did not provide one.
     fn stop_byte(&self) -> usize;
 
-    /// Zero-based UTF-8 byte span for the token text.
-    fn byte_span(&self) -> Range<usize> {
-        self.start_byte()..self.stop_byte()
+    /// Zero-based UTF-8 byte span for the token text, when available.
+    fn byte_span(&self) -> Option<Range<usize>> {
+        let start = self.start_byte();
+        let stop = self.stop_byte();
+        (start != usize::MAX && stop != usize::MAX).then_some(start..stop)
     }
 }
 
@@ -171,8 +176,8 @@ impl TokenSpec {
             channel: DEFAULT_CHANNEL,
             start: 0,
             stop: 0,
-            start_byte: 0,
-            stop_byte: 1,
+            start_byte: usize::MAX,
+            stop_byte: usize::MAX,
             line: 1,
             column: 0,
             text: Some(text.into()),
@@ -372,8 +377,8 @@ impl TokenStore {
         let id = TokenId(raw_id);
         let scalar_start = compact_boundary("start offset", spec.start)?;
         let scalar_stop = compact_boundary("stop offset", spec.stop)?;
-        let byte_start = compact_offset("start byte", spec.start_byte)?;
-        let byte_stop = compact_offset("stop byte", spec.stop_byte)?;
+        let byte_start = compact_boundary("start byte", spec.start_byte)?;
+        let byte_stop = compact_boundary("stop byte", spec.stop_byte)?;
         let line = compact_offset("line", spec.line)?;
         let column = compact_offset("column", spec.column)?;
 
@@ -470,19 +475,27 @@ impl TokenStore {
     }
 
     /// Returns the token's zero-based UTF-8 byte start offset.
+    ///
+    /// A stored `usize::MAX` means the token source did not provide one;
+    /// `None` means `id` is not in this store.
     #[must_use]
     pub fn start_byte(&self, id: TokenId) -> Option<usize> {
         self.byte_starts
             .get(id.index())
-            .map(|offset| *offset as usize)
+            .copied()
+            .map(expand_boundary)
     }
 
     /// Returns the token's zero-based exclusive UTF-8 byte stop offset.
+    ///
+    /// A stored `usize::MAX` means the token source did not provide one;
+    /// `None` means `id` is not in this store.
     #[must_use]
     pub fn stop_byte(&self, id: TokenId) -> Option<usize> {
         self.byte_stops
             .get(id.index())
-            .map(|offset| *offset as usize)
+            .copied()
+            .map(expand_boundary)
     }
 
     fn explicit_text(&self, id: TokenId) -> Option<&str> {
@@ -665,11 +678,11 @@ impl Token for TokenView<'_> {
     }
 
     fn start_byte(&self) -> usize {
-        self.store.byte_starts[self.id.index()] as usize
+        expand_boundary(self.store.byte_starts[self.id.index()])
     }
 
     fn stop_byte(&self) -> usize {
-        self.store.byte_stops[self.id.index()] as usize
+        expand_boundary(self.store.byte_stops[self.id.index()])
     }
 }
 
@@ -855,7 +868,6 @@ mod tests {
         let store = one_token(
             TokenSpec::explicit(7, "<missing X>")
                 .with_span(usize::MAX, usize::MAX)
-                .with_byte_span(0, 0)
                 .with_position(3, 9),
         );
         assert_eq!(
@@ -885,8 +897,18 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 1);
-        assert_eq!(token.byte_span(), 2..4);
+        assert_eq!(token.byte_span(), Some(2..4));
         assert_eq!(token.text(), Some("β"));
+    }
+
+    #[test]
+    fn explicit_token_without_offsets_has_no_byte_span() {
+        let store = one_token(TokenSpec::explicit(1, "x"));
+        let token = store.view(TokenId(0)).expect("token");
+
+        assert_eq!(token.start_byte(), usize::MAX);
+        assert_eq!(token.stop_byte(), usize::MAX);
+        assert_eq!(token.byte_span(), None);
     }
 
     #[test]

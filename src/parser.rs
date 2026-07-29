@@ -5243,6 +5243,25 @@ where
         self.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
     }
 
+    fn syntax_error_event<'a>(
+        &'a self,
+        offending: Option<TokenId>,
+        line: usize,
+        column: usize,
+        message: &'a str,
+        error: Option<&'a AntlrError>,
+    ) -> SyntaxErrorEvent<'a> {
+        let offending = offending.and_then(|token| self.token_store().view(token));
+        SyntaxErrorEvent {
+            offending,
+            line,
+            column,
+            span: offending.and_then(|token| token.byte_span()),
+            message,
+            error,
+        }
+    }
+
     /// Emits a fatal parser error after an entry-rule parse commits to returning it.
     ///
     /// Generated parsers call this only at their public entry boundary. Nested
@@ -5257,29 +5276,23 @@ where
         else {
             return;
         };
-        let offending = offending.and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(SyntaxErrorEvent {
-            offending,
-            line: *line,
-            column: *column,
-            span: offending.map(|token| token.byte_span()),
+        self.notify_error_listeners(self.syntax_error_event(
+            *offending,
+            *line,
+            *column,
             message,
-            error: Some(error),
-        });
+            Some(error),
+        ));
     }
 
     fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
-        let offending = diagnostic
-            .offending
-            .and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(SyntaxErrorEvent {
-            offending,
-            line: diagnostic.line,
-            column: diagnostic.column,
-            span: offending.map(|token| token.byte_span()),
-            message: &diagnostic.message,
-            error: None,
-        });
+        self.notify_error_listeners(self.syntax_error_event(
+            diagnostic.offending,
+            diagnostic.line,
+            diagnostic.column,
+            &diagnostic.message,
+            None,
+        ));
     }
 
     fn dispatch_parser_diagnostics<'a>(
@@ -5583,7 +5596,6 @@ where
             .insert(
                 TokenSpec::explicit(token_type, text)
                     .with_span(usize::MAX, usize::MAX)
-                    .with_byte_span(0, 0)
                     .with_position(line, column),
             )
             .map_err(|error| AntlrError::Unsupported(error.to_string()))
@@ -13401,6 +13413,35 @@ mod tests {
             "recovery_diagnostics_expose_the_offending_token_to_listeners",
             recorded
         );
+    }
+
+    #[test]
+    fn recovery_diagnostics_preserve_unknown_custom_token_span() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(7).with_text("oops").with_position(1, 2),
+            TestToken::eof("parser-test", 4, 1, 6),
+        ]);
+        parser.remove_error_listeners();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+        let offending = parser.input.lt_id(1);
+        assert!(offending.is_some(), "current token should be buffered");
+
+        parser.dispatch_parser_diagnostic(&ParserDiagnostic {
+            line: 1,
+            column: 2,
+            message: "extraneous input 'oops'".to_owned(),
+            offending,
+        });
+
+        let span = {
+            let diagnostics = diagnostics.lock().expect("recorded diagnostics lock");
+            assert_eq!(diagnostics.len(), 1);
+            diagnostics[0].span.clone()
+        };
+        assert_eq!(span, None);
     }
 
     #[test]

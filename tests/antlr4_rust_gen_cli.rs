@@ -1282,6 +1282,14 @@ mod combined_literal_tests {
         )
         .expect("byte stream should parse through the generic helper");
         assert_eq!(parsed.tokens().len(), 4);
+        assert_eq!(
+            parsed
+                .tokens()
+                .iter()
+                .map(|token| token.byte_span())
+                .collect::<Vec<_>>(),
+            [Some(0..5), Some(6..11), Some(12..17), Some(17..17)]
+        );
     }
 }
 "#,

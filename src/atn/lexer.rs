@@ -2898,7 +2898,7 @@ mod tests {
         assert_eq!(dot.text(), Some("."));
         assert_eq!(dot.start(), 0);
         assert_eq!(dot.stop(), 0);
-        assert_eq!(dot.byte_span(), 0..1);
+        assert_eq!(dot.byte_span(), Some(0..1));
         assert_eq!((dot.line(), dot.column()), (1, 0));
 
         let identifier = sink
@@ -2908,7 +2908,7 @@ mod tests {
         assert_eq!(identifier.text(), Some("β"));
         assert_eq!(identifier.start(), 1);
         assert_eq!(identifier.stop(), 1);
-        assert_eq!(identifier.byte_span(), 1..3);
+        assert_eq!(identifier.byte_span(), Some(1..3));
         assert_eq!((identifier.line(), identifier.column()), (1, 1));
 
         assert_eq!(

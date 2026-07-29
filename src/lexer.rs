@@ -1492,7 +1492,7 @@ where
         });
         let (start_byte, stop_byte) = source_interval
             .or_else(|| self.token_byte_span(stop))
-            .unwrap_or((self.token_start, self.token_start));
+            .unwrap_or((usize::MAX, usize::MAX));
         TokenSpec {
             token_type,
             channel,
@@ -2038,7 +2038,7 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+            @r#"(1, 0, Some("<EOF>"), Some(2..2))"#
         );
     }
 
@@ -2067,7 +2067,7 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+            @r#"(1, 0, Some("<EOF>"), Some(2..2))"#
         );
     }
 
@@ -2096,7 +2096,7 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(0, 0, Some("β"), 0..2)"#
+            @r#"(0, 0, Some("β"), Some(0..2))"#
         );
     }
 
@@ -2122,7 +2122,7 @@ mod tests {
         let token = sink.view(id).expect("emitted token should exist");
 
         assert_eq!(token.text(), Some("β"));
-        assert_eq!(token.byte_span(), 0..2);
+        assert_eq!(token.byte_span(), Some(0..2));
     }
 
     #[test]
