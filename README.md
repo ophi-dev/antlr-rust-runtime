@@ -670,7 +670,10 @@ depth, and turns flat star-loop children into nested left-recursive operator
 contexts. Existing consumers keyed to those surfaces should not enable it.
 Actions, predicates, rule attributes, unsupported shapes, overlapping
 same-fixity operator sets, and externally referenced middle rules are declined
-or treated as boundaries.
+or treated as boundaries. A prefix level that is looser than another collapsed
+operator level is also declined: ANTLR precedence parameters constrain recursive
+operators, not entry into primary/prefix alternatives, so collapsing that order
+would admit the looser prefix inside a tighter operand.
 
 Every applied run writes `optimizations.json` beside `semantics.json` and
 `decisions.json`. The manifest records the safety class, original source

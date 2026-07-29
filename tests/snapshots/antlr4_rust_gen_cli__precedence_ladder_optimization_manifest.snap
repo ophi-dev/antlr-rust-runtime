@@ -11,8 +11,22 @@ expression: stable_manifest
       "name": "collapse-precedence-ladders",
       "safetyClass": "recognition-preserving",
       "changed": true,
-      "metrics": {"before": {"rules": 38, "alternatives": 53, "elements": 82}, "after": {"rules": 30, "alternatives": 45, "elements": 74}},
+      "metrics": {"before": {"rules": 41, "alternatives": 59, "elements": 92}, "after": {"rules": 33, "alternatives": 51, "elements": 84}},
       "candidates": [
+        {
+          "grammar": "LadderParser",
+          "entryRule": "loosePrefix",
+          "source": {"path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4", "byteStart": 1030, "byteEnd": 1078, "start": {"line": 78, "column": 0}, "end": {"line": 81, "column": 5}},
+          "status": "declined",
+          "reason": "prefix rung loosePrefix is looser than another operator rung and cannot retain that precedence boundary after collapse",
+          "rungs": ["loosePrefix", "power"],
+          "boundaryRule": "primary",
+          "projected": null,
+          "removedRules": [],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": []
+        },
         {
           "grammar": "LadderParser",
           "entryRule": "sum",

@@ -445,6 +445,18 @@ mod precedence_ladder_differential {
         optimized_ladder_parser,
         direct_start
     );
+    parse_result!(
+        baseline_mixed,
+        baseline_ladder_lexer,
+        baseline_ladder_parser,
+        mixed_start
+    );
+    parse_result!(
+        optimized_mixed,
+        optimized_ladder_lexer,
+        optimized_ladder_parser,
+        mixed_start
+    );
 
     #[test]
     fn valid_and_invalid_inputs_match_the_unmodified_grammar() {
@@ -563,6 +575,21 @@ mod precedence_ladder_differential {
                 "direct/right-tail behavior diverged for {input:?}"
             );
         }
+    }
+
+    #[test]
+    fn looser_prefix_stays_out_of_a_tighter_right_tail_operand() {
+        for input in ["1", "!1", "!!1 ^ 2", "1 ^ 2 ^ 3"] {
+            assert_eq!(
+                optimized_mixed(input),
+                baseline_mixed(input),
+                "mixed prefix/right-tail behavior diverged for {input:?}"
+            );
+        }
+
+        let invalid = baseline_mixed("1 ^ !1");
+        assert!(invalid.1 > 0, "baseline should reject the loose prefix: {invalid:?}");
+        assert_eq!(optimized_mixed("1 ^ !1"), invalid);
     }
 }
 "#,

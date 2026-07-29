@@ -71,5 +71,18 @@ atom
     | '(' expr ')'
     ;
 
+mixedStart
+    : loosePrefix EOF
+    ;
+
+loosePrefix
+    : ('!')+ power
+    | power
+    ;
+
+power
+    : primary ('^' power)?
+    ;
+
 INT : [0-9]+;
 WS : [ \t\r\n]+ -> skip;

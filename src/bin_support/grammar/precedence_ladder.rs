@@ -195,7 +195,7 @@ fn discover_ladders(unit: &GrammarUnit) -> LadderDiscovery {
             .iter()
             .filter_map(|rule| rungs.get(rule).cloned())
             .collect::<Vec<_>>();
-        if let Err(reason) = prove_operator_totality(&selected) {
+        if let Err(reason) = prove_operator_compatibility(&selected) {
             let entry = selected[0].rule.clone();
             discovery.declined.push(DeclinedLadder {
                 entry_rule: entry,
@@ -309,7 +309,21 @@ fn follow_chain(
     }
 }
 
-fn prove_operator_totality(rungs: &[Rung]) -> Result<(), String> {
+fn prove_operator_compatibility(rungs: &[Rung]) -> Result<(), String> {
+    for (index, rung) in rungs.iter().enumerate() {
+        if matches!(&rung.kind, RungKind::Prefix { .. })
+            && rungs[index + 1..]
+                .iter()
+                .any(|tighter| !matches!(&tighter.kind, RungKind::Delegation))
+        {
+            return Err(format!(
+                "prefix rung {} is looser than another operator rung and cannot retain that \
+                 precedence boundary after collapse",
+                rung.rule.name
+            ));
+        }
+    }
+
     let operators = rungs
         .iter()
         .flat_map(|rung| rung.operators.iter())
@@ -1770,6 +1784,37 @@ atom : INT ;
                 .any(|option| { option.name.value == "assoc" && option.value.value == "right" })
         );
         assert!(alternatives[2].options.is_empty());
+    }
+
+    #[test]
+    fn prefix_looser_than_an_operator_declines_the_candidate() {
+        let (mut grammar, mut ids) = fixture(
+            r#"
+parser grammar P;
+expr : unary ('+' unary)* ;
+unary : ('!')+ power | power ;
+power : atom ('^' power)? ;
+atom : INT ;
+"#,
+        );
+        let before = grammar.units.clone();
+        let mut registry = TransformRegistry::default();
+        registry.push(CollapsePrecedenceLadders);
+        let report = registry
+            .run(&mut grammar, &mut ids, false)
+            .expect("declining an unsafe prefix boundary is not a compilation error");
+
+        assert_eq!(grammar.units, before);
+        assert!(!report.entries[0].changed);
+        assert_eq!(
+            report.candidates[0].status,
+            TransformCandidateStatus::Declined
+        );
+        assert!(
+            report.candidates[0]
+                .reason
+                .contains("prefix rung unary is looser than another operator rung")
+        );
     }
 
     #[test]
