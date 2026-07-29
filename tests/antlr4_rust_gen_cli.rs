@@ -287,6 +287,337 @@ fn positional_lexer_root_emits_rust_and_manifest() {
 }
 
 #[test]
+fn precedence_ladder_optimization_is_explicit_auditable_and_recognition_preserving() {
+    let temp = temporary_directory("precedence-ladder");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4");
+    let baseline = temp.path().join("baseline");
+    let optimized = temp.path().join("optimized");
+    let report = temp.path().join("report");
+
+    for (out, extra) in [
+        (&baseline, None),
+        (&optimized, Some("--optimize-precedence-ladders")),
+        (&report, Some("--report-precedence-ladders")),
+    ] {
+        let mut args = vec![
+            grammar.as_os_str(),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ];
+        if let Some(flag) = extra {
+            args.push(OsStr::new(flag));
+        }
+        let output = run_antlr4_rust_gen(&args);
+        assert!(
+            output.status.success(),
+            "{extra:?} failed\nstdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+    }
+
+    assert!(!baseline.join("optimizations.json").exists());
+    let report_files = fs::read_dir(&report)
+        .expect("report directory should exist")
+        .map(|entry| {
+            entry
+                .expect("report entry should be readable")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(report_files, ["optimizations.json"]);
+
+    let manifest = fs::read_to_string(optimized.join("optimizations.json"))
+        .expect("applied optimization manifest should be emitted");
+    for expected in [
+        "\"safetyClass\": \"recognition-preserving\"",
+        "\"status\": \"applied\"",
+        "\"source\": {\"path\":",
+        "\"byteStart\":",
+        "\"rungs\": [\"expr\", \"conditionalOr\", \"conditionalAnd\", \"relation\", \"calc\", \"unary\"]",
+        "\"contextsPerOperand\": {\"before\": 7, \"after\": 2, \"reduction\": 5}",
+        "\"precedenceDecisions\": {\"before\": 6, \"after\": 1, \"reduction\": 5}",
+        "{\"rule\": \"conditionalOr\", \"targetRule\": \"expr\"}",
+        "\"sourceAlternative\": 3",
+        "\"targetAltLabels\": [\"Negate\"]",
+        "\"from\": \"flat-loop\", \"to\": \"left-recursive-nesting\"",
+    ] {
+        assert!(
+            manifest.contains(expected),
+            "missing {expected}: {manifest}"
+        );
+    }
+    let dry_run_manifest = fs::read_to_string(report.join("optimizations.json"))
+        .expect("dry-run optimization manifest should be emitted");
+    assert!(dry_run_manifest.contains("\"reportOnly\": true"));
+    assert!(dry_run_manifest.contains("\"status\": \"eligible\""));
+    assert!(!dry_run_manifest.contains("\"status\": \"applied\""));
+
+    let baseline_parser = fs::read_to_string(baseline.join("ladder_parser.rs"))
+        .expect("baseline parser should be emitted");
+    let optimized_parser = fs::read_to_string(optimized.join("ladder_parser.rs"))
+        .expect("optimized parser should be emitted");
+    assert!(baseline_parser.contains("pub fn conditional_or("));
+    assert!(!optimized_parser.contains("pub fn conditional_or("));
+    assert!(optimized_parser.contains("pub fn expr("));
+    assert!(optimized_parser.contains("pub fn atom("));
+
+    let differential = temp.path().join("differential");
+    let generated = differential.join("generated");
+    fs::create_dir_all(&generated).expect("differential source directory");
+    for (source, target) in [
+        (
+            baseline.join("ladder_lexer.rs"),
+            generated.join("baseline_ladder_lexer.rs"),
+        ),
+        (
+            baseline.join("ladder_parser.rs"),
+            generated.join("baseline_ladder_parser.rs"),
+        ),
+        (
+            optimized.join("ladder_lexer.rs"),
+            generated.join("optimized_ladder_lexer.rs"),
+        ),
+        (
+            optimized.join("ladder_parser.rs"),
+            generated.join("optimized_ladder_parser.rs"),
+        ),
+    ] {
+        fs::copy(source, target).expect("generated differential module should be copied");
+    }
+    assert_generated_project(
+        &differential,
+        &[
+            "baseline_ladder_lexer.rs",
+            "baseline_ladder_parser.rs",
+            "optimized_ladder_lexer.rs",
+            "optimized_ladder_parser.rs",
+        ],
+        r#"
+#[cfg(test)]
+mod precedence_ladder_differential {
+    use super::{
+        baseline_ladder_lexer, baseline_ladder_parser, optimized_ladder_lexer,
+        optimized_ladder_parser,
+    };
+    use antlr4_runtime::{FromRuleNode, IntStream as _, Parser as _};
+
+    fn baseline(input: &str) -> (bool, usize, usize) {
+        match baseline_ladder_parser::parse_with_parser(
+            input,
+            baseline_ladder_lexer::LadderLexer::new,
+            baseline_ladder_parser::LadderParser::start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    fn optimized(input: &str) -> (bool, usize, usize) {
+        match optimized_ladder_parser::parse_with_parser(
+            input,
+            optimized_ladder_lexer::LadderLexer::new,
+            optimized_ladder_parser::LadderParser::start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    fn baseline_star(input: &str) -> (bool, usize, usize) {
+        match baseline_ladder_parser::parse_with_parser(
+            input,
+            baseline_ladder_lexer::LadderLexer::new,
+            baseline_ladder_parser::LadderParser::star_start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    fn optimized_star(input: &str) -> (bool, usize, usize) {
+        match optimized_ladder_parser::parse_with_parser(
+            input,
+            optimized_ladder_lexer::LadderLexer::new,
+            optimized_ladder_parser::LadderParser::star_start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    fn baseline_direct(input: &str) -> (bool, usize, usize) {
+        match baseline_ladder_parser::parse_with_parser(
+            input,
+            baseline_ladder_lexer::LadderLexer::new,
+            baseline_ladder_parser::LadderParser::direct_start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    fn optimized_direct(input: &str) -> (bool, usize, usize) {
+        match optimized_ladder_parser::parse_with_parser(
+            input,
+            optimized_ladder_lexer::LadderLexer::new,
+            optimized_ladder_parser::LadderParser::direct_start,
+        ) {
+            Ok(output) => {
+                let errors = output.parser.number_of_syntax_errors();
+                let index = output.parser.into_token_stream().index();
+                (true, errors, index)
+            }
+            Err(_) => (false, usize::MAX, 0),
+        }
+    }
+
+    #[test]
+    fn valid_and_invalid_inputs_match_the_unmodified_grammar() {
+        for input in [
+            "1",
+            "1 + 2 * 3",
+            "-1 + 2",
+            "!!1 || 2 && 3",
+            "1 < 2 == 3",
+            "1 ? 2 : 3 ? 4 : 5",
+            "(1 + 2) * 3",
+            "1 +",
+            "? 1 : 2",
+            "1 ? 2",
+            "1 && || 2",
+            "((1)",
+        ] {
+            assert_eq!(
+                optimized(input),
+                baseline(input),
+                "recognition or recovery diverged for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn precedence_and_right_associativity_survive_the_rewrite() {
+        let parsed = optimized_ladder_parser::parse(
+            "1 + 2 * 3",
+            optimized_ladder_lexer::LadderLexer::new,
+            optimized_ladder_parser::LadderParser::start,
+        )
+        .expect("valid arithmetic expression");
+        let start =
+            optimized_ladder_parser::StartContext::from_rule_node(
+                parsed.tree().as_rule().expect("rule root")
+            )
+                .expect("start context");
+        let expression = start.expr().expect("entry expression");
+        assert!(
+            optimized_ladder_parser::ExprCalcOperator2LabelContext::from_rule_node(
+                expression.rule_node()
+            )
+            .is_some(),
+            "addition should remain the root operator"
+        );
+        let children = expression.expr_children().collect::<Vec<_>>();
+        assert!(
+            optimized_ladder_parser::ExprCalcOperator1LabelContext::from_rule_node(
+                children[1].rule_node()
+            )
+            .is_some(),
+            "multiplication should bind inside the right operand"
+        );
+
+        let parsed = optimized_ladder_parser::parse(
+            "1 ? 2 : 3 ? 4 : 5",
+            optimized_ladder_lexer::LadderLexer::new,
+            optimized_ladder_parser::LadderParser::start,
+        )
+        .expect("valid conditional expression");
+        let start =
+            optimized_ladder_parser::StartContext::from_rule_node(
+                parsed.tree().as_rule().expect("rule root")
+            )
+                .expect("start context");
+        let expression = start.expr().expect("entry expression");
+        assert!(
+            optimized_ladder_parser::ExprExprRight6LabelContext::from_rule_node(
+                expression.rule_node()
+            )
+            .is_some(),
+            "outer conditional context"
+        );
+        let children = expression.expr_children().collect::<Vec<_>>();
+        assert!(
+            optimized_ladder_parser::ExprExprRight6LabelContext::from_rule_node(
+                children[2].rule_node()
+            )
+            .is_some(),
+            "conditional tail should remain right associative"
+        );
+    }
+
+    #[test]
+    fn lowest_star_rung_remains_repeatable_at_the_ladder_boundary() {
+        for input in [
+            "1",
+            "1 * 2 * 3",
+            "1 + 2 * 3 + 4 * 5 * 6",
+            "1 *",
+            "* 1",
+        ] {
+            assert_eq!(
+                optimized_star(input),
+                baseline_star(input),
+                "boundary star-loop behavior diverged for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn direct_base_rhs_and_binary_right_tail_match_the_original() {
+        for input in [
+            "1",
+            "1 ^ 2 ^ 3",
+            "1 ~ 2 ~ 3",
+            "1 ~ 2 ^ 3 ~ 4",
+            "1 ^",
+            "~ 1",
+        ] {
+            assert_eq!(
+                optimized_direct(input),
+                baseline_direct(input),
+                "direct/right-tail behavior diverged for {input:?}"
+            );
+        }
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn adaptive_atn_routing_generated_path_compiles() {
     let temp = temporary_directory("adaptive-atn-routing");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

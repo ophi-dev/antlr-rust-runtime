@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 
 use super::char_support::get_char_value_from_grammar_char_literal;
 use super::diagnostic::{CompilationError, Diagnostic};
+use super::frontend::{SourceId, SourceSpan};
 use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
@@ -36,12 +38,63 @@ pub(crate) struct TransformReportEntry {
     pub(crate) changed: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TransformCandidateStatus {
+    Applied,
+    Eligible,
+    Declined,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformProjection {
+    pub(crate) contexts_per_operand_before: usize,
+    pub(crate) contexts_per_operand_after: usize,
+    pub(crate) precedence_decisions_before: usize,
+    pub(crate) precedence_decisions_after: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformAlternativeMapping {
+    pub(crate) source_rule: String,
+    pub(crate) source_alternative: usize,
+    pub(crate) source_span: SourceSpan,
+    pub(crate) target_rule: String,
+    pub(crate) target_alternatives: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformLabelMapping {
+    pub(crate) source_rule: String,
+    pub(crate) source_label: String,
+    pub(crate) source_span: SourceSpan,
+    pub(crate) target_label: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformCandidateReport {
+    pub(crate) pass: TransformId,
+    pub(crate) grammar: String,
+    pub(crate) entry_rule: String,
+    pub(crate) source_span: SourceSpan,
+    pub(crate) status: TransformCandidateStatus,
+    pub(crate) reason: String,
+    pub(crate) rungs: Vec<String>,
+    pub(crate) boundary_rule: Option<String>,
+    pub(crate) projection: Option<TransformProjection>,
+    pub(crate) removed_rules: Vec<String>,
+    pub(crate) alternatives: Vec<TransformAlternativeMapping>,
+    pub(crate) labels: Vec<TransformLabelMapping>,
+    pub(crate) grouping_changes: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct TransformReport {
     pub(crate) entries: Vec<TransformReportEntry>,
+    pub(crate) candidates: Vec<TransformCandidateReport>,
 }
 
 pub(crate) struct TransformContext<'a> {
+    pub(crate) id: TransformId,
     pub(crate) analysis: &'a TransformAnalysis,
     pub(crate) report_only: bool,
 }
@@ -60,6 +113,7 @@ pub(crate) trait GrammarTransform {
         &self,
         input: &TransformContext<'_>,
         grammar: &mut TransformGrammar,
+        ids: &mut ModelIdAllocator,
         report: &mut TransformReport,
     ) -> Result<bool, Diagnostic>;
 }
@@ -93,27 +147,45 @@ impl TransformRegistry {
     pub(crate) fn run(
         &self,
         grammar: &mut TransformGrammar,
+        ids: &mut ModelIdAllocator,
+        report_only: bool,
+    ) -> Result<TransformReport, Diagnostic> {
+        if report_only {
+            let mut projected_grammar = grammar.clone();
+            let mut projected_ids = ids.clone();
+            return self.run_mutating(&mut projected_grammar, &mut projected_ids, true);
+        }
+        self.run_mutating(grammar, ids, false)
+    }
+
+    fn run_mutating(
+        &self,
+        grammar: &mut TransformGrammar,
+        ids: &mut ModelIdAllocator,
         report_only: bool,
     ) -> Result<TransformReport, Diagnostic> {
         let mut report = TransformReport::default();
         let mut analysis = TransformAnalysis::compute(&grammar.units);
         for (index, pass) in self.passes.iter().enumerate() {
+            let id = TransformId::new(index as u32);
             let before = metrics(&grammar.units);
             let changed = pass.apply(
                 &TransformContext {
+                    id,
                     analysis: &analysis,
                     report_only,
                 },
                 grammar,
+                ids,
                 &mut report,
             )?;
-            if changed && !report_only {
+            if changed {
                 validate_model(grammar)?;
                 analysis.invalidate(pass.invalidates());
                 analysis.recompute(&grammar.units);
             }
             report.entries.push(TransformReportEntry {
-                id: TransformId::new(index as u32),
+                id,
                 name: pass.name(),
                 safety: pass.safety_class(),
                 before,
@@ -146,6 +218,306 @@ fn accumulate_block(block: &Block, metrics: &mut StructuralMetrics) {
             }
         }
     }
+}
+
+pub(crate) fn render_optimization_manifest(
+    report: &TransformReport,
+    sources: &super::source::SourceSet,
+    report_only: bool,
+) -> String {
+    let mut out = String::new();
+    out.push_str("{\n  \"version\": 1,\n");
+    let _ = writeln!(out, "  \"reportOnly\": {report_only},");
+    out.push_str("  \"passes\": [");
+    for (position, entry) in report.entries.iter().enumerate() {
+        if position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    {\n");
+        let _ = writeln!(out, "      \"id\": {},", entry.id.index());
+        let _ = writeln!(out, "      \"name\": {},", json_string(entry.name));
+        let _ = writeln!(
+            out,
+            "      \"safetyClass\": {},",
+            json_string(safety_name(entry.safety))
+        );
+        let _ = writeln!(out, "      \"changed\": {},", entry.changed);
+        out.push_str("      \"metrics\": {\"before\": ");
+        write_metrics(&mut out, &entry.before);
+        out.push_str(", \"after\": ");
+        write_metrics(&mut out, &entry.after);
+        out.push_str("},\n");
+        out.push_str("      \"candidates\": [");
+        let candidates = report
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.pass == entry.id)
+            .collect::<Vec<_>>();
+        for (candidate_position, candidate) in candidates.iter().enumerate() {
+            if candidate_position > 0 {
+                out.push(',');
+            }
+            out.push_str("\n        ");
+            write_candidate(&mut out, candidate, sources);
+        }
+        if candidates.is_empty() {
+            out.push_str("]\n    }");
+        } else {
+            out.push_str("\n      ]\n    }");
+        }
+    }
+    if report.entries.is_empty() {
+        out.push_str("]\n}\n");
+    } else {
+        out.push_str("\n  ]\n}\n");
+    }
+    out
+}
+
+fn write_metrics(out: &mut String, metrics: &StructuralMetrics) {
+    let _ = write!(
+        out,
+        "{{\"rules\": {}, \"alternatives\": {}, \"elements\": {}}}",
+        metrics.rules, metrics.alternatives, metrics.elements
+    );
+}
+
+fn write_candidate(
+    out: &mut String,
+    candidate: &TransformCandidateReport,
+    sources: &super::source::SourceSet,
+) {
+    out.push_str("{\n");
+    let _ = writeln!(
+        out,
+        "          \"grammar\": {},",
+        json_string(&candidate.grammar)
+    );
+    let _ = writeln!(
+        out,
+        "          \"entryRule\": {},",
+        json_string(&candidate.entry_rule)
+    );
+    out.push_str("          \"source\": ");
+    write_source_span(out, &candidate.source_span, sources);
+    out.push_str(",\n");
+    let _ = writeln!(
+        out,
+        "          \"status\": {},",
+        json_string(candidate_status_name(candidate.status))
+    );
+    let _ = writeln!(
+        out,
+        "          \"reason\": {},",
+        json_string(&candidate.reason)
+    );
+    out.push_str("          \"rungs\": ");
+    write_string_array(out, &candidate.rungs);
+    out.push_str(",\n");
+    let _ = writeln!(
+        out,
+        "          \"boundaryRule\": {},",
+        json_optional_string(candidate.boundary_rule.as_deref())
+    );
+    out.push_str("          \"projected\": ");
+    if let Some(projection) = &candidate.projection {
+        write_projection(out, projection);
+    } else {
+        out.push_str("null");
+    }
+    out.push_str(",\n");
+    out.push_str("          \"removedRules\": [");
+    for (position, rule) in candidate.removed_rules.iter().enumerate() {
+        if position > 0 {
+            out.push_str(", ");
+        }
+        let _ = write!(
+            out,
+            "{{\"rule\": {}, \"targetRule\": {}}}",
+            json_string(rule),
+            json_string(&candidate.entry_rule)
+        );
+    }
+    out.push_str("],\n");
+    out.push_str("          \"alternatives\": [");
+    for (position, mapping) in candidate.alternatives.iter().enumerate() {
+        if position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n            ");
+        write_alternative_mapping(out, mapping, sources);
+    }
+    if candidate.alternatives.is_empty() {
+        out.push_str("],\n");
+    } else {
+        out.push_str("\n          ],\n");
+    }
+    out.push_str("          \"labelRenames\": [");
+    for (position, mapping) in candidate.labels.iter().enumerate() {
+        if position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n            ");
+        write_label_mapping(out, mapping, sources);
+    }
+    if candidate.labels.is_empty() {
+        out.push_str("],\n");
+    } else {
+        out.push_str("\n          ],\n");
+    }
+    out.push_str("          \"groupingChanges\": [");
+    for (position, rule) in candidate.grouping_changes.iter().enumerate() {
+        if position > 0 {
+            out.push_str(", ");
+        }
+        let _ = write!(
+            out,
+            "{{\"rule\": {}, \"from\": \"flat-loop\", \"to\": \"left-recursive-nesting\"}}",
+            json_string(rule)
+        );
+    }
+    out.push_str("]\n        }");
+}
+
+fn write_projection(out: &mut String, projection: &TransformProjection) {
+    let context_reduction = projection
+        .contexts_per_operand_before
+        .saturating_sub(projection.contexts_per_operand_after);
+    let decision_reduction = projection
+        .precedence_decisions_before
+        .saturating_sub(projection.precedence_decisions_after);
+    let _ = write!(
+        out,
+        "{{\"contextsPerOperand\": {{\"before\": {}, \"after\": {}, \"reduction\": {context_reduction}}}, \
+         \"precedenceDecisions\": {{\"before\": {}, \"after\": {}, \"reduction\": {decision_reduction}}}}}",
+        projection.contexts_per_operand_before,
+        projection.contexts_per_operand_after,
+        projection.precedence_decisions_before,
+        projection.precedence_decisions_after
+    );
+}
+
+fn write_alternative_mapping(
+    out: &mut String,
+    mapping: &TransformAlternativeMapping,
+    sources: &super::source::SourceSet,
+) {
+    out.push('{');
+    let _ = write!(
+        out,
+        "\"sourceRule\": {}, \"sourceAlternative\": {}, \"source\": ",
+        json_string(&mapping.source_rule),
+        mapping.source_alternative
+    );
+    write_source_span(out, &mapping.source_span, sources);
+    let _ = write!(
+        out,
+        ", \"targetRule\": {}, \"targetAltLabels\": ",
+        json_string(&mapping.target_rule)
+    );
+    write_string_array(out, &mapping.target_alternatives);
+    out.push('}');
+}
+
+fn write_label_mapping(
+    out: &mut String,
+    mapping: &TransformLabelMapping,
+    sources: &super::source::SourceSet,
+) {
+    out.push('{');
+    let _ = write!(
+        out,
+        "\"sourceRule\": {}, \"sourceLabel\": {}, \"source\": ",
+        json_string(&mapping.source_rule),
+        json_string(&mapping.source_label)
+    );
+    write_source_span(out, &mapping.source_span, sources);
+    let _ = write!(
+        out,
+        ", \"targetLabel\": {}",
+        json_string(&mapping.target_label)
+    );
+    out.push('}');
+}
+
+fn write_source_span(out: &mut String, span: &SourceSpan, sources: &super::source::SourceSet) {
+    let path = sources
+        .logical_path(span.source)
+        .map(|path| path.to_string_lossy().into_owned());
+    let start = sources.line_column(span.source, span.bytes.start);
+    let end = sources.line_column(span.source, span.bytes.end);
+    out.push('{');
+    let _ = write!(
+        out,
+        "\"path\": {}, \"byteStart\": {}, \"byteEnd\": {}, \"start\": ",
+        json_optional_string(path.as_deref()),
+        span.bytes.start,
+        span.bytes.end
+    );
+    write_line_column(out, start);
+    out.push_str(", \"end\": ");
+    write_line_column(out, end);
+    out.push('}');
+}
+
+fn write_line_column(out: &mut String, coordinate: Option<(usize, usize)>) {
+    if let Some((line, column)) = coordinate {
+        let _ = write!(out, "{{\"line\": {line}, \"column\": {column}}}");
+    } else {
+        out.push_str("null");
+    }
+}
+
+fn write_string_array(out: &mut String, values: &[String]) {
+    out.push('[');
+    for (position, value) in values.iter().enumerate() {
+        if position > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&json_string(value));
+    }
+    out.push(']');
+}
+
+const fn safety_name(safety: SafetyClass) -> &'static str {
+    match safety {
+        SafetyClass::TreeAndApiPreserving => "tree-and-api-preserving",
+        SafetyClass::RecognitionPreserving => "recognition-preserving",
+    }
+}
+
+const fn candidate_status_name(status: TransformCandidateStatus) -> &'static str {
+    match status {
+        TransformCandidateStatus::Applied => "applied",
+        TransformCandidateStatus::Eligible => "eligible",
+        TransformCandidateStatus::Declined => "declined",
+    }
+}
+
+fn json_optional_string(value: Option<&str>) -> String {
+    value.map_or_else(|| "null".to_owned(), json_string)
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if control <= '\u{1f}' => {
+                let _ = write!(out, "\\u{:04x}", control as u32);
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1409,7 +1781,7 @@ pub(crate) fn validate_model(grammar: &TransformGrammar) -> Result<(), Diagnosti
         .find(|node| grammar.provenance.origins(**node).is_empty())
     {
         let span = grammar.units.first().map_or_else(
-            || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),
+            || SourceSpan::empty(SourceId::new(0)),
             |unit| unit.span.clone(),
         );
         return Err(Diagnostic::error(
@@ -1455,7 +1827,7 @@ fn collect_block_nodes(block: &Block, nodes: &mut BTreeSet<ModelNodeId>) -> Resu
 fn insert_model_node(
     nodes: &mut BTreeSet<ModelNodeId>,
     node: ModelNodeId,
-    span: super::frontend::SourceSpan,
+    span: SourceSpan,
 ) -> Result<(), Diagnostic> {
     if nodes.insert(node) {
         Ok(())
@@ -1470,7 +1842,7 @@ fn insert_model_node(
 
 pub(crate) fn render_unmodified_sources(
     sources: &super::source::SourceSet,
-) -> BTreeMap<super::frontend::SourceId, String> {
+) -> BTreeMap<SourceId, String> {
     sources
         .iter()
         .map(|source| (source.id(), source.text().to_owned()))
@@ -1790,6 +2162,7 @@ right : 'right';
                 &self,
                 _input: &TransformContext<'_>,
                 grammar: &mut TransformGrammar,
+                _ids: &mut ModelIdAllocator,
                 _report: &mut TransformReport,
             ) -> Result<bool, Diagnostic> {
                 grammar.units[0].rules[0].name = "renamed".to_owned();
@@ -1815,6 +2188,7 @@ right : 'right';
                 &self,
                 input: &TransformContext<'_>,
                 _grammar: &mut TransformGrammar,
+                _ids: &mut ModelIdAllocator,
                 _report: &mut TransformReport,
             ) -> Result<bool, Diagnostic> {
                 assert!(input.analysis.rules_by_name.contains_key("renamed"));
@@ -1834,7 +2208,7 @@ right : 'right';
         registry.push(Rename);
         registry.push(Observe);
         let report = registry
-            .run(&mut integrated.grammar, false)
+            .run(&mut integrated.grammar, &mut integrated.ids, false)
             .expect("passes should run");
         assert_eq!(report.entries.len(), 2);
         assert!(report.entries[0].changed);

@@ -655,6 +655,43 @@ parser runs prediction-free. Rego adds two fixed-LL(2) tables (`regoElse`,
 and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
 10 genuinely ambiguous decisions staying adaptive.
 
+### Precedence-ladder optimization
+
+`--optimize-precedence-ladders` is an explicit, off-by-default source
+optimization for grammars that express operator precedence as a linear chain
+of parser rules. It recognizes pure delegation, binary star loops, direct
+left recursion, right-associative optional tails, and prefix-unary levels,
+then combines a proven chain into one left-recursive rule before ATN
+construction.
+
+This pass is **recognition preserving**, not tree/API preserving. It removes
+intermediate rule methods and context/listener/visitor types, changes tree
+depth, and turns flat star-loop children into nested left-recursive operator
+contexts. Existing consumers keyed to those surfaces should not enable it.
+Actions, predicates, rule attributes, unsupported shapes, overlapping
+same-fixity operator sets, and externally referenced middle rules are declined
+or treated as boundaries.
+
+Every applied run writes `optimizations.json` beside `semantics.json` and
+`decisions.json`. The manifest records the safety class, original source
+spans, removed-rule and alternative-label migrations, grouping changes, and
+projected context/decision reductions. Inspect the same deterministic report
+without generating or changing a parser with:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --report-precedence-ladders \
+  --out-dir target/grammar-report
+```
+
+Report mode writes only `optimizations.json`. Apply a reviewed candidate with:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --optimize-precedence-ladders \
+  --out-dir src/generated
+```
+
 ### Binary and Byte-Oriented Parsing
 
 ANTLR grammars can parse binary formats, not just text. The convention the
