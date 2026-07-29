@@ -423,10 +423,25 @@ parser action events are offered to `SemanticHooks::action` after the committed
 parse path is selected. Predicate hooks may run speculatively during
 prediction, so they must be replay-safe.
 
-For bare helper-call predicates, generated parsers also emit a typed hook
-adapter (`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable
-manifest coordinates to named Rust methods. Lexer callers can use
-`LexerSemCtx` with `atn::lexer::next_token_with_semantic_hooks` or the
+For helper-call predicates written as `helper()`, `this.helper()`, or
+`self.helper()`, generated parsers also emit a typed hook adapter
+(`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable manifest
+coordinates to named Rust methods. A `[[helper]]` pattern can opt into one
+additional receiver spelling with `receiver = "..."`. For example, an
+antlr4rust grammar using its `recog.helper()` convention can retain that source
+spelling during migration:
+
+```toml
+[[helper]]
+kind = "parser-predicate"
+name = "helper"
+receiver = "recog"
+returns = "bool"
+lower = "hook"
+```
+
+Lexer callers can use `LexerSemCtx` with
+`atn::lexer::next_token_with_semantic_hooks` or the
 compiled-DFA variant to route lexer predicates/actions through the same
 `SemanticHooks` trait. On the committed action path, `LexerSemCtx` exposes the
 pending token type/channel, character lookahead and consumption, and mode

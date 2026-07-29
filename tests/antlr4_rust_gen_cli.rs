@@ -2022,6 +2022,142 @@ fn imported_parser_predicate_generates_typed_hook_from_structural_body() {
     );
 }
 
+/// Issue #241: antlr4rust grammars use `recog` as the parser-predicate receiver.
+/// Supporting that convention keeps migrations source-compatible by routing it
+/// through the same typed helper hook as bare, `this.`, and `self.` calls.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn recog_receiver_parser_predicate_routes_to_typed_hook() {
+    let temp = temporary_directory("recog-parser-hook");
+    let grammar = temp.path().join("RecogPredicate.g4");
+    let patterns = temp.path().join("patterns.toml");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        r#"grammar RecogPredicate;
+
+options {
+    superClass = ParserBase;
+}
+
+shl
+    : {recog.IsOk()}? LT LT EOF
+    ;
+
+LT: '<';
+WS: [ \t\r\n]+ -> skip;
+"#,
+    )
+    .expect("grammar should be writable");
+    fs::write(
+        &patterns,
+        r#"version = 1
+
+[[helper]]
+kind = "parser-predicate"
+name = "IsOk"
+receiver = "recog"
+returns = "bool"
+lower = "hook"
+"#,
+    )
+    .expect("semantic patterns should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--sem-patterns"),
+        patterns.as_os_str(),
+        OsStr::new("--option-hook"),
+        OsStr::new("superClass=ParserBase"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let manifest =
+        fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    let predicate = manifest
+        .lines()
+        .find(|line| line.contains("\"kind\": \"parser-predicate\""))
+        .expect("parser predicate should be inventoried");
+    insta::assert_snapshot!("recog_receiver_semantics_manifest", predicate);
+
+    let parser = fs::read_to_string(out.join("recog_predicate_parser.rs"))
+        .expect("parser should be emitted");
+    let (_, adapter) = parser
+        .split_once("pub trait RecogPredicateParserHooks")
+        .expect("typed hook adapter should be emitted");
+    let (adapter, _) = adapter
+        .split_once(
+            "\n\n#[derive(Clone, Debug, Default)]\n\
+             #[allow(non_snake_case, dead_code)]\n\
+             pub struct __RuleAttrs",
+        )
+        .expect("generated rule attributes should follow the typed hook adapter");
+    insta::assert_snapshot!(
+        "recog_receiver_typed_hook_adapter",
+        format!("pub trait RecogPredicateParserHooks{adapter}")
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod recog_receiver_tests {
+    use super::recog_predicate_lexer::RecogPredicateLexer;
+    use super::recog_predicate_parser::{
+        RecogPredicateParser, RecogPredicateParserHooks,
+    };
+    use antlr4_runtime::{
+        CommonTokenStream, InputStream, Parser as _, ParserSemCtx, TokenSource,
+    };
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    struct Hooks {
+        calls: Rc<Cell<usize>>,
+    }
+
+    impl RecogPredicateParserHooks for Hooks {
+        fn is_ok<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>) -> bool
+        where
+            L: TokenSource,
+        {
+            self.calls.set(self.calls.get() + 1);
+            true
+        }
+    }
+
+    #[test]
+    fn typed_hook_accepts_the_predicated_alternative() {
+        let calls = Rc::new(Cell::new(0));
+        let lexer = RecogPredicateLexer::new(InputStream::new("<<"));
+        let mut parser = RecogPredicateParser::with_typed_hooks(
+            CommonTokenStream::new(lexer),
+            Hooks {
+                calls: Rc::clone(&calls),
+            },
+        );
+        let _ = parser.shl().expect("predicated rule should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert!(calls.get() > 0, "typed predicate hook was not invoked");
+    }
+}
+"####;
+
+    assert_generated_project(
+        temp.path(),
+        &["recog_predicate_lexer.rs", "recog_predicate_parser.rs"],
+        test_source,
+    );
+}
+
 #[test]
 fn imported_lexer_action_generates_typed_hook_from_structural_body() {
     let temp = temporary_directory("imported-lexer-hook");

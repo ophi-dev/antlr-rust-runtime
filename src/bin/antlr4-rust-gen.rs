@@ -549,6 +549,9 @@ struct SemHelperRule {
     /// Explicit helper kind. A missing kind preserves the pre-v1 wildcard
     /// behavior for lexer and parser predicates.
     kind: Option<SemanticsKind>,
+    /// Additional receiver spelling accepted for this helper. Bare calls and
+    /// the established `this.` / `self.` forms remain available by default.
+    receiver: Option<String>,
     name: String,
     arguments: Vec<SemanticLiteralKind>,
     lower: String,
@@ -603,7 +606,7 @@ impl SemPatternFile {
                 .iter()
                 .filter(|helper| semantic_helper_kind_matches(helper, kind))
                 .filter_map(|helper| {
-                    parse_semantic_helper_call(body, kind)
+                    parse_semantic_helper_call(body, kind, helper.receiver.as_deref())
                         .filter(|call| helper_call_matches(call, helper))
                         .map(|_| helper)
                 })
@@ -680,16 +683,17 @@ impl SemPatternFile {
         kind: SemanticsKind,
         body: &str,
     ) -> io::Result<Option<SemanticHelperCall>> {
-        let Some(call) = parse_semantic_helper_call(body, kind) else {
-            return Ok(None);
-        };
         let matches = self
             .helpers
             .iter()
             .filter(|helper| {
                 semantic_helper_kind_matches(helper, kind) && helper.lower.trim() == "hook"
             })
-            .filter(|helper| helper_call_matches(&call, helper))
+            .filter_map(|helper| {
+                parse_semantic_helper_call(body, kind, helper.receiver.as_deref())
+                    .filter(|call| helper_call_matches(call, helper))
+                    .map(|call| (helper, call))
+            })
             .collect::<Vec<_>>();
         if matches.len() > 1 {
             return Err(io::Error::new(
@@ -698,13 +702,13 @@ impl SemPatternFile {
                     "ambiguous semantic helper patterns for {body:?}: {}",
                     matches
                         .iter()
-                        .map(|helper| helper.name.as_str())
+                        .map(|(helper, _)| helper.name.as_str())
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
             ));
         }
-        Ok(matches.first().map(|_| call))
+        Ok(matches.into_iter().next().map(|(_, call)| call))
     }
 
     fn coordinate_disposition(
@@ -824,7 +828,11 @@ fn helper_call_matches(call: &SemanticHelperCall, helper: &SemHelperRule) -> boo
             })
 }
 
-fn parse_semantic_helper_call(body: &str, kind: SemanticsKind) -> Option<SemanticHelperCall> {
+fn parse_semantic_helper_call(
+    body: &str,
+    kind: SemanticsKind,
+    receiver: Option<&str>,
+) -> Option<SemanticHelperCall> {
     let mut body = body.trim();
     if matches!(
         kind,
@@ -842,6 +850,7 @@ fn parse_semantic_helper_call(body: &str, kind: SemanticsKind) -> Option<Semanti
     body = body
         .strip_prefix("this.")
         .or_else(|| body.strip_prefix("self."))
+        .or_else(|| receiver.and_then(|receiver| body.strip_prefix(receiver)?.strip_prefix('.')))
         .unwrap_or(body);
     let open = body.find('(')?;
     let name = body[..open].trim();
@@ -1944,6 +1953,21 @@ fn flush_pattern_section(
                 .remove("kind")
                 .map(|value| parse_coordinate_kind(&value))
                 .transpose()?;
+            let receiver = fields
+                .remove("receiver")
+                .map(|receiver| {
+                    if is_semantic_helper_identifier(&receiver) {
+                        Ok(receiver)
+                    } else {
+                        Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "semantic helper receiver must be an identifier, got {receiver:?}"
+                            ),
+                        ))
+                    }
+                })
+                .transpose()?;
             let arguments = fields
                 .remove("arguments")
                 .map_or_else(|| Ok(Vec::new()), |value| parse_helper_arguments(&value))?;
@@ -1973,6 +1997,7 @@ fn flush_pattern_section(
             }
             file.helpers.push(SemHelperRule {
                 kind,
+                receiver,
                 name: take_required_field(fields, "name")?,
                 arguments,
                 lower: take_required_field(fields, "lower")?,
@@ -14088,7 +14113,10 @@ fn push_typed_hook_mapping(
     body: &str,
     mappings: &mut Vec<TypedHookMapping>,
 ) -> io::Result<()> {
-    let helper_call = parse_semantic_helper_call(body, SemanticsKind::ParserPredicate);
+    let helper_call = match parse_semantic_helper_call(body, SemanticsKind::ParserPredicate, None) {
+        Some(call) => Some(call),
+        None => patterns.hook_helper_call(SemanticsKind::ParserPredicate, body)?,
+    };
     let forced_hook = patterns
         .coordinate_predicate_template(
             SemanticsKind::ParserPredicate,
@@ -19431,10 +19459,39 @@ lower = "pop_member(depths)"
 
     #[test]
     fn semantic_helper_calls_capture_kind_negation_and_literals() {
+        let expected = Some(SemanticHelperCall {
+            name: "isTypeName".to_owned(),
+            arguments: Vec::new(),
+            negated: false,
+        });
+        for body in ["isTypeName()", "this.isTypeName()", "self.isTypeName()"] {
+            assert_eq!(
+                parse_semantic_helper_call(body, SemanticsKind::ParserPredicate, None),
+                expected,
+                "receiver form {body:?} should parse"
+            );
+        }
+        assert!(
+            parse_semantic_helper_call(
+                "recognizer.isTypeName()",
+                SemanticsKind::ParserPredicate,
+                None,
+            )
+            .is_none()
+        );
+        assert_eq!(
+            parse_semantic_helper_call(
+                "recognizer.isTypeName()",
+                SemanticsKind::ParserPredicate,
+                Some("recognizer"),
+            ),
+            expected
+        );
         assert_eq!(
             parse_semantic_helper_call(
                 r#"!this.matches("marker", true, -2)"#,
                 SemanticsKind::LexerPredicate,
+                None,
             ),
             Some(SemanticHelperCall {
                 name: "matches".to_owned(),
@@ -19447,7 +19504,7 @@ lower = "pop_member(depths)"
             })
         );
         assert_eq!(
-            parse_semantic_helper_call("this.HandleAction();", SemanticsKind::LexerAction,),
+            parse_semantic_helper_call("this.HandleAction();", SemanticsKind::LexerAction, None,),
             Some(SemanticHelperCall {
                 name: "HandleAction".to_owned(),
                 arguments: Vec::new(),
@@ -19455,13 +19512,18 @@ lower = "pop_member(depths)"
             })
         );
         assert!(
-            parse_semantic_helper_call("this.n(dynamicValue)", SemanticsKind::ParserPredicate,)
-                .is_none()
+            parse_semantic_helper_call(
+                "this.n(dynamicValue)",
+                SemanticsKind::ParserPredicate,
+                None,
+            )
+            .is_none()
         );
         assert_eq!(
             parse_semantic_helper_call(
                 r"this.n('line\n\'quoted\'')",
                 SemanticsKind::ParserPredicate,
+                None,
             )
             .expect("single-quoted literal parses")
             .arguments,
@@ -19472,7 +19534,7 @@ lower = "pop_member(depths)"
     #[test]
     fn semantic_helper_patterns_are_scoped_by_kind_and_signature() {
         let patterns = parse_sem_patterns(
-            "version = 1\n[[helper]]\nkind = \"lexer-action\"\nname = \"handle\"\nreturns = \"unit\"\nlower = \"hook\"\n[[helper]]\nname = \"n\"\narguments = \"string\"\nreturns = \"bool\"\nlower = \"hook\"\n",
+            "version = 1\n[[helper]]\nkind = \"lexer-action\"\nname = \"handle\"\nreturns = \"unit\"\nlower = \"hook\"\n[[helper]]\nname = \"n\"\nreceiver = \"recognizer\"\narguments = \"string\"\nreturns = \"bool\"\nlower = \"hook\"\n",
         )
         .expect("pattern file parses");
         assert!(
@@ -19503,9 +19565,33 @@ lower = "pop_member(depths)"
         );
         assert!(
             patterns
+                .hook_helper_call(SemanticsKind::ParserPredicate, r#"recognizer.n("value")"#,)
+                .expect("matching cannot fail")
+                .is_some()
+        );
+        assert!(
+            patterns
+                .hook_helper_call(SemanticsKind::ParserPredicate, r#"other.n("value")"#)
+                .expect("matching cannot fail")
+                .is_none()
+        );
+        assert!(
+            patterns
                 .hook_helper_call(SemanticsKind::LexerAction, r#"this.n("value");"#)
                 .expect("matching cannot fail")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn semantic_helper_patterns_reject_invalid_receiver_aliases() {
+        let error = parse_sem_patterns(
+            "version = 1\n[[helper]]\nname = \"n\"\nreceiver = \"recognizer.state\"\nreturns = \"bool\"\nlower = \"hook\"\n",
+        )
+        .expect_err("receiver aliases must be identifiers");
+        insta::assert_snapshot!(
+            error.to_string(),
+            @r#"semantic helper receiver must be an identifier, got "recognizer.state""#
         );
     }
 
