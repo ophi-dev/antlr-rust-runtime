@@ -570,6 +570,87 @@ mod precedence_ladder_differential {
 }
 
 #[test]
+fn unoptimized_regeneration_removes_stale_precedence_manifest() {
+    let temp = temporary_directory("precedence-ladder-stale-manifest");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4");
+    let out = temp.path().join("generated");
+
+    let optimized = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--optimize-precedence-ladders"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        optimized.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&optimized.stdout),
+        utf8(&optimized.stderr)
+    );
+    assert!(out.join("optimizations.json").is_file());
+
+    let baseline = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        baseline.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&baseline.stdout),
+        utf8(&baseline.stderr)
+    );
+    assert!(!out.join("optimizations.json").exists());
+    let parser = fs::read_to_string(out.join("ladder_parser.rs"))
+        .expect("unoptimized parser should be emitted");
+    assert!(parser.contains("pub fn conditional_or("));
+}
+
+#[test]
+fn embedded_actions_keep_potentially_referenced_ladder_rules() {
+    let temp = temporary_directory("precedence-ladder-embedded-actions");
+    let grammar = temp.path().join("ActionLadder.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar ActionLadder;\n\
+         start: high { let _ = self.low(); } EOF;\n\
+         high: low ('+' low)*;\n\
+         low: atom ('*' atom)*;\n\
+         atom: INT;\n\
+         INT: [0-9]+;\n\
+         WS: [ \\t\\r\\n]+ -> skip;\n",
+    )
+    .expect("embedded-action grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--optimize-precedence-ladders"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(out.join("action_ladder_parser.rs")).expect("parser should be emitted");
+    assert!(parser.contains("pub fn low("));
+    let manifest = fs::read_to_string(out.join("optimizations.json"))
+        .expect("optimization manifest should be emitted");
+    assert!(manifest.contains("\"changed\": false"), "{manifest}");
+    assert_generated_modules_compile(
+        temp.path(),
+        &["action_ladder_lexer.rs", "action_ladder_parser.rs"],
+    );
+}
+
+#[test]
 fn adaptive_atn_routing_generated_path_compiles() {
     let temp = temporary_directory("adaptive-atn-routing");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -219,8 +219,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     if let Some(manifest) = optimization_manifest {
         fs::write(args.out_dir.join("optimizations.json"), manifest)?;
+    } else {
+        remove_file_if_present(&args.out_dir.join("optimizations.json"))?;
     }
     Ok(())
+}
+
+fn remove_file_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn insert_rendered_module(
