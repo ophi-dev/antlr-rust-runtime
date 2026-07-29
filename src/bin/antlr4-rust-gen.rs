@@ -2370,7 +2370,7 @@ Options:
                                    into static dispatch tables (off by default; every
                                    remaining decision keeps adaptive prediction)
   --optimize-precedence-ladders    Collapse proven linear precedence ladders (changes tree/API)
-  --report-precedence-ladders      Dry-run that pass and emit only optimizations.json
+  --report-precedence-ladders      Dry-run the pass and emit only optimizations.json
   -V, --version                    Print version
   -h, --help                       Print this help"
         .to_owned()

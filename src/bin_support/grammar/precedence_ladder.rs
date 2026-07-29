@@ -875,6 +875,7 @@ struct OutputAlternative {
     source: Alternative,
     elements: Vec<Element>,
     right_associative: bool,
+    tighter_operand: Option<usize>,
     label_hint: String,
 }
 
@@ -892,6 +893,7 @@ fn apply_plan(
         .map(|rung| rung.rule.name.clone())
         .collect::<BTreeSet<_>>();
     let mut outputs = output_alternatives(&plan);
+    set_tighter_operand_precedences(&mut outputs, &included_names);
     let mut label_allocator = AlternativeLabelAllocator::new(unit, &plan, &hub.name);
     let mut cloner = TransformCloner {
         ids,
@@ -997,6 +999,7 @@ fn output_alternatives(plan: &LadderPlan) -> Vec<OutputAlternative> {
         source: base.clone(),
         elements: vec![base.elements[0].clone()],
         right_associative: false,
+        tighter_operand: None,
         label_hint: "base".to_owned(),
     }];
     for rung in plan.rungs.iter().rev() {
@@ -1020,7 +1023,7 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
             call.name.clone_from(&rung.rule.name);
             let mut elements = vec![leading];
             elements.extend(loop_block.alternatives[0].elements.clone());
-            outputs.push(output_from_source(rung, 0, source, elements, false, "loop"));
+            outputs.push(output_from_source(rung, 0, elements, false, None, "loop"));
         }
         RungKind::Direct {
             recursive_alternatives,
@@ -1030,9 +1033,9 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
                 outputs.push(output_from_source(
                     rung,
                     *index,
-                    source,
                     source.elements.clone(),
                     association_is_right(source),
+                    None,
                     "operator",
                 ));
             }
@@ -1044,7 +1047,15 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
             };
             let mut elements = vec![source.elements[0].clone()];
             elements.extend(tail.alternatives[0].elements.clone());
-            outputs.push(output_from_source(rung, 0, source, elements, true, "right"));
+            let tighter_operand = (tail.alternatives[0].elements.len() == 4).then_some(2);
+            outputs.push(output_from_source(
+                rung,
+                0,
+                elements,
+                true,
+                tighter_operand,
+                "right",
+            ));
         }
         RungKind::Prefix {
             prefix_alternatives,
@@ -1054,9 +1065,9 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
                 outputs.push(output_from_source(
                     rung,
                     *index,
-                    source,
                     source.elements.clone(),
                     false,
+                    None,
                     "prefix",
                 ));
             }
@@ -1067,11 +1078,12 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
 fn output_from_source(
     rung: &Rung,
     source_alternative: usize,
-    source: &Alternative,
     elements: Vec<Element>,
     right_associative: bool,
+    tighter_operand: Option<usize>,
     label_hint: &str,
 ) -> OutputAlternative {
+    let source = &rung.rule.block.alternatives[source_alternative];
     OutputAlternative {
         source_rule: rung.rule.id,
         source_rule_name: rung.rule.name.clone(),
@@ -1079,7 +1091,32 @@ fn output_from_source(
         source: source.clone(),
         elements,
         right_associative,
+        tighter_operand,
         label_hint: label_hint.to_owned(),
+    }
+}
+
+fn set_tighter_operand_precedences(
+    outputs: &mut [OutputAlternative],
+    included_names: &BTreeSet<String>,
+) {
+    let alternative_count = outputs.len();
+    for (index, output) in outputs.iter_mut().enumerate() {
+        let Some(element_index) = output.tighter_operand else {
+            continue;
+        };
+        let ElementKind::RuleCall(call) = &mut output.elements[element_index].kind else {
+            unreachable!("a ternary middle operand is a rule call");
+        };
+        if included_names.contains(&call.name) {
+            let operator_precedence = u32::try_from(alternative_count - index)
+                .expect("precedence ladder alternative count exceeds u32");
+            call.precedence = Some(
+                operator_precedence
+                    .checked_add(1)
+                    .expect("precedence ladder precedence overflow"),
+            );
+        }
     }
 }
 
@@ -1115,7 +1152,8 @@ fn replace_ladder_calls(elements: &mut [Element], names: &BTreeSet<String>, hub:
     for element in elements {
         match &mut element.kind {
             ElementKind::RuleCall(call) if names.contains(&call.name) => {
-                call.name.clone_from(&hub.to_owned());
+                call.name.clear();
+                call.name.push_str(hub);
             }
             ElementKind::Block(block) => {
                 for alternative in &mut block.alternatives {
@@ -1549,6 +1587,21 @@ member : INT ;
             report.candidates[0].grouping_changes,
             ["conditionalOr", "conditionalAnd"]
         );
+        let ternary = grammar.units[0].rules[0]
+            .block
+            .alternatives
+            .iter()
+            .find(|alternative| association_is_right(alternative))
+            .expect("collapsed ternary alternative");
+        let recursive_calls = ternary
+            .elements
+            .iter()
+            .filter_map(|element| match &element.kind {
+                ElementKind::RuleCall(call) if call.name == "expr" => Some(call.precedence),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(recursive_calls, [None, Some(2), None]);
 
         let second = registry
             .run(&mut grammar, &mut ids, false)

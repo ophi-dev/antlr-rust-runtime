@@ -286,6 +286,7 @@ fn positional_lexer_root_emits_rust_and_manifest() {
     assert!(manifest.contains("\"kind\": \"lexer\""), "{manifest}");
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn precedence_ladder_optimization_is_explicit_auditable_and_recognition_preserving() {
     let temp = temporary_directory("precedence-ladder");
@@ -332,24 +333,8 @@ fn precedence_ladder_optimization_is_explicit_auditable_and_recognition_preservi
 
     let manifest = fs::read_to_string(optimized.join("optimizations.json"))
         .expect("applied optimization manifest should be emitted");
-    for expected in [
-        "\"safetyClass\": \"recognition-preserving\"",
-        "\"status\": \"applied\"",
-        "\"source\": {\"path\":",
-        "\"byteStart\":",
-        "\"rungs\": [\"expr\", \"conditionalOr\", \"conditionalAnd\", \"relation\", \"calc\", \"unary\"]",
-        "\"contextsPerOperand\": {\"before\": 7, \"after\": 2, \"reduction\": 5}",
-        "\"precedenceDecisions\": {\"before\": 6, \"after\": 1, \"reduction\": 5}",
-        "{\"rule\": \"conditionalOr\", \"targetRule\": \"expr\"}",
-        "\"sourceAlternative\": 3",
-        "\"targetAltLabels\": [\"Negate\"]",
-        "\"from\": \"flat-loop\", \"to\": \"left-recursive-nesting\"",
-    ] {
-        assert!(
-            manifest.contains(expected),
-            "missing {expected}: {manifest}"
-        );
-    }
+    let stable_manifest = manifest.replace(env!("CARGO_MANIFEST_DIR"), "$CARGO_MANIFEST_DIR");
+    insta::assert_snapshot!("precedence_ladder_optimization_manifest", stable_manifest);
     let dry_run_manifest = fs::read_to_string(report.join("optimizations.json"))
         .expect("dry-run optimization manifest should be emitted");
     assert!(dry_run_manifest.contains("\"reportOnly\": true"));
@@ -405,95 +390,61 @@ mod precedence_ladder_differential {
     };
     use antlr4_runtime::{FromRuleNode, IntStream as _, Parser as _};
 
-    fn baseline(input: &str) -> (bool, usize, usize) {
-        match baseline_ladder_parser::parse_with_parser(
-            input,
-            baseline_ladder_lexer::LadderLexer::new,
-            baseline_ladder_parser::LadderParser::start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
+    macro_rules! parse_result {
+        ($name:ident, $lexer:ident, $parser:ident, $entry:ident) => {
+            fn $name(input: &str) -> (bool, usize, usize) {
+                match $parser::parse_with_parser(
+                    input,
+                    $lexer::LadderLexer::new,
+                    $parser::LadderParser::$entry,
+                ) {
+                    Ok(output) => {
+                        let errors = output.parser.number_of_syntax_errors();
+                        let index = output.parser.into_token_stream().index();
+                        (true, errors, index)
+                    }
+                    Err(_) => (false, usize::MAX, 0),
+                }
             }
-            Err(_) => (false, usize::MAX, 0),
-        }
+        };
     }
 
-    fn optimized(input: &str) -> (bool, usize, usize) {
-        match optimized_ladder_parser::parse_with_parser(
-            input,
-            optimized_ladder_lexer::LadderLexer::new,
-            optimized_ladder_parser::LadderParser::start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
-            }
-            Err(_) => (false, usize::MAX, 0),
-        }
-    }
-
-    fn baseline_star(input: &str) -> (bool, usize, usize) {
-        match baseline_ladder_parser::parse_with_parser(
-            input,
-            baseline_ladder_lexer::LadderLexer::new,
-            baseline_ladder_parser::LadderParser::star_start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
-            }
-            Err(_) => (false, usize::MAX, 0),
-        }
-    }
-
-    fn optimized_star(input: &str) -> (bool, usize, usize) {
-        match optimized_ladder_parser::parse_with_parser(
-            input,
-            optimized_ladder_lexer::LadderLexer::new,
-            optimized_ladder_parser::LadderParser::star_start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
-            }
-            Err(_) => (false, usize::MAX, 0),
-        }
-    }
-
-    fn baseline_direct(input: &str) -> (bool, usize, usize) {
-        match baseline_ladder_parser::parse_with_parser(
-            input,
-            baseline_ladder_lexer::LadderLexer::new,
-            baseline_ladder_parser::LadderParser::direct_start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
-            }
-            Err(_) => (false, usize::MAX, 0),
-        }
-    }
-
-    fn optimized_direct(input: &str) -> (bool, usize, usize) {
-        match optimized_ladder_parser::parse_with_parser(
-            input,
-            optimized_ladder_lexer::LadderLexer::new,
-            optimized_ladder_parser::LadderParser::direct_start,
-        ) {
-            Ok(output) => {
-                let errors = output.parser.number_of_syntax_errors();
-                let index = output.parser.into_token_stream().index();
-                (true, errors, index)
-            }
-            Err(_) => (false, usize::MAX, 0),
-        }
-    }
+    parse_result!(
+        baseline,
+        baseline_ladder_lexer,
+        baseline_ladder_parser,
+        start
+    );
+    parse_result!(
+        optimized,
+        optimized_ladder_lexer,
+        optimized_ladder_parser,
+        start
+    );
+    parse_result!(
+        baseline_star,
+        baseline_ladder_lexer,
+        baseline_ladder_parser,
+        star_start
+    );
+    parse_result!(
+        optimized_star,
+        optimized_ladder_lexer,
+        optimized_ladder_parser,
+        star_start
+    );
+    parse_result!(
+        baseline_direct,
+        baseline_ladder_lexer,
+        baseline_ladder_parser,
+        direct_start
+    );
+    parse_result!(
+        optimized_direct,
+        optimized_ladder_lexer,
+        optimized_ladder_parser,
+        direct_start
+    );
 
     #[test]
     fn valid_and_invalid_inputs_match_the_unmodified_grammar() {
@@ -504,6 +455,7 @@ mod precedence_ladder_differential {
             "!!1 || 2 && 3",
             "1 < 2 == 3",
             "1 ? 2 : 3 ? 4 : 5",
+            "1 ? 2 ? 3 : 4 : 5",
             "(1 + 2) * 3",
             "1 +",
             "? 1 : 2",
