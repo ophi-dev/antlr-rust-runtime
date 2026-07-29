@@ -140,6 +140,10 @@ impl std::fmt::Debug for TransformRegistry {
 }
 
 impl TransformRegistry {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.passes.is_empty()
+    }
+
     pub(crate) fn push(&mut self, pass: impl GrammarTransform + 'static) {
         self.passes.push(Box::new(pass));
     }

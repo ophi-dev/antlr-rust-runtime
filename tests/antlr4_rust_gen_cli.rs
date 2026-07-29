@@ -390,23 +390,63 @@ mod precedence_ladder_differential {
     };
     use antlr4_runtime::{FromRuleNode, IntStream as _, Parser as _};
 
+    #[derive(Debug)]
+    struct ParseOutcome {
+        completed: bool,
+        syntax_errors: usize,
+        token_index: usize,
+    }
+
+    impl ParseOutcome {
+        fn accepted(&self) -> bool {
+            self.completed && self.syntax_errors == 0
+        }
+    }
+
     macro_rules! parse_result {
         ($name:ident, $lexer:ident, $parser:ident, $entry:ident) => {
-            fn $name(input: &str) -> (bool, usize, usize) {
+            fn $name(input: &str) -> ParseOutcome {
                 match $parser::parse_with_parser(
                     input,
                     $lexer::LadderLexer::new,
                     $parser::LadderParser::$entry,
                 ) {
                     Ok(output) => {
-                        let errors = output.parser.number_of_syntax_errors();
-                        let index = output.parser.into_token_stream().index();
-                        (true, errors, index)
+                        let syntax_errors = output.parser.number_of_syntax_errors();
+                        let token_index = output.parser.into_token_stream().index();
+                        ParseOutcome {
+                            completed: true,
+                            syntax_errors,
+                            token_index,
+                        }
                     }
-                    Err(_) => (false, usize::MAX, 0),
+                    Err(_) => ParseOutcome {
+                        completed: false,
+                        syntax_errors: usize::MAX,
+                        token_index: 0,
+                    },
                 }
             }
         };
+    }
+
+    fn assert_same_recognition(
+        input: &str,
+        baseline: ParseOutcome,
+        optimized: ParseOutcome,
+    ) {
+        assert_eq!(
+            optimized.accepted(),
+            baseline.accepted(),
+            "recognition diverged for {input:?}: baseline={baseline:?}, optimized={optimized:?}"
+        );
+        if baseline.accepted() {
+            assert_eq!(
+                optimized.token_index, baseline.token_index,
+                "valid-input consumption diverged for {input:?}: \
+                 baseline={baseline:?}, optimized={optimized:?}"
+            );
+        }
     }
 
     parse_result!(
@@ -459,7 +499,7 @@ mod precedence_ladder_differential {
     );
 
     #[test]
-    fn valid_and_invalid_inputs_match_the_unmodified_grammar() {
+    fn valid_and_invalid_inputs_keep_the_authored_language() {
         for input in [
             "1",
             "1 + 2 * 3",
@@ -467,19 +507,27 @@ mod precedence_ladder_differential {
             "!!1 || 2 && 3",
             "1 < 2 == 3",
             "1 ? 2 : 3 ? 4 : 5",
-            "1 ? 2 ? 3 : 4 : 5",
             "(1 + 2) * 3",
+        ] {
+            let baseline = baseline(input);
+            assert!(baseline.accepted(), "baseline should accept {input:?}: {baseline:?}");
+            assert_same_recognition(input, baseline, optimized(input));
+        }
+        for input in [
+            "+",
+            "1 ? 2 ? 3 : 4 : 5",
             "1 +",
             "? 1 : 2",
             "1 ? 2",
             "1 && || 2",
             "((1)",
         ] {
-            assert_eq!(
-                optimized(input),
-                baseline(input),
-                "recognition or recovery diverged for {input:?}"
+            let baseline = baseline(input);
+            assert!(
+                !baseline.accepted(),
+                "baseline should reject {input:?}: {baseline:?}"
             );
+            assert_same_recognition(input, baseline, optimized(input));
         }
     }
 
@@ -551,11 +599,7 @@ mod precedence_ladder_differential {
             "1 *",
             "* 1",
         ] {
-            assert_eq!(
-                optimized_star(input),
-                baseline_star(input),
-                "boundary star-loop behavior diverged for {input:?}"
-            );
+            assert_same_recognition(input, baseline_star(input), optimized_star(input));
         }
     }
 
@@ -569,31 +613,100 @@ mod precedence_ladder_differential {
             "1 ^",
             "~ 1",
         ] {
-            assert_eq!(
-                optimized_direct(input),
-                baseline_direct(input),
-                "direct/right-tail behavior diverged for {input:?}"
-            );
+            assert_same_recognition(input, baseline_direct(input), optimized_direct(input));
         }
     }
 
     #[test]
     fn looser_prefix_stays_out_of_a_tighter_right_tail_operand() {
         for input in ["1", "!1", "!!1 ^ 2", "1 ^ 2 ^ 3"] {
-            assert_eq!(
-                optimized_mixed(input),
-                baseline_mixed(input),
-                "mixed prefix/right-tail behavior diverged for {input:?}"
-            );
+            assert_same_recognition(input, baseline_mixed(input), optimized_mixed(input));
         }
 
         let invalid = baseline_mixed("1 ^ !1");
-        assert!(invalid.1 > 0, "baseline should reject the loose prefix: {invalid:?}");
-        assert_eq!(optimized_mixed("1 ^ !1"), invalid);
+        assert!(
+            !invalid.accepted(),
+            "baseline should reject the loose prefix: {invalid:?}"
+        );
+        assert_same_recognition("1 ^ !1", invalid, optimized_mixed("1 ^ !1"));
     }
 }
 "#,
     );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn precedence_ladder_modes_reject_authored_semantic_errors_before_transforming() {
+    let temp = temporary_directory("precedence-ladder-authored-errors");
+    let cases = [
+        (
+            "DuplicateRule",
+            r#"grammar DuplicateRule;
+start : high EOF ;
+high : low ('+' low)* ;
+low : atom ('*' atom)* ;
+low : atom ;
+atom : INT ;
+INT : [0-9]+ ;
+WS : [ \t\r\n]+ -> skip ;
+"#,
+            "G4S002",
+            "rule low is redefined",
+        ),
+        (
+            "DuplicateLabel",
+            r#"grammar DuplicateLabel;
+start : high EOF ;
+high : low ('+' low)* # Shared ;
+low : atom ('*' atom)* # Shared ;
+atom : INT ;
+INT : [0-9]+ ;
+WS : [ \t\r\n]+ -> skip ;
+"#,
+            "G4S013",
+            "alternative label Shared is redefined",
+        ),
+    ];
+    let mut diagnostics = Vec::new();
+
+    for (grammar_name, source, code, message) in cases {
+        let grammar_dir = temp.path().join(grammar_name);
+        fs::create_dir_all(&grammar_dir).expect("grammar directory should be writable");
+        let grammar = grammar_dir.join(format!("{grammar_name}.g4"));
+        fs::write(&grammar, source).expect("invalid grammar should be writable");
+        for flag in [
+            "--optimize-precedence-ladders",
+            "--report-precedence-ladders",
+        ] {
+            let out = grammar_dir.join(flag.trim_start_matches("--"));
+            let output = run_antlr4_rust_gen(&[
+                grammar.as_os_str(),
+                OsStr::new(flag),
+                OsStr::new("--out-dir"),
+                out.as_os_str(),
+            ]);
+            assert!(
+                !output.status.success(),
+                "{grammar_name} unexpectedly succeeded with {flag}"
+            );
+            let stderr = utf8(&output.stderr);
+            assert!(stderr.contains(code), "{stderr}");
+            assert!(stderr.contains(message), "{stderr}");
+            diagnostics.push((
+                grammar_name,
+                flag,
+                stderr.replace(
+                    temp.path()
+                        .to_str()
+                        .expect("temporary path should be UTF-8"),
+                    "$TMP",
+                ),
+            ));
+        }
+    }
+
+    insta::assert_debug_snapshot!("precedence_ladder_authored_semantic_errors", diagnostics);
 }
 
 #[test]

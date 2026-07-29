@@ -668,6 +668,11 @@ This pass is **recognition preserving**, not tree/API preserving. It removes
 intermediate rule methods and context/listener/visitor types, changes tree
 depth, and turns flat star-loop children into nested left-recursive operator
 contexts. Existing consumers keyed to those surfaces should not enable it.
+Removed rules are also removed recovery boundaries, so malformed-input
+diagnostic counts, error-listener calls, recovered trees, and stopping positions
+are not preserved. The guarantee is that complete inputs parse without syntax
+errors under the optimized grammar exactly when they do under the authored
+grammar; consumers requiring recovery parity should not enable this pass.
 Actions, predicates, rule attributes, unsupported shapes, overlapping
 same-fixity operator sets, and externally referenced middle rules are declined
 or treated as boundaries. A prefix level that is looser than another collapsed
