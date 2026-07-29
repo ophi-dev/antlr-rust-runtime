@@ -20,8 +20,10 @@ use grammar::model::{
     LeftRecursiveAlternativeKind, ModelNodeId, Quantifier, Rule, SemanticGrammar, SetElement,
     Terminal, Vocabulary,
 };
+use grammar::precedence_ladder::CollapsePrecedenceLadders;
 use grammar::provenance::{Origin, ProvenanceIndex};
 use grammar::source::SourceSet;
+use grammar::transform::{TransformRegistry, render_optimization_manifest};
 use petgraph::graph::DiGraph;
 use petgraph::visit::{Dfs, Reversed};
 
@@ -84,12 +86,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     };
-    let compilation = grammar::compiler::compile(LoadOptions {
-        roots: args.roots.clone(),
-        library_directories: args.library_directories.clone(),
-    })
+    let optimize_precedence_ladders =
+        args.optimize_precedence_ladders || args.report_precedence_ladders;
+    let mut transforms = TransformRegistry::default();
+    if optimize_precedence_ladders {
+        transforms.push(CollapsePrecedenceLadders);
+    }
+    let compilation = grammar::compiler::compile_with_transforms(
+        LoadOptions {
+            roots: args.roots.clone(),
+            library_directories: args.library_directories.clone(),
+        },
+        &transforms,
+        args.report_precedence_ladders,
+    )
     .map_err(|error| render_compilation_error(&error, &args.roots))?;
     emit_compilation_warnings(&compilation)?;
+    let optimization_manifest = optimize_precedence_ladders.then(|| {
+        render_optimization_manifest(
+            &compilation.transform_report,
+            &compilation.sources,
+            args.report_precedence_ladders,
+        )
+    });
+    if args.report_precedence_ladders {
+        fs::create_dir_all(&args.out_dir)?;
+        fs::write(
+            args.out_dir.join("optimizations.json"),
+            optimization_manifest.expect("report mode enables the optimization manifest"),
+        )?;
+        return Ok(());
+    }
 
     let mut grammar_options = Vec::new();
     let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
@@ -190,7 +217,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.out_dir.join("decisions.json"),
         render_decisions_manifest(args.fixed_lookahead, &decision_report_grammars),
     )?;
+    if let Some(manifest) = optimization_manifest {
+        fs::write(args.out_dir.join("optimizations.json"), manifest)?;
+    } else {
+        remove_file_if_present(&args.out_dir.join("optimizations.json"))?;
+    }
     Ok(())
+}
+
+fn remove_file_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn insert_rendered_module(
@@ -2169,6 +2209,10 @@ struct Args {
     /// tables instead of adaptive prediction. `None` keeps the default
     /// routing (Java parity).
     fixed_lookahead: Option<usize>,
+    /// Recognition-preserving source rewrite from issue #225.
+    optimize_precedence_ladders: bool,
+    /// Analyze the same pass on a shadow model and emit only its manifest.
+    report_precedence_ladders: bool,
 }
 
 enum CliCommand {
@@ -2192,6 +2236,8 @@ impl Args {
         let mut generate_listener = true;
         let mut generate_visitor = false;
         let mut fixed_lookahead = None;
+        let mut optimize_precedence_ladders = false;
+        let mut report_precedence_ladders = false;
         let mut positional_only = false;
 
         let mut iter = env::args().skip(1);
@@ -2254,6 +2300,12 @@ impl Args {
                         }
                     }
                 }
+                "--optimize-precedence-ladders" => {
+                    optimize_precedence_ladders = true;
+                }
+                "--report-precedence-ladders" => {
+                    report_precedence_ladders = true;
+                }
                 "--help" | "-h" => return Ok(CliCommand::Help),
                 "--version" | "-V" => return Ok(CliCommand::Version),
                 other if other.starts_with("-I") && other.len() > 2 => {
@@ -2272,6 +2324,12 @@ impl Args {
                 usage()
             ));
         }
+        if optimize_precedence_ladders && report_precedence_ladders {
+            return Err(format!(
+                "--optimize-precedence-ladders and --report-precedence-ladders are mutually exclusive\n\n{}",
+                usage()
+            ));
+        }
 
         Ok(CliCommand::Generate(Box::new(Self {
             roots,
@@ -2287,6 +2345,8 @@ impl Args {
             generate_visitor,
             embedded_actions,
             fixed_lookahead,
+            optimize_precedence_ladders,
+            report_precedence_ladders,
         })))
     }
 }
@@ -2319,6 +2379,8 @@ Options:
   --fixed-lookahead K              Compile decisions provable within K tokens of lookahead
                                    into static dispatch tables (off by default; every
                                    remaining decision keeps adaptive prediction)
+  --optimize-precedence-ladders    Collapse proven linear precedence ladders (changes tree/API)
+  --report-precedence-ladders      Dry-run the pass and emit only optimizations.json
   -V, --version                    Print version
   -h, --help                       Print this help"
         .to_owned()

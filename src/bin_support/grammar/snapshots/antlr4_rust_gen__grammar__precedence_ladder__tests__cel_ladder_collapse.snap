@@ -1,0 +1,310 @@
+---
+source: src/bin_support/grammar/precedence_ladder.rs
+expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,)"
+---
+(
+    [
+        (
+            "expr",
+            [
+                (
+                    "MemberExpr",
+                    [
+                        "member",
+                    ],
+                ),
+                (
+                    "LogicalNot",
+                    [
+                        "member",
+                    ],
+                ),
+                (
+                    "Negate",
+                    [
+                        "member",
+                    ],
+                ),
+                (
+                    "ExprCalcOperator1",
+                    [
+                        "expr",
+                        "expr",
+                    ],
+                ),
+                (
+                    "ExprCalcOperator2",
+                    [
+                        "expr",
+                        "expr",
+                    ],
+                ),
+                (
+                    "ExprRelationOperator3",
+                    [
+                        "expr",
+                        "expr",
+                    ],
+                ),
+                (
+                    "ExprConditionalAndLoop4",
+                    [
+                        "expr",
+                        "expr",
+                    ],
+                ),
+                (
+                    "ExprConditionalOrLoop5",
+                    [
+                        "expr",
+                        "expr",
+                    ],
+                ),
+                (
+                    "ExprExprRight6",
+                    [
+                        "expr",
+                        "expr",
+                        "expr",
+                    ],
+                ),
+            ],
+        ),
+        (
+            "member",
+            [
+                (
+                    "",
+                    [],
+                ),
+            ],
+        ),
+    ],
+    [
+        TransformReportEntry {
+            id: TransformId(
+                0,
+            ),
+            name: "collapse-precedence-ladders",
+            safety: RecognitionPreserving,
+            before: StructuralMetrics {
+                rules: 7,
+                alternatives: 29,
+                elements: 45,
+            },
+            after: StructuralMetrics {
+                rules: 2,
+                alternatives: 24,
+                elements: 40,
+            },
+            changed: true,
+        },
+    ],
+    [
+        TransformCandidateReport {
+            pass: TransformId(
+                0,
+            ),
+            grammar: "P",
+            entry_rule: "expr",
+            source_span: SourceSpan {
+                source: SourceId(
+                    0,
+                ),
+                bytes: 19..90,
+            },
+            status: Applied,
+            reason: "collapsed 6 precedence rungs into expr",
+            rungs: [
+                "expr",
+                "conditionalOr",
+                "conditionalAnd",
+                "relation",
+                "calc",
+                "unary",
+            ],
+            boundary_rule: Some(
+                "member",
+            ),
+            projection: Some(
+                TransformProjection {
+                    contexts_per_operand_before: 7,
+                    contexts_per_operand_after: 2,
+                    precedence_decisions_before: 6,
+                    precedence_decisions_after: 1,
+                },
+            ),
+            removed_rules: [
+                "conditionalOr",
+                "conditionalAnd",
+                "relation",
+                "calc",
+                "unary",
+            ],
+            alternatives: [
+                TransformAlternativeMapping {
+                    source_rule: "expr",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 30..84,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprExprRight6",
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "conditionalOr",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 111..159,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprConditionalOrLoop5",
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "conditionalAnd",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 187..223,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprConditionalAndLoop4",
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "relation",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 245..249,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "relation",
+                    source_alternative: 2,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 256..311,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprRelationOperator3",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "calc",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 329..334,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "calc",
+                    source_alternative: 2,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 341..367,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprCalcOperator1",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "calc",
+                    source_alternative: 3,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 374..396,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "ExprCalcOperator2",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "unary",
+                    source_alternative: 1,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 415..446,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "MemberExpr",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "unary",
+                    source_alternative: 2,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 453..484,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "LogicalNot",
+                    ],
+                },
+                TransformAlternativeMapping {
+                    source_rule: "unary",
+                    source_alternative: 3,
+                    source_span: SourceSpan {
+                        source: SourceId(
+                            0,
+                        ),
+                        bytes: 491..518,
+                    },
+                    target_rule: "expr",
+                    target_alternatives: [
+                        "Negate",
+                    ],
+                },
+            ],
+            labels: [],
+            grouping_changes: [
+                "conditionalOr",
+                "conditionalAnd",
+            ],
+        },
+    ],
+)

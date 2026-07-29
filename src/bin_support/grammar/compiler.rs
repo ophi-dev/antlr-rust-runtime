@@ -48,27 +48,61 @@ impl Compilation {
 }
 
 pub(crate) fn compile(options: LoadOptions) -> Result<Compilation, CompilationError> {
-    compile_with_transforms(options, &TransformRegistry::default())
+    compile_with_transforms(options, &TransformRegistry::default(), false)
 }
 
-fn compile_with_transforms(
+pub(crate) fn compile_with_transforms(
     options: LoadOptions,
     transforms: &TransformRegistry,
+    report_only: bool,
 ) -> Result<Compilation, CompilationError> {
     let loaded = load_recovering(options);
     let root_order = loaded.grammars.roots.clone();
     let mut integrated =
         integrate_loaded(&loaded).map_err(|error| error.with_sources(&loaded.sources))?;
-    let transform_report =
-        transforms
-            .run(&mut integrated.grammar, false)
-            .map_err(|diagnostic| {
-                CompilationError::new(vec![diagnostic]).with_sources(&loaded.sources)
-            })?;
-    let semantics = analyze(&loaded.sources, integrated)
+    let authored_diagnostics = if transforms.is_empty() {
+        None
+    } else {
+        Some(
+            analyze(&loaded.sources, integrated.clone())
+                .map_err(|error| error.with_sources(&loaded.sources))?
+                .diagnostics,
+        )
+    };
+    let transform_report = transforms
+        .run(&mut integrated.grammar, &mut integrated.ids, report_only)
+        .map_err(|diagnostic| {
+            CompilationError::new(vec![diagnostic]).with_sources(&loaded.sources)
+        })?;
+    let mut semantics = analyze(&loaded.sources, integrated)
         .map_err(|error| error.with_sources(&loaded.sources))?;
+    if let Some(authored_diagnostics) = authored_diagnostics {
+        semantics.diagnostics = merge_diagnostics(
+            authored_diagnostics,
+            std::mem::take(&mut semantics.diagnostics),
+        );
+    }
     let LoadedSources { sources, .. } = loaded;
     compile_semantics(sources, root_order, semantics, transform_report)
+}
+
+fn merge_diagnostics(
+    mut authored: Vec<Diagnostic>,
+    transformed: Vec<Diagnostic>,
+) -> Vec<Diagnostic> {
+    let mut matched = vec![false; authored.len()];
+    for diagnostic in transformed {
+        let existing = authored.iter().enumerate().find_map(|(index, candidate)| {
+            (!matched[index] && candidate == &diagnostic).then_some(index)
+        });
+        if let Some(index) = existing {
+            matched[index] = true;
+        } else {
+            authored.push(diagnostic);
+            matched.push(true);
+        }
+    }
+    authored
 }
 
 fn compile_semantics(
