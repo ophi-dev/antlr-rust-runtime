@@ -1119,8 +1119,12 @@ fn append_rung_outputs(rung: &Rung, outputs: &mut Vec<OutputAlternative>) {
                 unreachable!("right tail was structurally classified");
             };
             let mut elements = vec![source.elements[0].clone()];
-            elements.extend(tail.alternatives[0].elements.clone());
-            let tighter_operand = (tail.alternatives[0].elements.len() == 4).then_some(2);
+            let tail_elements = &tail.alternatives[0].elements;
+            let tighter_operand = tail_elements
+                .iter()
+                .position(|element| is_plain_call(element, &rung.base_rule))
+                .map(|tail_index| elements.len() + tail_index);
+            elements.extend(tail_elements.clone());
             outputs.push(output_from_source(
                 rung,
                 0,
