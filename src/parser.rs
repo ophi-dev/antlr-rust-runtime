@@ -83,7 +83,7 @@ use crate::atn::parser_atn::{
 #[cfg(test)]
 use crate::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 use crate::char_stream::CharStream;
-use crate::errors::AntlrError;
+use crate::errors::{AntlrError, SyntaxErrorEvent};
 use crate::int_stream::IntStream;
 use crate::lexer::{LexerCustomAction, LexerLifecycleCtx, LexerSemCtx};
 use crate::recognizer::{Recognizer, RecognizerData};
@@ -5243,6 +5243,25 @@ where
         self.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
     }
 
+    fn syntax_error_event<'a>(
+        &'a self,
+        offending: Option<TokenId>,
+        line: usize,
+        column: usize,
+        message: &'a str,
+        error: Option<&'a AntlrError>,
+    ) -> SyntaxErrorEvent<'a> {
+        let offending = offending.and_then(|token| self.token_store().view(token));
+        SyntaxErrorEvent {
+            offending,
+            line,
+            column,
+            span: offending.and_then(|token| token.byte_span()),
+            message,
+            error,
+        }
+    }
+
     /// Emits a fatal parser error after an entry-rule parse commits to returning it.
     ///
     /// Generated parsers call this only at their public entry boundary. Nested
@@ -5257,21 +5276,23 @@ where
         else {
             return;
         };
-        let offending = offending.and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(offending, *line, *column, message, Some(error));
+        self.notify_error_listeners(self.syntax_error_event(
+            *offending,
+            *line,
+            *column,
+            message,
+            Some(error),
+        ));
     }
 
     fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
-        let offending = diagnostic
-            .offending
-            .and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(
-            offending,
+        self.notify_error_listeners(self.syntax_error_event(
+            diagnostic.offending,
             diagnostic.line,
             diagnostic.column,
             &diagnostic.message,
             None,
-        );
+        ));
     }
 
     fn dispatch_parser_diagnostics<'a>(
@@ -5289,13 +5310,7 @@ where
         }
         // Lexer errors have no offending token: the failure is that no token
         // could be produced, matching ANTLR's null offendingSymbol.
-        self.notify_error_listeners(
-            None,
-            source_error.line,
-            source_error.column,
-            &source_error.message,
-            None,
-        );
+        self.notify_error_listeners(source_error.into());
     }
 
     fn dispatch_token_source_errors(&self, errors: &[TokenSourceError]) {
@@ -5581,7 +5596,6 @@ where
             .insert(
                 TokenSpec::explicit(token_type, text)
                     .with_span(usize::MAX, usize::MAX)
-                    .with_byte_span(0, 0)
                     .with_position(line, column),
             )
             .map_err(|error| AntlrError::Unsupported(error.to_string()))
@@ -13079,9 +13093,7 @@ mod tests {
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{
-        HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError, TokenView,
-    };
+    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
@@ -13140,14 +13152,13 @@ mod tests {
             self
         }
 
-        const fn with_span(mut self, start: usize, stop: usize) -> Self {
-            self.spec.start = start;
-            self.spec.stop = stop;
-            self.spec.start_byte = start;
-            self.spec.stop_byte = match stop.checked_add(1) {
-                Some(end) if end >= start => end,
-                Some(_) | None => start,
-            };
+        fn with_span(mut self, start: usize, stop: usize) -> Self {
+            self.spec = self.spec.with_span(start, stop);
+            self
+        }
+
+        fn with_byte_span(mut self, start: usize, stop: usize) -> Self {
+            self.spec = self.spec.with_byte_span(start, stop);
             self
         }
 
@@ -13199,12 +13210,12 @@ mod tests {
             &self.source_name
         }
 
-        fn start_byte(&self) -> usize {
-            self.spec.start_byte
+        fn start_byte(&self) -> Option<usize> {
+            (self.spec.start_byte != usize::MAX).then_some(self.spec.start_byte)
         }
 
-        fn stop_byte(&self) -> usize {
-            self.spec.stop_byte
+        fn stop_byte(&self) -> Option<usize> {
+            (self.spec.stop_byte != usize::MAX).then_some(self.spec.stop_byte)
         }
     }
 
@@ -13244,6 +13255,7 @@ mod tests {
         offending_text: Option<String>,
         line: usize,
         column: usize,
+        span: Option<std::ops::Range<usize>>,
         message: String,
         error: Option<AntlrError>,
     }
@@ -13257,25 +13269,20 @@ mod tests {
     where
         R: Recognizer + ?Sized,
     {
-        fn syntax_error(
-            &mut self,
-            recognizer: &R,
-            offending: Option<TokenView<'_>>,
-            line: usize,
-            column: usize,
-            message: &str,
-            error: Option<&AntlrError>,
-        ) {
+        fn syntax_error(&mut self, recognizer: &R, event: &SyntaxErrorEvent<'_>) {
             self.diagnostics
                 .lock()
                 .expect("recorded diagnostics lock")
                 .push(RecordedDiagnostic {
                     grammar_file_name: recognizer.grammar_file_name().to_owned(),
-                    offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
-                    line,
-                    column,
-                    message: message.to_owned(),
-                    error: error.cloned(),
+                    offending_text: event
+                        .offending
+                        .and_then(|token| token.text().map(str::to_owned)),
+                    line: event.line,
+                    column: event.column,
+                    span: event.span.clone(),
+                    message: event.message.to_owned(),
+                    error: event.error.cloned(),
                 });
         }
     }
@@ -13348,8 +13355,8 @@ mod tests {
             offending: None,
         }];
         let token_errors = [
-            TokenSourceError::new(1, 1, "token recognition error at: '@'"),
-            TokenSourceError::new(1, 3, "token recognition error at: '#'"),
+            TokenSourceError::new(1, 1, "token recognition error at: '@'").with_span(1..2),
+            TokenSourceError::new(1, 3, "token recognition error at: '#'").with_span(3..4),
         ];
 
         parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
@@ -13375,6 +13382,7 @@ mod tests {
             TestToken::new(7)
                 .with_text("oops")
                 .with_span(0, 3)
+                .with_byte_span(0, 4)
                 .with_position(1, 2),
             TestToken::eof("parser-test", 4, 1, 6),
         ]);
@@ -13405,6 +13413,38 @@ mod tests {
             "recovery_diagnostics_expose_the_offending_token_to_listeners",
             recorded
         );
+    }
+
+    #[test]
+    fn recovery_diagnostics_preserve_unknown_custom_token_span() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(7)
+                .with_text("oops")
+                .with_span(0, 3)
+                .with_position(1, 2),
+            TestToken::eof("parser-test", 4, 1, 6),
+        ]);
+        parser.remove_error_listeners();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+        let offending = parser.input.lt_id(1);
+        assert!(offending.is_some(), "current token should be buffered");
+
+        parser.dispatch_parser_diagnostic(&ParserDiagnostic {
+            line: 1,
+            column: 2,
+            message: "extraneous input 'oops'".to_owned(),
+            offending,
+        });
+
+        let span = {
+            let diagnostics = diagnostics.lock().expect("recorded diagnostics lock");
+            assert_eq!(diagnostics.len(), 1);
+            diagnostics[0].span.clone()
+        };
+        assert_eq!(span, None);
     }
 
     #[test]
@@ -17292,6 +17332,7 @@ mod tests {
             TestToken::new(2)
                 .with_text("y")
                 .with_span(0, 0)
+                .with_byte_span(0, 1)
                 .with_position(3, 5),
             TestToken::eof("parser-test", 1, 1, 1),
         ]);

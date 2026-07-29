@@ -1555,11 +1555,7 @@ mod tests {
         let mut tokens = TokenStore::new(None, "");
         let deleted = token(&mut tokens, 1, "x");
         let inserted = tokens
-            .push(
-                TokenSpec::explicit(2, "<missing B>")
-                    .with_span(usize::MAX, usize::MAX)
-                    .with_byte_span(0, 0),
-            )
+            .push(TokenSpec::explicit(2, "<missing B>").with_span(usize::MAX, usize::MAX))
             .expect("test token should fit");
         let kept = token(&mut tokens, 3, "c");
         let mut storage = ParseTreeStorage::new();

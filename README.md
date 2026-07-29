@@ -227,6 +227,9 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 Generated recognizers install a `ConsoleErrorListener` by default. Remove it
 from both the lexer and parser to suppress recovery output, as above, or call
 `add_error_listener` after removal to redirect diagnostics to a replacement.
+`ErrorListener::syntax_error` receives a `SyntaxErrorEvent`; its `span` is the
+resolved half-open UTF-8 byte range for parser tokens and lexer failures, when
+the input stream can provide byte offsets.
 
 ### Reusing Recognizers
 

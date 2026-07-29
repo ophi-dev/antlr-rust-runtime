@@ -217,14 +217,7 @@ where
         self.base.drain_errors()
     }
     fn report_error(&self, source_error: &antlr4_runtime::token::TokenSourceError) -> bool {
-        antlr4_runtime::Recognizer::notify_error_listeners(
-            self,
-            None,
-            source_error.line,
-            source_error.column,
-            &source_error.message,
-            None,
-        );
+        antlr4_runtime::Recognizer::notify_error_listeners(self, source_error.into());
         true
     }
     fn lexer_dfa_string(&self) -> String {

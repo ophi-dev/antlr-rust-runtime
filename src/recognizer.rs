@@ -1,8 +1,7 @@
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use crate::errors::{AntlrError, ConsoleErrorListener, ErrorListener};
-use crate::token::TokenView;
+use crate::errors::{ConsoleErrorListener, ErrorListener, SyntaxErrorEvent};
 use crate::vocabulary::Vocabulary;
 
 #[derive(Clone)]
@@ -16,20 +15,11 @@ impl ErrorListenerSlot {
         Self(Arc::new(Mutex::new(listener)))
     }
 
-    #[allow(clippy::too_many_arguments)] // mirrors ANTLR's canonical syntaxError signature
-    fn syntax_error(
-        &self,
-        recognizer: &(dyn Recognizer + '_),
-        offending: Option<TokenView<'_>>,
-        line: usize,
-        column: usize,
-        message: &str,
-        error: Option<&AntlrError>,
-    ) {
+    fn syntax_error(&self, recognizer: &(dyn Recognizer + '_), event: &SyntaxErrorEvent<'_>) {
         self.0
             .lock()
             .expect("error listener lock poisoned")
-            .syntax_error(recognizer, offending, line, column, message, error);
+            .syntax_error(recognizer, event);
     }
 }
 
@@ -168,21 +158,12 @@ impl RecognizerData {
         self.error_listeners.clear();
     }
 
-    #[allow(clippy::too_many_arguments)] // mirrors ANTLR's canonical syntaxError signature
-    fn notify_error_listeners(
-        &self,
-        recognizer: &dyn Recognizer,
-        offending: Option<TokenView<'_>>,
-        line: usize,
-        column: usize,
-        message: &str,
-        error: Option<&AntlrError>,
-    ) {
+    fn notify_error_listeners(&self, recognizer: &dyn Recognizer, event: &SyntaxErrorEvent<'_>) {
         if self.console_error_listener {
-            ConsoleErrorListener.syntax_error(recognizer, offending, line, column, message, error);
+            ConsoleErrorListener.syntax_error(recognizer, event);
         }
         for listener in &self.error_listeners {
-            listener.syntax_error(recognizer, offending, line, column, message, error);
+            listener.syntax_error(recognizer, event);
         }
     }
 }
@@ -238,22 +219,11 @@ pub trait Recognizer {
     }
 
     /// Sends one diagnostic to every registered error listener.
-    ///
-    /// `offending` is the token the diagnostic is anchored to, when one
-    /// exists — parser diagnostics resolve it from the token store; lexer
-    /// diagnostics pass `None` because no token was produced.
-    fn notify_error_listeners(
-        &self,
-        offending: Option<TokenView<'_>>,
-        line: usize,
-        column: usize,
-        message: &str,
-        error: Option<&AntlrError>,
-    ) where
+    fn notify_error_listeners(&self, event: SyntaxErrorEvent<'_>)
+    where
         Self: Sized,
     {
-        self.data()
-            .notify_error_listeners(self, offending, line, column, message, error);
+        self.data().notify_error_listeners(self, &event);
     }
 
     fn sempred(&mut self, _rule_index: usize, _pred_index: usize) -> bool {
@@ -269,6 +239,7 @@ mod tests {
     use std::mem::size_of;
 
     use super::*;
+    use crate::errors::AntlrError;
     use crate::generated::GrammarMetadata;
 
     static SHARED_METADATA: GrammarMetadata = GrammarMetadata::new(
@@ -288,6 +259,7 @@ mod tests {
         offending_text: Option<String>,
         line: usize,
         column: usize,
+        span: Option<std::ops::Range<usize>>,
         message: String,
         error: Option<AntlrError>,
     }
@@ -301,25 +273,20 @@ mod tests {
     where
         R: Recognizer + ?Sized,
     {
-        fn syntax_error(
-            &mut self,
-            recognizer: &R,
-            offending: Option<TokenView<'_>>,
-            line: usize,
-            column: usize,
-            message: &str,
-            error: Option<&AntlrError>,
-        ) {
+        fn syntax_error(&mut self, recognizer: &R, event: &SyntaxErrorEvent<'_>) {
             self.errors
                 .lock()
                 .expect("recorded errors lock")
                 .push(RecordedError {
                     grammar_file_name: recognizer.grammar_file_name().to_owned(),
-                    offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
-                    line,
-                    column,
-                    message: message.to_owned(),
-                    error: error.cloned(),
+                    offending_text: event
+                        .offending
+                        .and_then(|token| token.text().map(str::to_owned)),
+                    line: event.line,
+                    column: event.column,
+                    span: event.span.clone(),
+                    message: event.message.to_owned(),
+                    error: event.error.cloned(),
                 });
         }
     }
@@ -372,7 +339,14 @@ mod tests {
             message: "unexpected token".to_owned(),
             offending: None,
         };
-        recognizer.notify_error_listeners(None, 3, 5, "unexpected token", Some(&error));
+        recognizer.notify_error_listeners(SyntaxErrorEvent {
+            offending: None,
+            line: 3,
+            column: 5,
+            span: Some(17..27),
+            message: "unexpected token",
+            error: Some(&error),
+        });
 
         insta::assert_debug_snapshot!(
             "recognizers_replace_the_default_console_error_listener",

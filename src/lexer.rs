@@ -1,6 +1,7 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::atn::LexerAtn;
@@ -1491,7 +1492,7 @@ where
         });
         let (start_byte, stop_byte) = source_interval
             .or_else(|| self.token_byte_span(stop))
-            .unwrap_or((self.token_start, self.token_start));
+            .unwrap_or((usize::MAX, usize::MAX));
         TokenSpec {
             token_type,
             channel,
@@ -1631,7 +1632,7 @@ where
     }
 
     fn eof_token_spec(&self) -> TokenSpec {
-        let byte_offset = self.eof_byte_offset().unwrap_or_else(|| self.input.index());
+        let byte_offset = self.eof_byte_offset().unwrap_or(usize::MAX);
         TokenSpec::eof(self.input.index(), byte_offset, self.line, self.column)
     }
 
@@ -1658,6 +1659,20 @@ where
             self.input.byte_interval(previous)?.1
         };
         Some(byte_offset)
+    }
+
+    fn byte_span_for_scalar_range(&self, span: Range<usize>) -> Option<Range<usize>> {
+        if span.start > span.end {
+            return None;
+        }
+        if span.is_empty() {
+            let offset = self.byte_offset_at(span.start)?;
+            return Some(offset..offset);
+        }
+        let (start, end) = self
+            .input
+            .byte_interval(TextInterval::new(span.start, span.end - 1))?;
+        Some(start..end)
     }
 }
 
@@ -1742,12 +1757,32 @@ where
         self.force_interpreted
     }
 
-    /// Buffers a lexer diagnostic until the token stream consumer is ready to
-    /// emit errors in parser-compatible order.
+    /// Buffers a lexer diagnostic for the current token span until the token
+    /// stream consumer can emit it in parser-compatible order.
+    ///
+    /// `line` and `column` should identify the current token start. Use
+    /// [`Self::record_error_for_scalar_span`] when the diagnostic covers a
+    /// different input range.
     pub fn record_error(&self, line: usize, column: usize, message: impl Into<String>) {
-        self.errors
-            .borrow_mut()
-            .push(TokenSourceError::new(line, column, message));
+        let scalar_span = self.token_start..self.input.index().max(self.token_start);
+        self.record_error_for_scalar_span(line, column, message, scalar_span);
+    }
+
+    /// Buffers a lexer diagnostic for an explicit half-open Unicode-scalar span.
+    ///
+    /// The span is converted through [`CharStream::byte_interval`]. Streams
+    /// without an exact UTF-8 byte mapping leave the diagnostic byte span
+    /// unknown.
+    pub fn record_error_for_scalar_span(
+        &self,
+        line: usize,
+        column: usize,
+        message: impl Into<String>,
+        scalar_span: Range<usize>,
+    ) {
+        let mut error = TokenSourceError::new(line, column, message);
+        error.span = self.byte_span_for_scalar_range(scalar_span);
+        self.errors.borrow_mut().push(error);
     }
 
     /// Records one fail-loud semantic-hook miss per coordinate and token start.
@@ -1952,41 +1987,64 @@ mod tests {
     use crate::vocabulary::Vocabulary;
 
     #[derive(Clone, Debug)]
-    struct UnsharedInput(InputStream);
+    struct UnsharedInput {
+        input: InputStream,
+        maps_bytes: bool,
+    }
+
+    impl UnsharedInput {
+        fn mapped(input: InputStream) -> Self {
+            Self {
+                input,
+                maps_bytes: true,
+            }
+        }
+
+        fn scalar_only(input: InputStream) -> Self {
+            Self {
+                input,
+                maps_bytes: false,
+            }
+        }
+    }
 
     impl IntStream for UnsharedInput {
         fn consume(&mut self) {
-            self.0.consume();
+            self.input.consume();
         }
 
         fn la(&mut self, offset: isize) -> i32 {
-            self.0.la(offset)
+            self.input.la(offset)
         }
 
         fn index(&self) -> usize {
-            self.0.index()
+            self.input.index()
         }
 
         fn seek(&mut self, index: usize) {
-            self.0.seek(index);
+            self.input.seek(index);
         }
 
         fn size(&self) -> usize {
-            self.0.size()
+            self.input.size()
         }
 
         fn source_name(&self) -> &str {
-            self.0.source_name()
+            self.input.source_name()
         }
     }
 
     impl CharStream for UnsharedInput {
         fn text(&self, interval: TextInterval) -> String {
-            self.0.text(interval)
+            self.input.text(interval)
         }
 
         fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
-            self.0.byte_interval(interval)
+            if self.maps_bytes {
+                self.input.byte_interval(interval)
+            } else {
+                None
+            }
         }
     }
 
@@ -2012,7 +2070,31 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+            @r#"(1, 0, Some("<EOF>"), Some(2..2))"#
+        );
+    }
+
+    #[test]
+    fn eof_token_has_no_byte_span_without_byte_mapping() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(UnsharedInput::scalar_only(InputStream::new("β")), data);
+        lexer.consume_char();
+
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer.eof_token(&mut sink).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
+
+        insta::assert_compact_debug_snapshot!(
+            (token.start(), token.stop(), token.text(), token.byte_span()),
+            @r#"(1, 0, Some("<EOF>"), None)"#
         );
     }
 
@@ -2041,7 +2123,7 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(1, 0, Some("<EOF>"), 2..2)"#
+            @r#"(1, 0, Some("<EOF>"), Some(2..2))"#
         );
     }
 
@@ -2070,7 +2152,7 @@ mod tests {
         // snapshot the explicit (start, stop, text, byte_span) record rather than the token.
         insta::assert_compact_debug_snapshot!(
             (token.start(), token.stop(), token.text(), token.byte_span()),
-            @r#"(0, 0, Some("β"), 0..2)"#
+            @r#"(0, 0, Some("β"), Some(0..2))"#
         );
     }
 
@@ -2084,7 +2166,7 @@ mod tests {
                 std::iter::empty::<Option<&str>>(),
             ),
         );
-        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("β")), data);
+        let mut lexer = BaseLexer::new(UnsharedInput::mapped(InputStream::new("β")), data);
         lexer.begin_token();
         lexer.consume_char();
 
@@ -2096,7 +2178,7 @@ mod tests {
         let token = sink.view(id).expect("emitted token should exist");
 
         assert_eq!(token.text(), Some("β"));
-        assert_eq!(token.byte_span(), 0..2);
+        assert_eq!(token.byte_span(), Some(0..2));
     }
 
     #[test]
@@ -2133,7 +2215,7 @@ mod tests {
                 std::iter::empty::<Option<&str>>(),
             ),
         );
-        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("a\nb")), data);
+        let mut lexer = BaseLexer::new(UnsharedInput::mapped(InputStream::new("a\nb")), data);
         lexer.begin_token();
 
         lexer.commit_position(0, 3);
@@ -2157,7 +2239,7 @@ mod tests {
         lexer.record_semantic_error(false, 3, 7);
 
         let errors = lexer.drain_errors();
-        insta::assert_compact_debug_snapshot!(errors, @r#"[TokenSourceError { line: 1, column: 0, message: "unhandled lexer semantic predicate: rule=3 index=7" }]"#);
+        insta::assert_compact_debug_snapshot!(errors, @r#"[TokenSourceError { line: 1, column: 0, span: Some(0..0), message: "unhandled lexer semantic predicate: rule=3 index=7" }]"#);
 
         lexer.begin_token();
         lexer.record_semantic_error(false, 3, 7);

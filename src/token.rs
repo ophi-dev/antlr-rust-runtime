@@ -10,7 +10,8 @@ pub const HIDDEN_CHANNEL: i32 = 1;
 
 /// Largest source or location offset accepted by the compact token store.
 ///
-/// `u32::MAX` is reserved for ANTLR's synthetic `-1` source boundary.
+/// `u32::MAX` is reserved for unknown and ANTLR synthetic `-1` source
+/// boundaries.
 pub const MAX_TOKEN_OFFSET: usize = (u32::MAX - 1) as usize;
 
 #[repr(transparent)]
@@ -87,15 +88,15 @@ pub trait Token: fmt::Debug {
         TextInterval::new(self.start(), self.stop())
     }
 
-    /// Zero-based absolute start offset measured in UTF-8 bytes.
-    fn start_byte(&self) -> usize;
+    /// Zero-based absolute start offset measured in UTF-8 bytes, when available.
+    fn start_byte(&self) -> Option<usize>;
 
-    /// Zero-based exclusive end offset measured in UTF-8 bytes.
-    fn stop_byte(&self) -> usize;
+    /// Zero-based exclusive end offset measured in UTF-8 bytes, when available.
+    fn stop_byte(&self) -> Option<usize>;
 
-    /// Zero-based UTF-8 byte span for the token text.
-    fn byte_span(&self) -> Range<usize> {
-        self.start_byte()..self.stop_byte()
+    /// Zero-based UTF-8 byte span for the token text, when available.
+    fn byte_span(&self) -> Option<Range<usize>> {
+        Some(self.start_byte()?..self.stop_byte()?)
     }
 }
 
@@ -136,11 +137,11 @@ impl<T: Token + ?Sized> Token for &T {
         (**self).source_name()
     }
 
-    fn start_byte(&self) -> usize {
+    fn start_byte(&self) -> Option<usize> {
         (**self).start_byte()
     }
 
-    fn stop_byte(&self) -> usize {
+    fn stop_byte(&self) -> Option<usize> {
         (**self).stop_byte()
     }
 }
@@ -171,8 +172,8 @@ impl TokenSpec {
             channel: DEFAULT_CHANNEL,
             start: 0,
             stop: 0,
-            start_byte: 0,
-            stop_byte: 1,
+            start_byte: usize::MAX,
+            stop_byte: usize::MAX,
             line: 1,
             column: 0,
             text: Some(text.into()),
@@ -203,15 +204,18 @@ impl TokenSpec {
     }
 
     #[must_use]
+    /// Sets the inclusive Unicode-scalar span without inferring byte offsets.
+    ///
+    /// Call [`Self::with_byte_span`] separately when the token source can
+    /// resolve exact UTF-8 byte boundaries.
     pub const fn with_span(mut self, start: usize, stop: usize) -> Self {
         self.start = start;
         self.stop = stop;
-        self.start_byte = start;
-        self.stop_byte = default_stop_byte(start, stop);
         self
     }
 
     #[must_use]
+    /// Sets the half-open UTF-8 byte span resolved by the token source.
     pub const fn with_byte_span(mut self, start_byte: usize, stop_byte: usize) -> Self {
         self.start_byte = start_byte;
         self.stop_byte = stop_byte;
@@ -372,8 +376,8 @@ impl TokenStore {
         let id = TokenId(raw_id);
         let scalar_start = compact_boundary("start offset", spec.start)?;
         let scalar_stop = compact_boundary("stop offset", spec.stop)?;
-        let byte_start = compact_offset("start byte", spec.start_byte)?;
-        let byte_stop = compact_offset("stop byte", spec.stop_byte)?;
+        let byte_start = compact_boundary("start byte", spec.start_byte)?;
+        let byte_stop = compact_boundary("stop byte", spec.stop_byte)?;
         let line = compact_offset("line", spec.line)?;
         let column = compact_offset("column", spec.column)?;
 
@@ -470,19 +474,33 @@ impl TokenStore {
     }
 
     /// Returns the token's zero-based UTF-8 byte start offset.
+    ///
+    /// Returns `None` when `id` is absent or its token source did not provide
+    /// an exact byte offset.
     #[must_use]
     pub fn start_byte(&self, id: TokenId) -> Option<usize> {
         self.byte_starts
             .get(id.index())
-            .map(|offset| *offset as usize)
+            .copied()
+            .and_then(expand_byte_boundary)
     }
 
     /// Returns the token's zero-based exclusive UTF-8 byte stop offset.
+    ///
+    /// Returns `None` when `id` is absent or its token source did not provide
+    /// an exact byte offset.
     #[must_use]
     pub fn stop_byte(&self, id: TokenId) -> Option<usize> {
         self.byte_stops
             .get(id.index())
-            .map(|offset| *offset as usize)
+            .copied()
+            .and_then(expand_byte_boundary)
+    }
+
+    /// Returns the token's half-open UTF-8 byte span, when available.
+    #[must_use]
+    pub fn byte_span(&self, id: TokenId) -> Option<Range<usize>> {
+        Some(self.start_byte(id)?..self.stop_byte(id)?)
     }
 
     fn explicit_text(&self, id: TokenId) -> Option<&str> {
@@ -555,13 +573,6 @@ impl DoubleEndedIterator for TokenIter<'_> {
 }
 
 impl ExactSizeIterator for TokenIter<'_> {}
-
-const fn default_stop_byte(start: usize, stop: usize) -> usize {
-    match stop.checked_add(1) {
-        Some(end) if end >= start => end,
-        Some(_) | None => start,
-    }
-}
 
 const fn compact_boundary(field: &'static str, value: usize) -> Result<u32, TokenStoreError> {
     if value == usize::MAX {
@@ -664,12 +675,12 @@ impl Token for TokenView<'_> {
         self.store.source_name.as_ref()
     }
 
-    fn start_byte(&self) -> usize {
-        self.store.byte_starts[self.id.index()] as usize
+    fn start_byte(&self) -> Option<usize> {
+        self.store.start_byte(self.id)
     }
 
-    fn stop_byte(&self) -> usize {
-        self.store.byte_stops[self.id.index()] as usize
+    fn stop_byte(&self) -> Option<usize> {
+        self.store.stop_byte(self.id)
     }
 }
 
@@ -709,6 +720,14 @@ const fn expand_boundary(value: u32) -> usize {
     }
 }
 
+const fn expand_byte_boundary(value: u32) -> Option<usize> {
+    if value == u32::MAX {
+        None
+    } else {
+        Some(value as usize)
+    }
+}
+
 /// Mutable append-only view used by a token source.
 #[derive(Debug)]
 pub struct TokenSink<'a> {
@@ -735,11 +754,14 @@ impl<'a> TokenSink<'a> {
 
 /// A diagnostic buffered by a token source while it was producing tokens.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct TokenSourceError {
     /// One-based input line where the diagnostic starts.
     pub line: usize,
     /// Zero-based column within `line` where the diagnostic starts.
     pub column: usize,
+    /// Half-open UTF-8 byte span of the offending input, when available.
+    pub span: Option<Range<usize>>,
     /// ANTLR-compatible diagnostic message without the leading line/column.
     pub message: String,
 }
@@ -750,8 +772,16 @@ impl TokenSourceError {
         Self {
             line,
             column,
+            span: None,
             message: message.into(),
         }
+    }
+
+    /// Attaches the resolved half-open UTF-8 byte span.
+    #[must_use]
+    pub const fn with_span(mut self, span: Range<usize>) -> Self {
+        self.span = Some(span);
+        self
     }
 }
 
@@ -845,7 +875,6 @@ mod tests {
         let store = one_token(
             TokenSpec::explicit(7, "<missing X>")
                 .with_span(usize::MAX, usize::MAX)
-                .with_byte_span(0, 0)
                 .with_position(3, 9),
         );
         assert_eq!(
@@ -875,8 +904,23 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 1);
-        assert_eq!(token.byte_span(), 2..4);
+        assert_eq!(token.start_byte(), Some(2));
+        assert_eq!(token.stop_byte(), Some(4));
+        assert_eq!(token.byte_span(), Some(2..4));
+        assert_eq!(store.byte_span(id), Some(2..4));
         assert_eq!(token.text(), Some("β"));
+    }
+
+    #[test]
+    fn scalar_span_without_byte_offsets_remains_unknown() {
+        let store = one_token(TokenSpec::explicit(1, "β").with_span(0, 0));
+        let token = store.view(TokenId(0)).expect("token");
+
+        assert_eq!((token.start(), token.stop()), (0, 0));
+        assert_eq!(token.start_byte(), None);
+        assert_eq!(token.stop_byte(), None);
+        assert_eq!(token.byte_span(), None);
+        assert_eq!(store.byte_span(TokenId(0)), None);
     }
 
     #[test]
