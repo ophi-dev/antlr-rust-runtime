@@ -110,7 +110,6 @@ jobs:
             --model "claude-opus-5[1m]"
             --no-chrome
             --dangerously-skip-permissions
-            --max-turns 50
           plugins: "code-review@claude-code-plugins"
 
           # The trailing directive fixes a CI-only stall: the review skill fans out to
@@ -129,10 +128,7 @@ jobs:
             (missing imports, type errors, formatting, unused variables). Spend
             the budget on what CI cannot see: logic and algorithmic correctness,
             ANTLR parity, unsafe/panic paths, API and semantic regressions,
-            missing test coverage for the new behavior. If an outcome of this review
-            will be a counter-proposal of s different but simpler or more correct
-            feature system design - great, raise that concern (do not implement nor
-            commit the code however).
+            missing test coverage for the new behavior.
 
             UPSTREAM REFERENCE: This crate ports ANTLR (antlr/antlr4). A read-only
             checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`
