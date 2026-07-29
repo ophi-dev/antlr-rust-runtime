@@ -1,0 +1,49 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: "format!(\"pub trait RecogPredicateParserHooks{adapter}\")"
+---
+pub trait RecogPredicateParserHooks: Sized {
+    fn is_ok<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>) -> bool
+    where
+        L: TokenSource;
+
+    /// Handles a committed parser action routed to the typed hook. Return
+    /// `true` when the action is handled so it satisfies a `hook`/`error`
+    /// unknown-semantic policy; the default no-op returns `false` (unhandled),
+    /// which fails loud under those policies.
+    fn custom_action<L>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, _action: antlr4_runtime::ParserAction) -> bool
+    where
+        L: TokenSource,
+    {
+        false
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RecogPredicateParserTypedHooks<T>(pub T);
+
+impl<T> RecogPredicateParserTypedHooks<T> {
+    pub const fn new(inner: T) -> Self { Self(inner) }
+}
+
+impl<T> antlr4_runtime::SemanticHooks for RecogPredicateParserTypedHooks<T>
+where
+    T: RecogPredicateParserHooks,
+{
+    fn sempred<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, rule_index: usize, pred_index: usize) -> Option<bool>
+    where
+        L: TokenSource,
+    {
+        match (rule_index, pred_index) {
+            (0, 0) => Some(self.0.is_ok(ctx)),
+            _ => None,
+        }
+    }
+
+    fn action<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, action: antlr4_runtime::ParserAction) -> bool
+    where
+        L: TokenSource,
+    {
+        self.0.custom_action(ctx, action)
+    }
+}

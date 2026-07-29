@@ -2025,6 +2025,7 @@ fn imported_parser_predicate_generates_typed_hook_from_structural_body() {
 /// Issue #241: antlr4rust grammars use `recog` as the parser-predicate receiver.
 /// Supporting that convention keeps migrations source-compatible by routing it
 /// through the same typed helper hook as bare, `this.`, and `self.` calls.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn recog_receiver_parser_predicate_routes_to_typed_hook() {
     let temp = temporary_directory("recog-parser-hook");
@@ -2055,6 +2056,7 @@ WS: [ \t\r\n]+ -> skip;
 [[helper]]
 kind = "parser-predicate"
 name = "IsOk"
+receiver = "recog"
 returns = "bool"
 lower = "hook"
 "#,
@@ -2086,26 +2088,24 @@ lower = "hook"
         .lines()
         .find(|line| line.contains("\"kind\": \"parser-predicate\""))
         .expect("parser predicate should be inventoried");
-    for expected in [
-        "\"body\": \"recog.IsOk()\"",
-        "\"disposition\": \"hooked\"",
-        "\"template\": \"Hook\"",
-    ] {
-        assert!(
-            predicate.contains(expected),
-            "missing {expected:?}: {predicate}"
-        );
-    }
+    insta::assert_snapshot!("recog_receiver_semantics_manifest", predicate);
 
     let parser = fs::read_to_string(out.join("recog_predicate_parser.rs"))
         .expect("parser should be emitted");
-    for expected in [
-        "pub trait RecogPredicateParserHooks",
-        "fn is_ok",
-        "(0, 0) => Some(self.0.is_ok(ctx))",
-    ] {
-        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
-    }
+    let (_, adapter) = parser
+        .split_once("pub trait RecogPredicateParserHooks")
+        .expect("typed hook adapter should be emitted");
+    let (adapter, _) = adapter
+        .split_once(
+            "\n\n#[derive(Clone, Debug, Default)]\n\
+             #[allow(non_snake_case, dead_code)]\n\
+             pub struct __RuleAttrs",
+        )
+        .expect("generated rule attributes should follow the typed hook adapter");
+    insta::assert_snapshot!(
+        "recog_receiver_typed_hook_adapter",
+        format!("pub trait RecogPredicateParserHooks{adapter}")
+    );
 
     let test_source = r####"
 #[cfg(test)]
@@ -2117,25 +2117,36 @@ mod recog_receiver_tests {
     use antlr4_runtime::{
         CommonTokenStream, InputStream, Parser as _, ParserSemCtx, TokenSource,
     };
+    use std::cell::Cell;
+    use std::rc::Rc;
 
-    struct Hooks;
+    struct Hooks {
+        calls: Rc<Cell<usize>>,
+    }
 
     impl RecogPredicateParserHooks for Hooks {
         fn is_ok<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>) -> bool
         where
             L: TokenSource,
         {
+            self.calls.set(self.calls.get() + 1);
             true
         }
     }
 
     #[test]
     fn typed_hook_accepts_the_predicated_alternative() {
+        let calls = Rc::new(Cell::new(0));
         let lexer = RecogPredicateLexer::new(InputStream::new("<<"));
-        let mut parser =
-            RecogPredicateParser::with_typed_hooks(CommonTokenStream::new(lexer), Hooks);
+        let mut parser = RecogPredicateParser::with_typed_hooks(
+            CommonTokenStream::new(lexer),
+            Hooks {
+                calls: Rc::clone(&calls),
+            },
+        );
         let _ = parser.shl().expect("predicated rule should parse");
         assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert!(calls.get() > 0, "typed predicate hook was not invoked");
     }
 }
 "####;
