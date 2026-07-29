@@ -1,6 +1,7 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::atn::LexerAtn;
@@ -1659,6 +1660,20 @@ where
         };
         Some(byte_offset)
     }
+
+    fn byte_span_for_scalar_range(&self, span: Range<usize>) -> Option<Range<usize>> {
+        if span.start > span.end {
+            return None;
+        }
+        if span.is_empty() {
+            let offset = self.byte_offset_at(span.start)?;
+            return Some(offset..offset);
+        }
+        let (start, end) = self
+            .input
+            .byte_interval(TextInterval::new(span.start, span.end - 1))?;
+        Some(start..end)
+    }
 }
 
 impl<I> Recognizer for BaseLexer<I>
@@ -1745,9 +1760,20 @@ where
     /// Buffers a lexer diagnostic until the token stream consumer is ready to
     /// emit errors in parser-compatible order.
     pub fn record_error(&self, line: usize, column: usize, message: impl Into<String>) {
-        self.errors
-            .borrow_mut()
-            .push(TokenSourceError::new(line, column, message));
+        let scalar_span = self.token_start..self.input.index().max(self.token_start);
+        self.record_error_for_scalar_span(line, column, message, scalar_span);
+    }
+
+    pub(crate) fn record_error_for_scalar_span(
+        &self,
+        line: usize,
+        column: usize,
+        message: impl Into<String>,
+        scalar_span: Range<usize>,
+    ) {
+        let mut error = TokenSourceError::new(line, column, message);
+        error.span = self.byte_span_for_scalar_range(scalar_span);
+        self.errors.borrow_mut().push(error);
     }
 
     /// Records one fail-loud semantic-hook miss per coordinate and token start.
@@ -2157,7 +2183,7 @@ mod tests {
         lexer.record_semantic_error(false, 3, 7);
 
         let errors = lexer.drain_errors();
-        insta::assert_compact_debug_snapshot!(errors, @r#"[TokenSourceError { line: 1, column: 0, message: "unhandled lexer semantic predicate: rule=3 index=7" }]"#);
+        insta::assert_compact_debug_snapshot!(errors, @r#"[TokenSourceError { line: 1, column: 0, span: Some(0..0), message: "unhandled lexer semantic predicate: rule=3 index=7" }]"#);
 
         lexer.begin_token();
         lexer.record_semantic_error(false, 3, 7);

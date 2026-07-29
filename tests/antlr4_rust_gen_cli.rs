@@ -906,7 +906,7 @@ mod fatal_error_listener_tests {
     use super::fatal_parser::FatalParser;
     use antlr4_runtime::{
         AntlrError, CommonTokenStream, ErrorListener, InputStream, Parser as _, Recognizer,
-        TokenView,
+        SyntaxErrorEvent,
     };
 
     #[derive(Clone, Debug, Eq, PartialEq)]
@@ -914,6 +914,7 @@ mod fatal_error_listener_tests {
         offending_text: Option<String>,
         line: usize,
         column: usize,
+        span: Option<std::ops::Range<usize>>,
         message: String,
         error: Option<AntlrError>,
     }
@@ -935,21 +936,16 @@ mod fatal_error_listener_tests {
     where
         R: Recognizer + ?Sized,
     {
-        fn syntax_error(
-            &mut self,
-            _recognizer: &R,
-            offending: Option<TokenView<'_>>,
-            line: usize,
-            column: usize,
-            message: &str,
-            error: Option<&AntlrError>,
-        ) {
+        fn syntax_error(&mut self, _recognizer: &R, event: &SyntaxErrorEvent<'_>) {
             self.events.lock().expect("events lock").push(Event {
-                offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
-                line,
-                column,
-                message: message.to_owned(),
-                error: error.cloned(),
+                offending_text: event
+                    .offending
+                    .and_then(|token| token.text().map(str::to_owned)),
+                line: event.line,
+                column: event.column,
+                span: event.span.clone(),
+                message: event.message.to_owned(),
+                error: event.error.cloned(),
             });
         }
     }

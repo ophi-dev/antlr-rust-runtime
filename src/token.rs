@@ -740,6 +740,8 @@ pub struct TokenSourceError {
     pub line: usize,
     /// Zero-based column within `line` where the diagnostic starts.
     pub column: usize,
+    /// Half-open UTF-8 byte span of the offending input, when available.
+    pub span: Option<Range<usize>>,
     /// ANTLR-compatible diagnostic message without the leading line/column.
     pub message: String,
 }
@@ -750,8 +752,16 @@ impl TokenSourceError {
         Self {
             line,
             column,
+            span: None,
             message: message.into(),
         }
+    }
+
+    /// Attaches the resolved half-open UTF-8 byte span.
+    #[must_use]
+    pub const fn with_span(mut self, span: Range<usize>) -> Self {
+        self.span = Some(span);
+        self
     }
 }
 

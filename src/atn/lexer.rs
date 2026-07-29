@@ -2214,12 +2214,14 @@ fn record_token_recognition_error<I>(lexer: &BaseLexer<I>, start: usize, stop: u
 where
     I: CharStream,
 {
-    let stop = stop.saturating_sub(1);
-    let text = display_error_text(&lexer.input().text(TextInterval::new(start, stop)));
-    lexer.record_error(
+    let inclusive_stop = stop.saturating_sub(1);
+    let text = display_error_text(&lexer.input().text(TextInterval::new(start, inclusive_stop)));
+    let scalar_end = stop.max(start.saturating_add(1));
+    lexer.record_error_for_scalar_span(
         lexer.line(),
         lexer.column(),
         format!("token recognition error at: '{text}'"),
+        start..scalar_end,
     );
 }
 
@@ -2257,6 +2259,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use crate::atn::lexer_dfa::{
         CompiledLexerActionTrace, CompiledLexerConfig, CompiledLexerContext,
@@ -2264,7 +2268,8 @@ mod tests {
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::atn::{LexerAtnState, LexerTransition};
     use crate::char_stream::InputStream;
-    use crate::recognizer::RecognizerData;
+    use crate::errors::{ErrorListener, SyntaxErrorEvent};
+    use crate::recognizer::{Recognizer, RecognizerData};
     use crate::token::{DEFAULT_CHANNEL, HIDDEN_CHANNEL, TOKEN_EOF, Token, TokenStore, TokenView};
     use crate::vocabulary::Vocabulary;
 
@@ -2281,6 +2286,38 @@ mod tests {
             "T",
             Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
         )
+    }
+
+    #[derive(Clone, Debug)]
+    struct SpanListener(Arc<Mutex<Vec<Option<std::ops::Range<usize>>>>>);
+
+    impl<R> ErrorListener<R> for SpanListener
+    where
+        R: Recognizer + ?Sized,
+    {
+        fn syntax_error(&mut self, _recognizer: &R, event: &SyntaxErrorEvent<'_>) {
+            self.0
+                .lock()
+                .expect("recorded spans lock")
+                .push(event.span.clone());
+        }
+    }
+
+    #[test]
+    fn lexer_error_listener_receives_utf8_byte_span() {
+        let spans = Arc::new(Mutex::new(Vec::new()));
+        let mut lexer = BaseLexer::new(InputStream::new("aβz"), recognizer_data());
+        lexer.remove_error_listeners();
+        lexer.add_error_listener(SpanListener(Arc::clone(&spans)));
+        lexer.commit_position(0, 1);
+        lexer.begin_token();
+
+        record_token_recognition_error(&lexer, 1, 2);
+        let errors = lexer.drain_errors();
+        assert_eq!(errors.len(), 1);
+        lexer.notify_error_listeners((&errors[0]).into());
+
+        assert_eq!(*spans.lock().expect("recorded spans lock"), [Some(1..3)]);
     }
 
     fn predicate_atn() -> LexerAtn {

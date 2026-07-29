@@ -21,6 +21,9 @@ EntrySnapshot {
             ),
             line: 1,
             column: 1,
+            span: Some(
+                1..2,
+            ),
             message: "mismatched input 'd' expecting {'b', 'c'}",
             error: None,
         },
@@ -30,6 +33,9 @@ EntrySnapshot {
             ),
             line: 1,
             column: 3,
+            span: Some(
+                3..4,
+            ),
             message: "mismatched input 'd' expecting {'b', 'c'}",
             error: Some(
                 ParserError {

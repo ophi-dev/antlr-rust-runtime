@@ -10,6 +10,9 @@ expression: "*diagnostics.lock().expect(\"recorded diagnostics lock\")"
         ),
         line: 3,
         column: 5,
+        span: Some(
+            0..1,
+        ),
         message: "mismatched input 'y' expecting 'x'",
         error: Some(
             ParserError {

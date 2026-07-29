@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use antlr4_runtime::{
     AsRuleNode, CharStream as _, CommonTokenStream, ErrorListener, InputStream, Node, NodeId,
-    NodeKind, Parser, Recognizer, TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
+    NodeKind, Parser, Recognizer, SyntaxErrorEvent, TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
 };
 
 use super::generated::antlr_v4_lexer::{
@@ -980,22 +980,14 @@ impl<R> ErrorListener<R> for DiagnosticCollector
 where
     R: Recognizer + ?Sized,
 {
-    fn syntax_error(
-        &mut self,
-        _recognizer: &R,
-        _offending: Option<antlr4_runtime::TokenView<'_>>,
-        line: usize,
-        column: usize,
-        message: &str,
-        _error: Option<&antlr4_runtime::AntlrError>,
-    ) {
+    fn syntax_error(&mut self, _recognizer: &R, event: &SyntaxErrorEvent<'_>) {
         self.0
             .lock()
             .expect("grammar diagnostic collector mutex poisoned")
             .push(ReportedDiagnostic {
-                line,
-                column,
-                message: message.to_owned(),
+                line: event.line,
+                column: event.column,
+                message: event.message.to_owned(),
             });
     }
 }

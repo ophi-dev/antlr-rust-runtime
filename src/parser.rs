@@ -83,7 +83,7 @@ use crate::atn::parser_atn::{
 #[cfg(test)]
 use crate::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 use crate::char_stream::CharStream;
-use crate::errors::AntlrError;
+use crate::errors::{AntlrError, SyntaxErrorEvent};
 use crate::int_stream::IntStream;
 use crate::lexer::{LexerCustomAction, LexerLifecycleCtx, LexerSemCtx};
 use crate::recognizer::{Recognizer, RecognizerData};
@@ -5258,20 +5258,28 @@ where
             return;
         };
         let offending = offending.and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(offending, *line, *column, message, Some(error));
+        self.notify_error_listeners(SyntaxErrorEvent {
+            offending,
+            line: *line,
+            column: *column,
+            span: offending.map(|token| token.byte_span()),
+            message,
+            error: Some(error),
+        });
     }
 
     fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
         let offending = diagnostic
             .offending
             .and_then(|token| self.token_store().view(token));
-        self.notify_error_listeners(
+        self.notify_error_listeners(SyntaxErrorEvent {
             offending,
-            diagnostic.line,
-            diagnostic.column,
-            &diagnostic.message,
-            None,
-        );
+            line: diagnostic.line,
+            column: diagnostic.column,
+            span: offending.map(|token| token.byte_span()),
+            message: &diagnostic.message,
+            error: None,
+        });
     }
 
     fn dispatch_parser_diagnostics<'a>(
@@ -5289,13 +5297,7 @@ where
         }
         // Lexer errors have no offending token: the failure is that no token
         // could be produced, matching ANTLR's null offendingSymbol.
-        self.notify_error_listeners(
-            None,
-            source_error.line,
-            source_error.column,
-            &source_error.message,
-            None,
-        );
+        self.notify_error_listeners(source_error.into());
     }
 
     fn dispatch_token_source_errors(&self, errors: &[TokenSourceError]) {
@@ -13079,9 +13081,7 @@ mod tests {
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{
-        HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError, TokenView,
-    };
+    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
@@ -13244,6 +13244,7 @@ mod tests {
         offending_text: Option<String>,
         line: usize,
         column: usize,
+        span: Option<std::ops::Range<usize>>,
         message: String,
         error: Option<AntlrError>,
     }
@@ -13257,25 +13258,20 @@ mod tests {
     where
         R: Recognizer + ?Sized,
     {
-        fn syntax_error(
-            &mut self,
-            recognizer: &R,
-            offending: Option<TokenView<'_>>,
-            line: usize,
-            column: usize,
-            message: &str,
-            error: Option<&AntlrError>,
-        ) {
+        fn syntax_error(&mut self, recognizer: &R, event: &SyntaxErrorEvent<'_>) {
             self.diagnostics
                 .lock()
                 .expect("recorded diagnostics lock")
                 .push(RecordedDiagnostic {
                     grammar_file_name: recognizer.grammar_file_name().to_owned(),
-                    offending_text: offending.and_then(|token| token.text().map(str::to_owned)),
-                    line,
-                    column,
-                    message: message.to_owned(),
-                    error: error.cloned(),
+                    offending_text: event
+                        .offending
+                        .and_then(|token| token.text().map(str::to_owned)),
+                    line: event.line,
+                    column: event.column,
+                    span: event.span.clone(),
+                    message: event.message.to_owned(),
+                    error: event.error.cloned(),
                 });
         }
     }
@@ -13348,8 +13344,8 @@ mod tests {
             offending: None,
         }];
         let token_errors = [
-            TokenSourceError::new(1, 1, "token recognition error at: '@'"),
-            TokenSourceError::new(1, 3, "token recognition error at: '#'"),
+            TokenSourceError::new(1, 1, "token recognition error at: '@'").with_span(1..2),
+            TokenSourceError::new(1, 3, "token recognition error at: '#'").with_span(3..4),
         ];
 
         parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);

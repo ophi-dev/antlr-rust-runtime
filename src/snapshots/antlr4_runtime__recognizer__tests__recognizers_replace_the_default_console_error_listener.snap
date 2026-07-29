@@ -8,6 +8,9 @@ expression: "*errors.lock().expect(\"recorded errors lock\")"
         offending_text: None,
         line: 3,
         column: 5,
+        span: Some(
+            17..27,
+        ),
         message: "unexpected token",
         error: Some(
             ParserError {

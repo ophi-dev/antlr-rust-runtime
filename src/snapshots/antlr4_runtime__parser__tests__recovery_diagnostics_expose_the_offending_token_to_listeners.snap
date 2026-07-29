@@ -10,6 +10,9 @@ expression: recorded
         ),
         line: 1,
         column: 2,
+        span: Some(
+            0..4,
+        ),
         message: "extraneous input 'oops'",
         error: None,
     },
