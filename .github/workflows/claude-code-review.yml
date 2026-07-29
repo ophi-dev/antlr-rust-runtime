@@ -121,15 +121,6 @@ jobs:
           prompt: |
             /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
-            CI unit tests, formatting and clippy are run in a dedicated workflow
-            - it is NOT your concern! Do not build, test, typecheck, lint,
-            or otherwise re-verify those mechanics, and do not report findings
-            a compiler, clippy, or a failing test would already have caught
-            (missing imports, type errors, formatting, unused variables). Spend
-            the budget on what CI cannot see: logic and algorithmic correctness,
-            ANTLR parity, unsafe/panic paths, API and semantic regressions,
-            missing test coverage for the new behavior.
-
             UPSTREAM REFERENCE: This crate ports ANTLR (antlr/antlr4). A read-only
             checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`
             (Java runtime: `runtime/Java/src/org/antlr/v4/runtime/`; generator:
@@ -137,11 +128,6 @@ jobs:
             simulation, serialized-ATN decoding, generated-code shape), compare
             against it and cite the upstream file:line. Flag unintended divergence
             from ANTLR semantics; treat documented deviations as intentional.
-
-            DX and performance - are two major targets of this runtime. Flag
-            non-idiomatic Rust in generated parser or potential performance regressions
-            which arent explicitly mentioned - our consumers should enjoy working
-            with the code our codegen outputs and trust the speed it delivers.
 
             IMPORTANT (non-interactive CI run): You cannot pause and resume. Any
             sub-agents you spawn return their results synchronously within this same
