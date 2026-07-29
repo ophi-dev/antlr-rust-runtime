@@ -250,9 +250,9 @@ dependencies = [
 
 [[package]]
 name = "intl"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "679905fcba80e639354bce6eade07db0236893252338ae0d1a9b00b6f3a728d2"
+checksum = "dfd028342d50d3bb97d30a89b00b6ab1bac0f2dc0eeed1e0b8175ceacfa063d8"
 
 [[package]]
 name = "libc"
