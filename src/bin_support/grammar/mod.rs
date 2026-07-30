@@ -16,6 +16,8 @@ pub(crate) mod model;
 mod mutual_recursion;
 pub(crate) mod precedence_ladder;
 pub(crate) mod provenance;
+pub(crate) mod prune_unreachable;
+pub(crate) mod rule_reachability;
 mod semantics;
 pub(crate) mod source;
 mod syntax;

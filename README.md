@@ -693,6 +693,32 @@ parser runs prediction-free. Rego adds two fixed-LL(2) tables (`regoElse`,
 and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
 10 genuinely ambiguous decisions staying adaptive.
 
+### Unreachable parser rules
+
+The grammar frontend reports `warning[G4S078]` for parser rules that no entry
+rule can reach. Top-level parser rules whose call paths reach an explicit `EOF`
+terminal are inferred as entries; when neither inferred nor configured entries
+exist, the first parser rule is the fallback.
+Repeated `--entry-rule NAME` options declare entry rules for
+grammars with callable top-level forms that do not consume `EOF`. Lexer rules,
+including fragments and mode-scoped rules, are outside this parser analysis.
+
+Warnings do not change generated output. The opt-in `--prune-unreachable` pass
+removes the same unreachable set before ATN construction and logs every removed
+qualified rule:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --entry-rule alternateTopLevel \
+  --prune-unreachable \
+  --out-dir src/generated
+```
+
+Pruning is recognition preserving only from the inferred and configured entry
+rules. It removes generated rule methods, context types, and listener/visitor
+callbacks, so consumers that invoke other rules directly must declare them with
+`--entry-rule` or leave pruning disabled.
+
 ### Precedence-ladder optimization
 
 `--optimize-precedence-ladders` is an explicit, off-by-default source

@@ -141,6 +141,8 @@ fn long_help_describes_source_only_cli() {
     );
     assert!(stdout.contains("  -I, --lib DIR"), "{stdout}");
     assert!(stdout.contains("  --option-hook KEY=VALUE"), "{stdout}");
+    assert!(stdout.contains("  --entry-rule NAME"), "{stdout}");
+    assert!(stdout.contains("  --prune-unreachable"), "{stdout}");
     assert!(stdout.contains("  -listener, --listener"), "{stdout}");
     assert!(stdout.contains("  -no-listener, --no-listener"), "{stdout}");
     assert!(stdout.contains("  -visitor, --visitor"), "{stdout}");
@@ -284,6 +286,152 @@ fn positional_lexer_root_emits_rust_and_manifest() {
         fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
     assert!(manifest.contains("\"name\": \"Letters\""), "{manifest}");
     assert!(manifest.contains("\"kind\": \"lexer\""), "{manifest}");
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn unreachable_parser_rules_warn_from_every_inferred_entry() {
+    let temp = temporary_directory("unreachable-rules-warning");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/unreachable-rules/Reachability.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let stderr = utf8(&output.stderr).replace(
+        grammar
+            .to_str()
+            .expect("fixture path should be valid Unicode"),
+        "<grammar>",
+    );
+    insta::assert_snapshot!("unreachable_rule_default_diagnostics", stderr);
+
+    let parser = fs::read_to_string(out.join("reachability_parser.rs"))
+        .expect("baseline parser should be emitted");
+    assert!(parser.contains("/// - `start()`"));
+    assert!(parser.contains("/// - `script()`"));
+    assert!(parser.contains("/// - `alternate()`"));
+    assert!(parser.contains("pub fn dead_root("));
+    assert!(parser.contains("pub fn dead_helper("));
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
+    let temp = temporary_directory("unreachable-rules-pruned");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/unreachable-rules/Reachability.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--entry-rule"),
+        OsStr::new("manual"),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let stderr = utf8(&output.stderr).replace(
+        grammar
+            .to_str()
+            .expect("fixture path should be valid Unicode"),
+        "<grammar>",
+    );
+    insta::assert_snapshot!("pruned_unreachable_rule_diagnostics", stderr);
+
+    let parser = fs::read_to_string(out.join("reachability_parser.rs"))
+        .expect("pruned parser should be emitted");
+    for retained in ["start", "script", "alternate", "end", "manual", "live"] {
+        assert!(
+            parser.contains(&format!("pub fn {retained}(")),
+            "missing retained rule {retained}"
+        );
+    }
+    assert!(!parser.contains("pub fn dead_root("));
+    assert!(!parser.contains("pub fn dead_helper("));
+    assert!(!parser.contains("DeadRootContext"));
+    assert!(!parser.contains("DeadHelperContext"));
+
+    let lexer =
+        fs::read_to_string(out.join("reachability_lexer.rs")).expect("lexer should be emitted");
+    assert!(lexer.contains("\"LETTER\""));
+    assert_generated_modules_compile(
+        temp.path(),
+        &["reachability_lexer.rs", "reachability_parser.rs"],
+    );
+}
+
+#[test]
+fn configured_entry_rule_must_name_a_parser_rule() {
+    let temp = temporary_directory("unknown-entry-rule");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/unreachable-rules/Reachability.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--entry-rule"),
+        OsStr::new("missing"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    let stderr = utf8(&output.stderr);
+    assert!(stderr.contains("G4S079"), "{stderr}");
+    assert!(
+        stderr.contains("configured parser entry rule missing is not defined"),
+        "{stderr}"
+    );
+    assert!(!out.exists(), "invalid entry selection emitted output");
+}
+
+#[test]
+fn lexer_fragments_and_mode_rules_are_not_parser_reachability_candidates() {
+    let temp = temporary_directory("lexer-reachability-exclusions");
+    let grammar = temp.path().join("Modes.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "lexer grammar Modes;\n\
+         A : 'a';\n\
+         fragment UNUSED : 'u';\n\
+         mode OTHER;\n\
+         B : 'b';\n\
+         fragment MODE_UNUSED : 'x';\n",
+    )
+    .expect("lexer grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert!(!utf8(&output.stderr).contains("G4S078"));
+    let lexer = fs::read_to_string(out.join("modes.rs")).expect("lexer should be emitted");
+    assert!(lexer.contains("\"UNUSED\""));
+    assert!(lexer.contains("\"MODE_UNUSED\""));
 }
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.

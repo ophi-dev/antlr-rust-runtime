@@ -22,6 +22,8 @@ use grammar::model::{
 };
 use grammar::precedence_ladder::CollapsePrecedenceLadders;
 use grammar::provenance::{Origin, ProvenanceIndex};
+use grammar::prune_unreachable::PruneUnreachableRules;
+use grammar::rule_reachability::EntryRuleConfig;
 use grammar::source::SourceSet;
 use grammar::transform::{TransformRegistry, render_optimization_manifest};
 use petgraph::graph::DiGraph;
@@ -88,7 +90,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let optimize_precedence_ladders =
         args.optimize_precedence_ladders || args.report_precedence_ladders;
+    let entry_rules = EntryRuleConfig::new(args.entry_rules.iter().cloned());
     let mut transforms = TransformRegistry::default();
+    if args.prune_unreachable {
+        transforms.push(PruneUnreachableRules::new(entry_rules.clone()));
+    }
     if optimize_precedence_ladders {
         transforms.push(CollapsePrecedenceLadders);
     }
@@ -99,9 +105,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         &transforms,
         args.report_precedence_ladders,
+        &entry_rules,
     )
     .map_err(|error| render_compilation_error(&error, &args.roots))?;
     emit_compilation_warnings(&compilation)?;
+    if args.prune_unreachable && !args.report_precedence_ladders {
+        emit_pruned_unreachable_rules(&compilation)?;
+    }
     let optimization_manifest = optimize_precedence_ladders.then(|| {
         render_optimization_manifest(
             &compilation.transform_report,
@@ -320,6 +330,38 @@ fn emit_compilation_warnings(compilation: &grammar::compiler::Compilation) -> io
             stderr,
             "warning[{}]: {path}{position}: {}",
             diagnostic.code, diagnostic.message
+        )?;
+    }
+    Ok(())
+}
+
+fn emit_pruned_unreachable_rules(compilation: &grammar::compiler::Compilation) -> io::Result<()> {
+    let prune_passes = compilation
+        .transform_report
+        .entries
+        .iter()
+        .filter(|entry| entry.name == PruneUnreachableRules::NAME)
+        .map(|entry| entry.id)
+        .collect::<BTreeSet<_>>();
+    let mut stderr = io::stderr().lock();
+    for removal in compilation
+        .transform_report
+        .rule_removals
+        .iter()
+        .filter(|removal| prune_passes.contains(&removal.pass))
+    {
+        let source = compilation.sources.get(removal.source_span.source);
+        let path = source.map_or_else(
+            || "<grammar>".to_owned(),
+            |source| source.logical_path().display().to_string(),
+        );
+        let position = source
+            .and_then(|source| source.line_column(removal.source_span.bytes.start))
+            .map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
+        writeln!(
+            stderr,
+            "pruned: {path}{position}: unreachable parser rule {}.{}",
+            removal.grammar, removal.rule
         )?;
     }
     Ok(())
@@ -2209,6 +2251,10 @@ struct Args {
     /// tables instead of adaptive prediction. `None` keeps the default
     /// routing (Java parity).
     fixed_lookahead: Option<usize>,
+    /// Parser entry rules configured for reachability diagnostics and pruning.
+    entry_rules: BTreeSet<String>,
+    /// Remove parser rules unreachable from every inferred/configured entry.
+    prune_unreachable: bool,
     /// Recognition-preserving source rewrite from issue #225.
     optimize_precedence_ladders: bool,
     /// Analyze the same pass on a shadow model and emit only its manifest.
@@ -2236,6 +2282,8 @@ impl Args {
         let mut generate_listener = true;
         let mut generate_visitor = false;
         let mut fixed_lookahead = None;
+        let mut entry_rules = BTreeSet::new();
+        let mut prune_unreachable = false;
         let mut optimize_precedence_ladders = false;
         let mut report_precedence_ladders = false;
         let mut positional_only = false;
@@ -2300,6 +2348,12 @@ impl Args {
                         }
                     }
                 }
+                "--entry-rule" => {
+                    entry_rules.insert(next_arg(&mut iter, "--entry-rule")?);
+                }
+                "--prune-unreachable" => {
+                    prune_unreachable = true;
+                }
                 "--optimize-precedence-ladders" => {
                     optimize_precedence_ladders = true;
                 }
@@ -2345,6 +2399,8 @@ impl Args {
             generate_visitor,
             embedded_actions,
             fixed_lookahead,
+            entry_rules,
+            prune_unreachable,
             optimize_precedence_ladders,
             report_precedence_ladders,
         })))
@@ -2379,6 +2435,8 @@ Options:
   --fixed-lookahead K              Compile decisions provable within K tokens of lookahead
                                    into static dispatch tables (off by default; every
                                    remaining decision keeps adaptive prediction)
+  --entry-rule NAME                Declare a parser entry rule (repeatable)
+  --prune-unreachable              Remove parser rules unreachable from every entry rule
   --optimize-precedence-ladders    Collapse proven linear precedence ladders (changes tree/API)
   --report-precedence-ladders      Dry-run the pass and emit only optimizations.json
   -V, --version                    Print version
@@ -14272,21 +14330,23 @@ fn render_parser_rustdoc(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// identify rules that are not called by another rule, but it cannot"
+        "/// infer entry candidates from top-level call paths that reach"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// infer the semantic choice between multiple candidates."
+        "/// explicit `EOF` matches and from configured entry rules, but it"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "/// cannot infer the semantic choice between multiple candidates."
     )
     .expect("writing to a string cannot fail");
     if !entry_rule_indices.is_empty() {
         writeln!(out, "///").expect("writing to a string cannot fail");
-        writeln!(
-            out,
-            "/// Likely parser entry-rule methods (not called by other rules):"
-        )
-        .expect("writing to a string cannot fail");
+        writeln!(out, "/// Likely parser entry-rule methods:")
+            .expect("writing to a string cannot fail");
         for index in entry_rule_indices {
             let Some(method_name) = public_rule_method_names.get(*index) else {
                 continue;
@@ -15638,6 +15698,7 @@ mod tests {
         assert!(rendered.contains("/// - `r#try()`"));
         assert!(rendered.contains("cannot"));
         assert!(rendered.contains("semantic choice"));
+        assert!(rendered.contains("explicit `EOF` matches"));
     }
 
     #[test]
@@ -15657,9 +15718,7 @@ mod tests {
         assert!(rendered.contains(
             "/// Generated parser. Each grammar rule is exposed as a public method.\n///\n/// Pick an entry-rule method"
         ));
-        assert!(rendered.contains(
-            "/// Likely parser entry-rule methods (not called by other rules):\n/// - `s()`"
-        ));
+        assert!(rendered.contains("/// Likely parser entry-rule methods:\n/// - `s()`"));
         assert!(rendered.contains(
             "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<L, H = antlr4_runtime::NoSemanticHooks>"
         ));

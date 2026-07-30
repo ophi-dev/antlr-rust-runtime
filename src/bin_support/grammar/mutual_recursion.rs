@@ -1117,7 +1117,7 @@ fn collect_left_corner_calls(
     }
 }
 
-fn collect_calls_into(
+pub(crate) fn collect_calls_into(
     block: &Block,
     names: &BTreeMap<String, RuleId>,
     sink: &mut impl FnMut(RuleId),
@@ -1127,7 +1127,7 @@ fn collect_calls_into(
     }
 }
 
-fn collect_calls_in_elements(
+pub(crate) fn collect_calls_in_elements(
     elements: &[Element],
     names: &BTreeMap<String, RuleId>,
     sink: &mut impl FnMut(RuleId),

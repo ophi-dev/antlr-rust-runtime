@@ -4,7 +4,8 @@ use super::atn::{CompiledLexer, CompiledParser, compile_lexer, compile_parser};
 use super::diagnostic::{CompilationError, Diagnostic};
 use super::loader::{LoadOptions, LoadedSources, load_recovering};
 use super::model::{GrammarId, GrammarKind};
-use super::semantics::{SemanticGrammarSet, analyze};
+use super::rule_reachability::EntryRuleConfig;
+use super::semantics::{SemanticGrammarSet, analyze_with_entry_rules};
 use super::source::SourceSet;
 use super::transform::{RootOutputs, TransformRegistry, TransformReport, integrate_loaded};
 
@@ -48,23 +49,53 @@ impl Compilation {
 }
 
 pub(crate) fn compile(options: LoadOptions) -> Result<Compilation, CompilationError> {
-    compile_with_transforms(options, &TransformRegistry::default(), false)
+    compile_with_transforms(
+        options,
+        &TransformRegistry::default(),
+        false,
+        &EntryRuleConfig::default(),
+    )
 }
 
 pub(crate) fn compile_with_transforms(
     options: LoadOptions,
     transforms: &TransformRegistry,
     report_only: bool,
+    entry_rules: &EntryRuleConfig,
 ) -> Result<Compilation, CompilationError> {
     let loaded = load_recovering(options);
     let root_order = loaded.grammars.roots.clone();
     let mut integrated =
         integrate_loaded(&loaded).map_err(|error| error.with_sources(&loaded.sources))?;
+    let unknown_entries = entry_rules.unknown_names(&integrated.grammar.units);
+    if !unknown_entries.is_empty() {
+        let span = integrated
+            .grammar
+            .units
+            .iter()
+            .find(|unit| unit.kind == GrammarKind::Parser)
+            .or_else(|| integrated.grammar.units.first())
+            .map_or_else(
+                || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),
+                |unit| unit.span.clone(),
+            );
+        let diagnostics = unknown_entries
+            .into_iter()
+            .map(|entry| {
+                Diagnostic::error(
+                    "G4S079",
+                    span.clone(),
+                    format!("configured parser entry rule {entry} is not defined"),
+                )
+            })
+            .collect();
+        return Err(CompilationError::new(diagnostics).with_sources(&loaded.sources));
+    }
     let authored_diagnostics = if transforms.is_empty() {
         None
     } else {
         Some(
-            analyze(&loaded.sources, integrated.clone())
+            analyze_with_entry_rules(&loaded.sources, integrated.clone(), entry_rules)
                 .map_err(|error| error.with_sources(&loaded.sources))?
                 .diagnostics,
         )
@@ -74,7 +105,7 @@ pub(crate) fn compile_with_transforms(
         .map_err(|diagnostic| {
             CompilationError::new(vec![diagnostic]).with_sources(&loaded.sources)
         })?;
-    let mut semantics = analyze(&loaded.sources, integrated)
+    let mut semantics = analyze_with_entry_rules(&loaded.sources, integrated, entry_rules)
         .map_err(|error| error.with_sources(&loaded.sources))?;
     if let Some(authored_diagnostics) = authored_diagnostics {
         semantics.diagnostics = merge_diagnostics(

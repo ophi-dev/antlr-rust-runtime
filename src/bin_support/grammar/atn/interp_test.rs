@@ -374,6 +374,15 @@ mod tests {
     use crate::grammar::semantics::analyze;
     use crate::grammar::transform::integrate_loaded;
 
+    fn java_parity_diagnostics(
+        diagnostics: &[crate::grammar::diagnostic::Diagnostic],
+    ) -> Vec<&crate::grammar::diagnostic::Diagnostic> {
+        diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code != "G4S078")
+            .collect()
+    }
+
     #[test]
     fn parser_basic_matches_java_serialization_and_direct_packing() {
         assert_parser_fixture("parser-basic", "ParserBasic");
@@ -568,9 +577,8 @@ mod tests {
         let compilation =
             compile_fixture("vscode-odd-expr", &["OddExpr.g4"]).expect("fixture should compile");
         assert_eq!(
-            compilation
-                .diagnostics
-                .iter()
+            java_parity_diagnostics(&compilation.diagnostics)
+                .into_iter()
                 .filter(|diagnostic| diagnostic.severity
                     == crate::grammar::diagnostic::Severity::Warning)
                 .count(),
@@ -1347,7 +1355,7 @@ mod tests {
                 parser_named(&compilation, "T"),
                 &fixture(fixture_name).join("T.interp"),
             );
-            assert!(compilation.diagnostics.is_empty());
+            assert!(java_parity_diagnostics(&compilation.diagnostics).is_empty());
             compilation
         }
 
@@ -2819,7 +2827,7 @@ mod tests {
                     "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
                     "T",
                 );
-                assert!(compilation.diagnostics.is_empty());
+                assert!(java_parity_diagnostics(&compilation.diagnostics).is_empty());
             }
         }
 
@@ -3761,10 +3769,11 @@ mod tests {
             actual: &[crate::grammar::diagnostic::Diagnostic],
             expected: &[ExpectedDiagnostic],
         ) {
+            let actual = java_parity_diagnostics(actual);
             assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
             let source = std::fs::read_to_string(fixture(fixture_name).join(root))
                 .expect("attribute fixture source");
-            for (actual, expected) in actual.iter().zip(expected) {
+            for (actual, expected) in actual.into_iter().zip(expected) {
                 assert_eq!(actual.code, expected.code, "{fixture_name}: {actual:#?}");
                 assert_eq!(
                     actual.severity,
@@ -4157,10 +4166,11 @@ mod tests {
             actual: &[crate::grammar::diagnostic::Diagnostic],
             expected: &[ExpectedDiagnostic],
         ) {
+            let actual = java_parity_diagnostics(actual);
             assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
             let source = std::fs::read_to_string(fixture(fixture_name).join(root))
                 .expect("symbol fixture source");
-            for (actual, expected) in actual.iter().zip(expected) {
+            for (actual, expected) in actual.into_iter().zip(expected) {
                 assert_eq!(actual.code, expected.code, "{fixture_name}: {actual:#?}");
                 assert_eq!(
                     actual.severity, expected.severity,
@@ -4402,8 +4412,9 @@ mod tests {
             actual: &[crate::grammar::diagnostic::Diagnostic],
             expected: &[ExpectedDiagnostic],
         ) {
+            let actual = java_parity_diagnostics(actual);
             assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
-            for (actual, expected) in actual.iter().zip(expected) {
+            for (actual, expected) in actual.into_iter().zip(expected) {
                 assert!(
                     rust_code_matches(expected.java_code, actual.code),
                     "{fixture_name}: Java error({}) does not match Rust code {}: {actual:#?}",
@@ -4620,10 +4631,11 @@ mod tests {
             actual: &[crate::grammar::diagnostic::Diagnostic],
             expected: &[ExpectedDiagnostic],
         ) {
+            let actual = java_parity_diagnostics(actual);
             assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
             let source = std::fs::read_to_string(fixture(fixture_name).join(root))
                 .expect("tool syntax fixture source");
-            for (actual, expected) in actual.iter().zip(expected) {
+            for (actual, expected) in actual.into_iter().zip(expected) {
                 assert!(
                     rust_code_matches(expected.java_code, actual.code),
                     "{fixture_name}: Java error({}) does not match Rust code {}: {actual:#?}",

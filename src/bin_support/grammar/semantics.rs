@@ -16,6 +16,7 @@ use super::model::{
 };
 use super::mutual_recursion::eliminate_mutual_left_recursion;
 use super::provenance::ProvenanceIndex;
+use super::rule_reachability::{EntryRuleConfig, analyze as analyze_rule_reachability};
 use super::source::SourceSet;
 use super::transform::{
     IntegratedGrammarSet, IntegratedVocabulary, IntegratedVocabularySource, RootOutputs,
@@ -73,7 +74,15 @@ pub(crate) struct SemanticGrammarSet {
 
 pub(crate) fn analyze(
     sources: &SourceSet,
+    integrated: IntegratedGrammarSet,
+) -> Result<SemanticGrammarSet, CompilationError> {
+    analyze_with_entry_rules(sources, integrated, &EntryRuleConfig::default())
+}
+
+pub(crate) fn analyze_with_entry_rules(
+    sources: &SourceSet,
     mut integrated: IntegratedGrammarSet,
+    entry_rules: &EntryRuleConfig,
 ) -> Result<SemanticGrammarSet, CompilationError> {
     let mut diagnostics = std::mem::take(&mut integrated.diagnostics);
     let deferred_diagnostics = channel_placement_diagnostics(&integrated.grammar.units);
@@ -81,6 +90,10 @@ pub(crate) fn analyze(
     if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
+    diagnostics.extend(check_unreachable_rules(
+        &integrated.grammar.units,
+        entry_rules,
+    ));
 
     // Snapshot the authored units for symbol validation *before* any
     // left-recursion rewriting: the mutual-recursion pass may delete satellite
@@ -140,6 +153,7 @@ pub(crate) fn analyze(
                 sources,
                 symbol_unit: &symbol_units[&unit_id],
                 shares_tokens_with_implicit_lexer,
+                entry_rules,
             },
             unit,
             imported,
@@ -898,6 +912,7 @@ struct UnitAnalysisContext<'a> {
     sources: &'a SourceSet,
     symbol_unit: &'a GrammarUnit,
     shares_tokens_with_implicit_lexer: bool,
+    entry_rules: &'a EntryRuleConfig,
 }
 
 fn analyze_unit(
@@ -911,6 +926,7 @@ fn analyze_unit(
         sources,
         symbol_unit,
         shares_tokens_with_implicit_lexer,
+        entry_rules,
     } = context;
     let imported_names = vocabulary.by_name.keys().cloned().collect::<BTreeSet<_>>();
     let mut token_diagnostics = Vec::new();
@@ -980,20 +996,7 @@ fn analyze_unit(
 
     let literal_names = name_table(vocabulary.max_token_type(), &vocabulary.by_literal);
     let symbolic_names = symbolic_name_table(&vocabulary);
-    let entry_rules = if unit.kind == GrammarKind::Parser {
-        unit.rules
-            .iter()
-            .filter(|rule| {
-                !collection
-                    .call_graph
-                    .values()
-                    .any(|targets| targets.contains(&rule.id))
-            })
-            .map(|rule| rule.id)
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let entry_rules = analyze_rule_reachability(&unit, entry_rules).entry_rules;
 
     let recognizer = RecognizerModel {
         grammar: unit.id,
@@ -1018,6 +1021,51 @@ fn analyze_unit(
         call_graph: collection.call_graph,
         entry_rules,
     }
+}
+
+fn check_unreachable_rules(
+    units: &[GrammarUnit],
+    entry_config: &EntryRuleConfig,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for unit in units {
+        let reachability = analyze_rule_reachability(unit, entry_config);
+        if reachability.unreachable_rules.is_empty() {
+            continue;
+        }
+        let rules = unit
+            .rules
+            .iter()
+            .map(|rule| (rule.id, rule))
+            .collect::<BTreeMap<_, _>>();
+        let entries = reachability
+            .entry_rules
+            .iter()
+            .filter_map(|rule| rules.get(rule))
+            .map(|rule| rule.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        for rule in reachability
+            .unreachable_rules
+            .iter()
+            .filter_map(|rule| rules.get(rule))
+        {
+            diagnostics.push(Diagnostic::warning(
+                "G4S078",
+                rule.name_span.clone(),
+                format!(
+                    "parser rule {} is unreachable from entry rule{} {entries}",
+                    rule.name,
+                    if reachability.entry_rules.len() == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ),
+            ));
+        }
+    }
+    diagnostics
 }
 
 fn assign_lexer_tokens(

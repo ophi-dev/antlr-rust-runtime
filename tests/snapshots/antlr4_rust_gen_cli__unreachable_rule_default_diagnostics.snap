@@ -1,0 +1,7 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: stderr
+---
+warning[G4S078]: <grammar>:20:0: parser rule manual is unreachable from entry rules start, script, alternate
+warning[G4S078]: <grammar>:28:0: parser rule deadRoot is unreachable from entry rules start, script, alternate
+warning[G4S078]: <grammar>:32:0: parser rule deadHelper is unreachable from entry rules start, script, alternate

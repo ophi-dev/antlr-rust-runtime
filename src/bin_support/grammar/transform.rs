@@ -91,6 +91,15 @@ pub(crate) struct TransformCandidateReport {
 pub(crate) struct TransformReport {
     pub(crate) entries: Vec<TransformReportEntry>,
     pub(crate) candidates: Vec<TransformCandidateReport>,
+    pub(crate) rule_removals: Vec<TransformRuleRemoval>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformRuleRemoval {
+    pub(crate) pass: TransformId,
+    pub(crate) grammar: String,
+    pub(crate) rule: String,
+    pub(crate) source_span: SourceSpan,
 }
 
 pub(crate) struct TransformContext<'a> {
