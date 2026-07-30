@@ -12229,10 +12229,17 @@ fn __write_invocation_states(
             recovered = rendered_accessors.recovered,
             validated = rendered_accessors.validated,
         );
+        let validation_body = if rendered_accessors.validation.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "                    let context = {view_name}::__from_listener_node(context, None);\n{}",
+                rendered_accessors.validation
+            )
+        };
         let _ = writeln!(
             validation_arms,
-            "                {context_kind} => {{\n                    let context = {view_name}::__from_listener_node(context, None);\n{validation}                }},",
-            validation = rendered_accessors.validation,
+            "                {context_kind} => {{\n{validation_body}                }},"
         );
         if options.generate_visitor {
             let _ = writeln!(

@@ -2101,6 +2101,34 @@ mod validated_tree_tests {
     }
 
     #[test]
+    fn structural_validation_reports_underfilled_repetitions() {
+        let lexer = TLexer::new(InputStream::new("! :"));
+        let tokens = CommonTokenStream::new(lexer);
+        let data = TParser::<TLexer<InputStream>>::metadata().recognizer_data();
+        let mut parser = BaseParser::new(tokens, data);
+        let required_rule = parser.rule_node(ParserRuleContext::new(RULE_REQUIRED_RULE, -1));
+        let bang = parser.match_token(BANG).expect("BANG token");
+        let colon = parser.match_token(COLON).expect("COLON token");
+        let mut root = ParserRuleContext::new(RULE_START, -1);
+        parser.add_parse_child(&mut root, required_rule);
+        parser.add_parse_child(&mut root, bang);
+        parser.add_parse_child(&mut root, colon);
+        let root = parser.rule_node(root);
+        let malformed = parser.into_parsed_file(root);
+
+        assert_eq!(
+            validate_tree_structure(&malformed)
+                .expect_err("start context must contain at least one atom"),
+            TValidationError::InvalidChildCount {
+                context: "StartContext",
+                child: "atom",
+                minimum: 1,
+                actual: 0,
+            }
+        );
+    }
+
+    #[test]
     fn recovery_oriented_contexts_keep_fallible_required_accessors() {
         let parsed = parse("head ! : one", TLexer::new, TParser::start)
             .expect("clean recovery-oriented parse");
@@ -2738,6 +2766,8 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
         "pub struct ObjectCreationExpressionContext<'a, State = StoredTreeContext>",
         "pub struct ObjectCreationExpressionLabelContext<'a, State = StoredTreeContext>",
         "pub struct ParenthesizedLabelContext<'a, State = StoredTreeContext>",
+        "pub struct StoredTreeRuleContext<'a, State = StoredTreeContext>",
+        "pub struct ValidatedTreeRuleContext<'a, State = StoredTreeContext>",
         "fn enter_object_creation_expression(&mut self",
         "fn enter_object_creation_expression_label(&mut self",
         "fn enter_parenthesized_label(&mut self",
