@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use petgraph::algo::tarjan_scc;
+use petgraph::graph::DiGraph;
+
 use super::model::{
     Block, ElementKind, GrammarKind, GrammarUnit, Rule, RuleId, RuleKind, SetElement, Terminal,
 };
@@ -28,6 +31,15 @@ impl EntryRuleConfig {
             .iter()
             .filter(|name| !parser_rules.contains(name.as_str()))
             .cloned()
+            .collect()
+    }
+
+    pub(crate) fn matching_rule_ids(&self, units: &[GrammarUnit]) -> BTreeSet<RuleId> {
+        units
+            .iter()
+            .flat_map(|unit| &unit.rules)
+            .filter(|rule| rule.kind == RuleKind::Parser && self.names.contains(&rule.name))
+            .map(|rule| rule.id)
             .collect()
     }
 }
@@ -61,15 +73,7 @@ pub(crate) fn analyze(unit: &GrammarUnit, configured: &EntryRuleConfig) -> RuleR
             (rule.id, calls)
         })
         .collect::<BTreeMap<_, _>>();
-    let called_by_other_rule = call_graph
-        .iter()
-        .flat_map(|(caller, targets)| {
-            targets
-                .iter()
-                .copied()
-                .filter(move |target| target != caller)
-        })
-        .collect::<BTreeSet<_>>();
+    let source_component_rules = source_component_rules(&call_graph);
     let mut reaches_eof = parser_rules
         .iter()
         .filter(|rule| rule_contains_eof(rule))
@@ -91,7 +95,7 @@ pub(crate) fn analyze(unit: &GrammarUnit, configured: &EntryRuleConfig) -> RuleR
         .iter()
         .filter(|rule| {
             configured.names.contains(&rule.name)
-                || (reaches_eof.contains(&rule.id) && !called_by_other_rule.contains(&rule.id))
+                || (reaches_eof.contains(&rule.id) && source_component_rules.contains(&rule.id))
         })
         .map(|rule| rule.id)
         .collect::<Vec<_>>();
@@ -119,6 +123,43 @@ pub(crate) fn analyze(unit: &GrammarUnit, configured: &EntryRuleConfig) -> RuleR
         entry_rules,
         unreachable_rules,
     }
+}
+
+fn source_component_rules(call_graph: &BTreeMap<RuleId, BTreeSet<RuleId>>) -> BTreeSet<RuleId> {
+    let mut graph = DiGraph::<RuleId, ()>::new();
+    let nodes = call_graph
+        .keys()
+        .map(|rule| (*rule, graph.add_node(*rule)))
+        .collect::<BTreeMap<_, _>>();
+    for (source, targets) in call_graph {
+        for target in targets {
+            graph.add_edge(nodes[source], nodes[target], ());
+        }
+    }
+
+    let components = tarjan_scc(&graph);
+    let mut component_by_rule = BTreeMap::new();
+    for (component_index, component) in components.iter().enumerate() {
+        for node in component {
+            component_by_rule.insert(graph[*node], component_index);
+        }
+    }
+    let mut has_external_incoming = vec![false; components.len()];
+    for (source, targets) in call_graph {
+        let source_component = component_by_rule[source];
+        for target in targets {
+            let target_component = component_by_rule[target];
+            if source_component != target_component {
+                has_external_incoming[target_component] = true;
+            }
+        }
+    }
+
+    call_graph
+        .keys()
+        .filter(|rule| !has_external_incoming[component_by_rule[rule]])
+        .copied()
+        .collect()
 }
 
 fn rule_contains_eof(rule: &Rule) -> bool {

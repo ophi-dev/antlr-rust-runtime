@@ -111,10 +111,12 @@ pub(crate) fn analyze_with_entry_rules(
     // recursion before the direct-recursion rewrite runs (issue #151). This is
     // a no-op on grammars with no reducible left-corner cycle; anything it
     // declines is reported later by the ATN-level G4A005 detector.
+    let preserved_entry_rules = entry_rules.matching_rule_ids(&integrated.grammar.units);
     eliminate_mutual_left_recursion(
         &mut integrated.grammar.units,
         &mut integrated.ids,
         &mut integrated.grammar.provenance,
+        &preserved_entry_rules,
     );
     diagnostics.extend(rewrite_immediate_left_recursion(
         &mut integrated.grammar.units,

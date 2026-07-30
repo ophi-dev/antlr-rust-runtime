@@ -67,6 +67,7 @@ pub(crate) fn eliminate_mutual_left_recursion(
     units: &mut [GrammarUnit],
     ids: &mut ModelIdAllocator,
     provenance: &mut ProvenanceIndex,
+    preserved_rules: &BTreeSet<RuleId>,
 ) -> bool {
     let mut changed = false;
     for unit in units.iter_mut() {
@@ -75,7 +76,7 @@ pub(crate) fn eliminate_mutual_left_recursion(
         // become "unsupported embedded lexer action" much later, far from the
         // cause).
         if unit.kind == GrammarKind::Parser {
-            changed |= eliminate_in_unit(unit, ids, provenance);
+            changed |= eliminate_in_unit(unit, ids, provenance, preserved_rules);
         }
     }
     changed
@@ -103,6 +104,7 @@ fn eliminate_in_unit(
     unit: &mut GrammarUnit,
     ids: &mut ModelIdAllocator,
     provenance: &mut ProvenanceIndex,
+    preserved_rules: &BTreeSet<RuleId>,
 ) -> bool {
     let mut changed = false;
     // Re-derive the cycle set after each successful rewrite: splicing a
@@ -119,7 +121,7 @@ fn eliminate_in_unit(
         };
         let Some(plan) = left_corner_cycles(unit, grammar)
             .iter()
-            .find_map(|cycle| plan_cycle(unit, cycle, grammar))
+            .find_map(|cycle| plan_cycle(unit, cycle, grammar, preserved_rules))
         else {
             return changed;
         };
@@ -278,13 +280,18 @@ const fn bare_reference(element: &Element, call: &RuleCall) -> bool {
 }
 
 /// Decide the whole rewrite for one cycle, or decline. Mutates nothing.
-fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option<CyclePlan> {
+fn plan_cycle(
+    unit: &GrammarUnit,
+    cycle: &Cycle,
+    grammar: Grammar<'_>,
+    preserved_rules: &BTreeSet<RuleId>,
+) -> Option<CyclePlan> {
     let rules = rules_by_id(unit);
     if cycle.iter().any(|member| !rules.contains_key(member)) {
         return None;
     }
     let cycle_set: BTreeSet<RuleId> = cycle.iter().copied().collect();
-    let hub_id = choose_hub(unit, cycle, &cycle_set, grammar)?;
+    let hub_id = choose_hub(unit, cycle, &cycle_set, grammar, preserved_rules)?;
     // Note: a *nullable* hub is fine — Roslyn's `pattern` is one
     // (`recursive_pattern` is all-optional) and ANTLR accepts the collapsed
     // grammar; the ill-founded shapes nullability could smuggle in (an
@@ -374,7 +381,14 @@ fn plan_cycle(unit: &GrammarUnit, cycle: &Cycle, grammar: Grammar<'_>) -> Option
         return None;
     }
 
-    let removable = removable_satellites(unit, cycle, hub_id, &planned, grammar.names);
+    let removable = removable_satellites(
+        unit,
+        cycle,
+        hub_id,
+        &planned,
+        grammar.names,
+        preserved_rules,
+    );
     Some(CyclePlan {
         hub: hub_id,
         alternatives: planned,
@@ -936,8 +950,10 @@ fn choose_hub(
     cycle: &Cycle,
     cycle_set: &BTreeSet<RuleId>,
     grammar: Grammar<'_>,
+    preserved_rules: &BTreeSet<RuleId>,
 ) -> Option<RuleId> {
-    let external = externally_referenced(unit, cycle_set, grammar.names);
+    let mut external = externally_referenced(unit, cycle_set, grammar.names);
+    external.extend(preserved_rules.iter().copied());
     let rules = rules_by_id(unit);
     let candidates = cycle
         .iter()
@@ -992,11 +1008,12 @@ fn removable_satellites(
     hub_id: RuleId,
     planned: &[PlannedAlternative],
     names: &BTreeMap<String, RuleId>,
+    preserved_rules: &BTreeSet<RuleId>,
 ) -> BTreeSet<RuleId> {
     let mut removable = cycle
         .iter()
         .copied()
-        .filter(|member| *member != hub_id)
+        .filter(|member| *member != hub_id && !preserved_rules.contains(member))
         .collect::<BTreeSet<_>>();
     loop {
         let mut referenced = BTreeSet::new();
@@ -1349,6 +1366,7 @@ mod tests {
             std::slice::from_mut(&mut fixture.unit),
             &mut fixture.ids,
             &mut fixture.provenance,
+            &BTreeSet::new(),
         );
         let after = render(&fixture.unit);
         (before, after, changed)
@@ -1361,6 +1379,7 @@ mod tests {
                 std::slice::from_mut(&mut fixture.unit),
                 &mut fixture.ids,
                 &mut fixture.provenance,
+                &BTreeSet::new(),
             ),
             "expected the cycle to be rewritten"
         );
@@ -1478,6 +1497,7 @@ mod tests {
             std::slice::from_mut(&mut fixture.unit),
             &mut fixture.ids,
             &mut fixture.provenance,
+            &BTreeSet::new(),
         ));
         let diagnostics = rewrite_immediate_left_recursion(
             std::slice::from_mut(&mut fixture.unit),
@@ -1529,6 +1549,7 @@ mod tests {
             std::slice::from_mut(&mut fixture.unit),
             &mut fixture.ids,
             &mut fixture.provenance,
+            &BTreeSet::new(),
         ));
         let diagnostics = rewrite_immediate_left_recursion(
             std::slice::from_mut(&mut fixture.unit),
@@ -1908,6 +1929,7 @@ mod tests {
             std::slice::from_mut(&mut fixture.unit),
             &mut fixture.ids,
             &mut fixture.provenance,
+            &BTreeSet::new(),
         );
         assert!(!changed, "lexer grammars must not be rewritten");
         assert_eq!(before, render(&fixture.unit));
@@ -1924,6 +1946,7 @@ mod tests {
             std::slice::from_mut(&mut fixture.unit),
             &mut fixture.ids,
             &mut fixture.provenance,
+            &BTreeSet::new(),
         ));
         assert_eq!(
             ids_before,

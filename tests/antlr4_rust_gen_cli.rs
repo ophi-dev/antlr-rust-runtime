@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -79,6 +80,46 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
 
 fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
+}
+
+fn generated_parser_api(source: &str) -> Vec<String> {
+    let mut api = BTreeSet::new();
+    for line in source.lines().map(str::trim) {
+        for (prefix, kind) in [
+            ("pub const fn ", "fn"),
+            ("pub const ", "const"),
+            ("pub enum ", "enum"),
+            ("pub fn ", "fn"),
+            ("pub static ", "static"),
+            ("pub struct ", "struct"),
+            ("pub trait ", "trait"),
+            ("pub type ", "type"),
+        ] {
+            let Some(rest) = line.strip_prefix(prefix) else {
+                continue;
+            };
+            let name = rest
+                .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                .next()
+                .unwrap_or_default();
+            if !name.is_empty() {
+                api.insert(format!("{kind} {name}"));
+            }
+            break;
+        }
+
+        let Some(rest) = line.strip_prefix("fn ") else {
+            continue;
+        };
+        let name = rest
+            .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+            .next()
+            .unwrap_or_default();
+        if name.starts_with("enter_") || name.starts_with("exit_") || name.starts_with("visit_") {
+            api.insert(format!("callback {name}"));
+        }
+    }
+    api.into_iter().collect()
 }
 
 /// Lines of `haystack` containing `needle`, numbered, capped so a failure
@@ -298,6 +339,7 @@ fn unreachable_parser_rules_warn_from_every_inferred_entry() {
 
     let output = run_antlr4_rust_gen(&[
         grammar.as_os_str(),
+        OsStr::new("--visitor"),
         OsStr::new("--out-dir"),
         out.as_os_str(),
     ]);
@@ -317,11 +359,10 @@ fn unreachable_parser_rules_warn_from_every_inferred_entry() {
 
     let parser = fs::read_to_string(out.join("reachability_parser.rs"))
         .expect("baseline parser should be emitted");
-    assert!(parser.contains("/// - `start()`"));
-    assert!(parser.contains("/// - `script()`"));
-    assert!(parser.contains("/// - `alternate()`"));
-    assert!(parser.contains("pub fn dead_root("));
-    assert!(parser.contains("pub fn dead_helper("));
+    insta::assert_debug_snapshot!(
+        "unreachable_rule_default_generated_api",
+        generated_parser_api(&parser)
+    );
 }
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
@@ -336,6 +377,7 @@ fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
         grammar.as_os_str(),
         OsStr::new("--entry-rule"),
         OsStr::new("manual"),
+        OsStr::new("--visitor"),
         OsStr::new("--prune-unreachable"),
         OsStr::new("--out-dir"),
         out.as_os_str(),
@@ -356,16 +398,10 @@ fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
 
     let parser = fs::read_to_string(out.join("reachability_parser.rs"))
         .expect("pruned parser should be emitted");
-    for retained in ["start", "script", "alternate", "end", "manual", "live"] {
-        assert!(
-            parser.contains(&format!("pub fn {retained}(")),
-            "missing retained rule {retained}"
-        );
-    }
-    assert!(!parser.contains("pub fn dead_root("));
-    assert!(!parser.contains("pub fn dead_helper("));
-    assert!(!parser.contains("DeadRootContext"));
-    assert!(!parser.contains("DeadHelperContext"));
+    insta::assert_debug_snapshot!(
+        "pruned_unreachable_rule_generated_api",
+        generated_parser_api(&parser)
+    );
 
     let lexer =
         fs::read_to_string(out.join("reachability_lexer.rs")).expect("lexer should be emitted");
@@ -373,6 +409,102 @@ fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
     assert_generated_modules_compile(
         temp.path(),
         &["reachability_lexer.rs", "reachability_parser.rs"],
+    );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn eof_reaching_recursive_source_component_is_inferred_as_entries() {
+    let temp = temporary_directory("recursive-entry-component");
+    let grammar = temp.path().join("RecursiveEntries.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar RecursiveEntries;\n\
+         junk : ID ;\n\
+         a : 'a' b | EOF ;\n\
+         b : 'b' a ;\n\
+         ID : [a-z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--visitor"),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("recursive_entries_parser.rs"))
+        .expect("parser should be emitted");
+    let api = generated_parser_api(&parser);
+    assert!(
+        api.iter().any(|symbol| symbol == "fn a"),
+        "recursive entry a should survive pruning"
+    );
+    assert!(
+        api.iter().any(|symbol| symbol == "fn b"),
+        "recursive entry b should survive pruning"
+    );
+    insta::assert_debug_snapshot!("recursive_eof_entry_component_generated_api", api);
+    assert_generated_modules_compile(
+        temp.path(),
+        &["recursive_entries_lexer.rs", "recursive_entries_parser.rs"],
+    );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn configured_entry_survives_mutual_recursion_rewrite() {
+    let temp = temporary_directory("configured-mutual-entry");
+    let grammar = temp.path().join("ConfiguredMutualEntry.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar ConfiguredMutualEntry;\n\
+         e : s | ID ;\n\
+         s : e '+' ID ;\n\
+         ID : [a-z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--entry-rule"),
+        OsStr::new("s"),
+        OsStr::new("--visitor"),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("configured_mutual_entry_parser.rs"))
+        .expect("parser should be emitted");
+    let api = generated_parser_api(&parser);
+    assert!(
+        api.iter().any(|symbol| symbol == "fn s"),
+        "configured entry s should survive rewriting"
+    );
+    insta::assert_debug_snapshot!("configured_mutual_entry_generated_api", api);
+    assert_generated_modules_compile(
+        temp.path(),
+        &[
+            "configured_mutual_entry_lexer.rs",
+            "configured_mutual_entry_parser.rs",
+        ],
     );
 }
 
