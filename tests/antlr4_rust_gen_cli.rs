@@ -1815,6 +1815,311 @@ mod token_label_recovery_tests {
 }
 
 #[test]
+fn validated_tree_makes_required_children_infallible_after_full_validation() {
+    let temp = temporary_directory("validated-tree");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/validated-tree/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--visitor"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
+    for expected in [
+        "pub struct TValidatedTree",
+        "pub enum TValidationError",
+        "pub fn parse_validated<L: TokenSource>",
+        "pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>",
+        "pub fn validate(self) -> Result<TValidatedTree, TValidationError>",
+        "pub trait TValidatedListener",
+        "pub trait TValidatedVisitor",
+        "impl<'a> StartContext<'a, ValidatedTreeContext>",
+        "pub fn required_rule(&self) -> RequiredRuleContext<'a, ValidatedTreeContext>",
+        "pub fn bang_token(&self) -> TerminalNode<'a>",
+        "pub fn optional_rule(&self) -> Option<OptionalRuleContext<'a, ValidatedTreeContext>>",
+        "pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a, ValidatedTreeContext>>",
+        "let _ = context.required_rule().map_err(TValidationError::MissingChild)?;",
+        "TValidationError::InvalidChildCount",
+    ] {
+        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
+    }
+
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod validated_tree_tests {
+    use std::convert::Infallible;
+
+    use super::t_lexer::TLexer;
+    use super::t_parser::*;
+    use antlr4_runtime::{
+        BaseParser, CommonTokenStream, InputStream, MissingChildError, ParserRuleContext,
+    };
+
+    fn strict(input: &str) -> Result<TValidatedTree, TValidationError> {
+        parse_validated(input, TLexer::new, TParser::start)
+    }
+
+    fn start_context(tree: &TValidatedTree) -> StartContext<'_, ValidatedTreeContext> {
+        tree.tree()
+            .downcast_ref()
+            .expect("validated start context")
+    }
+
+    #[derive(Default)]
+    struct ValidatedTrace {
+        starts: usize,
+        wrapped: usize,
+        bare: usize,
+        atoms: usize,
+    }
+
+    impl TValidatedListener for ValidatedTrace {
+        fn enter_start(
+            &mut self,
+            ctx: &StartContext<ValidatedTreeContext>,
+        ) -> Result<(), Infallible> {
+            self.starts += 1;
+            assert_eq!(ctx.bang_token().to_string(), "!");
+            assert_eq!(ctx.required().text(), "(head)");
+            Ok(())
+        }
+
+        fn enter_wrapped_label(
+            &mut self,
+            ctx: &WrappedLabelContext<ValidatedTreeContext>,
+        ) -> Result<(), Infallible> {
+            self.wrapped += 1;
+            assert_eq!(ctx.id_token().to_string(), "head");
+            Ok(())
+        }
+
+        fn enter_bare_label(
+            &mut self,
+            _ctx: &BareLabelContext<ValidatedTreeContext>,
+        ) -> Result<(), Infallible> {
+            self.bare += 1;
+            Ok(())
+        }
+
+        fn enter_atom(
+            &mut self,
+            ctx: &AtomContext<ValidatedTreeContext>,
+        ) -> Result<(), Infallible> {
+            self.atoms += 1;
+            let _required_token = ctx.id_token();
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct ValidatedVisitor {
+        wrapped: usize,
+        bare: usize,
+        atoms: usize,
+    }
+
+    impl TValidatedVisitor for ValidatedVisitor {
+        type Result = ();
+
+        fn default_result(&mut self) -> Self::Result {}
+
+        fn visit_wrapped_label(
+            &mut self,
+            ctx: &WrappedLabelContext<ValidatedTreeContext>,
+        ) -> Self::Result {
+            self.wrapped += 1;
+            let _required_token = ctx.id_token();
+            self.visit_children(ctx)
+        }
+
+        fn visit_bare_label(
+            &mut self,
+            ctx: &BareLabelContext<ValidatedTreeContext>,
+        ) -> Self::Result {
+            self.bare += 1;
+            let _required_token = ctx.id_token();
+            self.visit_children(ctx)
+        }
+
+        fn visit_atom(
+            &mut self,
+            ctx: &AtomContext<ValidatedTreeContext>,
+        ) -> Self::Result {
+            self.atoms += 1;
+            let _required_token = ctx.id_token();
+        }
+    }
+
+    #[test]
+    fn clean_tree_exposes_direct_required_children_and_typed_traversal() {
+        let validated = strict("(head) [maybe] ! : ? one two").expect("clean parse validates");
+        let start = start_context(&validated);
+
+        assert_eq!(start.required_rule().text(), "(head)");
+        assert_eq!(start.required().text(), "(head)");
+        assert_eq!(
+            start.optional_rule().expect("optional rule").text(),
+            "[maybe]"
+        );
+        assert_eq!(start.optional().expect("optional label").text(), "[maybe]");
+        assert_eq!(start.bang_token().to_string(), "!");
+        assert_eq!(start.bang().to_string(), "!");
+        assert_eq!(start.colon_token().to_string(), ":");
+        assert_eq!(
+            start.question_token().expect("optional token").to_string(),
+            "?"
+        );
+        assert_eq!(start.question().expect("optional label").to_string(), "?");
+        assert_eq!(
+            start
+                .atom_children()
+                .map(|atom| atom.id_token().to_string())
+                .collect::<Vec<_>>(),
+            ["one", "two"]
+        );
+        assert_eq!(
+            start
+                .items()
+                .map(|atom| atom.id_token().to_string())
+                .collect::<Vec<_>>(),
+            ["one", "two"]
+        );
+        assert_eq!(start.eof_token().to_string(), "<EOF>");
+
+        let mut listener = ValidatedTrace::default();
+        listener.walk(validated.tree()).expect("validated walk");
+        assert_eq!(listener.starts, 1);
+        assert_eq!(listener.wrapped, 1);
+        assert_eq!(listener.bare, 0);
+        assert_eq!(listener.atoms, 2);
+
+        let mut visitor = ValidatedVisitor::default();
+        visitor.visit(validated.tree());
+        assert_eq!(visitor.wrapped, 1);
+        assert_eq!(visitor.bare, 0);
+        assert_eq!(visitor.atoms, 2);
+    }
+
+    #[test]
+    fn optional_absence_and_the_other_labeled_alternative_stay_typed() {
+        let validated = strict("head ! : one").expect("clean bare parse validates");
+        let start = start_context(&validated);
+
+        assert!(start.optional_rule().is_none());
+        assert!(start.optional().is_none());
+        assert!(start.question_token().is_none());
+        assert!(start.question().is_none());
+        assert_eq!(start.items().count(), 1);
+
+        let mut visitor = ValidatedVisitor::default();
+        visitor.visit(validated.tree());
+        assert_eq!(visitor.wrapped, 0);
+        assert_eq!(visitor.bare, 1);
+        assert_eq!(visitor.atoms, 1);
+    }
+
+    #[test]
+    fn recovery_and_lexer_errors_cannot_cross_the_type_boundary() {
+        // The first input inserts a missing COLON; the second deletes COMMA.
+        for input in ["head ! one", "head , ! : one"] {
+            let error = parse_with_parser(input, TLexer::new, TParser::start)
+                .expect("ANTLR recovery returns a tree")
+                .validate()
+                .expect_err("recovered parse must not validate");
+            assert!(
+                matches!(
+                    error,
+                    TValidationError::SyntaxErrors {
+                        lexer: 0,
+                        parser: 1..
+                    }
+                ),
+                "{input:?}: {error:?}"
+            );
+
+            let output = parse_with_parser(input, TLexer::new, TParser::start)
+                .expect("ANTLR recovery returns a tree");
+            let TParserParseOutput { result, parser } = output;
+            let recovered = parser.into_parsed_file(result);
+            assert!(
+                matches!(
+                    validate_tree_structure(&recovered),
+                    Err(TValidationError::RecoveredErrorNode { .. })
+                ),
+                "{input:?}"
+            );
+        }
+
+        assert_eq!(
+            strict("head @ ! : one").expect_err("lexer diagnostics must reject validation"),
+            TValidationError::SyntaxErrors {
+                lexer: 1,
+                parser: 0,
+            }
+        );
+
+        assert!(matches!(
+            strict("head : one"),
+            Err(TValidationError::Recognition(_))
+        ));
+    }
+
+    #[test]
+    fn structural_validation_reports_missing_required_children() {
+        let lexer = TLexer::new(InputStream::new(""));
+        let tokens = CommonTokenStream::new(lexer);
+        let data = TParser::<TLexer<InputStream>>::metadata().recognizer_data();
+        let mut parser = BaseParser::new(tokens, data);
+        let root = parser.rule_node(ParserRuleContext::new(0, -1));
+        let malformed = parser.into_parsed_file(root);
+
+        let error =
+            validate_tree_structure(&malformed).expect_err("empty start context must be invalid");
+        assert_eq!(
+            error,
+            TValidationError::MissingChild(MissingChildError::new(
+                "StartContext",
+                "requiredRule",
+            ))
+        );
+        assert_eq!(
+            error.to_string(),
+            "required child requiredRule is missing from StartContext"
+        );
+    }
+
+    #[test]
+    fn recovery_oriented_contexts_keep_fallible_required_accessors() {
+        let parsed = parse("head ! : one", TLexer::new, TParser::start)
+            .expect("clean recovery-oriented parse");
+        let start = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<StartContext>()
+            .expect("stored start context");
+        let required: Result<RequiredRuleContext<'_>, MissingChildError> =
+            start.required_rule();
+        assert_eq!(required.expect("required child").text(), "head");
+    }
+}
+"#,
+    );
+}
+
+#[test]
 fn compile_parse_tree_pattern_matches_and_binds_against_generated_parser() {
     let temp = temporary_directory("tree-pattern-compile");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

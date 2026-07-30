@@ -22,3 +22,7 @@ everyRule
 storedTree
     : NEW
     ;
+
+validatedTree
+    : NEW
+    ;

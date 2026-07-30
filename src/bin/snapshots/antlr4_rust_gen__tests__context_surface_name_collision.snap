@@ -24,6 +24,11 @@ ContextSurfaceNames {
             listener_method: "stored_tree",
             visitor_method: "stored_tree",
         },
+        ContextSurfaceName {
+            context_type: "ValidatedTreeRuleContext",
+            listener_method: "validated_tree",
+            visitor_method: "validated_tree",
+        },
     ],
     views: [
         ContextViewName {
@@ -82,6 +87,15 @@ ContextSurfaceNames {
                 visitor_method: "stored_tree",
             },
             rule_index: 3,
+            alternative_label: None,
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "ValidatedTreeRuleContext",
+                listener_method: "validated_tree",
+                visitor_method: "validated_tree",
+            },
+            rule_index: 4,
             alternative_label: None,
         },
     ],

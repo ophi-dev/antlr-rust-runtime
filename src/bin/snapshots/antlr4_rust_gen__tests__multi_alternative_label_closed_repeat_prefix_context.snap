@@ -1,6 +1,6 @@
 ---
 source: src/bin/antlr4-rust-gen.rs
-expression: "context(\"ClosedRepeatPrefixContext\")"
+expression: "rendered_context_impl(&rendered, \"ClosedRepeatPrefixContext\")"
 ---
 
     pub fn child_count(&self) -> usize {
@@ -24,6 +24,10 @@ expression: "context(\"ClosedRepeatPrefixContext\")"
             __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
         }
     }
+}
+
+#[allow(dead_code, private_bounds, clippy::all)]
+impl<'a, State: __RecoveryContextState> ClosedRepeatPrefixContext<'a, State> {
     pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __token_children(self.__node, 8).map(TerminalNode::new)
     }
@@ -35,5 +39,66 @@ expression: "context(\"ClosedRepeatPrefixContext\")"
             .next()
             .map(TerminalNode::new)
             .ok_or_else(|| MissingChildError::new("ClosedRepeatPrefixContext", "NUM"))
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ClosedRepeatPrefixContext<'a, ValidatedTreeContext> {
+    fn __from_validated_node(node: RuleNodeView<'a>) -> Self {
+        Self::__from_validated_node_with_invocation_states(node, None)
+    }
+
+    fn __from_validated_child_node(
+        node: RuleNodeView<'a>,
+        parent_invocation_states: Option<&[isize]>,
+    ) -> Self {
+        let invocation_states = parent_invocation_states.map(|states| {
+            let mut invocation_states = Vec::with_capacity(states.len() + 1);
+            invocation_states.push(node.invoking_state());
+            invocation_states.extend_from_slice(states);
+            invocation_states
+        });
+        Self::__from_validated_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_validated_listener_node(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<&[isize]>,
+    ) -> Self {
+        Self::__from_validated_node_with_invocation_states(
+            node,
+            invocation_states.map(|states| states.to_vec()),
+        )
+    }
+
+    fn __from_validated_node_with_invocation_states(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<Vec<isize>>,
+    ) -> Self {
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+            __state: std::marker::PhantomData,
+        }
+    }
+
+    pub fn rule_node(&self) -> RuleNodeView<'a> {
+        match self.__node {
+            __GeneratedRuleContext::Stored(node) => node,
+            __GeneratedRuleContext::Active { .. } => unreachable!("validated context contains an active parser context"),
+        }
+    }
+
+    pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 8).map(TerminalNode::new)
+    }
+    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 13).map(TerminalNode::new)
+    }
+    pub fn num_token(&self) -> TerminalNode<'a> {
+        let Some(node) = __token_children(self.__node, 14).next() else {
+            unreachable!("validated ClosedRepeatPrefixContext is missing required child NUM")
+        };
+        TerminalNode::new(node)
     }
 }
