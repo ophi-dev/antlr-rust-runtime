@@ -1,6 +1,6 @@
 ---
 source: src/bin/antlr4-rust-gen.rs
-expression: "context(\"GroupedContext\")"
+expression: "rendered_context_impl(&rendered, \"GroupedContext\")"
 ---
 
     pub fn child_count(&self) -> usize {
@@ -24,6 +24,10 @@ expression: "context(\"GroupedContext\")"
             __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
         }
     }
+}
+
+#[allow(dead_code, private_bounds, clippy::all)]
+impl<'a, State: __RecoveryContextState> GroupedContext<'a, State> {
     pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
         __rule_children(self.__node, 4)
             .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
@@ -61,6 +65,98 @@ expression: "context(\"GroupedContext\")"
         __rule_children(self.__node, 4)
             .skip(0)
             .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
+    pub fn oneway(&self) -> Option<TerminalNode<'a>> {
+        __labeled_token_children(self.__node, 8)
+            .nth(0)
+            .map(TerminalNode::new)
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> GroupedContext<'a, ValidatedTreeContext> {
+    fn __from_validated_node(node: RuleNodeView<'a>) -> Self {
+        Self::__from_validated_node_with_invocation_states(node, None)
+    }
+
+    fn __from_validated_child_node(
+        node: RuleNodeView<'a>,
+        parent_invocation_states: Option<&[isize]>,
+    ) -> Self {
+        let invocation_states = parent_invocation_states.map(|states| {
+            let mut invocation_states = Vec::with_capacity(states.len() + 1);
+            invocation_states.push(node.invoking_state());
+            invocation_states.extend_from_slice(states);
+            invocation_states
+        });
+        Self::__from_validated_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_validated_listener_node(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<&[isize]>,
+    ) -> Self {
+        Self::__from_validated_node_with_invocation_states(
+            node,
+            invocation_states.map(|states| states.to_vec()),
+        )
+    }
+
+    fn __from_validated_node_with_invocation_states(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<Vec<isize>>,
+    ) -> Self {
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+            __state: std::marker::PhantomData,
+        }
+    }
+
+    pub fn rule_node(&self) -> RuleNodeView<'a> {
+        match self.__node {
+            __GeneratedRuleContext::Stored(node) => node,
+            __GeneratedRuleContext::Active { .. } => unreachable!("validated context contains an active parser context"),
+        }
+    }
+
+    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
+        __rule_children(self.__node, 4)
+            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
+    }
+    pub fn in_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 7)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 8)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 13)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn num_token(&self) -> TerminalNode<'a> {
+        let Some(node) = __token_children(self.__node, 14).next() else {
+            unreachable!("validated GroupedContext is missing required child NUM")
+        };
+        TerminalNode::new(node)
+    }
+    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 15).map(TerminalNode::new)
+    }
+    pub fn doc(&self) -> Option<TerminalNode<'a>> {
+        __labeled_token_children(self.__node, 13)
+            .nth(0)
+            .map(TerminalNode::new)
+    }
+    pub fn errors(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
+        __rule_children(self.__node, 4)
+            .skip(0)
+            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn oneway(&self) -> Option<TerminalNode<'a>> {
         __labeled_token_children(self.__node, 8)

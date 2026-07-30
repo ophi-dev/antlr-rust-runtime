@@ -18,6 +18,7 @@ pub struct CommonTokenStream<S> {
     source: S,
     store: TokenStore,
     source_token_count: usize,
+    source_error_count: usize,
     next_visible_after: Vec<usize>,
     cursor: usize,
     channel: i32,
@@ -94,10 +95,12 @@ where
     pub fn try_with_channel(mut source: S, channel: i32) -> Result<Self, TokenStoreError> {
         let (store, source_errors) = buffer_token_source(&mut source)?;
         let source_token_count = store.len();
+        let source_error_count = source_errors.len();
         let mut stream = Self {
             source,
             store,
             source_token_count,
+            source_error_count,
             next_visible_after: vec![UNKNOWN_NEXT_VISIBLE; source_token_count],
             cursor: 0,
             channel,
@@ -140,6 +143,7 @@ where
         let (store, source_errors) = buffer_token_source(&mut self.source)?;
         self.store = store;
         self.source_token_count = self.store.len();
+        self.source_error_count = source_errors.len();
         self.next_visible_after = vec![UNKNOWN_NEXT_VISIBLE; self.source_token_count];
         self.cursor = self.adjust_seek_index(0);
         self.requested_token_count.set(0);
@@ -228,6 +232,13 @@ where
 
     pub const fn token_count(&self) -> usize {
         self.source_token_count
+    }
+
+    /// Returns the total number of diagnostics emitted while buffering the
+    /// current token source, including diagnostics already delivered through
+    /// [`Self::drain_source_errors`].
+    pub const fn number_of_source_errors(&self) -> usize {
+        self.source_error_count
     }
 
     /// Returns the canonical token store owned by this stream.
@@ -592,12 +603,17 @@ mod tests {
             index: 0,
         });
 
+        assert_eq!(stream.number_of_source_errors(), 1);
         assert!(stream.drain_source_errors().is_empty());
         assert_eq!(stream.token_type_at_index(1), 2);
         assert!(stream.drain_source_errors().is_empty());
 
         assert_eq!(stream.token_type_at_index(2), TOKEN_EOF);
         assert_eq!(stream.drain_source_errors(), vec![suffix_error]);
+        assert_eq!(stream.number_of_source_errors(), 1);
+
+        stream.refill();
+        assert_eq!(stream.number_of_source_errors(), 0);
     }
 
     #[test]
@@ -657,6 +673,7 @@ mod tests {
 
         assert_eq!(stream.channel(), 2);
         assert_eq!(stream.index(), 0);
+        assert_eq!(stream.number_of_source_errors(), 0);
         assert_eq!(stream.la_token(1), 2);
         assert_eq!(stream.text_all(), "new");
     }
@@ -674,6 +691,7 @@ mod tests {
         stream.refill();
 
         assert_eq!(stream.index(), 0);
+        assert_eq!(stream.number_of_source_errors(), 0);
         assert_eq!(stream.la_token(1), 2);
         assert_eq!(stream.text_all(), "new");
     }

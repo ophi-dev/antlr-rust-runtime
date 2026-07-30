@@ -15,6 +15,24 @@ where
     pub parser: TParser<L>,
 }
 
+impl<L: TokenSource> TParserParseOutput<antlr4_runtime::NodeId, L> {
+    /// Validates a completed parse and changes its generated context surface.
+    ///
+    /// Validation rejects lexer diagnostics, parser recovery, recovered error
+    /// nodes, and missing generated required children before constructing the
+    /// validated-tree type boundary.
+    pub fn validate(self) -> Result<TValidatedTree, TValidationError> {
+        let lexer = self.parser.token_stream().number_of_source_errors();
+        let parser = self.parser.number_of_syntax_errors();
+        if lexer != 0 || parser != 0 {
+            return Err(TValidationError::SyntaxErrors { lexer, parser });
+        }
+        let parsed = self.parser.into_parsed_file(self.result);
+        validate_tree_structure(&parsed)?;
+        Ok(TValidatedTree::__new(parsed))
+    }
+}
+
 /// Parses UTF-8 text by constructing the lexer, token stream, parser, and
 /// caller-selected entry rule in one call.
 ///
@@ -32,6 +50,21 @@ pub fn parse<L: TokenSource>(
 ) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
 {
     parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)
+}
+
+/// Parses UTF-8 text and returns a typed tree whose required generated child
+/// accessors are infallible.
+pub fn parse_validated<L: TokenSource>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<TValidatedTree, TValidationError>
+{
+    parse_stream_validated(
+        antlr4_runtime::InputStream::new(input.as_ref()),
+        lexer,
+        entry,
+    )
 }
 
 /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
@@ -67,6 +100,18 @@ pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(
     let TParserParseOutput { result, parser } =
         parse_stream_with_parser(input, lexer, entry)?;
     Ok(parser.into_parsed_file(result))
+}
+
+/// Parses a caller-provided character stream and validates the completed tree.
+pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut TParser<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<TValidatedTree, TValidationError>
+{
+    let output = parse_stream_with_parser(input, lexer, entry)
+        .map_err(TValidationError::Recognition)?;
+    output.validate()
 }
 
 /// Parses a caller-provided character stream like [`parse_stream`] while

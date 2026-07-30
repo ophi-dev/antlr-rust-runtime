@@ -9917,7 +9917,10 @@ impl ContextSurfaceNames {
 /// always use a `Label`/`_label` suffix so their generated surfaces cannot be
 /// confused with rule surfaces.
 fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames {
-    let mut used_context_types = BTreeSet::from(["StoredTreeContext".to_owned()]);
+    let mut used_context_types = BTreeSet::from([
+        "StoredTreeContext".to_owned(),
+        "ValidatedTreeContext".to_owned(),
+    ]);
     let mut used_listener_methods = BTreeSet::from(["every_rule".to_owned()]);
     let mut used_visitor_methods = BTreeSet::from([
         "children".to_owned(),
@@ -10861,18 +10864,79 @@ fn accessor_stem(name: &str) -> String {
     rust_function_name(name).trim_start_matches("r#").to_owned()
 }
 
-fn render_rule_label_accessor(
+#[derive(Debug, Default, Eq, PartialEq)]
+struct RenderedContextAccessors {
+    recovered: String,
+    validated: String,
+    validation: String,
+}
+
+fn render_required_accessor_validation(
+    out: &mut String,
+    method: &str,
+    validation_error_name: &str,
+) {
+    let _ = writeln!(
+        out,
+        "        let _ = context.{method}().map_err({validation_error_name}::MissingChild)?;"
+    );
+}
+
+fn render_repeated_accessor_validation(
     out: &mut String,
     method: &str,
     view_name: &str,
-    child_view: &str,
-    child_index: usize,
-    label: &ContextLabelAccessor,
+    child_name: &str,
+    minimum: usize,
+    validation_error_name: &str,
 ) {
+    if minimum == 0 {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "        {{\n            let actual = context.{method}().count();\n            if actual < {minimum} {{\n                return Err({validation_error_name}::InvalidChildCount {{\n                    context: \"{view_name}\",\n                    child: \"{child_name}\",\n                    minimum: {minimum},\n                    actual,\n                }});\n            }}\n        }}"
+    );
+}
+
+#[derive(Clone, Copy)]
+struct RuleLabelAccessorRender<'a> {
+    method: &'a str,
+    view_name: &'a str,
+    child_view: &'a str,
+    child_index: usize,
+    label: &'a ContextLabelAccessor,
+    validation_error_name: &'a str,
+}
+
+fn render_rule_label_accessor(
+    rendered: &mut RenderedContextAccessors,
+    context: RuleLabelAccessorRender<'_>,
+) {
+    let RuleLabelAccessorRender {
+        method,
+        view_name,
+        child_view,
+        child_index,
+        label,
+        validation_error_name,
+    } = context;
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
-            out,
+            rendered.recovered,
             "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+        );
+        let _ = writeln!(
+            rendered.validated,
+            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a, ValidatedTreeContext>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+        );
+        render_repeated_accessor_validation(
+            &mut rendered.validation,
+            method,
+            view_name,
+            &label.source_name,
+            label.cardinality.min,
+            validation_error_name,
         );
         return;
     }
@@ -10883,23 +10947,38 @@ fn render_rule_label_accessor(
     };
     if label.cardinality.is_required_single() {
         let _ = writeln!(
-            out,
+            rendered.recovered,
             "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
             label.source_name
         );
+        let _ = writeln!(
+            rendered.validated,
+            "    pub fn {method}(&self) -> {child_view}<'a, ValidatedTreeContext> {{\n        let Some(node) = __rule_children(self.__node, {child_index})\n            {lookup}\n        else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        {child_view}::<ValidatedTreeContext>::__from_validated_child_node(\n            node,\n            self.__invocation_states.as_deref(),\n        )\n    }}",
+            label.source_name
+        );
+        render_required_accessor_validation(
+            &mut rendered.validation,
+            method,
+            validation_error_name,
+        );
     } else {
         let _ = writeln!(
-            out,
+            rendered.recovered,
             "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+        );
+        let _ = writeln!(
+            rendered.validated,
+            "    pub fn {method}(&self) -> Option<{child_view}<'a, ValidatedTreeContext>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
         );
     }
 }
 
 fn render_token_label_accessor(
-    out: &mut String,
+    rendered: &mut RenderedContextAccessors,
     method: &str,
     view_name: &str,
     label: &ContextLabelAccessor,
+    validation_error_name: &str,
 ) {
     let token_types = label
         .token_types
@@ -10914,8 +10993,20 @@ fn render_token_label_accessor(
     };
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
-            out,
+            rendered.recovered,
             "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        {children}\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
+        );
+        let _ = writeln!(
+            rendered.validated,
+            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        {children}\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
+        );
+        render_repeated_accessor_validation(
+            &mut rendered.validation,
+            method,
+            view_name,
+            &label.source_name,
+            label.cardinality.min,
+            validation_error_name,
         );
         return;
     }
@@ -10926,31 +11017,77 @@ fn render_token_label_accessor(
     };
     if label.cardinality.is_required_single() {
         let _ = writeln!(
-            out,
+            rendered.recovered,
             "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
             label.source_name
         );
+        let _ = writeln!(
+            rendered.validated,
+            "    pub fn {method}(&self) -> TerminalNode<'a> {{\n        let Some(node) = {children}\n            {lookup}\n        else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        TerminalNode::new(node)\n    }}",
+            label.source_name
+        );
+        render_required_accessor_validation(
+            &mut rendered.validation,
+            method,
+            validation_error_name,
+        );
     } else {
         let _ = writeln!(
-            out,
+            rendered.recovered,
+            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
+        );
+        let _ = writeln!(
+            rendered.validated,
             "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
         );
     }
 }
 
-fn render_context_child_accessors(
-    view_name: &str,
-    model: &embedded::EmbeddedModel,
-    context_names: &ContextSurfaceNames,
-    token_accessors: &[(String, i32)],
-    child_cardinalities: &BTreeMap<String, embedded::ChildCardinality>,
-    label_accessors: &[ContextLabelAccessor],
-) -> String {
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }}\n    }}\n\n    pub fn text(&self) -> String {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.text(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.text(storage, tokens),\n        }}\n    }}"
-    );
+const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+"#;
+
+#[derive(Clone, Copy)]
+struct ContextAccessorsRender<'a> {
+    view_name: &'a str,
+    model: &'a embedded::EmbeddedModel,
+    context_names: &'a ContextSurfaceNames,
+    token_accessors: &'a [(String, i32)],
+    child_cardinalities: &'a BTreeMap<String, embedded::ChildCardinality>,
+    label_accessors: &'a [ContextLabelAccessor],
+    validation_error_name: &'a str,
+}
+
+fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> RenderedContextAccessors {
+    let ContextAccessorsRender {
+        view_name,
+        model,
+        context_names,
+        token_accessors,
+        child_cardinalities,
+        label_accessors,
+        validation_error_name,
+    } = context;
+    let mut rendered = RenderedContextAccessors::default();
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
         "rule_node".to_owned(),
@@ -10975,19 +11112,45 @@ fn render_context_child_accessors(
         let child_view = &context_names.rules[child_index].context_type;
         if cardinality.is_repeated() {
             let _ = writeln!(
-                out,
+                rendered.recovered,
                 "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+            );
+            let _ = writeln!(
+                rendered.validated,
+                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a, ValidatedTreeContext>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+            );
+            render_repeated_accessor_validation(
+                &mut rendered.validation,
+                &method,
+                view_name,
+                &child.name,
+                cardinality.min,
+                validation_error_name,
             );
         } else if cardinality.is_required_single() {
             let _ = writeln!(
-                out,
+                rendered.recovered,
                 "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
                 child.name
             );
+            let _ = writeln!(
+                rendered.validated,
+                "    pub fn {method}(&self) -> {child_view}<'a, ValidatedTreeContext> {{\n        let Some(node) = __rule_children(self.__node, {child_index}).next() else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        {child_view}::<ValidatedTreeContext>::__from_validated_child_node(\n            node,\n            self.__invocation_states.as_deref(),\n        )\n    }}",
+                child.name
+            );
+            render_required_accessor_validation(
+                &mut rendered.validation,
+                &method,
+                validation_error_name,
+            );
         } else {
             let _ = writeln!(
-                out,
+                rendered.recovered,
                 "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+            );
+            let _ = writeln!(
+                rendered.validated,
+                "    pub fn {method}(&self) -> Option<{child_view}<'a, ValidatedTreeContext>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
             );
         }
     }
@@ -11009,17 +11172,42 @@ fn render_context_child_accessors(
         );
         if cardinality.is_repeated() {
             let _ = writeln!(
-                out,
+                rendered.recovered,
                 "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type}).map(TerminalNode::new)\n    }}"
+            );
+            let _ = writeln!(
+                rendered.validated,
+                "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type}).map(TerminalNode::new)\n    }}"
+            );
+            render_repeated_accessor_validation(
+                &mut rendered.validation,
+                &method,
+                view_name,
+                token_name,
+                cardinality.min,
+                validation_error_name,
             );
         } else if cardinality.is_required_single() {
             let _ = writeln!(
-                out,
+                rendered.recovered,
                 "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{token_name}\"))\n    }}"
+            );
+            let _ = writeln!(
+                rendered.validated,
+                "    pub fn {method}(&self) -> TerminalNode<'a> {{\n        let Some(node) = __token_children(self.__node, {token_type}).next() else {{\n            unreachable!(\"validated {view_name} is missing required child {token_name}\")\n        }};\n        TerminalNode::new(node)\n    }}"
+            );
+            render_required_accessor_validation(
+                &mut rendered.validation,
+                &method,
+                validation_error_name,
             );
         } else {
             let _ = writeln!(
-                out,
+                rendered.recovered,
+                "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n    }}"
+            );
+            let _ = writeln!(
+                rendered.validated,
                 "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n    }}"
             );
         }
@@ -11039,21 +11227,30 @@ fn render_context_child_accessors(
         {
             let child_view = &context_names.rules[child_index].context_type;
             render_rule_label_accessor(
-                &mut out,
-                &method,
-                view_name,
-                child_view,
-                child_index,
-                label,
+                &mut rendered,
+                RuleLabelAccessorRender {
+                    method: &method,
+                    view_name,
+                    child_view,
+                    child_index,
+                    label,
+                    validation_error_name,
+                },
             );
             continue;
         }
         if label.token_types.is_empty() {
             continue;
         }
-        render_token_label_accessor(&mut out, &method, view_name, label);
+        render_token_label_accessor(
+            &mut rendered,
+            &method,
+            view_name,
+            label,
+            validation_error_name,
+        );
     }
-    out
+    rendered
 }
 
 const LABELED_TOKEN_CHILD_HELPERS: &str = r#"#[allow(dead_code)]
@@ -11101,6 +11298,625 @@ fn __labeled_token_children_matching<'a>(
 
 "#;
 
+fn render_validated_tree_support(surface_name: &str) -> String {
+    let validated_tree = format!("{surface_name}ValidatedTree");
+    let validation_error = format!("{surface_name}ValidationError");
+    format!(
+        r#"/// Marker carried by generated contexts whose required-child
+/// invariants were checked after a syntax-clean parse.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedTreeContext {{
+    __private: (),
+}}
+
+#[allow(dead_code)]
+trait __RecoveryContextState {{}}
+
+impl __RecoveryContextState for StoredTreeContext {{}}
+impl __RecoveryContextState for __ActiveParserContext {{}}
+
+/// A completed, syntax-clean parse tree whose generated child cardinalities
+/// have been structurally validated.
+#[derive(Debug)]
+pub struct {validated_tree} {{
+    parsed: antlr4_runtime::ParsedFile,
+}}
+
+impl {validated_tree} {{
+    fn __new(parsed: antlr4_runtime::ParsedFile) -> Self {{
+        Self {{ parsed }}
+    }}
+
+    /// Returns the validated entry-rule root.
+    pub fn tree(&self) -> ValidatedRuleNode<'_> {{
+        let Some(rule) = self.parsed.tree().as_rule() else {{
+            unreachable!("validated parse root was checked as a rule node")
+        }};
+        ValidatedRuleNode {{ __node: rule }}
+    }}
+
+    /// Borrows the underlying recovery-oriented parsed file.
+    pub const fn parsed_file(&self) -> &antlr4_runtime::ParsedFile {{
+        &self.parsed
+    }}
+
+    /// Drops the validation type boundary and returns the underlying parsed file.
+    pub fn into_parsed_file(self) -> antlr4_runtime::ParsedFile {{
+        self.parsed
+    }}
+}}
+
+/// A rule node borrowed from a [`{validated_tree}`].
+#[derive(Clone, Copy, Debug)]
+pub struct ValidatedRuleNode<'a> {{
+    __node: RuleNodeView<'a>,
+}}
+
+impl<'a> ValidatedRuleNode<'a> {{
+    pub const fn rule_node(self) -> RuleNodeView<'a> {{
+        self.__node
+    }}
+
+    pub const fn node(self) -> antlr4_runtime::Node<'a> {{
+        self.__node.node()
+    }}
+
+    pub fn rule_index(self) -> usize {{
+        self.__node.rule_index()
+    }}
+
+    pub fn text(self) -> String {{
+        self.__node.text()
+    }}
+
+    pub fn downcast_ref<T: FromValidatedRuleNode<'a>>(self) -> Option<T> {{
+        T::from_validated_rule_node(self)
+    }}
+}}
+
+/// Constructs a generated validated context from a validated rule node.
+pub trait FromValidatedRuleNode<'a>: Sized {{
+    fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self>;
+}}
+
+/// Failure to recognize or validate a strict generated parse.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum {validation_error} {{
+    Recognition(antlr4_runtime::AntlrError),
+    SyntaxErrors {{
+        lexer: usize,
+        parser: usize,
+    }},
+    MissingChild(MissingChildError),
+    InvalidChildCount {{
+        context: &'static str,
+        child: &'static str,
+        minimum: usize,
+        actual: usize,
+    }},
+    RecoveredErrorNode {{
+        line: usize,
+        column: usize,
+        text: String,
+    }},
+    InvalidRoot,
+    UnknownRule {{
+        rule_index: usize,
+    }},
+}}
+
+impl std::fmt::Display for {validation_error} {{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{
+        match self {{
+            Self::Recognition(error) => write!(f, "parse failed: {{error}}"),
+            Self::SyntaxErrors {{ lexer, parser }} => write!(
+                f,
+                "parse produced {{lexer}} lexer and {{parser}} parser syntax errors"
+            ),
+            Self::MissingChild(error) => error.fmt(f),
+            Self::InvalidChildCount {{
+                context,
+                child,
+                minimum,
+                actual,
+            }} => write!(
+                f,
+                "required child {{child}} occurs {{actual}} times in {{context}}; expected at least {{minimum}}"
+            ),
+            Self::RecoveredErrorNode {{
+                line,
+                column,
+                text,
+            }} => write!(
+                f,
+                "recovered error node at {{line}}:{{column}}: {{text}}"
+            ),
+            Self::InvalidRoot => f.write_str("validated parse root is not a rule node"),
+            Self::UnknownRule {{ rule_index }} => write!(
+                f,
+                "parse tree contains unknown rule index {{rule_index}}"
+            ),
+        }}
+    }}
+}}
+
+impl std::error::Error for {validation_error} {{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {{
+        match self {{
+            Self::Recognition(error) => Some(error),
+            Self::MissingChild(error) => Some(error),
+            _ => None,
+        }}
+    }}
+}}
+
+impl From<antlr4_runtime::AntlrError> for {validation_error} {{
+    fn from(error: antlr4_runtime::AntlrError) -> Self {{
+        Self::Recognition(error)
+    }}
+}}
+
+impl From<MissingChildError> for {validation_error} {{
+    fn from(error: MissingChildError) -> Self {{
+        Self::MissingChild(error)
+    }}
+}}
+
+"#
+    )
+}
+
+fn render_context_listener_surface(
+    context_names: &ContextSurfaceNames,
+    listener_trait: &str,
+    tree_walker: &str,
+    validated_listener_trait: &str,
+    validated_tree_walker: &str,
+) -> String {
+    let mut out = String::new();
+    let mut trait_methods = String::new();
+    let mut enter_arms = String::new();
+    let mut exit_arms = String::new();
+    let mut validated_trait_methods = String::new();
+    let mut validated_enter_arms = String::new();
+    let mut validated_exit_arms = String::new();
+    for (kind_id, view) in context_names.views.iter().enumerate() {
+        let ContextSurfaceName {
+            context_type,
+            listener_method,
+            ..
+        } = &view.surface;
+        let _ = writeln!(
+            trait_methods,
+            "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}"
+        );
+        let _ = writeln!(
+            enter_arms,
+            "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
+        );
+        let _ = writeln!(
+            exit_arms,
+            "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
+        );
+        let _ = writeln!(
+            validated_trait_methods,
+            "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}<ValidatedTreeContext>) -> Result<(), E> {{ Ok(()) }}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}<ValidatedTreeContext>) -> Result<(), E> {{ Ok(()) }}"
+        );
+        let _ = writeln!(
+            validated_enter_arms,
+            "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,"
+        );
+        let _ = writeln!(
+            validated_exit_arms,
+            "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,"
+        );
+    }
+    let _ = writeln!(
+        out,
+        "#[allow(dead_code, unused_variables)]\npub trait {listener_trait}<E = std::convert::Infallible> {{\n    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), E>\n    where\n        Self: Sized,\n    {{\n        {tree_walker}::walk(self, tree)\n    }}\n\n    fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n    fn exit_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) -> Result<(), E> {{ Ok(()) }}\n    fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E> {{ Ok(()) }}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
+    );
+
+    let _ = writeln!(
+        out,
+        r#"#[allow(dead_code)]
+pub struct {tree_walker};
+
+#[allow(dead_code)]
+impl {tree_walker} {{
+    pub fn walk<E, T: {listener_trait}<E>>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree, None)
+    }}
+
+    pub fn walk_with_invocation_states<E, T: {listener_trait}<E>>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+        parent_invocation_states: Vec<isize>,
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree, Some(parent_invocation_states))
+    }}
+
+    fn __walk<E, T: {listener_trait}<E>>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+        mut invocation_states: Option<Vec<isize>>,
+    ) -> Result<(), E> {{
+        enum Event<'tree> {{
+            Enter(antlr4_runtime::Node<'tree>),
+            Exit(RuleNodeView<'tree>),
+        }}
+
+        let mut stack = vec![Event::Enter(tree)];
+        while let Some(event) = stack.pop() {{
+            match event {{
+                Event::Enter(node) => match node.kind() {{
+                    antlr4_runtime::NodeKind::Rule => {{
+                        let context = node.as_rule().expect("rule node kind checked");
+                        if let Some(states) = &mut invocation_states {{
+                            states.insert(0, context.invoking_state());
+                        }}
+                        listener.enter_every_rule(context)?;
+                        match __context_kind(context) {{
+{enter_arms}                            _ => {{}}
+                        }}
+                        stack.push(Event::Exit(context));
+                        stack.extend(context.children().rev().map(Event::Enter));
+                    }}
+                    antlr4_runtime::NodeKind::Terminal => {{
+                        listener.visit_terminal(&TerminalNode::new(
+                            node.as_terminal().expect("terminal node kind checked"),
+                        ))?;
+                    }}
+                    antlr4_runtime::NodeKind::Error => {{
+                        listener.visit_error_node(&ErrorNode::new(
+                            node.as_error().expect("error node kind checked"),
+                        ))?;
+                    }}
+                }},
+                Event::Exit(context) => {{
+                    match __context_kind(context) {{
+{exit_arms}                        _ => {{}}
+                    }}
+                    listener.exit_every_rule(context)?;
+                    if let Some(states) = &mut invocation_states {{
+                        states.remove(0);
+                    }}
+                }}
+            }}
+        }}
+        Ok(())
+    }}
+}}
+
+pub type ParseTreeWalker = {tree_walker};
+"#
+    );
+    let _ = writeln!(
+        out,
+        r#"#[allow(dead_code, unused_variables)]
+pub trait {validated_listener_trait}<E = std::convert::Infallible> {{
+    fn walk(&mut self, tree: ValidatedRuleNode<'_>) -> Result<(), E>
+    where
+        Self: Sized,
+    {{
+        {validated_tree_walker}::walk(self, tree)
+    }}
+
+    fn enter_every_rule(&mut self, _ctx: ValidatedRuleNode<'_>) -> Result<(), E> {{ Ok(()) }}
+    fn exit_every_rule(&mut self, _ctx: ValidatedRuleNode<'_>) -> Result<(), E> {{ Ok(()) }}
+
+{validated_trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) -> Result<(), E> {{ Ok(()) }}
+    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}
+}}
+
+#[allow(dead_code)]
+pub struct {validated_tree_walker};
+
+#[allow(dead_code)]
+impl {validated_tree_walker} {{
+    pub fn walk<E, T: {validated_listener_trait}<E>>(
+        listener: &mut T,
+        tree: ValidatedRuleNode<'_>,
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree.node(), None)
+    }}
+
+    pub fn walk_with_invocation_states<E, T: {validated_listener_trait}<E>>(
+        listener: &mut T,
+        tree: ValidatedRuleNode<'_>,
+        parent_invocation_states: Vec<isize>,
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree.node(), Some(parent_invocation_states))
+    }}
+
+    fn __walk<E, T: {validated_listener_trait}<E>>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+        mut invocation_states: Option<Vec<isize>>,
+    ) -> Result<(), E> {{
+        enum Event<'tree> {{
+            Enter(antlr4_runtime::Node<'tree>),
+            Exit(RuleNodeView<'tree>),
+        }}
+
+        let mut stack = vec![Event::Enter(tree)];
+        while let Some(event) = stack.pop() {{
+            match event {{
+                Event::Enter(node) => match node.kind() {{
+                    antlr4_runtime::NodeKind::Rule => {{
+                        let context = node.as_rule().expect("rule node kind checked");
+                        if let Some(states) = &mut invocation_states {{
+                            states.insert(0, context.invoking_state());
+                        }}
+                        listener.enter_every_rule(ValidatedRuleNode {{ __node: context }})?;
+                        match __context_kind(context) {{
+{validated_enter_arms}                            _ => {{}}
+                        }}
+                        stack.push(Event::Exit(context));
+                        stack.extend(context.children().rev().map(Event::Enter));
+                    }}
+                    antlr4_runtime::NodeKind::Terminal => {{
+                        listener.visit_terminal(&TerminalNode::new(
+                            node.as_terminal().expect("terminal node kind checked"),
+                        ))?;
+                    }}
+                    antlr4_runtime::NodeKind::Error => {{
+                        unreachable!("validated parse tree contains an error node")
+                    }}
+                }},
+                Event::Exit(context) => {{
+                    match __context_kind(context) {{
+{validated_exit_arms}                        _ => {{}}
+                    }}
+                    listener.exit_every_rule(ValidatedRuleNode {{ __node: context }})?;
+                    if let Some(states) = &mut invocation_states {{
+                        states.remove(0);
+                    }}
+                }}
+            }}
+        }}
+        Ok(())
+    }}
+}}
+
+pub type ValidatedParseTreeWalker = {validated_tree_walker};
+"#
+    );
+    out
+}
+
+fn render_context_visitor_surface(
+    context_names: &ContextSurfaceNames,
+    visitor_trait: &str,
+    visitable_trait: &str,
+    validated_visitor_trait: &str,
+    validated_visitable_trait: &str,
+) -> String {
+    let mut out = String::new();
+    let mut visitor_methods = String::new();
+    let mut visitor_arms = String::new();
+    let mut validated_visitor_methods = String::new();
+    let mut validated_visitor_arms = String::new();
+    for (kind_id, view) in context_names.views.iter().enumerate() {
+        let ContextSurfaceName {
+            context_type,
+            visitor_method,
+            ..
+        } = &view.surface;
+        let _ = writeln!(
+            visitor_methods,
+            "    fn visit_{visitor_method}(&mut self, ctx: &{context_type}) -> Self::Result {{\n        self.visit_children(ctx)\n    }}"
+        );
+        let _ = writeln!(
+            visitor_arms,
+            "            {kind_id} => {visitor_trait}::visit_{visitor_method}(self.0, &{context_type}::__from_listener_node(context, None)),"
+        );
+        let _ = writeln!(
+            validated_visitor_methods,
+            "    fn visit_{visitor_method}(&mut self, ctx: &{context_type}<ValidatedTreeContext>) -> Self::Result {{\n        self.visit_children(ctx)\n    }}"
+        );
+        let _ = writeln!(
+            validated_visitor_arms,
+            "            {kind_id} => {validated_visitor_trait}::visit_{visitor_method}(self.0, &{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, None)),"
+        );
+    }
+    let _ = writeln!(
+        out,
+        r#"#[allow(dead_code, unused_variables)]
+pub trait {visitor_trait}: Sized {{
+    type Result;
+
+    fn default_result(&mut self) -> Self::Result;
+
+    fn visit<'tree, T>(&mut self, tree: T) -> Self::Result
+    where
+        T: {visitable_trait}<'tree>,
+    {{
+        let tree = {visitable_trait}::into_parse_tree_node(tree);
+        let mut bridge = __VisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit(&mut bridge, tree)
+    }}
+
+    fn visit_children<'tree, T>(&mut self, context: T) -> Self::Result
+    where
+        T: {visitable_trait}<'tree>,
+    {{
+        let tree = {visitable_trait}::into_parse_tree_node(context);
+        let context = tree.as_rule().expect("visit_children requires a rule context");
+        let mut bridge = __VisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit_children(&mut bridge, context)
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        _aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        next_result
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        _context: RuleNodeView<'_>,
+        _current_result: &Self::Result,
+    ) -> bool {{
+        true
+    }}
+
+    fn visit_terminal(&mut self, _node: &TerminalNode) -> Self::Result {{
+        self.default_result()
+    }}
+
+    fn visit_error_node(&mut self, _node: &ErrorNode) -> Self::Result {{
+        self.default_result()
+    }}
+
+{visitor_methods}}}
+
+#[allow(dead_code)]
+struct __VisitorBridge<'a, T: {visitor_trait}>(&'a mut T);
+
+impl<T: {visitor_trait}> antlr4_runtime::ParseTreeVisitor for __VisitorBridge<'_, T> {{
+    type Result = T::Result;
+
+    fn visit_rule(&mut self, context: RuleNodeView<'_>) -> Self::Result {{
+        match __context_kind(context) {{
+{visitor_arms}            _ => {visitor_trait}::default_result(self.0),
+        }}
+    }}
+
+    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Self::Result {{
+        {visitor_trait}::visit_terminal(self.0, &TerminalNode::new(node))
+    }}
+
+    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Self::Result {{
+        {visitor_trait}::visit_error_node(self.0, &ErrorNode::new(node))
+    }}
+
+    fn default_result(&mut self) -> Self::Result {{
+        {visitor_trait}::default_result(self.0)
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        {visitor_trait}::aggregate_result(self.0, aggregate, next_result)
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        context: RuleNodeView<'_>,
+        current_result: &Self::Result,
+    ) -> bool {{
+        {visitor_trait}::should_visit_next_child(self.0, context, current_result)
+    }}
+}}
+"#
+    );
+    let _ = writeln!(
+        out,
+        r#"#[allow(dead_code, unused_variables)]
+pub trait {validated_visitor_trait}: Sized {{
+    type Result;
+
+    fn default_result(&mut self) -> Self::Result;
+
+    fn visit<'tree, T>(&mut self, tree: T) -> Self::Result
+    where
+        T: {validated_visitable_trait}<'tree>,
+    {{
+        let tree = {validated_visitable_trait}::into_validated_parse_tree_node(tree);
+        let mut bridge = __ValidatedVisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit(&mut bridge, tree)
+    }}
+
+    fn visit_children<'tree, T>(&mut self, context: T) -> Self::Result
+    where
+        T: {validated_visitable_trait}<'tree>,
+    {{
+        let tree = {validated_visitable_trait}::into_validated_parse_tree_node(context);
+        let context = tree.as_rule().expect("visit_children requires a rule context");
+        let mut bridge = __ValidatedVisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit_children(&mut bridge, context)
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        _aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        next_result
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        _context: ValidatedRuleNode<'_>,
+        _current_result: &Self::Result,
+    ) -> bool {{
+        true
+    }}
+
+    fn visit_terminal(&mut self, _node: &TerminalNode) -> Self::Result {{
+        self.default_result()
+    }}
+
+{validated_visitor_methods}}}
+
+#[allow(dead_code)]
+struct __ValidatedVisitorBridge<'a, T: {validated_visitor_trait}>(&'a mut T);
+
+impl<T: {validated_visitor_trait}> antlr4_runtime::ParseTreeVisitor
+    for __ValidatedVisitorBridge<'_, T>
+{{
+    type Result = T::Result;
+
+    fn visit_rule(&mut self, context: RuleNodeView<'_>) -> Self::Result {{
+        match __context_kind(context) {{
+{validated_visitor_arms}            _ => {validated_visitor_trait}::default_result(self.0),
+        }}
+    }}
+
+    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Self::Result {{
+        {validated_visitor_trait}::visit_terminal(self.0, &TerminalNode::new(node))
+    }}
+
+    fn visit_error_node(&mut self, _node: RuntimeErrorNode<'_>) -> Self::Result {{
+        unreachable!("validated parse tree contains an error node")
+    }}
+
+    fn default_result(&mut self) -> Self::Result {{
+        {validated_visitor_trait}::default_result(self.0)
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        {validated_visitor_trait}::aggregate_result(self.0, aggregate, next_result)
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        context: RuleNodeView<'_>,
+        current_result: &Self::Result,
+    ) -> bool {{
+        {validated_visitor_trait}::should_visit_next_child(
+            self.0,
+            ValidatedRuleNode {{ __node: context }},
+            current_result,
+        )
+    }}
+}}
+"#
+    );
+    out
+}
+
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
 ///
@@ -11113,6 +11929,10 @@ fn __labeled_token_children_matching<'a>(
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
 ///   walker onto the typed listener callbacks, threading the invoking-state
 ///   chain Java's `RuleContext.toString` renders (`[13 6]`).
+fn parser_surface_name(grammar_name: &str) -> &str {
+    grammar_name.strip_suffix("Parser").unwrap_or(grammar_name)
+}
+
 fn render_embedded_context_types(
     grammar_name: &str,
     data: &CodegenData<'_>,
@@ -11121,11 +11941,16 @@ fn render_embedded_context_types(
 ) -> String {
     let mut out = String::new();
     let context_names = context_surface_names(model);
-    let surface_name = grammar_name.strip_suffix("Parser").unwrap_or(grammar_name);
+    let surface_name = parser_surface_name(grammar_name);
     let listener_trait = format!("{surface_name}Listener");
     let visitor_trait = format!("{surface_name}Visitor");
     let visitable_trait = format!("{surface_name}Visitable");
     let tree_walker = format!("{surface_name}TreeWalker");
+    let validation_error = format!("{surface_name}ValidationError");
+    let validated_listener_trait = format!("{surface_name}ValidatedListener");
+    let validated_visitor_trait = format!("{surface_name}ValidatedVisitor");
+    let validated_visitable_trait = format!("{surface_name}ValidatedVisitable");
+    let validated_tree_walker = format!("{surface_name}ValidatedTreeWalker");
     let token_accessors = std::iter::once(("EOF".to_owned(), TOKEN_EOF))
         .chain(
             data.symbolic_names
@@ -11141,7 +11966,7 @@ fn render_embedded_context_types(
     if options.generate_visitor {
         let _ = writeln!(
             out,
-            "#[allow(dead_code)]\npub trait {visitable_trait}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a>;\n}}\n\nimpl<'a> {visitable_trait}<'a> for antlr4_runtime::Node<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for RuleNodeView<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.node() }}\n}}\n"
+            "#[allow(dead_code)]\npub trait {visitable_trait}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a>;\n}}\n\nimpl<'a> {visitable_trait}<'a> for antlr4_runtime::Node<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for RuleNodeView<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.node() }}\n}}\n\n#[allow(dead_code)]\npub trait {validated_visitable_trait}<'a> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a>;\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for ValidatedRuleNode<'a> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.node() }}\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for &ValidatedRuleNode<'a> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.node() }}\n}}\n"
         );
     }
 
@@ -11321,13 +12146,15 @@ fn __write_invocation_states(
 
 "#,
     );
+    out.push_str(&render_validated_tree_support(surface_name));
     if options.generate_visitor {
         let _ = writeln!(
             out,
-            "impl<'a> {visitable_trait}<'a> for TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n"
+            "impl<'a> {visitable_trait}<'a> for TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for TerminalNode<'a> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for &TerminalNode<'a> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n"
         );
     }
     out.push_str(&render_context_kind_functions(model, &context_names));
+    let mut validation_arms = String::new();
 
     for ContextViewName {
         surface,
@@ -11373,27 +12200,55 @@ fn __write_invocation_states(
             out,
             "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.rule_node() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn rule_node(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n{active_attrs_bindings}        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: Some(invocation_states),\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
         );
+        let _ = writeln!(
+            out,
+            "impl<'a> FromValidatedRuleNode<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self> {{\n        let node = node.rule_node();\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_validated_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.rule_node() }}\n}}\n"
+        );
         let mut accessors = String::new();
         let _ = writeln!(
             accessors,
             "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        Self::__from_node_with_invocation_states(node, None)\n    }}\n\n    fn __from_child_node(\n        node: RuleNodeView<'a>,\n        parent_invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        let invocation_states = parent_invocation_states.map(|states| {{\n            let mut invocation_states = Vec::with_capacity(states.len() + 1);\n            invocation_states.push(node.invoking_state());\n            invocation_states.extend_from_slice(states);\n            invocation_states\n        }});\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        Self::__from_node_with_invocation_states(\n            node,\n            invocation_states.map(|states| states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<Vec<isize>>,\n    ) -> Self {{\n{stored_attrs_bindings}        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n"
         );
-        let common_accessors = render_context_child_accessors(
+        let mut validated_constructors = String::new();
+        let _ = writeln!(
+            validated_constructors,
+            "    fn __from_validated_node(node: RuleNodeView<'a>) -> Self {{\n        Self::__from_validated_node_with_invocation_states(node, None)\n    }}\n\n    fn __from_validated_child_node(\n        node: RuleNodeView<'a>,\n        parent_invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        let invocation_states = parent_invocation_states.map(|states| {{\n            let mut invocation_states = Vec::with_capacity(states.len() + 1);\n            invocation_states.push(node.invoking_state());\n            invocation_states.extend_from_slice(states);\n            invocation_states\n        }});\n        Self::__from_validated_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_validated_listener_node(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        Self::__from_validated_node_with_invocation_states(\n            node,\n            invocation_states.map(|states| states.to_vec()),\n        )\n    }}\n\n    fn __from_validated_node_with_invocation_states(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<Vec<isize>>,\n    ) -> Self {{\n{stored_attrs_bindings}        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n\n    pub fn rule_node(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"validated context contains an active parser context\"),\n        }}\n    }}\n"
+        );
+        let rendered_accessors = render_context_child_accessors(ContextAccessorsRender {
             view_name,
             model,
-            &context_names,
-            &token_accessors,
-            &child_cardinalities,
-            &label_accessors,
-        );
+            context_names: &context_names,
+            token_accessors: &token_accessors,
+            child_cardinalities: &child_cardinalities,
+            label_accessors: &label_accessors,
+            validation_error_name: &validation_error,
+        });
         let _ = writeln!(
             out,
-            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{common_accessors}}}\n"
+            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{CONTEXT_COMMON_ACCESSORS}}}\n\n#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated_constructors}{validated}}}\n",
+            recovered = rendered_accessors.recovered,
+            validated = rendered_accessors.validated,
+        );
+        let validation_body = if rendered_accessors.validation.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "                    let context = {view_name}::__from_listener_node(context, None);\n{}",
+                rendered_accessors.validation
+            )
+        };
+        let _ = writeln!(
+            validation_arms,
+            "                {context_kind} => {{\n{validation_body}                }},"
         );
         if options.generate_visitor {
             let _ = writeln!(
                 out,
                 "impl<'a> {visitable_trait}<'a> for {view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &{view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n"
+            );
+            let _ = writeln!(
+                out,
+                "impl<'a> {validated_visitable_trait}<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for &{view_name}<'a, ValidatedTreeContext> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n"
             );
         }
         // Java's RuleContext.toString(): bracketed invoking-state chain from
@@ -11404,226 +12259,70 @@ fn __write_invocation_states(
         );
     }
 
-    if options.generate_listener {
-        let mut trait_methods = String::new();
-        let mut enter_arms = String::new();
-        let mut exit_arms = String::new();
-        for (kind_id, view) in context_names.views.iter().enumerate() {
-            let ContextSurfaceName {
-                context_type,
-                listener_method,
-                ..
-            } = &view.surface;
-            let _ = writeln!(
-                trait_methods,
-                "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}"
-            );
-            let _ = writeln!(
-                enter_arms,
-                "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
-            );
-            let _ = writeln!(
-                exit_arms,
-                "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
-            );
-        }
-        let _ = writeln!(
-            out,
-            "#[allow(dead_code, unused_variables)]\npub trait {listener_trait}<E = std::convert::Infallible> {{\n    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), E>\n    where\n        Self: Sized,\n    {{\n        {tree_walker}::walk(self, tree)\n    }}\n\n    fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n    fn exit_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) -> Result<(), E> {{ Ok(()) }}\n    fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E> {{ Ok(()) }}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
-        );
-
-        let _ = writeln!(
-            out,
-            r#"#[allow(dead_code)]
-pub struct {tree_walker};
-
-#[allow(dead_code)]
-impl {tree_walker} {{
-    pub fn walk<E, T: {listener_trait}<E>>(
-        listener: &mut T,
-        tree: antlr4_runtime::Node<'_>,
-    ) -> Result<(), E> {{
-        Self::__walk(listener, tree, None)
+    let _ = writeln!(
+        out,
+        r#"/// Checks generated required-child invariants without changing the
+/// recovery-oriented tree's type.
+///
+/// Strict parsing calls this after proving that lexer and parser syntax-error
+/// counts are both zero. It is public so structural runtime/codegen invariant
+/// failures can be diagnosed independently.
+pub fn validate_tree_structure(
+    parsed: &antlr4_runtime::ParsedFile,
+) -> Result<(), {validation_error}> {{
+    let tree = parsed.tree();
+    if tree.as_rule().is_none() {{
+        return Err({validation_error}::InvalidRoot);
     }}
-
-    pub fn walk_with_invocation_states<E, T: {listener_trait}<E>>(
-        listener: &mut T,
-        tree: antlr4_runtime::Node<'_>,
-        parent_invocation_states: Vec<isize>,
-    ) -> Result<(), E> {{
-        Self::__walk(listener, tree, Some(parent_invocation_states))
-    }}
-
-    fn __walk<E, T: {listener_trait}<E>>(
-        listener: &mut T,
-        tree: antlr4_runtime::Node<'_>,
-        mut invocation_states: Option<Vec<isize>>,
-    ) -> Result<(), E> {{
-        enum Event<'tree> {{
-            Enter(antlr4_runtime::Node<'tree>),
-            Exit(RuleNodeView<'tree>),
-        }}
-
-        let mut stack = vec![Event::Enter(tree)];
-        while let Some(event) = stack.pop() {{
-            match event {{
-                Event::Enter(node) => match node.kind() {{
-                    antlr4_runtime::NodeKind::Rule => {{
-                        let context = node.as_rule().expect("rule node kind checked");
-                        if let Some(states) = &mut invocation_states {{
-                            states.insert(0, context.invoking_state());
-                        }}
-                        listener.enter_every_rule(context)?;
-                        match __context_kind(context) {{
-{enter_arms}                            _ => {{}}
-                        }}
-                        stack.push(Event::Exit(context));
-                        stack.extend(context.children().rev().map(Event::Enter));
-                    }}
-                    antlr4_runtime::NodeKind::Terminal => {{
-                        listener.visit_terminal(&TerminalNode::new(
-                            node.as_terminal().expect("terminal node kind checked"),
-                        ))?;
-                    }}
-                    antlr4_runtime::NodeKind::Error => {{
-                        listener.visit_error_node(&ErrorNode::new(
-                            node.as_error().expect("error node kind checked"),
-                        ))?;
-                    }}
-                }},
-                Event::Exit(context) => {{
-                    match __context_kind(context) {{
-{exit_arms}                        _ => {{}}
-                    }}
-                    listener.exit_every_rule(context)?;
-                    if let Some(states) = &mut invocation_states {{
-                        states.remove(0);
+    for node in tree.descendants() {{
+        match node.kind() {{
+            antlr4_runtime::NodeKind::Terminal => {{}}
+            antlr4_runtime::NodeKind::Error => {{
+                let symbol = node
+                    .as_error()
+                    .expect("error node kind checked")
+                    .symbol();
+                return Err({validation_error}::RecoveredErrorNode {{
+                    line: symbol.line(),
+                    column: symbol.column(),
+                    text: symbol.text_or_empty().to_owned(),
+                }});
+            }}
+            antlr4_runtime::NodeKind::Rule => {{
+                let context = node.as_rule().expect("rule node kind checked");
+                match __context_kind(context) {{
+{validation_arms}                    _ => {{
+                        return Err({validation_error}::UnknownRule {{
+                            rule_index: context.rule_index(),
+                        }});
                     }}
                 }}
             }}
         }}
-        Ok(())
     }}
+    Ok(())
 }}
-
-pub type ParseTreeWalker = {tree_walker};
 "#
-        );
+    );
+
+    if options.generate_listener {
+        out.push_str(&render_context_listener_surface(
+            &context_names,
+            &listener_trait,
+            &tree_walker,
+            &validated_listener_trait,
+            &validated_tree_walker,
+        ));
     }
 
     if options.generate_visitor {
-        let mut visitor_methods = String::new();
-        let mut visitor_arms = String::new();
-        for (kind_id, view) in context_names.views.iter().enumerate() {
-            let ContextSurfaceName {
-                context_type,
-                visitor_method,
-                ..
-            } = &view.surface;
-            let _ = writeln!(
-                visitor_methods,
-                "    fn visit_{visitor_method}(&mut self, ctx: &{context_type}) -> Self::Result {{\n        self.visit_children(ctx)\n    }}"
-            );
-            let _ = writeln!(
-                visitor_arms,
-                "            {kind_id} => {visitor_trait}::visit_{visitor_method}(self.0, &{context_type}::__from_listener_node(context, None)),"
-            );
-        }
-        let _ = writeln!(
-            out,
-            r#"#[allow(dead_code, unused_variables)]
-pub trait {visitor_trait}: Sized {{
-    type Result;
-
-    fn default_result(&mut self) -> Self::Result;
-
-    fn visit<'tree, T>(&mut self, tree: T) -> Self::Result
-    where
-        T: {visitable_trait}<'tree>,
-    {{
-        let tree = {visitable_trait}::into_parse_tree_node(tree);
-        let mut bridge = __VisitorBridge(self);
-        antlr4_runtime::ParseTreeVisitor::visit(&mut bridge, tree)
-    }}
-
-    fn visit_children<'tree, T>(&mut self, context: T) -> Self::Result
-    where
-        T: {visitable_trait}<'tree>,
-    {{
-        let tree = {visitable_trait}::into_parse_tree_node(context);
-        let context = tree.as_rule().expect("visit_children requires a rule context");
-        let mut bridge = __VisitorBridge(self);
-        antlr4_runtime::ParseTreeVisitor::visit_children(&mut bridge, context)
-    }}
-
-    fn aggregate_result(
-        &mut self,
-        _aggregate: Self::Result,
-        next_result: Self::Result,
-    ) -> Self::Result {{
-        next_result
-    }}
-
-    fn should_visit_next_child(
-        &mut self,
-        _context: RuleNodeView<'_>,
-        _current_result: &Self::Result,
-    ) -> bool {{
-        true
-    }}
-
-    fn visit_terminal(&mut self, _node: &TerminalNode) -> Self::Result {{
-        self.default_result()
-    }}
-
-    fn visit_error_node(&mut self, _node: &ErrorNode) -> Self::Result {{
-        self.default_result()
-    }}
-
-{visitor_methods}}}
-
-#[allow(dead_code)]
-struct __VisitorBridge<'a, T: {visitor_trait}>(&'a mut T);
-
-impl<T: {visitor_trait}> antlr4_runtime::ParseTreeVisitor for __VisitorBridge<'_, T> {{
-    type Result = T::Result;
-
-    fn visit_rule(&mut self, context: RuleNodeView<'_>) -> Self::Result {{
-        match __context_kind(context) {{
-{visitor_arms}            _ => {visitor_trait}::default_result(self.0),
-        }}
-    }}
-
-    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Self::Result {{
-        {visitor_trait}::visit_terminal(self.0, &TerminalNode::new(node))
-    }}
-
-    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Self::Result {{
-        {visitor_trait}::visit_error_node(self.0, &ErrorNode::new(node))
-    }}
-
-    fn default_result(&mut self) -> Self::Result {{
-        {visitor_trait}::default_result(self.0)
-    }}
-
-    fn aggregate_result(
-        &mut self,
-        aggregate: Self::Result,
-        next_result: Self::Result,
-    ) -> Self::Result {{
-        {visitor_trait}::aggregate_result(self.0, aggregate, next_result)
-    }}
-
-    fn should_visit_next_child(
-        &mut self,
-        context: RuleNodeView<'_>,
-        current_result: &Self::Result,
-    ) -> bool {{
-        {visitor_trait}::should_visit_next_child(self.0, context, current_result)
-    }}
-}}
-"#
-        );
+        out.push_str(&render_context_visitor_surface(
+            &context_names,
+            &visitor_trait,
+            &visitable_trait,
+            &validated_visitor_trait,
+            &validated_visitable_trait,
+        ));
     }
     out
 }
@@ -12151,7 +12850,8 @@ fn render_parser_with_decision_report(
             &noop_action_states
         },
     );
-    let parse_convenience = render_parser_parse_convenience(&type_name);
+    let parse_convenience =
+        render_parser_parse_convenience(&type_name, parser_surface_name(grammar_name));
     // A grammar-declared `@members` initializer must seed the parser too, or a
     // predicate reading the slot would observe 0 and reject input the source
     // grammar accepts (issue #206 review).
@@ -14641,8 +15341,10 @@ fn render_parser_base_initialization(
 
 /// Renders parser-module conveniences that wire text or a caller-provided
 /// character stream through the lexer, token stream, parser, and entry rule.
-fn render_parser_parse_convenience(type_name: &str) -> String {
+fn render_parser_parse_convenience(type_name: &str, surface_name: &str) -> String {
     let output_type_name = format!("{type_name}ParseOutput");
+    let validated_tree_name = format!("{surface_name}ValidatedTree");
+    let validation_error_name = format!("{surface_name}ValidationError");
     format!(
         r#"/// Result from [`parse_with_parser`] or [`parse_stream_with_parser`].
 ///
@@ -14655,6 +15357,24 @@ where
 {{
     pub result: R,
     pub parser: {type_name}<L>,
+}}
+
+impl<L: TokenSource> {output_type_name}<antlr4_runtime::NodeId, L> {{
+    /// Validates a completed parse and changes its generated context surface.
+    ///
+    /// Validation rejects lexer diagnostics, parser recovery, recovered error
+    /// nodes, and missing generated required children before constructing the
+    /// validated-tree type boundary.
+    pub fn validate(self) -> Result<{validated_tree_name}, {validation_error_name}> {{
+        let lexer = self.parser.token_stream().number_of_source_errors();
+        let parser = self.parser.number_of_syntax_errors();
+        if lexer != 0 || parser != 0 {{
+            return Err({validation_error_name}::SyntaxErrors {{ lexer, parser }});
+        }}
+        let parsed = self.parser.into_parsed_file(self.result);
+        validate_tree_structure(&parsed)?;
+        Ok({validated_tree_name}::__new(parsed))
+    }}
 }}
 
 /// Parses UTF-8 text by constructing the lexer, token stream, parser, and
@@ -14674,6 +15394,21 @@ pub fn parse<L: TokenSource>(
 ) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
 {{
     parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)
+}}
+
+/// Parses UTF-8 text and returns a typed tree whose required generated child
+/// accessors are infallible.
+pub fn parse_validated<L: TokenSource>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<{validated_tree_name}, {validation_error_name}>
+{{
+    parse_stream_validated(
+        antlr4_runtime::InputStream::new(input.as_ref()),
+        lexer,
+        entry,
+    )
 }}
 
 /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
@@ -14709,6 +15444,18 @@ pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(
     let {output_type_name} {{ result, parser }} =
         parse_stream_with_parser(input, lexer, entry)?;
     Ok(parser.into_parsed_file(result))
+}}
+
+/// Parses a caller-provided character stream and validates the completed tree.
+pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<{validated_tree_name}, {validation_error_name}>
+{{
+    let output = parse_stream_with_parser(input, lexer, entry)
+        .map_err({validation_error_name}::Recognition)?;
+    output.validate()
 }}
 
 /// Parses a caller-provided character stream like [`parse_stream`] while
@@ -16405,6 +17152,15 @@ mod tests {
             .position(|rule| rule.name == "storedTree")
             .expect("storedTree fixture rule");
         assert_ne!(names.rules[stored_tree].context_type, "StoredTreeContext");
+        let validated_tree = model
+            .rules
+            .iter()
+            .position(|rule| rule.name == "validatedTree")
+            .expect("validatedTree fixture rule");
+        assert_ne!(
+            names.rules[validated_tree].context_type,
+            "ValidatedTreeContext"
+        );
 
         insta::assert_debug_snapshot!("context_surface_name_collision", names);
     }
@@ -17327,7 +18083,7 @@ mod tests {
 
         insta::assert_snapshot!(
             "parser_parse_convenience",
-            render_parser_parse_convenience("TParser")
+            render_parser_parse_convenience("TParser", "T")
         );
         assert!(rendered.contains("pub struct TParserParseOutput<R, L>"));
         assert!(rendered.contains("pub result: R,"));
@@ -17364,6 +18120,19 @@ mod tests {
         assert!(
             rendered.contains("pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self")
         );
+    }
+
+    #[test]
+    fn validated_parse_names_match_lowercase_grammar_surface() {
+        let rendered = render_parser("u", &minimal_parser_data()).expect("parser should render");
+
+        assert!(rendered.contains("pub struct uValidatedTree"));
+        assert!(rendered.contains("pub enum uValidationError"));
+        assert!(
+            rendered.contains("pub fn validate(self) -> Result<uValidatedTree, uValidationError>")
+        );
+        assert!(!rendered.contains("UValidatedTree"));
+        assert!(!rendered.contains("UValidationError"));
     }
 
     #[test]

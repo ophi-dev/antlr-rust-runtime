@@ -133,6 +133,41 @@ repeated children are lazy iterators. Rule labels keep their grammar names
 (`left()`), while token accessors use snake_case names such as `int_token()` and
 `comma_tokens()`.
 
+Call `parse_validated` when the application rejects recovered parses. It checks
+lexer and parser syntax-error counts, recovered error nodes, and every generated
+required-child invariant before returning a `<Grammar>ValidatedTree`:
+
+```rust
+use generated::json_lexer::JsonLexer;
+use generated::json_parser::{
+    self, JsonContext, JsonParser, ValidatedTreeContext,
+};
+
+fn main() -> Result<(), json_parser::JsonValidationError> {
+    let validated = json_parser::parse_validated(
+        r#"{"a":1}"#,
+        JsonLexer::new,
+        JsonParser::json,
+    )?;
+    let json = validated
+        .tree()
+        .downcast_ref::<JsonContext<'_, ValidatedTreeContext>>()
+        .expect("the selected entry rule is json");
+
+    // `value` and `EOF` are required by `json : value EOF`.
+    println!("{}{}", json.value().text(), json.eof_token());
+    Ok(())
+}
+```
+
+Required accessors on contexts carrying `ValidatedTreeContext` return the child
+directly. Optional children remain `Option<T>`, and repeated children remain
+iterators. `parse_with_parser(...).validate()` provides the same boundary when
+the caller needs the parser first. Generated `<Grammar>ValidatedListener` and,
+with `--visitor`, `<Grammar>ValidatedVisitor` traits traverse this surface
+without `MissingChildError` plumbing. The original listener, visitor, and
+`ParsedFile` context APIs remain recovery-oriented and fallible.
+
 `--no-visitor` disables visitor generation. The generator also accepts ANTLR's
 single-dash spellings (`-listener`, `-no-listener`, `-visitor`,
 `-no-visitor`).
