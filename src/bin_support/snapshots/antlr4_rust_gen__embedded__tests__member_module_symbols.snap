@@ -3,10 +3,12 @@ source: src/bin_support/embedded.rs
 expression: members.module_symbols
 ---
 {
+    "AliasTypeParser_CONDITIONAL",
     "AliasTypeParser_ID",
     "LeafListener",
     "Other",
     "RenamedItem",
+    "fmt",
     "nested",
     "type",
 }

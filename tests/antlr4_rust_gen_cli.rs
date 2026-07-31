@@ -3675,8 +3675,32 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "a body-local binding must suppress the colliding token alias"
     );
     assert!(
+        alias_collision_parser.contains(
+            "use self::{__antlr4rust_token_aliases::AliasCollisionParser_MEMBER_ONLY as \
+             RenamedMemberOnly};"
+        ),
+        "member-only compatibility imports must target the generated alias namespace"
+    );
+    assert!(
+        alias_collision_parser.contains("#[cfg(not(any()))]")
+            && alias_collision_parser.contains("const AliasCollisionParser_CFG"),
+        "a cfg-disabled member binding must retain a complementary compatibility alias"
+    );
+    assert!(
+        alias_collision_parser.contains(
+            "let before_scope = \
+             __antlr4rust_token_aliases::AliasCollisionParser_SCOPE;"
+        ) && alias_collision_parser.contains(
+            "let after_scope = \
+             __antlr4rust_token_aliases::AliasCollisionParser_SCOPE;"
+        ) && alias_collision_parser.contains("let AliasCollisionParser_SCOPE = 99;"),
+        "compatibility aliases must respect nested lexical bindings"
+    );
+    assert!(
         java_parser.contains("pub fn r#type(&self) -> Option<TypeContext<'a>>")
-            && java_parser.contains("self.type_rule_child().ok()"),
+            && java_parser.contains("self.type_rule_child().ok()")
+            && java_parser.contains("pub fn self_(&self) -> Option<SelfContext<'a>>")
+            && java_parser.contains("self.self__rule_child().ok()"),
         "keyword compatibility getters and their native targets must use distinct legal names"
     );
     let unrelated_context = java_parser
@@ -3725,6 +3749,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                     "pub fn context_start",
                     "pub fn context_text",
                     "pub fn r#type",
+                    "pub fn self_",
                     "AliasCollisionParser_EOF",
                     "AliasCollisionParser_ID",
                     "let _localctx = __active_context_view",
@@ -3750,6 +3775,8 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     let test_source = r####"
 #[cfg(test)]
 mod antlr4rust_compat_tests {
+    use super::alias_collision_lexer::AliasCollisionLexer;
+    use super::alias_collision_parser::AliasCollisionParser;
     use super::alias_only_lexer::AliasOnlyLexer;
     use super::alias_only_parser::AliasOnlyParser;
     use super::c_compat_lexer::CCompatLexer;
@@ -3775,6 +3802,19 @@ mod antlr4rust_compat_tests {
         let lexer = AliasOnlyLexer::new(InputStream::new("name!"));
         let mut parser = AliasOnlyParser::new(CommonTokenStream::new(lexer));
         assert!(parser.start().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn alias_scopes_and_member_imports_compile_and_execute() {
+        let lexer = AliasCollisionLexer::new(InputStream::new("scope"));
+        let mut parser = AliasCollisionParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.start().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+
+        let lexer = AliasCollisionLexer::new(InputStream::new("cross"));
+        let mut parser = AliasCollisionParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.cross_body().is_ok());
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
@@ -3920,7 +3960,7 @@ mod antlr4rust_compat_tests {
 
     #[test]
     fn keyword_compatibility_getter_and_unrelated_context_compile() {
-        let lexer = JavaCompatLexer::new(InputStream::new("type"));
+        let lexer = JavaCompatLexer::new(InputStream::new("type self"));
         let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
         assert!(parser.keyword_accessor().is_ok());
         assert_eq!(parser.number_of_syntax_errors(), 0);
@@ -3954,7 +3994,7 @@ mod antlr4rust_compat_tests {
 fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
     let temp = temporary_directory("antlr4rust-diagnostics");
     let mut diagnostics = Vec::new();
-    for (name, predicate) in [
+    let mut cases = [
         (
             "BadRecog",
             r#"{
@@ -3975,13 +4015,46 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
                 recog.input.la(1, 2) == 1
             }"#,
         ),
-    ] {
-        let grammar = temp.path().join(format!("{name}.g4"));
-        fs::write(
-            &grammar,
+    ]
+    .into_iter()
+    .map(|(name, predicate)| {
+        (
+            name,
             format!("grammar {name};\n\nstart\n    : {predicate}? A EOF\n    ;\n\nA: 'a';\n"),
         )
-        .expect("diagnostic fixture should be writable");
+    })
+    .collect::<Vec<_>>();
+    cases.extend([
+        (
+            "BadInit",
+            "grammar BadInit;\n\n\
+             start\n\
+             @init { let _ = recog.input.peek(1); }\n\
+                 : A EOF\n\
+                 ;\n\n\
+             A: 'a';\n"
+                .to_owned(),
+        ),
+        (
+            "BadAfter",
+            "grammar BadAfter;\n\n\
+             start\n\
+             @after { let _ = recog.input.peek(1); }\n\
+                 : A EOF\n\
+                 ;\n\n\
+             A: 'a';\n"
+                .to_owned(),
+        ),
+        (
+            "BadLexer",
+            "lexer grammar BadLexer;\n\n\
+             A: 'a' { let _ = recog.input.la(1); };\n"
+                .to_owned(),
+        ),
+    ]);
+    for (name, grammar_source) in cases {
+        let grammar = temp.path().join(format!("{name}.g4"));
+        fs::write(&grammar, grammar_source).expect("diagnostic fixture should be writable");
         let out = temp.path().join(format!("generated-{name}"));
         let output = run_antlr4_rust_gen(&[
             grammar.as_os_str(),

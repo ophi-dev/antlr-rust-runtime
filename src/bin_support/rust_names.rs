@@ -27,12 +27,7 @@ pub(crate) fn rust_function_name(name: &str) -> String {
     } else {
         words.join("_")
     };
-    let ident = sanitize_identifier(&ident);
-    if is_rust_keyword(&ident) {
-        format!("r#{ident}")
-    } else {
-        ident
-    }
+    rust_identifier(&ident)
 }
 
 /// Escapes a Rust string literal using explicit ASCII escape forms.
@@ -91,6 +86,19 @@ pub(crate) fn sanitize_identifier(value: &str) -> String {
         }
     }
     if out.is_empty() { "_".to_owned() } else { out }
+}
+
+/// Produces a legal Rust identifier, using raw syntax only for keywords that
+/// permit it. Path keywords cannot be raw identifiers, so suffix those names.
+pub(crate) fn rust_identifier(value: &str) -> String {
+    let identifier = sanitize_identifier(value);
+    if matches!(identifier.as_str(), "crate" | "self" | "Self" | "super") {
+        format!("{identifier}_")
+    } else if is_rust_keyword(&identifier) {
+        format!("r#{identifier}")
+    } else {
+        identifier
+    }
 }
 
 /// Returns true for Rust reserved and contextual keywords that cannot be used

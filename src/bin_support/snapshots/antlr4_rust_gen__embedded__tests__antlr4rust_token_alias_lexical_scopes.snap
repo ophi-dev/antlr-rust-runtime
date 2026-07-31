@@ -1,0 +1,11 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+let before = __antlr4rust_token_aliases::ScopeParser_ID;
+{ let ScopeParser_ID = 99; let inside = ScopeParser_ID; assert_eq!(inside, 99); }
+let after = __antlr4rust_token_aliases::ScopeParser_ID;
+let closure = |ScopeParser_ID| ScopeParser_ID;
+before == after && closure(7) == 7 && matches!(before, __antlr4rust_token_aliases::ScopeParser_ID)
+}

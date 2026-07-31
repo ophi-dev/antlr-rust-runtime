@@ -19,6 +19,10 @@ expression: rendered
         self.type_rule_child()
     }
     #[allow(non_snake_case)]
+    pub fn self_(&self) -> Option<SelfContext<'a>> {
+        self.self_rule_child()
+    }
+    #[allow(non_snake_case)]
     pub fn ID(&self) -> Option<TerminalNode<'a>> {
         self.id_token().ok()
     }

@@ -19,7 +19,7 @@ let _localctx = __active_context_view_with_attrs::<SContext<'_, __ActiveParserCo
             let _before: &'a str = "before";
             let _token = __Antlr4RustInput(self.base.token_stream()).lt(-offset);
             let _probe = Probe { token: __Antlr4RustInput(self.base.token_stream()).la(1) };
-            let _kind = CompatParser_ID;
+            let _kind = __antlr4rust_token_aliases::CompatParser_ID;
             let _after: &'b str = "after";
             _localctx.as_ref().is_some()
 }

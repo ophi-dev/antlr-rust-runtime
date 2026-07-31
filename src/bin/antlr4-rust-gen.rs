@@ -41,8 +41,10 @@ mod stack_member;
 #[path = "../bin_support/templates.rs"]
 mod templates;
 
+#[cfg(test)]
+use rust_names::is_rust_keyword;
 use rust_names::{
-    is_rust_keyword, module_name, rust_function_name, rust_string, rust_type_name,
+    module_name, rust_function_name, rust_identifier, rust_string, rust_type_name,
     sanitize_identifier, split_identifier_words,
 };
 use templates::{
@@ -9920,7 +9922,6 @@ fn antlr4rust_token_alias_inventory(
     data: &CodegenData<'_>,
     root_type_name: &str,
     source: SourceId,
-    member_symbols: &BTreeSet<String>,
 ) -> Antlr4RustTokenAliasInventory {
     let owner_type = if data
         .semantic
@@ -9942,8 +9943,7 @@ fn antlr4rust_token_alias_inventory(
                 },
             )
     };
-    let mut values = antlr4rust_token_alias_values(&owner_type, data);
-    values.retain(|name, _| !member_symbols.contains(name));
+    let values = antlr4rust_token_alias_values(&owner_type, data);
     let names = values.keys().cloned().collect();
     Antlr4RustTokenAliasInventory { names, values }
 }
@@ -10051,12 +10051,7 @@ fn build_embedded_parser_data(
         let aliases = antlr4rust_alias_inventory_cache
             .entry(action.span.source)
             .or_insert_with(|| {
-                antlr4rust_token_alias_inventory(
-                    data,
-                    type_name,
-                    action.span.source,
-                    &model.parser_members.module_symbols,
-                )
+                antlr4rust_token_alias_inventory(data, type_name, action.span.source)
             });
         let translated = embedded::translate_parser_body(
             &action.body,
@@ -10100,12 +10095,7 @@ fn build_embedded_parser_data(
         let aliases = antlr4rust_alias_inventory_cache
             .entry(predicate.span.source)
             .or_insert_with(|| {
-                antlr4rust_token_alias_inventory(
-                    data,
-                    type_name,
-                    predicate.span.source,
-                    &model.parser_members.module_symbols,
-                )
+                antlr4rust_token_alias_inventory(data, type_name, predicate.span.source)
             });
         let translated = embedded::translate_parser_body(
             predicate.body.trim(),
@@ -10143,28 +10133,18 @@ fn build_embedded_parser_data(
 
     // @init / @after bodies from the rule headers.
     for (rule_index, rule) in model.rules.iter().enumerate() {
-        let rule_source = data
+        let semantic = data
             .semantic
-            .and_then(|semantic| semantic.unit.rules.get(rule_index))
-            .map_or_else(
-                || {
-                    data.semantic
-                        .expect("embedded parser data has semantic grammar")
-                        .unit
-                        .source
-                },
-                |semantic_rule| semantic_rule.span.source,
-            );
+            .expect("embedded parser data has semantic grammar");
+        let semantic_rule = semantic.unit.rules.iter().find(|semantic_rule| {
+            semantic.recognizer.rule_numbers.get(&semantic_rule.id) == Some(&rule_index)
+        });
+        let rule_source = semantic_rule.map_or(semantic.unit.source, |semantic_rule| {
+            semantic_rule.span.source
+        });
         let aliases = antlr4rust_alias_inventory_cache
             .entry(rule_source)
-            .or_insert_with(|| {
-                antlr4rust_token_alias_inventory(
-                    data,
-                    type_name,
-                    rule_source,
-                    &model.parser_members.module_symbols,
-                )
-            });
+            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, rule_source));
         if let Some(body) = &rule.init_body {
             let ctx = embedded::TranslationCtx {
                 model: &model,
@@ -10181,13 +10161,34 @@ fn build_embedded_parser_data(
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
-                io::Error::new(
-                    error.kind(),
-                    format!(
-                        "cannot lower embedded @init body for parser rule {} ({rule_index}): {error}",
-                        rule.name
-                    ),
-                )
+                semantic_rule
+                    .and_then(|semantic_rule| {
+                        semantic_rule
+                            .actions
+                            .iter()
+                            .find(|action| action.name == "init")
+                    })
+                    .map_or_else(
+                        || {
+                            io::Error::new(
+                                error.kind(),
+                                format!(
+                                    "cannot lower embedded @init body for parser rule {} \
+                                     ({rule_index}): {error}",
+                                    rule.name
+                                ),
+                            )
+                        },
+                        |action| {
+                            embedded_named_body_translation_error(
+                                data,
+                                &action.body_span,
+                                "parser @init",
+                                rule_index,
+                                &error,
+                            )
+                        },
+                    )
             })?;
             record_antlr4rust_translation(
                 &translated,
@@ -10216,13 +10217,34 @@ fn build_embedded_parser_data(
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
-                io::Error::new(
-                    error.kind(),
-                    format!(
-                        "cannot lower embedded @after body for parser rule {} ({rule_index}): {error}",
-                        rule.name
-                    ),
-                )
+                semantic_rule
+                    .and_then(|semantic_rule| {
+                        semantic_rule
+                            .actions
+                            .iter()
+                            .find(|action| action.name == "after")
+                    })
+                    .map_or_else(
+                        || {
+                            io::Error::new(
+                                error.kind(),
+                                format!(
+                                    "cannot lower embedded @after body for parser rule {} \
+                                     ({rule_index}): {error}",
+                                    rule.name
+                                ),
+                            )
+                        },
+                        |action| {
+                            embedded_named_body_translation_error(
+                                data,
+                                &action.body_span,
+                                "parser @after",
+                                rule_index,
+                                &error,
+                            )
+                        },
+                    )
             })?;
             record_antlr4rust_translation(
                 &translated,
@@ -10280,8 +10302,25 @@ fn build_embedded_parser_data(
         }
         let _ = writeln!(out.impl_items, "    {indented}\n");
     }
+    let root_source = data
+        .semantic
+        .expect("embedded parser data has semantic grammar")
+        .unit
+        .source;
+    let (root_alias_names, root_alias_values) = {
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(root_source)
+            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, root_source));
+        (aliases.names.clone(), aliases.values.clone())
+    };
     for item in &model.parser_members.module_items {
-        let item = post_process_embedded(item, item, type_name);
+        let translated = embedded::translate_member_token_alias_uses(item, &root_alias_names)?;
+        antlr4rust_token_aliases.extend(translated.token_aliases.iter().filter_map(|name| {
+            root_alias_values
+                .get(name)
+                .map(|value| (name.clone(), *value))
+        }));
+        let item = post_process_embedded(item, &translated.source, type_name);
         let _ = writeln!(out.module_items, "{item}\n");
     }
 
@@ -10315,8 +10354,10 @@ fn build_embedded_parser_data(
         out.module_items.push_str(ANTLR4RUST_INPUT_FACADE);
     }
     if !antlr4rust_token_aliases.is_empty() {
-        out.module_items
-            .push_str(&render_antlr4rust_token_aliases(&antlr4rust_token_aliases));
+        out.module_items.push_str(&render_antlr4rust_token_aliases(
+            &antlr4rust_token_aliases,
+            &model.parser_members.module_symbol_cfgs,
+        ));
     }
     let antlr4rust_context_rules =
         antlr4rust_compatibility_rules(&model, &antlr4rust_context_roots);
@@ -10352,6 +10393,31 @@ fn embedded_body_translation_error(
         format!(
             "{path}:{line}:{column}: cannot lower embedded {kind} coordinate \
              ({rule_index}, {coordinate_index}) in rule {rule}: {error}"
+        ),
+    )
+}
+
+fn embedded_named_body_translation_error(
+    data: &CodegenData<'_>,
+    span: &SourceSpan,
+    kind: &str,
+    rule_index: usize,
+    error: &io::Error,
+) -> io::Error {
+    let path = data
+        .sources
+        .and_then(|sources| sources.logical_path(span.source))
+        .map_or_else(|| "<grammar>".to_owned(), |path| path.display().to_string());
+    let (line, column) = structural_line_column(data, span);
+    let rule = data
+        .rule_names
+        .get(rule_index)
+        .map_or("<unknown>", String::as_str);
+    io::Error::new(
+        error.kind(),
+        format!(
+            "{path}:{line}:{column}: cannot lower embedded {kind} in rule {rule} \
+             ({rule_index}): {error}"
         ),
     )
 }
@@ -11450,12 +11516,7 @@ fn render_repeated_accessor_validation(
 }
 
 fn antlr4rust_compat_method_name(source_name: &str) -> String {
-    let identifier = sanitize_identifier(source_name);
-    if is_rust_keyword(&identifier) {
-        format!("r#{identifier}")
-    } else {
-        identifier
-    }
+    rust_identifier(source_name)
 }
 
 fn render_antlr4rust_rule_all_accessor(
@@ -14234,6 +14295,7 @@ enum RuleArgTemplate {
 /// the `BaseLexer` hooks: `self.text()` / column accessors become position
 /// -aware `_base` calls, `self.output()` becomes stdout.
 fn translate_embedded_lexer_body(body: &str, position_expr: &str) -> io::Result<String> {
+    embedded::validate_lexer_body_compatibility_receivers(body)?;
     let mut out = replace_all(body.trim(), "self.output()", "std::io::stdout()");
     out = replace_all(
         &out,
@@ -14265,12 +14327,23 @@ fn structural_embedded_lexer_actions(
     let mut actions = structural_actions(data)?
         .into_iter()
         .map(|action| {
+            let translated = translate_embedded_lexer_body(&action.body, "action.position()")
+                .map_err(|error| {
+                    embedded_body_translation_error(
+                        data,
+                        &action.span,
+                        "lexer action",
+                        action.rule_index,
+                        action.action_index,
+                        &error,
+                    )
+                })?;
             Ok((
                 (
                     i32::try_from(action.rule_index).expect("rule index exceeds i32"),
                     i32::try_from(action.action_index).expect("action index exceeds i32"),
                 ),
-                translate_embedded_lexer_body(&action.body, "action.position()")?,
+                translated,
             ))
         })
         .collect::<io::Result<Vec<_>>>()?;
@@ -14285,9 +14358,20 @@ fn structural_embedded_lexer_predicates(
     structural_predicates(data)?
         .into_iter()
         .map(|predicate| {
+            let translated = translate_embedded_lexer_body(&predicate.body, "predicate.position()")
+                .map_err(|error| {
+                    embedded_body_translation_error(
+                        data,
+                        &predicate.span,
+                        "lexer predicate",
+                        predicate.rule_index,
+                        predicate.predicate_index,
+                        &error,
+                    )
+                })?;
             Ok((
                 (predicate.rule_index, predicate.predicate_index),
-                translate_embedded_lexer_body(&predicate.body, "predicate.position()")?,
+                translated,
             ))
         })
         .collect()
@@ -15278,20 +15362,58 @@ fn antlr4rust_token_alias_values(type_name: &str, data: &CodegenData<'_>) -> BTr
     aliases
 }
 
-fn render_antlr4rust_token_aliases(aliases: &BTreeMap<String, i32>) -> String {
+fn render_antlr4rust_token_aliases(
+    aliases: &BTreeMap<String, i32>,
+    member_symbol_cfgs: &BTreeMap<String, Vec<Vec<String>>>,
+) -> String {
     let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "#[allow(non_snake_case, dead_code, unused_imports)]\nmod {} {{",
+        embedded::ANTLR4RUST_TOKEN_ALIAS_MODULE
+    );
     for (alias, token_type) in aliases {
         let value = if *token_type == TOKEN_EOF {
             "antlr4_runtime::TOKEN_EOF".to_owned()
         } else {
             token_type.to_string()
         };
+        let declarations = member_symbol_cfgs.get(alias);
+        if declarations.is_some_and(|declarations| declarations.iter().any(Vec::is_empty)) {
+            let _ = writeln!(out, "    pub(super) use super::{alias};");
+            continue;
+        }
+        let conditions = declarations
+            .into_iter()
+            .flatten()
+            .map(|predicates| match predicates.as_slice() {
+                [predicate] => predicate.clone(),
+                predicates => format!("all({})", predicates.join(", ")),
+            })
+            .collect::<BTreeSet<_>>();
+        for condition in &conditions {
+            let _ = writeln!(
+                out,
+                "    #[cfg({condition})]\n    pub(super) use super::{alias};"
+            );
+        }
+        if !conditions.is_empty() {
+            let active = if conditions.len() == 1 {
+                conditions.first().expect("non-empty condition set").clone()
+            } else {
+                format!(
+                    "any({})",
+                    conditions.iter().cloned().collect::<Vec<_>>().join(", ")
+                )
+            };
+            let _ = writeln!(out, "    #[cfg(not({active}))]");
+        }
         let _ = writeln!(
             out,
-            "#[allow(non_upper_case_globals, dead_code)]\nconst {alias}: i32 = {value};"
+            "    #[allow(non_upper_case_globals)]\n    pub(super) const {alias}: i32 = {value};"
         );
     }
-    out.push('\n');
+    out.push_str("}\n\n");
     out
 }
 
@@ -16518,7 +16640,11 @@ mod tests {
         assert_eq!(rust_const_name("UnicodeClassLL"), "UNICODE_CLASS_LL");
         assert_eq!(rust_function_name("gen"), "r#gen");
         assert_eq!(rust_function_name("try"), "r#try");
-        assert_eq!(rust_function_name("Self"), "r#self");
+        assert_eq!(rust_function_name("Self"), "self_");
+        assert_eq!(rust_function_name("crate"), "crate_");
+        assert_eq!(rust_function_name("super"), "super_");
+        assert_eq!(rust_identifier("Self"), "Self_");
+        assert_eq!(rust_identifier("type"), "r#type");
         assert!(is_rust_keyword("Self"));
     }
 
@@ -18139,6 +18265,10 @@ mod tests {
                     name: "type".to_owned(),
                     ..embedded::RuleModel::default()
                 },
+                embedded::RuleModel {
+                    name: "self".to_owned(),
+                    ..embedded::RuleModel::default()
+                },
             ],
             parser_members: embedded::MembersModel::default(),
         };
@@ -18158,6 +18288,13 @@ mod tests {
             ("required".to_owned(), embedded::ChildCardinality::ONE),
             (
                 "type".to_owned(),
+                embedded::ChildCardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            ),
+            (
+                "self".to_owned(),
                 embedded::ChildCardinality {
                     min: 0,
                     max: Some(1),
@@ -18187,6 +18324,7 @@ mod tests {
         )
         .expect("collision-free legacy getters");
         assert!(compatibility_methods.contains("r#type"));
+        assert!(compatibility_methods.contains("self_"));
         let common_methods = context_common_method_names(&compatibility_methods);
         assert_eq!(common_methods.text, "context_text");
         let mut used_methods = compatibility_methods;
@@ -18227,6 +18365,14 @@ mod tests {
             "type",
             "type_rule_child",
             "TypeContext",
+            false,
+            &mut emitted_methods,
+        );
+        render_antlr4rust_single_rule_accessor(
+            &mut rendered,
+            "self",
+            "self_rule_child",
+            "SelfContext",
             false,
             &mut emitted_methods,
         );
