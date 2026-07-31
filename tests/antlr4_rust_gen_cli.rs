@@ -3670,6 +3670,31 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         alias_collision_parser.contains("const AliasCollisionParser_MODULE"),
         "a renamed import path must not suppress the original compatibility alias"
     );
+    assert!(
+        !alias_collision_parser.contains("const AliasCollisionParser_LOCAL"),
+        "a body-local binding must suppress the colliding token alias"
+    );
+    assert!(
+        java_parser.contains("pub fn r#type(&self) -> Option<TypeContext<'a>>")
+            && java_parser.contains("self.type_rule_child().ok()"),
+        "keyword compatibility getters and their native targets must use distinct legal names"
+    );
+    let unrelated_context = java_parser
+        .split_once("pub struct UnrelatedContext")
+        .expect("unrelated context should be emitted")
+        .1
+        .split_once("impl<State> std::fmt::Display for UnrelatedContext")
+        .expect("unrelated context display impl should delimit its surface")
+        .0;
+    insta::assert_snapshot!(
+        "antlr4rust_unrelated_context_surface",
+        unrelated_context
+            .lines()
+            .filter(|line| line.trim_start().starts_with("pub fn "))
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let live_context = java_parser
         .find(
             "let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>",
@@ -3699,6 +3724,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                     "pub fn context_rule_node",
                     "pub fn context_start",
                     "pub fn context_text",
+                    "pub fn r#type",
                     "AliasCollisionParser_EOF",
                     "AliasCollisionParser_ID",
                     "let _localctx = __active_context_view",
@@ -3889,6 +3915,19 @@ mod antlr4rust_compat_tests {
         let lexer = JavaCompatLexer::new(InputStream::new("value"));
         let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
         assert!(parser.live_attributes().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn keyword_compatibility_getter_and_unrelated_context_compile() {
+        let lexer = JavaCompatLexer::new(InputStream::new("type"));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.keyword_accessor().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+
+        let lexer = JavaCompatLexer::new(InputStream::new("text value"));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.unrelated().is_ok());
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 }

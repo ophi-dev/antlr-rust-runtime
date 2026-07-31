@@ -72,6 +72,19 @@ liveAttributes locals [int value=0]
     }? IDENTIFIER EOF
     ;
 
+keywordAccessor
+    : type {
+        _localctx.as_deref()
+            .map(|ctx| ctx.r#type().is_some())
+            .unwrap_or(true)
+    }? EOF
+    ;
+
+unrelated
+    : text IDENTIFIER EOF
+    ;
+
+type: TYPE;
 text: TEXT;
 start: START;
 child_count: CHILD_COUNT;
@@ -120,5 +133,6 @@ TEXT: 'text';
 START: 'start';
 CHILD_COUNT: 'child_count';
 RULE_NODE: 'rule_node';
+TYPE: 'type';
 IDENTIFIER: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

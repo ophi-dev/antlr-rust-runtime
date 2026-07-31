@@ -1,0 +1,5 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: collision
+---
+antlr4rust compatibility accessor `item_all` in CollisionContext is ambiguous between parser rule `item` and parser rule `item_all`

@@ -10,9 +10,7 @@ self.0.lt(offset).map(__Antlr4RustTokenView)
 struct __Antlr4RustTokenView<'a>(antlr4_runtime::TokenView<'a>);
 impl<'a> __Antlr4RustTokenView<'a> {
 const CCompatParser_ASSIGN: i32 = 1;
-const CCompatParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
 const CCompatParser_IDENTIFIER: i32 = 2;
-const CCompatParser_WS: i32 = 3;
 let __first = __Antlr4RustInput(self.base.token_stream()).lt(1);
 let __first_text = __Antlr4RustInput(self.base.token_stream()).lt(1).map(|t| t.get_text());
 let __eof = __Antlr4RustInput(self.base.token_stream()).lt(4)
@@ -32,18 +30,8 @@ self.0.lt(offset).map(__Antlr4RustTokenView)
 struct __Antlr4RustTokenView<'a>(antlr4_runtime::TokenView<'a>);
 impl<'a> __Antlr4RustTokenView<'a> {
 const JavaCompatParser_ASSIGN: i32 = 1;
-const JavaCompatParser_CHILD_COUNT: i32 = 7;
-const JavaCompatParser_COMMA: i32 = 2;
-const JavaCompatParser_ELLIPSIS: i32 = 3;
-const JavaCompatParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
-const JavaCompatParser_IDENTIFIER: i32 = 9;
+const JavaCompatParser_IDENTIFIER: i32 = 10;
 const JavaCompatParser_MODULE: i32 = 4;
-const JavaCompatParser_RULE_NODE: i32 = 8;
-const JavaCompatParser_START: i32 = 6;
-const JavaCompatParser_TEXT: i32 = 5;
-const JavaCompatParser_WS: i32 = 10;
-pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
-pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn recordComponent_all(&self) -> Vec<RecordComponentContext<'a>> {
 pub fn ELLIPSIS(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
@@ -54,9 +42,7 @@ pub fn context_start(&self) -> __GeneratedTokenView {
 pub fn context_text(&self) -> String {
 pub fn context_rule_node(&self) -> RuleNodeView<'a> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
-pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
-pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
-pub fn recordComponent_all(&self) -> Vec<RecordComponentContext<'a>> {
+pub fn r#type(&self) -> Option<TypeContext<'a>> {
 __Antlr4RustInput(self.base.token_stream()).la(1),
 JavaCompatParser_IDENTIFIER | JavaCompatParser_MODULE
 ) || __Antlr4RustInput(self.base.token_stream()).la(2) != JavaCompatParser_ASSIGN
@@ -73,11 +59,11 @@ let rcs = ctx.recordComponent_all();
 let _localctx = __active_context_view_with_attrs::<RepeatedTokensContext<'_, __ActiveParserContext>>(
 let _localctx = __active_context_view_with_attrs::<CommonAccessorCollisionsContext<'_, __ActiveParserContext>>(
 let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<KeywordAccessorContext<'_, __ActiveParserContext>>(
+pub fn r#type(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
 === Alias only ===
-const AliasOnlyParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
 const AliasOnlyParser_ID: i32 = 2;
 const AliasOnlyParser_T__0: i32 = 1;
-const AliasOnlyParser_WS: i32 = 3;
 AliasOnlyParser_ID == ID && AliasOnlyParser_T__0 == T__0
 === Alias collision ===
 struct AliasCollisionParser_ID;

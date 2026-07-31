@@ -13,10 +13,13 @@ start
         let _user_import = AliasCollisionParser_EOF;
         let _compat_alias = AliasCollisionParser_MODULE;
         let _renamed_import = RenamedModule;
+        let AliasCollisionParser_LOCAL = 7;
+        let _local_binding = AliasCollisionParser_LOCAL;
         true
-    }? (ID | MODULE) EOF
+    }? (ID | MODULE | LOCAL) EOF
     ;
 
 MODULE: 'module';
+LOCAL: 'local';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

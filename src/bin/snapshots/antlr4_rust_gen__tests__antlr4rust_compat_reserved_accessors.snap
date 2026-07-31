@@ -15,6 +15,10 @@ expression: rendered
         self.required_rule_child().ok()
     }
     #[allow(non_snake_case)]
+    pub fn r#type(&self) -> Option<TypeContext<'a>> {
+        self.type_rule_child()
+    }
+    #[allow(non_snake_case)]
     pub fn ID(&self) -> Option<TerminalNode<'a>> {
         self.id_token().ok()
     }
