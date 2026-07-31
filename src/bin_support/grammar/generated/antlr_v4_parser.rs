@@ -17202,9 +17202,10 @@ pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R
 ///
 /// Pick an entry-rule method that matches the grammar's intended
 /// top-level construct for the input being parsed. The generator can
-/// infer entry candidates from top-level call paths that reach
-/// explicit `EOF` matches and from configured entry rules, but it
-/// cannot infer the semantic choice between multiple candidates.
+/// infer entry candidates from call paths that reach explicit `EOF`
+/// matches, from parser rules that no other rule calls, and from
+/// configured entry rules. It cannot infer the semantic choice
+/// between multiple candidates.
 ///
 /// Likely parser entry-rule methods:
 /// - `grammar_spec()`

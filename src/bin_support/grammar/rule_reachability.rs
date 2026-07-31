@@ -4,7 +4,8 @@ use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
 use super::model::{
-    Block, ElementKind, GrammarKind, GrammarUnit, Rule, RuleId, RuleKind, SetElement, Terminal,
+    Block, ElementKind, GrammarId, GrammarKind, GrammarUnit, Rule, RuleId, RuleKind, SetElement,
+    Terminal,
 };
 use super::mutual_recursion::collect_calls_into;
 
@@ -20,9 +21,14 @@ impl EntryRuleConfig {
         }
     }
 
-    pub(crate) fn unknown_names(&self, units: &[GrammarUnit]) -> Vec<String> {
+    pub(crate) fn unknown_names(
+        &self,
+        units: &[GrammarUnit],
+        target_units: &BTreeSet<GrammarId>,
+    ) -> Vec<String> {
         let parser_rules = units
             .iter()
+            .filter(|unit| target_units.contains(&unit.id))
             .flat_map(|unit| &unit.rules)
             .filter(|rule| rule.kind == RuleKind::Parser)
             .map(|rule| rule.name.as_str())
@@ -34,9 +40,14 @@ impl EntryRuleConfig {
             .collect()
     }
 
-    pub(crate) fn matching_rule_ids(&self, units: &[GrammarUnit]) -> BTreeSet<RuleId> {
+    pub(crate) fn matching_rule_ids(
+        &self,
+        units: &[GrammarUnit],
+        target_units: &BTreeSet<GrammarId>,
+    ) -> BTreeSet<RuleId> {
         units
             .iter()
+            .filter(|unit| target_units.contains(&unit.id))
             .flat_map(|unit| &unit.rules)
             .filter(|rule| rule.kind == RuleKind::Parser && self.names.contains(&rule.name))
             .map(|rule| rule.id)
@@ -73,6 +84,15 @@ pub(crate) fn analyze(unit: &GrammarUnit, configured: &EntryRuleConfig) -> RuleR
             (rule.id, calls)
         })
         .collect::<BTreeMap<_, _>>();
+    let called_by_other_rule = call_graph
+        .iter()
+        .flat_map(|(caller, targets)| {
+            targets
+                .iter()
+                .copied()
+                .filter(move |target| target != caller)
+        })
+        .collect::<BTreeSet<_>>();
     let source_component_rules = source_component_rules(&call_graph);
     let mut reaches_eof = parser_rules
         .iter()
@@ -91,11 +111,15 @@ pub(crate) fn analyze(unit: &GrammarUnit, configured: &EntryRuleConfig) -> RuleR
         }
     }
 
+    let has_configured_entry = parser_rules
+        .iter()
+        .any(|rule| configured.names.contains(&rule.name));
     let mut entry_rules = parser_rules
         .iter()
         .filter(|rule| {
             configured.names.contains(&rule.name)
                 || (reaches_eof.contains(&rule.id) && source_component_rules.contains(&rule.id))
+                || (!has_configured_entry && !called_by_other_rule.contains(&rule.id))
         })
         .map(|rule| rule.id)
         .collect::<Vec<_>>();

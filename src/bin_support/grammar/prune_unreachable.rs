@@ -44,6 +44,9 @@ impl GrammarTransform for PruneUnreachableRules {
     ) -> Result<bool, Diagnostic> {
         let mut changed = false;
         for unit in &mut grammar.units {
+            if !grammar.target_units.contains(&unit.id) {
+                continue;
+            }
             let unreachable = analyze(unit, &self.entries)
                 .unreachable_rules
                 .into_iter()
@@ -83,6 +86,9 @@ fn tombstone_rule(provenance: &mut ProvenanceIndex, rule: &Rule) {
     for action in &rule.actions {
         tombstone(provenance, action.syntax);
     }
+    for handler in &rule.catches {
+        tombstone(provenance, handler.syntax);
+    }
     if let Some(action) = &rule.finally_action {
         tombstone(provenance, action.syntax);
     }
@@ -92,6 +98,9 @@ fn tombstone_rule(provenance: &mut ProvenanceIndex, rule: &Rule) {
 fn tombstone_block(provenance: &mut ProvenanceIndex, block: &Block) {
     for alternative in &block.alternatives {
         tombstone(provenance, alternative.syntax);
+        if let Some(label) = &alternative.label {
+            tombstone(provenance, label.syntax);
+        }
         for element in &alternative.elements {
             tombstone(provenance, element.syntax);
             if let Some(label) = &element.label {

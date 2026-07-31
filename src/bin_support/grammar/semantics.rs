@@ -92,6 +92,7 @@ pub(crate) fn analyze_with_entry_rules(
     }
     diagnostics.extend(check_unreachable_rules(
         &integrated.grammar.units,
+        &integrated.grammar.target_units,
         entry_rules,
     ));
 
@@ -111,7 +112,8 @@ pub(crate) fn analyze_with_entry_rules(
     // recursion before the direct-recursion rewrite runs (issue #151). This is
     // a no-op on grammars with no reducible left-corner cycle; anything it
     // declines is reported later by the ATN-level G4A005 detector.
-    let preserved_entry_rules = entry_rules.matching_rule_ids(&integrated.grammar.units);
+    let preserved_entry_rules =
+        entry_rules.matching_rule_ids(&integrated.grammar.units, &integrated.grammar.target_units);
     eliminate_mutual_left_recursion(
         &mut integrated.grammar.units,
         &mut integrated.ids,
@@ -1027,10 +1029,11 @@ fn analyze_unit(
 
 fn check_unreachable_rules(
     units: &[GrammarUnit],
+    target_units: &BTreeSet<GrammarId>,
     entry_config: &EntryRuleConfig,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    for unit in units {
+    for unit in units.iter().filter(|unit| target_units.contains(&unit.id)) {
         let reachability = analyze_rule_reachability(unit, entry_config);
         if reachability.unreachable_rules.is_empty() {
             continue;

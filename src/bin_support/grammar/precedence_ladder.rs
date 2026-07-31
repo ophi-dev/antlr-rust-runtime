@@ -2060,6 +2060,7 @@ low : INT ;
         (
             TransformGrammar {
                 units: vec![unit],
+                target_units: BTreeSet::from([GrammarId::new(0)]),
                 provenance,
             },
             ids,

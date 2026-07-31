@@ -299,10 +299,12 @@ ahead-of-time lexer DFA tables remain embedded generated data.
 ### Choosing Parser Entry Rules
 
 Generated parsers expose one public method per grammar rule. Call the method
-that matches the grammar's intended top-level rule for the input; the generator
-can identify rules that are not called by other rules, but it cannot infer the
-semantic choice between multiple top-level forms. The generated parser rustdoc
-lists likely entry methods first, followed by all rule methods.
+that matches the grammar's intended top-level rule for the input. The generated
+parser rustdoc lists likely entry methods first, followed by all rule methods,
+using the same call-graph and `EOF` inference as the `G4S078` unreachable-rule
+diagnostic. Use `--entry-rule` to declare callable non-`EOF` forms before
+enabling `--prune-unreachable`; the generator cannot infer the semantic choice
+between multiple public rule methods.
 
 For the JSON grammar above, `json()` is the natural entry. Larger grammars may
 have several top-level forms, so confirm the intended entry rule against that
@@ -696,16 +698,23 @@ and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
 ### Unreachable parser rules
 
 The grammar frontend reports `warning[G4S078]` for parser rules that no entry
-rule can reach. Top-level parser rules whose call paths reach an explicit `EOF`
-terminal are inferred as entries; when neither inferred nor configured entries
-exist, the first parser rule is the fallback.
-Repeated `--entry-rule NAME` options declare entry rules for
-grammars with callable top-level forms that do not consume `EOF`. Lexer rules,
-including fragments and mode-scoped rules, are outside this parser analysis.
+rule can reach. Source call-graph components whose paths reach an explicit
+`EOF` terminal are inferred as entries. Without an explicit entry selection for
+a parser, rules that no other rule calls are also inferred; this preserves
+callable top-level forms that do not consume `EOF`. The first parser rule is the
+fallback only when neither inference finds an entry.
 
-Warnings do not change generated output. The opt-in `--prune-unreachable` pass
-removes the same unreachable set before ATN construction and logs every removed
-qualified rule:
+Repeated `--entry-rule NAME` options declare non-`EOF` entry rules explicitly.
+Names are bare and apply to every generated parser in the invocation that
+defines `NAME`. Once at least one name matches a parser, its other non-`EOF`
+top-level rules are no longer inferred, while `EOF` entries remain automatic.
+`G4S079` rejects a name not defined by any generated parser. Lexer rules,
+including fragments and mode-scoped rules, and grammars loaded only as
+`tokenVocab` sources are outside this parser analysis.
+
+Emitting `G4S078` does not remove code. The opt-in `--prune-unreachable` pass
+removes the same unreachable set before ATN construction and logs every
+removed qualified rule:
 
 ```bash
 antlr4-rust-gen Grammar.g4 \

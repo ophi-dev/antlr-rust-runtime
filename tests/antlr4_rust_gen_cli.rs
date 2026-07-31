@@ -331,7 +331,7 @@ fn positional_lexer_root_emits_rust_and_manifest() {
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
-fn unreachable_parser_rules_warn_from_every_inferred_entry() {
+fn unreachable_parser_rules_warn_without_pruning() {
     let temp = temporary_directory("unreachable-rules-warning");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/antlr4-rust-gen/unreachable-rules/Reachability.g4");
@@ -355,7 +355,7 @@ fn unreachable_parser_rules_warn_from_every_inferred_entry() {
             .expect("fixture path should be valid Unicode"),
         "<grammar>",
     );
-    insta::assert_snapshot!("unreachable_rule_default_diagnostics", stderr);
+    insta::assert_snapshot!("unreachable_rule_warning_diagnostics", stderr);
 
     let parser = fs::read_to_string(out.join("reachability_parser.rs"))
         .expect("baseline parser should be emitted");
@@ -412,6 +412,40 @@ fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
     );
 }
 
+#[test]
+fn independent_top_level_rules_without_eof_are_inferred() {
+    let temp = temporary_directory("no-eof-entry-rules");
+    let grammar = temp.path().join("NoEof.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar NoEof;\n\
+         parseA : expr ;\n\
+         parseB : stmt ;\n\
+         expr : ID ;\n\
+         stmt : ID SEMI ;\n\
+         ID : [a-z]+ ;\n\
+         SEMI : ';' ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_eq!(utf8(&output.stderr), "");
+    assert_generated_modules_compile(temp.path(), &["no_eof_lexer.rs", "no_eof_parser.rs"]);
+}
+
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn eof_reaching_recursive_source_component_is_inferred_as_entries() {
@@ -452,6 +486,10 @@ fn eof_reaching_recursive_source_component_is_inferred_as_entries() {
     assert!(
         api.iter().any(|symbol| symbol == "fn b"),
         "recursive entry b should survive pruning"
+    );
+    assert!(
+        api.iter().any(|symbol| symbol == "fn junk"),
+        "independent top-level entry junk should survive pruning"
     );
     insta::assert_debug_snapshot!("recursive_eof_entry_component_generated_api", api);
     assert_generated_modules_compile(
@@ -508,6 +546,7 @@ fn configured_entry_survives_mutual_recursion_rewrite() {
     );
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn configured_entry_rule_must_name_a_parser_rule() {
     let temp = temporary_directory("unknown-entry-rule");
@@ -523,13 +562,70 @@ fn configured_entry_rule_must_name_a_parser_rule() {
         out.as_os_str(),
     ]);
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
-    let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("G4S079"), "{stderr}");
-    assert!(
-        stderr.contains("configured parser entry rule missing is not defined"),
-        "{stderr}"
+    let stderr = utf8(&output.stderr).replace(
+        grammar
+            .to_str()
+            .expect("fixture path should be valid Unicode"),
+        "<grammar>",
     );
+    insta::assert_snapshot!("configured_entry_rule_not_found", stderr);
     assert!(!out.exists(), "invalid entry selection emitted output");
+}
+
+#[test]
+fn token_vocab_source_parser_is_not_diagnosed_or_pruned() {
+    let temp = temporary_directory("token-vocab-reachability");
+    let vocabulary = temp.path().join("Vocab.g4");
+    let grammar = temp.path().join("User.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &vocabulary,
+        "grammar Vocab;\n\
+         vstart : A EOF ;\n\
+         vcycle : A vhelper ;\n\
+         vhelper : B vcycle | B ;\n\
+         A : 'a' ;\n\
+         B : 'b' ;\n",
+    )
+    .expect("vocabulary grammar should be writable");
+    fs::write(
+        &grammar,
+        "parser grammar User;\n\
+         options { tokenVocab=Vocab; }\n\
+         root : A EOF ;\n",
+    )
+    .expect("root grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--lib"),
+        temp.path().as_os_str(),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_eq!(utf8(&output.stderr), "");
+    let mut output_files = fs::read_dir(&out)
+        .expect("output directory should exist")
+        .map(|entry| {
+            entry
+                .expect("output entry should be readable")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    output_files.sort();
+    assert_eq!(
+        output_files,
+        ["decisions.json", "semantics.json", "user.rs"]
+    );
 }
 
 #[test]

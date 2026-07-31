@@ -2435,7 +2435,8 @@ Options:
   --fixed-lookahead K              Compile decisions provable within K tokens of lookahead
                                    into static dispatch tables (off by default; every
                                    remaining decision keeps adaptive prediction)
-  --entry-rule NAME                Declare a parser entry rule (repeatable)
+  --entry-rule NAME                Declare a parser entry rule by bare name (repeatable;
+                                   applies to every generated parser defining NAME)
   --prune-unreachable              Remove parser rules unreachable from every entry rule
   --optimize-precedence-ladders    Collapse proven linear precedence ladders (changes tree/API)
   --report-precedence-ladders      Dry-run the pass and emit only optimizations.json
@@ -14330,19 +14331,20 @@ fn render_parser_rustdoc(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// infer entry candidates from top-level call paths that reach"
+        "/// infer entry candidates from call paths that reach explicit `EOF`"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// explicit `EOF` matches and from configured entry rules, but it"
+        "/// matches, from parser rules that no other rule calls, and from"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// cannot infer the semantic choice between multiple candidates."
+        "/// configured entry rules. It cannot infer the semantic choice"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "/// between multiple candidates.").expect("writing to a string cannot fail");
     if !entry_rule_indices.is_empty() {
         writeln!(out, "///").expect("writing to a string cannot fail");
         writeln!(out, "/// Likely parser entry-rule methods:")
@@ -15698,7 +15700,8 @@ mod tests {
         assert!(rendered.contains("/// - `r#try()`"));
         assert!(rendered.contains("cannot"));
         assert!(rendered.contains("semantic choice"));
-        assert!(rendered.contains("explicit `EOF` matches"));
+        assert!(rendered.contains("explicit `EOF`"));
+        assert!(rendered.contains("no other rule calls"));
     }
 
     #[test]

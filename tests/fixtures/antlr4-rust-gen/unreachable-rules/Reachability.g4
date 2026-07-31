@@ -26,11 +26,11 @@ live
     ;
 
 deadRoot
-    : deadHelper
+    : ID deadHelper?
     ;
 
 deadHelper
-    : ID
+    : ID deadRoot?
     ;
 
 fragment LETTER

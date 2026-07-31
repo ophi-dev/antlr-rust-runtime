@@ -67,13 +67,17 @@ pub(crate) fn compile_with_transforms(
     let root_order = loaded.grammars.roots.clone();
     let mut integrated =
         integrate_loaded(&loaded).map_err(|error| error.with_sources(&loaded.sources))?;
-    let unknown_entries = entry_rules.unknown_names(&integrated.grammar.units);
+    let unknown_entries =
+        entry_rules.unknown_names(&integrated.grammar.units, &integrated.grammar.target_units);
     if !unknown_entries.is_empty() {
         let span = integrated
             .grammar
             .units
             .iter()
-            .find(|unit| unit.kind == GrammarKind::Parser)
+            .find(|unit| {
+                integrated.grammar.target_units.contains(&unit.id)
+                    && unit.kind == GrammarKind::Parser
+            })
             .or_else(|| integrated.grammar.units.first())
             .map_or_else(
                 || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),

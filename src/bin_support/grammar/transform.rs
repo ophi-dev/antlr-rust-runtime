@@ -111,6 +111,7 @@ pub(crate) struct TransformContext<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct TransformGrammar {
     pub(crate) units: Vec<GrammarUnit>,
+    pub(crate) target_units: BTreeSet<GrammarId>,
     pub(crate) provenance: ProvenanceIndex,
 }
 
@@ -704,7 +705,16 @@ pub(crate) fn integrate_loaded(
         });
     }
 
-    let grammar = TransformGrammar { units, provenance };
+    let target_units = roots
+        .values()
+        .flat_map(|outputs| [outputs.lexer, outputs.parser])
+        .flatten()
+        .collect();
+    let grammar = TransformGrammar {
+        units,
+        target_units,
+        provenance,
+    };
     if let Err(diagnostic) = validate_model(&grammar) {
         return Err(CompilationError::new(vec![diagnostic]));
     }
