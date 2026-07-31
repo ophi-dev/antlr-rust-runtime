@@ -10008,6 +10008,7 @@ fn build_embedded_parser_data(
     let mut uses_antlr4rust_input = false;
     let mut uses_antlr4rust_context = false;
     let mut antlr4rust_token_aliases = BTreeMap::new();
+    let mut antlr4rust_alias_inventory_cache = BTreeMap::new();
 
     for action in structural_actions(data)? {
         if action.body.trim().is_empty() {
@@ -10023,12 +10024,16 @@ fn build_embedded_parser_data(
             site: embedded::ActionSite::Body,
             token_types: &token_types,
         };
-        let aliases = antlr4rust_token_alias_inventory(
-            data,
-            type_name,
-            action.span.source,
-            &model.parser_members.module_symbols,
-        );
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(action.span.source)
+            .or_insert_with(|| {
+                antlr4rust_token_alias_inventory(
+                    data,
+                    type_name,
+                    action.span.source,
+                    &model.parser_members.module_symbols,
+                )
+            });
         let translated = embedded::translate_parser_body(
             &action.body,
             &ctx,
@@ -10048,7 +10053,7 @@ fn build_embedded_parser_data(
         })?;
         record_antlr4rust_translation(
             &translated,
-            &aliases,
+            aliases,
             &mut uses_antlr4rust_input,
             &mut uses_antlr4rust_context,
             &mut antlr4rust_token_aliases,
@@ -10067,12 +10072,16 @@ fn build_embedded_parser_data(
             site: embedded::ActionSite::Body,
             token_types: &token_types,
         };
-        let aliases = antlr4rust_token_alias_inventory(
-            data,
-            type_name,
-            predicate.span.source,
-            &model.parser_members.module_symbols,
-        );
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(predicate.span.source)
+            .or_insert_with(|| {
+                antlr4rust_token_alias_inventory(
+                    data,
+                    type_name,
+                    predicate.span.source,
+                    &model.parser_members.module_symbols,
+                )
+            });
         let translated = embedded::translate_parser_body(
             predicate.body.trim(),
             &ctx,
@@ -10092,7 +10101,7 @@ fn build_embedded_parser_data(
         })?;
         record_antlr4rust_translation(
             &translated,
-            &aliases,
+            aliases,
             &mut uses_antlr4rust_input,
             &mut uses_antlr4rust_context,
             &mut antlr4rust_token_aliases,
@@ -10120,12 +10129,16 @@ fn build_embedded_parser_data(
                 },
                 |semantic_rule| semantic_rule.span.source,
             );
-        let aliases = antlr4rust_token_alias_inventory(
-            data,
-            type_name,
-            rule_source,
-            &model.parser_members.module_symbols,
-        );
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(rule_source)
+            .or_insert_with(|| {
+                antlr4rust_token_alias_inventory(
+                    data,
+                    type_name,
+                    rule_source,
+                    &model.parser_members.module_symbols,
+                )
+            });
         if let Some(body) = &rule.init_body {
             let ctx = embedded::TranslationCtx {
                 model: &model,
@@ -10152,7 +10165,7 @@ fn build_embedded_parser_data(
             })?;
             record_antlr4rust_translation(
                 &translated,
-                &aliases,
+                aliases,
                 &mut uses_antlr4rust_input,
                 &mut uses_antlr4rust_context,
                 &mut antlr4rust_token_aliases,
@@ -10186,7 +10199,7 @@ fn build_embedded_parser_data(
             })?;
             record_antlr4rust_translation(
                 &translated,
-                &aliases,
+                aliases,
                 &mut uses_antlr4rust_input,
                 &mut uses_antlr4rust_context,
                 &mut antlr4rust_token_aliases,
@@ -12836,6 +12849,7 @@ fn __token_children_matching<'a>(
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -12849,7 +12863,24 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     storage: &'a antlr4_runtime::ParseTreeStorage,
     tokens: &'a antlr4_runtime::TokenStore,
 ) -> Option<T> {
-    T::__from_active(context, invocation_states, storage, tokens)
+    T::__from_active(context, None, invocation_states, storage, tokens)
+}
+
+#[allow(dead_code)]
+fn __active_context_view_with_attrs<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a antlr4_runtime::ParserRuleContext,
+    live_attrs: &dyn std::any::Any,
+    invocation_states: Vec<isize>,
+    storage: &'a antlr4_runtime::ParseTreeStorage,
+    tokens: &'a antlr4_runtime::TokenStore,
+) -> Option<T> {
+    T::__from_active(
+        context,
+        Some(live_attrs),
+        invocation_states,
+        storage,
+        tokens,
+    )
 }
 
 #[allow(dead_code)]
@@ -12920,7 +12951,13 @@ fn __write_invocation_states(
                 )
             }
         };
-        let active_attrs_bindings = attrs_bindings("context");
+        let active_attrs_bindings = if rule.attrs.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "        let __default = {attrs_struct}::default();\n        let __attrs = match live_attrs {{\n            Some(live_attrs) => live_attrs.downcast_ref::<{attrs_struct}>().expect(\"active context attributes match the parser rule\"),\n            None => context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default),\n        }};\n"
+            )
+        };
         let stored_attrs_bindings = attrs_bindings("node");
         let _ = writeln!(
             out,
@@ -12928,7 +12965,7 @@ fn __write_invocation_states(
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.{rule_node_method}() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn {rule_node_method}(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n{active_attrs_bindings}        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: Some(invocation_states),\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.{rule_node_method}() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn {rule_node_method}(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        live_attrs: Option<&dyn std::any::Any>,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n{active_attrs_bindings}        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: Some(invocation_states),\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
         );
         let _ = writeln!(
             out,
@@ -17966,6 +18003,19 @@ mod tests {
         assert!(
             attributed.contains("generated_attrs::<__RuleAttrs1>"),
             "rules with declared attributes must still populate public context fields"
+        );
+        assert!(
+            attributed.contains("live_attrs.downcast_ref::<__RuleAttrs1>()"),
+            "active contexts must populate public fields from live rule attributes"
+        );
+        assert!(
+            attributed
+                .contains("T::__from_active(context, None, invocation_states, storage, tokens)"),
+            "native embedded actions must retain the original active-context helper"
+        );
+        assert!(
+            attributed.contains("T::__from_active(\n        context,\n        Some(live_attrs),"),
+            "compatibility lowering must have a live-attribute helper"
         );
     }
 

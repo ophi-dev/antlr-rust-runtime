@@ -39,9 +39,10 @@ expression: manifest
         {"kind": "parser-predicate", "rule": "recordComponentList", "rule_index": 2, "index": 2, "atn_state": null, "line": 23, "column": 8, "body": "_localctx.as_deref() .map(|ctx| { let rcs = ctx.recordComponent_all(); let count = rcs.len(); (0...", "disposition": "translated", "template": "Embedded"},
         {"kind": "parser-predicate", "rule": "repeatedTokens", "rule_index": 4, "index": 3, "atn_state": null, "line": 44, "column": 28, "body": "_localctx.as_deref() .map(|ctx| ctx.IDENTIFIER_all().len() == 2) .unwrap_or(true)", "disposition": "translated", "template": "Embedded"},
         {"kind": "parser-predicate", "rule": "commonAccessorCollisions", "rule_index": 5, "index": 4, "atn_state": null, "line": 52, "column": 42, "body": "_localctx.as_deref() .map(|ctx| { ctx.text().is_some() && ctx.start().is_some() && ctx.child_cou...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-predicate", "rule": "nativeNotIdentifierAssign", "rule_index": 10, "index": 5, "atn_state": null, "line": 71, "column": 6, "body": "!matches!( self.base.token_stream().la_token(1), IDENTIFIER | MODULE ) || self.base.token_stream...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-predicate", "rule": "nativeEndLookahead", "rule_index": 11, "index": 6, "atn_state": null, "line": 80, "column": 17, "body": "self.base.token_stream().la_token(1) == antlr4_runtime::TOKEN_EOF && self.base.token_stream().la...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-predicate", "rule": "nativeRecordComponentList", "rule_index": 12, "index": 7, "atn_state": null, "line": 88, "column": 8, "body": "let rcs = __ctx.child_rules( self.base.parse_tree_storage(), self.base.token_store(), RULE_RECOR...", "disposition": "translated", "template": "Embedded"}
+        {"kind": "parser-predicate", "rule": "liveAttributes", "rule_index": 6, "index": 5, "atn_state": null, "line": 68, "column": 6, "body": "_localctx.as_deref() .map(|ctx| ctx.value == 1) .unwrap_or(false)", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeNotIdentifierAssign", "rule_index": 11, "index": 6, "atn_state": null, "line": 82, "column": 6, "body": "!matches!( self.base.token_stream().la_token(1), IDENTIFIER | MODULE ) || self.base.token_stream...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeEndLookahead", "rule_index": 12, "index": 7, "atn_state": null, "line": 91, "column": 17, "body": "self.base.token_stream().la_token(1) == antlr4_runtime::TOKEN_EOF && self.base.token_stream().la...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeRecordComponentList", "rule_index": 13, "index": 8, "atn_state": null, "line": 99, "column": 8, "body": "let rcs = __ctx.child_rules( self.base.parse_tree_storage(), self.base.token_store(), RULE_RECOR...", "disposition": "translated", "template": "Embedded"}
       ]
     },
     {
@@ -65,7 +66,7 @@ expression: manifest
       "kind": "parser",
       "name": "AliasCollisionParser",
       "coordinates": [
-        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 10, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; true", "disposition": "translated", "template": "Embedded"}
+        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 11, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; let _co...", "disposition": "translated", "template": "Embedded"}
       ]
     }
   ]

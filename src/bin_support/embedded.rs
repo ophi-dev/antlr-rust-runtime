@@ -387,12 +387,16 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
             item.push_str(body[offset..item_end].trim());
             members.impl_items.push(item);
             offset = item_end;
-        } else if rest.starts_with("struct ")
-            || rest.starts_with("impl ")
-            || rest.starts_with("use ")
-        {
+        } else if rest.starts_with("struct ") || rest.starts_with("impl ") {
             let item_end = item_end_from(body, offset)?;
-            record_member_module_symbols(&body[offset..item_end], members);
+            record_member_module_symbols(&body[offset..item_end], members)?;
+            let mut item = std::mem::take(&mut pending_attrs);
+            item.push_str(body[offset..item_end].trim());
+            members.module_items.push(item);
+            offset = item_end;
+        } else if rest.starts_with("use ") {
+            let item_end = use_item_end_from(body, offset)?;
+            record_member_module_symbols(&body[offset..item_end], members)?;
             let mut item = std::mem::take(&mut pending_attrs);
             item.push_str(body[offset..item_end].trim());
             members.module_items.push(item);
@@ -414,7 +418,7 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
     Ok(())
 }
 
-fn record_member_module_symbols(item: &str, members: &mut MembersModel) {
+fn record_member_module_symbols(item: &str, members: &mut MembersModel) -> io::Result<()> {
     let item = item.trim_start();
     if let Some(rest) = item.strip_prefix("struct ") {
         if let Some(name) = rest
@@ -423,19 +427,162 @@ fn record_member_module_symbols(item: &str, members: &mut MembersModel) {
         {
             members.module_symbols.insert(name.to_owned());
         }
-        return;
+        return Ok(());
     }
     let Some(rest) = item.strip_prefix("use ") else {
-        return;
+        return Ok(());
     };
-    // Every identifier in a use tree can participate in name resolution.
-    // Conservatively reserving path segments as well avoids emitting a token
-    // constant over a user import without needing a second Rust parser here.
-    members.module_symbols.extend(
-        rest.split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
-            .filter(|part| is_identifier(part))
-            .map(str::to_owned),
-    );
+    members.module_symbols.extend(use_tree_bindings(rest)?);
+    Ok(())
+}
+
+fn use_tree_bindings(source: &str) -> io::Result<BTreeSet<String>> {
+    let mut lexemes = lex_rust_body(source)
+        .into_iter()
+        .filter(|lexeme| lexeme.kind != RustLexemeKind::Trivia)
+        .collect::<Vec<_>>();
+    let Some(semicolon) = lexemes.pop() else {
+        return Err(invalid_use_tree());
+    };
+    if semicolon.kind != RustLexemeKind::Punctuation(b';') {
+        return Err(invalid_use_tree());
+    }
+
+    let mut parser = UseTreeBindingParser {
+        source,
+        lexemes: &lexemes,
+        position: 0,
+        bindings: BTreeSet::new(),
+    };
+    parser.parse_tree(None)?;
+    if parser.position != parser.lexemes.len() {
+        return Err(invalid_use_tree());
+    }
+    Ok(parser.bindings)
+}
+
+struct UseTreeBindingParser<'a> {
+    source: &'a str,
+    lexemes: &'a [RustLexeme],
+    position: usize,
+    bindings: BTreeSet<String>,
+}
+
+impl UseTreeBindingParser<'_> {
+    fn parse_tree(&mut self, parent: Option<&str>) -> io::Result<()> {
+        if self.consume_punctuation(b'*') {
+            return Ok(());
+        }
+        if self.consume_punctuation(b'{') {
+            return self.parse_group(parent);
+        }
+        let _ = self.consume_path_separator();
+        let name = self.consume_identifier().ok_or_else(invalid_use_tree)?;
+        if self.peek_text() == Some("as") {
+            self.position += 1;
+            let alias = self.consume_identifier().ok_or_else(invalid_use_tree)?;
+            if alias != "_" {
+                self.bindings.insert(alias);
+            }
+            return Ok(());
+        }
+        if self.consume_path_separator() {
+            return self.parse_tree(Some(&name));
+        }
+        if name == "self" {
+            if let Some(parent) = parent {
+                self.bindings.insert(parent.to_owned());
+            }
+        } else if !matches!(name.as_str(), "crate" | "super") {
+            self.bindings.insert(name);
+        }
+        Ok(())
+    }
+
+    fn parse_group(&mut self, parent: Option<&str>) -> io::Result<()> {
+        loop {
+            if self.consume_punctuation(b'}') {
+                return Ok(());
+            }
+            self.parse_tree(parent)?;
+            if self.consume_punctuation(b',') {
+                continue;
+            }
+            if self.consume_punctuation(b'}') {
+                return Ok(());
+            }
+            return Err(invalid_use_tree());
+        }
+    }
+
+    fn consume_identifier(&mut self) -> Option<String> {
+        let lexeme = *self.lexemes.get(self.position)?;
+        if lexeme.kind != RustLexemeKind::Identifier {
+            return None;
+        }
+        self.position += 1;
+        Some(
+            lexeme_text(self.source, lexeme)
+                .strip_prefix("r#")
+                .unwrap_or_else(|| lexeme_text(self.source, lexeme))
+                .to_owned(),
+        )
+    }
+
+    fn consume_path_separator(&mut self) -> bool {
+        if self
+            .lexemes
+            .get(self.position..self.position + 2)
+            .is_some_and(|pair| {
+                pair.iter()
+                    .all(|lexeme| lexeme.kind == RustLexemeKind::Punctuation(b':'))
+            })
+        {
+            self.position += 2;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn consume_punctuation(&mut self, punctuation: u8) -> bool {
+        if self
+            .lexemes
+            .get(self.position)
+            .is_some_and(|lexeme| lexeme.kind == RustLexemeKind::Punctuation(punctuation))
+        {
+            self.position += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn peek_text(&self) -> Option<&str> {
+        self.lexemes
+            .get(self.position)
+            .map(|lexeme| lexeme_text(self.source, *lexeme))
+    }
+}
+
+fn invalid_use_tree() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        "unsupported use tree in @members block",
+    )
+}
+
+fn use_item_end_from(body: &str, offset: usize) -> io::Result<usize> {
+    lex_rust_body(&body[offset..])
+        .into_iter()
+        .find(|lexeme| lexeme.kind == RustLexemeKind::Punctuation(b';'))
+        .map(|lexeme| offset + lexeme.end)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unterminated use item in @members block",
+            )
+        })
 }
 
 /// Finds the end of an item: the matching `}` of its first top-level brace
@@ -1608,9 +1755,14 @@ pub(crate) fn translate_parser_body(
 
     let mut out = String::from("{\n");
     if uses_local_context {
+        let live_attrs = if ctx.model.rules[ctx.rule_index].has_attrs() {
+            "&__attrs"
+        } else {
+            "&()"
+        };
         writeln!(
             out,
-            "let _localctx = __active_context_view::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n);"
+            "let _localctx = __active_context_view_with_attrs::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    {live_attrs},\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n);"
         )
         .expect("writing to a string cannot fail");
     }
@@ -1822,14 +1974,34 @@ fn require_nonempty_call_argument(
         )));
     }
 
-    let mut depth = 0_usize;
-    for lexeme in &lexemes[open..] {
+    let mut delimiters = Vec::new();
+    for (position, lexeme) in lexemes.iter().enumerate().skip(open + 1) {
         match lexeme.kind {
-            RustLexemeKind::Punctuation(b'(') => depth += 1,
-            RustLexemeKind::Punctuation(b')') => {
-                depth -= 1;
-                if depth == 0 {
+            RustLexemeKind::Punctuation(b'(') => delimiters.push(b')'),
+            RustLexemeKind::Punctuation(b'[') => delimiters.push(b']'),
+            RustLexemeKind::Punctuation(b'{') => delimiters.push(b'}'),
+            RustLexemeKind::Punctuation(close @ (b')' | b']' | b'}')) => {
+                if let Some(expected) = delimiters.pop() {
+                    if close != expected {
+                        return Err(unsupported_antlr4rust(&format!(
+                            "unterminated `{display_receiver}.{method_name}` call"
+                        )));
+                    }
+                } else if close == b')' {
                     return Ok(());
+                } else {
+                    return Err(unsupported_antlr4rust(&format!(
+                        "unterminated `{display_receiver}.{method_name}` call"
+                    )));
+                }
+            }
+            RustLexemeKind::Punctuation(b',') if delimiters.is_empty() => {
+                let trailing = next_significant(lexemes, position)
+                    .is_some_and(|next| lexemes[next].kind == RustLexemeKind::Punctuation(b')'));
+                if !trailing {
+                    return Err(unsupported_antlr4rust(&format!(
+                        "`{display_receiver}.{method_name}` accepts exactly one offset argument"
+                    )));
                 }
             }
             _ => {}
@@ -4019,13 +4191,20 @@ mod tests {
         assert!(tokens.contains("__ctx.child_tokens("), "{tokens}");
     }
 
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
     #[test]
     fn classifies_member_blocks() {
         let body = "i: i32 = 0;\n\
             #[allow(non_snake_case)]\n\
             fn Property(&self) -> bool {\n    true\n}\n\
             struct LeafListener;\n\
-            use crate::AliasTypeParser_ID;\n";
+            use crate::{\n\
+                AliasTypeParser_ID,\n\
+                CompatParser_ID as Other,\n\
+                nested::{self, Item as RenamedItem, Hidden as _},\n\
+                r#type,\n\
+                *,\n\
+            };\n";
         let mut members = MembersModel::default();
         classify_members(body, &mut members).expect("members classify");
 
@@ -4035,14 +4214,7 @@ mod tests {
         assert_eq!(members.impl_items.len(), 1);
         assert!(members.impl_items[0].contains("fn Property"));
         assert_eq!(members.module_items.len(), 2);
-        assert_eq!(
-            members.module_symbols,
-            BTreeSet::from([
-                "AliasTypeParser_ID".to_owned(),
-                "LeafListener".to_owned(),
-                "crate".to_owned(),
-            ])
-        );
+        insta::assert_debug_snapshot!("member_module_symbols", members.module_symbols);
     }
 
     #[test]
@@ -4129,6 +4301,14 @@ mod tests {
                 "`recog.input.la` requires one offset argument",
             ),
             (
+                "recog.input.la(1, 2)",
+                "`recog.input.la` accepts exactly one offset argument",
+            ),
+            (
+                "recog.input.lt(1, nested(2, 3))",
+                "`recog.input.lt` accepts exactly one offset argument",
+            ),
+            (
                 "_localctx.context()",
                 "unsupported `_localctx.context` accessor",
             ),
@@ -4143,5 +4323,14 @@ mod tests {
             .expect_err("unknown compatibility surface must fail");
             assert!(error.to_string().contains(expected), "{error}");
         }
+
+        translate_parser_body(
+            "recog.input.la((1, 2).0)",
+            &ctx,
+            "SContext",
+            &BTreeSet::new(),
+            ParserBodyKind::Predicate,
+        )
+        .expect("a nested comma remains one offset argument");
     }
 }

@@ -1,0 +1,12 @@
+---
+source: src/bin_support/embedded.rs
+expression: members.module_symbols
+---
+{
+    "AliasTypeParser_ID",
+    "LeafListener",
+    "Other",
+    "RenamedItem",
+    "nested",
+    "type",
+}

@@ -3666,6 +3666,21 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         !alias_collision_parser.contains("const AliasCollisionParser_EOF"),
         "a user import must suppress the colliding token alias"
     );
+    assert!(
+        alias_collision_parser.contains("const AliasCollisionParser_MODULE"),
+        "a renamed import path must not suppress the original compatibility alias"
+    );
+    let live_context = java_parser
+        .find(
+            "let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>",
+        )
+        .expect("live-attribute predicate should materialize its active context");
+    assert!(
+        java_parser[live_context..].starts_with(
+            "let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(\n    &__ctx,\n    &__attrs,\n"
+        ),
+        "active context must receive the rule's live attributes"
+    );
     let excerpt = |source: &str| {
         source
             .lines()
@@ -3868,6 +3883,14 @@ mod antlr4rust_compat_tests {
         assert!(parser.common_accessor_collisions().is_ok());
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
+
+    #[test]
+    fn active_context_reads_attributes_mutated_by_init() {
+        let lexer = JavaCompatLexer::new(InputStream::new("value"));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.live_attributes().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
 }
 "####;
 
@@ -3905,6 +3928,12 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
             "BadContext",
             r#"{
                 _localctx.context().is_some()
+            }"#,
+        ),
+        (
+            "BadArity",
+            r#"{
+                recog.input.la(1, 2) == 1
             }"#,
         ),
     ] {

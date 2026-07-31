@@ -5,3 +5,5 @@ expression: "diagnostics.join(\"\\n\")"
 Error: Custom { kind: InvalidData, error: "$GRAMMAR:4:6: cannot lower embedded parser predicate coordinate (0, 0) in rule start: antlr4rust compatibility lowering: unsupported `recog.input.peek` accessor" }
 
 Error: Custom { kind: InvalidData, error: "$GRAMMAR:4:6: cannot lower embedded parser predicate coordinate (0, 0) in rule start: antlr4rust compatibility lowering: unsupported `_localctx.context` accessor" }
+
+Error: Custom { kind: InvalidData, error: "$GRAMMAR:4:6: cannot lower embedded parser predicate coordinate (0, 0) in rule start: antlr4rust compatibility lowering: `recog.input.la` accepts exactly one offset argument" }

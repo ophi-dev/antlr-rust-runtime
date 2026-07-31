@@ -61,6 +61,17 @@ commonAccessorCollisions
     }? EOF
     ;
 
+liveAttributes locals [int value=0]
+@init {
+    $value = 1;
+}
+    : {
+        _localctx.as_deref()
+            .map(|ctx| ctx.value == 1)
+            .unwrap_or(false)
+    }? IDENTIFIER EOF
+    ;
+
 text: TEXT;
 start: START;
 child_count: CHILD_COUNT;

@@ -55,22 +55,24 @@ pub fn context_text(&self) -> String {
 pub fn context_rule_node(&self) -> RuleNodeView<'a> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
+pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn recordComponent_all(&self) -> Vec<RecordComponentContext<'a>> {
 __Antlr4RustInput(self.base.token_stream()).la(1),
 JavaCompatParser_IDENTIFIER | JavaCompatParser_MODULE
 ) || __Antlr4RustInput(self.base.token_stream()).la(2) != JavaCompatParser_ASSIGN
 __Antlr4RustInput(self.base.token_stream()).la(1) == antlr4_runtime::TOKEN_EOF
 && __Antlr4RustInput(self.base.token_stream()).la(2) == antlr4_runtime::TOKEN_EOF
-let _localctx = __active_context_view::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
 let rcs = ctx.recordComponent_all();
-let _localctx = __active_context_view::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
 let rcs = ctx.recordComponent_all();
-let _localctx = __active_context_view::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
 let rcs = ctx.recordComponent_all();
-let _localctx = __active_context_view::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
 let rcs = ctx.recordComponent_all();
-let _localctx = __active_context_view::<RepeatedTokensContext<'_, __ActiveParserContext>>(
-let _localctx = __active_context_view::<CommonAccessorCollisionsContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<RepeatedTokensContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<CommonAccessorCollisionsContext<'_, __ActiveParserContext>>(
+let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(
 === Alias only ===
 const AliasOnlyParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
 const AliasOnlyParser_ID: i32 = 2;
