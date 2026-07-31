@@ -34,7 +34,7 @@ For Rust projects, add the runtime crate:
 
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.23.0"
+antlr-rust-runtime = "0.24.0"
 ```
 
 <!-- x-release-please-end -->

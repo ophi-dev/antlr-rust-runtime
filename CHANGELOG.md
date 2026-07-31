@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.23.0...v0.24.0) (2026-07-31)
+
+
+### Features
+
+* **codegen:** add validated parse tree surface ([#260](https://github.com/ophi-dev/antlr-rust-runtime/issues/260)) ([bb9a3ca](https://github.com/ophi-dev/antlr-rust-runtime/commit/bb9a3ca75356481e6afbcc7158bb815f633220f1))
+* **codegen:** diagnose and prune unreachable rules ([#264](https://github.com/ophi-dev/antlr-rust-runtime/issues/264)) ([4c4df20](https://github.com/ophi-dev/antlr-rust-runtime/commit/4c4df205fe4726c0bd22aaaaaf509a89b160dd54))
+
 ## [0.23.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.22.0...v0.23.0) (2026-07-29)
 
 
