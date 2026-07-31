@@ -1,0 +1,8 @@
+---
+source: src/bin_support/grammar/mutual_recursion.rs
+expression: render(&fixture.unit)
+---
+b:
+  | b ''a'' ''b''
+  | A ''b''
+  | B

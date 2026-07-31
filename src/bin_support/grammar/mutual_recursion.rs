@@ -1578,6 +1578,48 @@ mod tests {
     }
 
     #[test]
+    fn retains_explicitly_preserved_satellite() {
+        let mut fixture = parse(
+            "parser grammar P; \
+             e : s | ID ; \
+             s : e '+' ID ;",
+        );
+        let preserved = BTreeSet::from([rule(&fixture.unit, "s").id]);
+        assert!(eliminate_mutual_left_recursion(
+            std::slice::from_mut(&mut fixture.unit),
+            &mut fixture.ids,
+            &mut fixture.provenance,
+            &preserved,
+        ));
+        assert!(
+            fixture.unit.rules.iter().any(|rule| rule.name == "s"),
+            "configured satellite remains a callable entry"
+        );
+        insta::assert_snapshot!("preserved_satellite_retained", render(&fixture.unit));
+    }
+
+    #[test]
+    fn prefers_an_eligible_preserved_rule_as_the_hub() {
+        let mut fixture = parse(
+            "parser grammar P; \
+             a : b 'a' | A ; \
+             b : a 'b' | B ;",
+        );
+        let preserved = BTreeSet::from([rule(&fixture.unit, "b").id]);
+        assert!(eliminate_mutual_left_recursion(
+            std::slice::from_mut(&mut fixture.unit),
+            &mut fixture.ids,
+            &mut fixture.provenance,
+            &preserved,
+        ));
+        assert!(
+            fixture.unit.rules.iter().all(|rule| rule.name != "a"),
+            "preserved b is selected as the hub instead of lower-id a"
+        );
+        insta::assert_snapshot!("preserved_rule_selected_as_hub", render(&fixture.unit));
+    }
+
+    #[test]
     fn preserves_satellite_alternative_associativity() {
         // `<assoc=right>` is declared on the satellite's alternative and drives
         // the direct rewriter's associativity, so the spliced alternative must
