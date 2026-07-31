@@ -93,6 +93,7 @@ generate_frontend() {
         --sem-patterns "$grammar_dir/antlr-v4.toml" \
         --option-hook superClass=LexerAdaptor \
         --sem-unknown error \
+        --prune-unreachable \
         --require-full-semantics \
         --require-generated-parser
 }

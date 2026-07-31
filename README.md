@@ -299,10 +299,12 @@ ahead-of-time lexer DFA tables remain embedded generated data.
 ### Choosing Parser Entry Rules
 
 Generated parsers expose one public method per grammar rule. Call the method
-that matches the grammar's intended top-level rule for the input; the generator
-can identify rules that are not called by other rules, but it cannot infer the
-semantic choice between multiple top-level forms. The generated parser rustdoc
-lists likely entry methods first, followed by all rule methods.
+that matches the grammar's intended top-level rule for the input. The generated
+parser rustdoc lists likely entry methods first, followed by all rule methods,
+using the same call-graph and `EOF` inference as the `G4S078` unreachable-rule
+diagnostic. Use `--entry-rule` to declare callable non-`EOF` forms before
+enabling `--prune-unreachable`; the generator cannot infer the semantic choice
+between multiple public rule methods.
 
 For the JSON grammar above, `json()` is the natural entry. Larger grammars may
 have several top-level forms, so confirm the intended entry rule against that
@@ -693,6 +695,39 @@ parser runs prediction-free. Rego adds two fixed-LL(2) tables (`regoElse`,
 and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
 10 genuinely ambiguous decisions staying adaptive.
 
+### Unreachable parser rules
+
+The grammar frontend reports `warning[G4S078]` for parser rules that no entry
+rule can reach. Source call-graph components whose paths reach an explicit
+`EOF` terminal are inferred as entries. Without an explicit entry selection for
+a parser, rules that no other rule calls are also inferred; this preserves
+callable top-level forms that do not consume `EOF`. The first parser rule is the
+fallback only when neither inference finds an entry.
+
+Repeated `--entry-rule NAME` options declare non-`EOF` entry rules explicitly.
+Names are bare and apply to every generated parser in the invocation that
+defines `NAME`. Once at least one name matches a parser, its other non-`EOF`
+top-level rules are no longer inferred, while `EOF` entries remain automatic.
+`G4S079` rejects a name not defined by any generated parser. Lexer rules,
+including fragments and mode-scoped rules, and grammars loaded only as
+`tokenVocab` sources are outside this parser analysis.
+
+Emitting `G4S078` does not remove code. The opt-in `--prune-unreachable` pass
+removes the same unreachable set before ATN construction and logs every
+removed qualified rule:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --entry-rule alternateTopLevel \
+  --prune-unreachable \
+  --out-dir src/generated
+```
+
+Pruning is recognition preserving only from the inferred and configured entry
+rules. It removes generated rule methods, context types, and listener/visitor
+callbacks, so consumers that invoke other rules directly must declare them with
+`--entry-rule` or leave pruning disabled.
+
 ### Precedence-ladder optimization
 
 `--optimize-precedence-ladders` is an explicit, off-by-default source
@@ -711,12 +746,13 @@ diagnostic counts, error-listener calls, recovered trees, and stopping positions
 are not preserved. The guarantee is that complete inputs parse without syntax
 errors under the optimized grammar exactly when they do under the authored
 grammar; consumers requiring recovery parity should not enable this pass.
-Actions, predicates, rule attributes, unsupported shapes, overlapping
-same-fixity operator sets, and externally referenced middle rules are declined
-or treated as boundaries. A prefix level that is looser than another collapsed
-operator level is also declined: ANTLR precedence parameters constrain recursive
-operators, not entry into primary/prefix alternatives, so collapsing that order
-would admit the looser prefix inside a tighter operand.
+Configured `--entry-rule` rules and externally referenced middle rules are
+retained as collapse boundaries. Actions, predicates, rule attributes,
+unsupported shapes, and overlapping same-fixity operator sets are declined. A
+prefix level that is looser than another collapsed operator level is also
+declined: ANTLR precedence parameters constrain recursive operators, not entry
+into primary/prefix alternatives, so collapsing that order would admit the
+looser prefix inside a tighter operand.
 
 Every applied run writes `optimizations.json` beside `semantics.json` and
 `decisions.json`. The manifest records the safety class, original source
