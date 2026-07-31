@@ -3604,7 +3604,280 @@ fn embedded_parser_semantics_satisfy_strict_manifest_checks() {
         2
     );
     assert_eq!(manifest.matches("\"template\": \"Embedded\"").count(), 2);
+    let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
+    assert!(
+        !parser.contains("__Antlr4RustInput"),
+        "native embedded bodies should not emit the antlr4rust facade"
+    );
     assert_generated_modules_compile(temp.path(), &["t_lexer.rs", "t_parser.rs"]);
+}
+
+/// Issue #267: the exact embedded-Rust forms emitted by the pinned C and Java
+/// grammars-v4 transforms lower onto native token and active-context APIs.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
+    let temp = temporary_directory("antlr4rust-compat");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/antlr4rust-compat");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        fixtures.join("CCompat.g4").as_os_str(),
+        fixtures.join("JavaCompat.g4").as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let manifest =
+        fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    insta::assert_snapshot!("antlr4rust_compat_semantics_manifest", manifest);
+
+    let c_parser =
+        fs::read_to_string(out.join("c_compat_parser.rs")).expect("C parser should be emitted");
+    let java_parser = fs::read_to_string(out.join("java_compat_parser.rs"))
+        .expect("Java parser should be emitted");
+    let excerpt = |source: &str| {
+        source
+            .lines()
+            .filter(|line| {
+                [
+                    "__Antlr4RustInput",
+                    "__Antlr4RustTokenView",
+                    "CCompatParser_",
+                    "JavaCompatParser_",
+                    "recordComponent_all",
+                    "pub fn ELLIPSIS",
+                    "let _localctx = __active_context_view",
+                ]
+                .iter()
+                .any(|needle| line.contains(needle))
+            })
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    insta::assert_snapshot!(
+        "antlr4rust_compat_generated_surface",
+        format!(
+            "=== C ===\n{}\n=== Java ===\n{}",
+            excerpt(&c_parser),
+            excerpt(&java_parser)
+        )
+    );
+
+    let test_source = r####"
+#[cfg(test)]
+mod antlr4rust_compat_tests {
+    use super::c_compat_lexer::CCompatLexer;
+    use super::c_compat_parser::CCompatParser;
+    use super::java_compat_lexer::JavaCompatLexer;
+    use super::java_compat_parser::JavaCompatParser;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn c_assignment(input: &str, native: bool) -> (bool, usize) {
+        let lexer = CCompatLexer::new(InputStream::new(input));
+        let mut parser = CCompatParser::new(CommonTokenStream::new(lexer));
+        let parsed = if native {
+            parser.native_assignment()
+        } else {
+            parser.assignment()
+        }
+        .is_ok();
+        (parsed, parser.number_of_syntax_errors())
+    }
+
+    fn java_not_assign(input: &str, native: bool) -> (bool, usize) {
+        let lexer = JavaCompatLexer::new(InputStream::new(input));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        let parsed = if native {
+            parser.native_not_identifier_assign()
+        } else {
+            parser.not_identifier_assign()
+        }
+        .is_ok();
+        (parsed, parser.number_of_syntax_errors())
+    }
+
+    fn java_end_lookahead(input: &str, native: bool) -> (bool, usize) {
+        let lexer = JavaCompatLexer::new(InputStream::new(input));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        let parsed = if native {
+            parser.native_end_lookahead()
+        } else {
+            parser.end_lookahead()
+        }
+        .is_ok();
+        (parsed, parser.number_of_syntax_errors())
+    }
+
+    fn java_components(input: &str, native: bool) -> (bool, usize) {
+        let lexer = JavaCompatLexer::new(InputStream::new(input));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        let parsed = if native {
+            parser.native_record_component_list()
+        } else {
+            parser.record_component_list()
+        }
+        .is_ok();
+        (parsed, parser.number_of_syntax_errors())
+    }
+
+    #[test]
+    fn lookahead_and_missing_token_behavior_match_the_native_stream() {
+        for input in ["left=right", "left right"] {
+            assert_eq!(
+                c_assignment(input, false),
+                c_assignment(input, true),
+                "legacy C input facade diverged for {input:?}"
+            );
+        }
+        assert_eq!(c_assignment("left=right", false), (true, 0));
+
+        for input in ["name", "module", "name=value"] {
+            assert_eq!(
+                java_not_assign(input, false),
+                java_not_assign(input, true),
+                "legacy Java token aliases diverged for {input:?}"
+            );
+        }
+        assert_eq!(java_not_assign("name", false), (true, 0));
+        assert_eq!(java_not_assign("module", false), (true, 0));
+
+        for input in ["name", "name=value"] {
+            assert_eq!(
+                java_end_lookahead(input, false),
+                java_end_lookahead(input, true),
+                "legacy Java EOF lookahead diverged for {input:?}"
+            );
+        }
+        assert_eq!(java_end_lookahead("name", false), (true, 0));
+        let rejected = java_end_lookahead("name=value", false);
+        assert!(rejected.1 > 0);
+    }
+
+    #[test]
+    fn dynamic_lookbehind_and_inline_action_execute() {
+        for native in [false, true] {
+            let lexer = CCompatLexer::new(InputStream::new("first second"));
+            let mut parser = CCompatParser::new(CommonTokenStream::new(lexer));
+            let parsed = if native {
+                parser.native_history()
+            } else {
+                parser.history()
+            };
+            assert!(parsed.is_ok());
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+
+            let lexer = CCompatLexer::new(InputStream::new("action"));
+            let mut parser = CCompatParser::new(CommonTokenStream::new(lexer));
+            let parsed = if native {
+                parser.native_inline_action()
+            } else {
+                parser.inline_action()
+            };
+            assert!(parsed.is_ok());
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+        }
+    }
+
+    #[test]
+    fn active_context_contains_only_children_matched_before_the_predicate() {
+        for input in [
+            "first,second...",
+            "first",
+            "first...,second",
+            // The syntactically selected ASSIGN branch does not evaluate the
+            // predicate belonging to the EOF branch.
+            "first...=",
+        ] {
+            assert_eq!(
+                java_components(input, false),
+                java_components(input, true),
+                "legacy active context diverged for {input:?}"
+            );
+        }
+        assert_eq!(java_components("first,second...", false), (true, 0));
+        assert_eq!(java_components("first", false), (true, 0));
+        assert_eq!(java_components("first...=", false), (true, 0));
+        let rejected = java_components("first...,second", false);
+        assert!(rejected.1 > 0);
+    }
+}
+"####;
+
+    assert_generated_project(
+        temp.path(),
+        &[
+            "c_compat_lexer.rs",
+            "c_compat_parser.rs",
+            "java_compat_lexer.rs",
+            "java_compat_parser.rs",
+        ],
+        test_source,
+    );
+}
+
+#[allow(clippy::disallowed_methods)] // Snapshot and path normalization are test-only.
+#[test]
+fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
+    let temp = temporary_directory("antlr4rust-diagnostics");
+    let mut diagnostics = Vec::new();
+    for (name, predicate) in [
+        (
+            "BadRecog",
+            r#"{
+                let _not_code = "recog.output()";
+                // recog.input.unknown(1)
+                recog.input.peek(1) == 1
+            }"#,
+        ),
+        (
+            "BadContext",
+            r#"{
+                _localctx.context().is_some()
+            }"#,
+        ),
+    ] {
+        let grammar = temp.path().join(format!("{name}.g4"));
+        fs::write(
+            &grammar,
+            format!("grammar {name};\n\nstart\n    : {predicate}? A EOF\n    ;\n\nA: 'a';\n"),
+        )
+        .expect("diagnostic fixture should be writable");
+        let out = temp.path().join(format!("generated-{name}"));
+        let output = run_antlr4_rust_gen(&[
+            grammar.as_os_str(),
+            OsStr::new("--actions"),
+            OsStr::new("embedded"),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ]);
+        assert!(
+            !output.status.success(),
+            "unsupported compatibility shape unexpectedly generated: {}",
+            utf8(&output.stdout)
+        );
+        let path = grammar
+            .to_str()
+            .expect("temporary grammar path should be UTF-8");
+        diagnostics.push(utf8(&output.stderr).replace(path, "$GRAMMAR"));
+    }
+    insta::assert_snapshot!(
+        "unsupported_antlr4rust_surface_diagnostics",
+        diagnostics.join("\n")
+    );
 }
 
 #[test]

@@ -17,6 +17,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::io;
+use std::ops::Range;
 
 use crate::templates::{matching_action_brace, skip_ascii_whitespace};
 
@@ -299,6 +300,13 @@ pub(crate) enum ActionSite {
     After,
     /// Rule `@init`: runs at rule entry.
     Init,
+}
+
+/// How a translated parser body is embedded into generated Rust.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ParserBodyKind {
+    Action,
+    Predicate,
 }
 
 /// Maps a grammar attribute type (possibly Java-flavored, possibly already
@@ -1540,6 +1548,264 @@ pub(crate) fn translate_body(body: &str, ctx: &TranslationCtx<'_>) -> io::Result
     Ok(out)
 }
 
+/// Translates ANTLR attributes and the observed antlr4rust parser ABI.
+///
+/// Predicates are always block expressions so a rendered body may contain
+/// statements before its final boolean expression. `_localctx` bodies also
+/// need a block to hold the active typed-context view.
+pub(crate) fn translate_parser_body(
+    body: &str,
+    ctx: &TranslationCtx<'_>,
+    active_context_type: &str,
+    kind: ParserBodyKind,
+) -> io::Result<String> {
+    let translated = translate_body(body, ctx)?;
+    let lowered = lower_antlr4rust_surface(&translated)?;
+    if kind == ParserBodyKind::Action && !lowered.uses_local_context {
+        return Ok(lowered.source);
+    }
+
+    let mut out = String::from("{\n");
+    if lowered.uses_local_context {
+        writeln!(
+            out,
+            "let _localctx = __active_context_view::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n);"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    out.push_str(&lowered.source);
+    out.push_str("\n}");
+    Ok(out)
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct LoweredAntlr4RustBody {
+    source: String,
+    uses_local_context: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RustLexemeKind {
+    Trivia,
+    Identifier,
+    Literal,
+    Punctuation(u8),
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RustLexeme {
+    kind: RustLexemeKind,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct RustReplacement {
+    range: Range<usize>,
+    text: &'static str,
+}
+
+fn lower_antlr4rust_surface(body: &str) -> io::Result<LoweredAntlr4RustBody> {
+    let lexemes = lex_rust_body(body);
+    let mut replacements = Vec::new();
+    let mut uses_local_context = false;
+    for (position, lexeme) in lexemes.iter().enumerate() {
+        if lexeme.kind != RustLexemeKind::Identifier {
+            continue;
+        }
+        match &body[lexeme.start..lexeme.end] {
+            "recog" if is_standalone_identifier(&lexemes, position) => {
+                if let Some(replacement) = recog_input_replacement(body, &lexemes, position)? {
+                    replacements.push(replacement);
+                }
+            }
+            "_localctx" if is_standalone_identifier(&lexemes, position) => {
+                replacements.push(local_context_replacement(body, &lexemes, position)?);
+                uses_local_context = true;
+            }
+            _ => {}
+        }
+    }
+    replacements.sort_by_key(|replacement| replacement.range.start);
+    Ok(LoweredAntlr4RustBody {
+        source: apply_rust_replacements(body, &replacements)?,
+        uses_local_context,
+    })
+}
+
+fn recog_input_replacement(
+    body: &str,
+    lexemes: &[RustLexeme],
+    position: usize,
+) -> io::Result<Option<RustReplacement>> {
+    let Some(dot) = next_significant(lexemes, position) else {
+        return Ok(None);
+    };
+    if lexemes[dot].kind != RustLexemeKind::Punctuation(b'.') {
+        return Ok(None);
+    }
+    let Some(member) = next_significant(lexemes, dot) else {
+        return Err(unsupported_antlr4rust("incomplete `recog` member access"));
+    };
+    if lexeme_text(body, lexemes[member]) != "input" {
+        return Err(unsupported_antlr4rust(&format!(
+            "unsupported `recog.{}` member",
+            lexeme_text(body, lexemes[member])
+        )));
+    }
+    let accessor = required_member_call(body, lexemes, member, "recog.input")?;
+    let accessor_name = lexeme_text(body, lexemes[accessor]);
+    if !matches!(accessor_name, "la" | "lt") {
+        return Err(unsupported_antlr4rust(&format!(
+            "unsupported `recog.input.{accessor_name}` accessor"
+        )));
+    }
+    require_nonempty_call_argument(body, lexemes, accessor, "recog.input")?;
+    Ok(Some(RustReplacement {
+        range: lexemes[position].start..lexemes[member].end,
+        text: "__Antlr4RustInput(self.base.token_stream())",
+    }))
+}
+
+fn local_context_replacement(
+    body: &str,
+    lexemes: &[RustLexeme],
+    position: usize,
+) -> io::Result<RustReplacement> {
+    let method = required_member_call(body, lexemes, position, "_localctx")?;
+    let method_name = lexeme_text(body, lexemes[method]);
+    if method_name != "as_deref" {
+        return Err(unsupported_antlr4rust(&format!(
+            "unsupported `_localctx.{method_name}` accessor"
+        )));
+    }
+    Ok(RustReplacement {
+        range: lexemes[method].start..lexemes[method].end,
+        text: "as_ref",
+    })
+}
+
+fn required_member_call(
+    body: &str,
+    lexemes: &[RustLexeme],
+    receiver: usize,
+    display_receiver: &str,
+) -> io::Result<usize> {
+    let dot = next_significant(lexemes, receiver)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'.'))
+        .ok_or_else(|| {
+            unsupported_antlr4rust(&format!("unsupported `{display_receiver}` shape"))
+        })?;
+    let method = next_significant(lexemes, dot)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Identifier)
+        .ok_or_else(|| {
+            unsupported_antlr4rust(&format!("unsupported `{display_receiver}` shape"))
+        })?;
+    let open = next_significant(lexemes, method)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'('))
+        .ok_or_else(|| {
+            unsupported_antlr4rust(&format!(
+                "`{display_receiver}.{}` must be a method call",
+                lexeme_text(body, lexemes[method])
+            ))
+        })?;
+    if display_receiver == "_localctx" {
+        next_significant(lexemes, open)
+            .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b')'))
+            .ok_or_else(|| {
+                unsupported_antlr4rust("`_localctx.as_deref()` does not accept arguments")
+            })?;
+    }
+    Ok(method)
+}
+
+fn require_nonempty_call_argument(
+    body: &str,
+    lexemes: &[RustLexeme],
+    method: usize,
+    display_receiver: &str,
+) -> io::Result<()> {
+    let method_name = lexeme_text(body, lexemes[method]);
+    let open = next_significant(lexemes, method)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'('))
+        .expect("required_member_call already checked the opening parenthesis");
+    let first = next_significant(lexemes, open).ok_or_else(|| {
+        unsupported_antlr4rust(&format!(
+            "unterminated `{display_receiver}.{method_name}` call"
+        ))
+    })?;
+    if lexemes[first].kind == RustLexemeKind::Punctuation(b')') {
+        return Err(unsupported_antlr4rust(&format!(
+            "`{display_receiver}.{method_name}` requires one offset argument"
+        )));
+    }
+
+    let mut depth = 0_usize;
+    for lexeme in &lexemes[open..] {
+        match lexeme.kind {
+            RustLexemeKind::Punctuation(b'(') => depth += 1,
+            RustLexemeKind::Punctuation(b')') => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(unsupported_antlr4rust(&format!(
+        "unterminated `{display_receiver}.{method_name}` call"
+    )))
+}
+
+fn unsupported_antlr4rust(message: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("antlr4rust compatibility lowering: {message}"),
+    )
+}
+
+fn is_standalone_identifier(lexemes: &[RustLexeme], position: usize) -> bool {
+    previous_significant(lexemes, position).is_none_or(|previous| {
+        !matches!(
+            lexemes[previous].kind,
+            RustLexemeKind::Punctuation(b'.' | b':')
+        )
+    })
+}
+
+fn next_significant(lexemes: &[RustLexeme], position: usize) -> Option<usize> {
+    (position + 1..lexemes.len()).find(|&index| lexemes[index].kind != RustLexemeKind::Trivia)
+}
+
+fn previous_significant(lexemes: &[RustLexeme], position: usize) -> Option<usize> {
+    (0..position)
+        .rev()
+        .find(|&index| lexemes[index].kind != RustLexemeKind::Trivia)
+}
+
+fn lexeme_text(body: &str, lexeme: RustLexeme) -> &str {
+    &body[lexeme.start..lexeme.end]
+}
+
+fn apply_rust_replacements(body: &str, replacements: &[RustReplacement]) -> io::Result<String> {
+    let mut out = String::with_capacity(body.len());
+    let mut copied = 0;
+    for replacement in replacements {
+        if replacement.range.start < copied {
+            return Err(unsupported_antlr4rust(
+                "overlapping compatibility expressions",
+            ));
+        }
+        out.push_str(&body[copied..replacement.range.start]);
+        out.push_str(replacement.text);
+        copied = replacement.range.end;
+    }
+    out.push_str(&body[copied..]);
+    Ok(out)
+}
+
 /// Finds the next `$` that is outside a string literal.
 fn find_dollar(text: &str) -> Option<usize> {
     let mut quoted = false;
@@ -1557,6 +1823,181 @@ fn find_dollar(text: &str) -> Option<usize> {
         }
     }
     None
+}
+
+fn lex_rust_body(body: &str) -> Vec<RustLexeme> {
+    let bytes = body.as_bytes();
+    let mut lexemes = Vec::new();
+    let mut offset = 0;
+    while offset < bytes.len() {
+        let start = offset;
+        let kind = if bytes[offset].is_ascii_whitespace() {
+            offset = skip_while(bytes, offset, is_ascii_whitespace);
+            RustLexemeKind::Trivia
+        } else if body[offset..].starts_with("//") {
+            offset = body[offset..]
+                .find('\n')
+                .map_or(body.len(), |newline| offset + newline);
+            RustLexemeKind::Trivia
+        } else if body[offset..].starts_with("/*") {
+            offset = block_comment_end(body, offset);
+            RustLexemeKind::Trivia
+        } else if let Some(end) = raw_literal_end(body, offset) {
+            offset = end;
+            RustLexemeKind::Literal
+        } else if let Some(end) = quoted_literal_end(body, offset) {
+            offset = end;
+            RustLexemeKind::Literal
+        } else if let Some(end) = raw_identifier_end(body, offset) {
+            offset = end;
+            RustLexemeKind::Identifier
+        } else if is_identifier_start(bytes[offset]) {
+            offset = skip_while(bytes, offset + 1, is_identifier_continue);
+            RustLexemeKind::Identifier
+        } else if bytes[offset].is_ascii_punctuation() {
+            offset += 1;
+            RustLexemeKind::Punctuation(bytes[offset - 1])
+        } else {
+            offset += body[offset..]
+                .chars()
+                .next()
+                .expect("offset is within the string")
+                .len_utf8();
+            RustLexemeKind::Other
+        };
+        lexemes.push(RustLexeme {
+            kind,
+            start,
+            end: offset,
+        });
+    }
+    lexemes
+}
+
+fn skip_while(bytes: &[u8], mut offset: usize, predicate: fn(u8) -> bool) -> usize {
+    while bytes.get(offset).copied().is_some_and(predicate) {
+        offset += 1;
+    }
+    offset
+}
+
+const fn is_ascii_whitespace(byte: u8) -> bool {
+    byte.is_ascii_whitespace()
+}
+
+const fn is_identifier_start(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+const fn is_identifier_continue(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphanumeric()
+}
+
+fn block_comment_end(body: &str, start: usize) -> usize {
+    let bytes = body.as_bytes();
+    let mut depth = 1;
+    let mut offset = start + 2;
+    while offset + 1 < bytes.len() {
+        match &bytes[offset..offset + 2] {
+            b"/*" => {
+                depth += 1;
+                offset += 2;
+            }
+            b"*/" => {
+                depth -= 1;
+                offset += 2;
+                if depth == 0 {
+                    return offset;
+                }
+            }
+            _ => offset += 1,
+        }
+    }
+    body.len()
+}
+
+fn raw_literal_end(body: &str, start: usize) -> Option<usize> {
+    let rest = &body[start..];
+    let prefix = ["br", "cr", "r"]
+        .into_iter()
+        .find(|prefix| rest.starts_with(prefix))?;
+    let mut quote = start + prefix.len();
+    while body.as_bytes().get(quote) == Some(&b'#') {
+        quote += 1;
+    }
+    if body.as_bytes().get(quote) != Some(&b'"') {
+        return None;
+    }
+    let hashes = quote - start - prefix.len();
+    let closing = format!("\"{}", "#".repeat(hashes));
+    let content = quote + 1;
+    Some(
+        body[content..]
+            .find(&closing)
+            .map_or(body.len(), |end| content + end + closing.len()),
+    )
+}
+
+fn raw_identifier_end(body: &str, start: usize) -> Option<usize> {
+    let bytes = body.as_bytes();
+    if bytes.get(start..start + 2) != Some(b"r#")
+        || !bytes
+            .get(start + 2)
+            .copied()
+            .is_some_and(is_identifier_start)
+    {
+        return None;
+    }
+    Some(skip_while(bytes, start + 3, is_identifier_continue))
+}
+
+fn quoted_literal_end(body: &str, start: usize) -> Option<usize> {
+    let bytes = body.as_bytes();
+    let (quote, content) = match bytes.get(start..start + 2) {
+        Some([b'b' | b'c', b'"']) => (b'"', start + 2),
+        Some([b'b', b'\'']) => (b'\'', start + 2),
+        _ if bytes[start] == b'"' => (b'"', start + 1),
+        _ if bytes[start] == b'\'' => (b'\'', start + 1),
+        _ => return None,
+    };
+    if quote == b'\'' {
+        return char_literal_end(body, content);
+    }
+
+    let mut offset = content;
+    let mut escaped = false;
+    while offset < bytes.len() {
+        if escaped {
+            escaped = false;
+        } else if bytes[offset] == b'\\' {
+            escaped = true;
+        } else if bytes[offset] == quote {
+            return Some(offset + 1);
+        }
+        offset += 1;
+    }
+    Some(body.len())
+}
+
+fn char_literal_end(body: &str, content: usize) -> Option<usize> {
+    let bytes = body.as_bytes();
+    let end = if bytes.get(content) == Some(&b'\\') {
+        match bytes.get(content + 1).copied()? {
+            b'x' => content.checked_add(4)?,
+            b'u' if bytes.get(content + 2) == Some(&b'{') => {
+                content + 3 + body[content + 3..].find('}')? + 1
+            }
+            _ => content.checked_add(2)?,
+        }
+    } else {
+        content
+            + body[content..]
+                .chars()
+                .next()
+                .filter(|ch| *ch != '\'' && *ch != '\n' && *ch != '\r')?
+                .len_utf8()
+    };
+    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
 }
 
 fn translate_reference(
@@ -3524,5 +3965,74 @@ mod tests {
         };
         let body = "writeln!(self.output(), \"{}\", \"$notaref\");";
         assert_eq!(translate_body(body, &ctx).expect("translates"), body);
+    }
+
+    #[test]
+    fn lowers_only_supported_antlr4rust_code_tokens() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[("ID", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let body = r##"
+            let _literal = r#"recog.output() _localctx.context()"#;
+            // recog.input.peek(1)
+            let _raw_recog = r#recog.input.peek(1);
+            let _raw_context = r#_localctx.context();
+            let _before: &'a str = "before";
+            let _token = recog /* receiver */ . input.lt(-offset);
+            let _after: &'b str = "after";
+            _localctx.as_deref().is_some()
+        "##;
+        let lowered = translate_parser_body(body, &ctx, "SContext", ParserBodyKind::Predicate)
+            .expect("supported compatibility surface should lower");
+
+        assert!(lowered.contains(r##"r#"recog.output() _localctx.context()"#"##));
+        assert!(lowered.contains("// recog.input.peek(1)"));
+        assert!(lowered.contains("r#recog.input.peek(1)"));
+        assert!(lowered.contains("r#_localctx.context()"));
+        assert!(
+            lowered.contains("__Antlr4RustInput(self.base.token_stream()).lt(-offset)"),
+            "{lowered}"
+        );
+        assert!(lowered.contains("_localctx.as_ref().is_some()"));
+        assert!(lowered.contains("__active_context_view::<SContext"));
+    }
+
+    #[test]
+    fn rejects_unknown_antlr4rust_members_before_rust_compilation() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        for (body, expected) in [
+            ("recog.output()", "unsupported `recog.output` member"),
+            (
+                "recog.input.peek(1)",
+                "unsupported `recog.input.peek` accessor",
+            ),
+            (
+                "recog.input.la()",
+                "`recog.input.la` requires one offset argument",
+            ),
+            (
+                "_localctx.context()",
+                "unsupported `_localctx.context` accessor",
+            ),
+        ] {
+            let error = translate_parser_body(body, &ctx, "SContext", ParserBodyKind::Predicate)
+                .expect_err("unknown compatibility surface must fail");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
     }
 }
