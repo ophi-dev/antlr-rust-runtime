@@ -10,6 +10,10 @@ expression: "rendered_context_impl(&rendered, \"PrefixedMixedRepetitionContext\"
         }
     }
 
+    pub fn direct_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __terminal_children(self.__node).map(TerminalNode::new)
+    }
+
     pub fn start(&self) -> __GeneratedTokenView {
         let token = match &self.__node {
             __GeneratedRuleContext::Stored(node) => node.start(),

@@ -53,6 +53,7 @@ expression: generated_parser_api(&parser)
     "fn compile_parse_tree_pattern",
     "fn dead_helper",
     "fn dead_root",
+    "fn direct_tokens",
     "fn downcast_ref",
     "fn end",
     "fn eof_token",

@@ -4826,6 +4826,78 @@ mod mutual_left_recursion_tests {
     );
 }
 
+/// Issue #269: terminals from a hub-only mutual-left-recursion satellite must
+/// remain reachable without descending into nested expression children. The
+/// operators are anonymous literals, so no stable per-token accessor name
+/// exists; `direct_tokens()` provides the typed, grammar-agnostic surface.
+#[test]
+fn inlined_satellite_terminals_are_typed_direct_children() {
+    let temp = temporary_directory("inlined-token-accessors");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/inlined-token-accessors/InlinedTokens.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser =
+        fs::read_to_string(out.join("inlined_tokens_parser.rs")).expect("parser should be emitted");
+    for collapsed in ["AssignContext", "BinopContext"] {
+        assert!(
+            !parser.contains(collapsed),
+            "hub-only satellite context {collapsed} should be inlined away"
+        );
+    }
+
+    assert_generated_project(
+        temp.path(),
+        &["inlined_tokens_lexer.rs", "inlined_tokens_parser.rs"],
+        r#"
+#[cfg(test)]
+mod inlined_token_tests {
+    use super::inlined_tokens_lexer::InlinedTokensLexer;
+    use super::inlined_tokens_parser::{ExprContext, InlinedTokensParser, StartContext};
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    fn direct_expression_tokens(input: &str) -> Vec<String> {
+        let lexer = InlinedTokensLexer::new(InputStream::new(input));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.start().expect("operator input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let start = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<StartContext>()
+            .expect("typed start context");
+        let expression: ExprContext<'_> = start.expr().expect("root expression");
+        expression
+            .direct_tokens()
+            .map(|token| token.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn returns_only_the_operator_owned_by_the_hub_context() {
+        assert_eq!(direct_expression_tokens("left=right"), ["="]);
+        assert_eq!(direct_expression_tokens("left+right"), ["+"]);
+        assert_eq!(direct_expression_tokens("left-right"), ["-"]);
+    }
+}
+"#,
+    );
+}
+
 /// Issue #151, decline path: a cycle the transform must *not* rewrite still
 /// reports the pre-existing `G4A005` mutual-left-recursion diagnostic, naming
 /// both original rules. This is the guard that the transform is additive — it

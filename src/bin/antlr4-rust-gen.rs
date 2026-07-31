@@ -11109,6 +11109,10 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
         }
     }
 
+    pub fn direct_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __terminal_children(self.__node).map(TerminalNode::new)
+    }
+
     pub fn start(&self) -> __GeneratedTokenView {
         let token = match &self.__node {
             __GeneratedRuleContext::Stored(node) => node.start(),
@@ -11149,6 +11153,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
     let mut rendered = RenderedContextAccessors::default();
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
+        "direct_tokens".to_owned(),
         "rule_node".to_owned(),
         "start".to_owned(),
         "text".to_owned(),
@@ -11981,8 +11986,9 @@ impl<T: {validated_visitor_trait}> antlr4_runtime::ParseTreeVisitor
 ///
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
 ///   alternative) with cardinality-aware rule, token, and label accessors,
-///   `child_count()`, `start()`, `text()`, public attribute fields, and a
-///   `FromRuleNode` impl backing `ctx.downcast_ref::<XContext>()`;
+///   `child_count()`, `direct_tokens()`, `start()`, `text()`, public attribute
+///   fields, and a `FromRuleNode` impl backing
+///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -12130,20 +12136,25 @@ fn __rule_children<'a>(
 }
 
 #[allow(dead_code)]
+fn __terminal_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(|child| match child.kind() {
+        antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+        antlr4_runtime::NodeKind::Error => {
+            child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
+        }
+        antlr4_runtime::NodeKind::Rule => None,
+    })
+}
+
+#[allow(dead_code)]
 fn __token_children<'a>(
     source: __GeneratedRuleContext<'a>,
     token_type: i32,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = match child.kind() {
-            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
-            antlr4_runtime::NodeKind::Error => {
-                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
-            }
-            antlr4_runtime::NodeKind::Rule => None,
-        }?;
-        (terminal.symbol().token_type() == token_type).then_some(terminal)
-    })
+    __terminal_children(source)
+        .filter(move |terminal| terminal.symbol().token_type() == token_type)
 }
 
 #[allow(dead_code)]
@@ -12151,18 +12162,8 @@ fn __token_children_matching<'a>(
     source: __GeneratedRuleContext<'a>,
     token_types: &'static [i32],
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = match child.kind() {
-            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
-            antlr4_runtime::NodeKind::Error => {
-                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
-            }
-            antlr4_runtime::NodeKind::Rule => None,
-        }?;
-        token_types
-            .contains(&terminal.symbol().token_type())
-            .then_some(terminal)
-    })
+    __terminal_children(source)
+        .filter(move |terminal| token_types.contains(&terminal.symbol().token_type()))
 }
 
 "#,

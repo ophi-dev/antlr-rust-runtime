@@ -43,6 +43,7 @@ expression: generated_parser_api(&parser)
     "fn child_count",
     "fn clear_dfa",
     "fn compile_parse_tree_pattern",
+    "fn direct_tokens",
     "fn downcast_ref",
     "fn end",
     "fn eof_token",

@@ -30,6 +30,7 @@ expression: api
     "fn child_count",
     "fn clear_dfa",
     "fn compile_parse_tree_pattern",
+    "fn direct_tokens",
     "fn downcast_ref",
     "fn eof_token",
     "fn id_token",
