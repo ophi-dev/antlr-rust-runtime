@@ -7,6 +7,18 @@ expression: rendered
         self.item_children().collect()
     }
     #[allow(non_snake_case)]
+    pub fn text(&self) -> Option<TextContext<'a>> {
+        self.text_rule_child()
+    }
+    #[allow(non_snake_case)]
+    pub fn required(&self) -> Option<RequiredContext<'a>> {
+        self.required_rule_child().ok()
+    }
+    #[allow(non_snake_case)]
     pub fn ID(&self) -> Option<TerminalNode<'a>> {
         self.id_token().ok()
+    }
+    #[allow(non_snake_case)]
+    pub fn IDS_all(&self) -> Vec<TerminalNode<'a>> {
+        self.ids_tokens().collect()
     }

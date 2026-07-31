@@ -40,6 +40,32 @@ recordComponent
     : IDENTIFIER ELLIPSIS?
     ;
 
+repeatedTokens
+    : IDENTIFIER IDENTIFIER {
+        _localctx.as_deref()
+            .map(|ctx| ctx.IDENTIFIER_all().len() == 2)
+            .unwrap_or(true)
+    }? EOF
+    ;
+
+commonAccessorCollisions
+    : text start? child_count? rule_node? {
+        _localctx.as_deref()
+            .map(|ctx| {
+                ctx.text().is_some()
+                    && ctx.start().is_some()
+                    && ctx.child_count().is_some()
+                    && ctx.rule_node().is_some()
+            })
+            .unwrap_or(true)
+    }? EOF
+    ;
+
+text: TEXT;
+start: START;
+child_count: CHILD_COUNT;
+rule_node: RULE_NODE;
+
 // Native equivalents used by the differential regression.
 nativeNotIdentifierAssign
     : {
@@ -79,5 +105,9 @@ ASSIGN: '=';
 COMMA: ',';
 ELLIPSIS: '...';
 MODULE: 'module';
+TEXT: 'text';
+START: 'start';
+CHILD_COUNT: 'child_count';
+RULE_NODE: 'rule_node';
 IDENTIFIER: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

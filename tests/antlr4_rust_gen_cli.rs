@@ -3626,6 +3626,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         fixtures.join("CCompat.g4").as_os_str(),
         fixtures.join("JavaCompat.g4").as_os_str(),
         fixtures.join("AliasOnly.g4").as_os_str(),
+        fixtures.join("AliasCollision.g4").as_os_str(),
         OsStr::new("--actions"),
         OsStr::new("embedded"),
         OsStr::new("--sem-unknown"),
@@ -3651,9 +3652,19 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         .expect("Java parser should be emitted");
     let alias_parser = fs::read_to_string(out.join("alias_only_parser.rs"))
         .expect("alias-only parser should be emitted");
+    let alias_collision_parser = fs::read_to_string(out.join("alias_collision_parser.rs"))
+        .expect("alias-collision parser should be emitted");
     assert!(
         !alias_parser.contains("__Antlr4RustInput"),
         "token-alias-only bodies should not emit the input facade"
+    );
+    assert!(
+        !alias_collision_parser.contains("const AliasCollisionParser_ID"),
+        "a user member symbol must suppress the colliding token alias"
+    );
+    assert!(
+        !alias_collision_parser.contains("const AliasCollisionParser_EOF"),
+        "a user import must suppress the colliding token alias"
     );
     let excerpt = |source: &str| {
         source
@@ -3666,8 +3677,15 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                     "JavaCompatParser_",
                     "AliasOnlyParser_",
                     "recordComponent_all",
+                    "pub fn IDENTIFIER_all",
                     "pub fn IDENTIFIER",
                     "pub fn ELLIPSIS",
+                    "pub fn context_child_count",
+                    "pub fn context_rule_node",
+                    "pub fn context_start",
+                    "pub fn context_text",
+                    "AliasCollisionParser_EOF",
+                    "AliasCollisionParser_ID",
                     "let _localctx = __active_context_view",
                 ]
                 .iter()
@@ -3680,10 +3698,11 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     insta::assert_snapshot!(
         "antlr4rust_compat_generated_surface",
         format!(
-            "=== C ===\n{}\n=== Java ===\n{}\n=== Alias only ===\n{}",
+            "=== C ===\n{}\n=== Java ===\n{}\n=== Alias only ===\n{}\n=== Alias collision ===\n{}",
             excerpt(&c_parser),
             excerpt(&java_parser),
-            excerpt(&alias_parser)
+            excerpt(&alias_parser),
+            excerpt(&alias_collision_parser)
         )
     );
 
@@ -3834,6 +3853,21 @@ mod antlr4rust_compat_tests {
         let rejected = java_components("first...,second", false);
         assert!(rejected.1 > 0);
     }
+
+    #[test]
+    fn repeated_tokens_and_common_method_collisions_use_legacy_getters() {
+        let lexer = JavaCompatLexer::new(InputStream::new("first second"));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.repeated_tokens().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+
+        let lexer = JavaCompatLexer::new(InputStream::new(
+            "text start child_count rule_node",
+        ));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.common_accessor_collisions().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
 }
 "####;
 
@@ -3842,6 +3876,8 @@ mod antlr4rust_compat_tests {
         &[
             "alias_only_lexer.rs",
             "alias_only_parser.rs",
+            "alias_collision_lexer.rs",
+            "alias_collision_parser.rs",
             "c_compat_lexer.rs",
             "c_compat_parser.rs",
             "java_compat_lexer.rs",
@@ -4007,6 +4043,66 @@ fn imported_parser_predicate_generates_typed_hook_from_structural_body() {
         parser.contains("(1, 0) => Some(self.0.is_type_name(ctx))"),
         "{parser}"
     );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn imported_antlr4rust_alias_uses_the_action_source_owner() {
+    let temp = temporary_directory("imported-antlr4rust-alias");
+    let root = temp.path().join("RootParser.g4");
+    let delegate = temp.path().join("DelegateParser.g4");
+    let tokens = temp.path().join("Tokens.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "parser grammar RootParser;\n\
+         import DelegateParser;\n\
+         options { tokenVocab=Tokens; }\n\
+         start: delegated EOF;\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "parser grammar DelegateParser;\n\
+         delegated: {DelegateParser_ID == ID}? ID;\n",
+    )
+    .expect("delegate grammar should be writable");
+    fs::write(
+        &tokens,
+        "lexer grammar Tokens;\n\
+         ID: [a-z]+;\n\
+         WS: [ \\t\\r\\n]+ -> skip;\n",
+    )
+    .expect("token grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        tokens.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("root_parser.rs")).expect("parser should be emitted");
+    let alias_excerpt = parser
+        .lines()
+        .filter(|line| line.contains("Parser_ID"))
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!("imported_antlr4rust_alias_owner", alias_excerpt);
+    assert_generated_modules_compile(temp.path(), &["tokens.rs", "root_parser.rs"]);
 }
 
 /// Issue #241: antlr4rust grammars use `recog` as the parser-predicate receiver.

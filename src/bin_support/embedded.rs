@@ -280,6 +280,11 @@ pub(crate) struct MembersModel {
     /// `struct` / `impl` / attribute-prefixed items emitted at module level
     /// (test listeners, custom nodes, …).
     pub(crate) module_items: Vec<String>,
+    /// Names introduced into the generated module's value/type namespaces.
+    ///
+    /// Compatibility token aliases must not be emitted over user-authored
+    /// `struct` declarations or imports with the same identifier.
+    pub(crate) module_symbols: BTreeSet<String>,
 }
 
 /// Full grammar model for embedded translation.
@@ -387,6 +392,7 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
             || rest.starts_with("use ")
         {
             let item_end = item_end_from(body, offset)?;
+            record_member_module_symbols(&body[offset..item_end], members);
             let mut item = std::mem::take(&mut pending_attrs);
             item.push_str(body[offset..item_end].trim());
             members.module_items.push(item);
@@ -406,6 +412,30 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
         }
     }
     Ok(())
+}
+
+fn record_member_module_symbols(item: &str, members: &mut MembersModel) {
+    let item = item.trim_start();
+    if let Some(rest) = item.strip_prefix("struct ") {
+        if let Some(name) = rest
+            .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
+            .find(|part| !part.is_empty())
+        {
+            members.module_symbols.insert(name.to_owned());
+        }
+        return;
+    }
+    let Some(rest) = item.strip_prefix("use ") else {
+        return;
+    };
+    // Every identifier in a use tree can participate in name resolution.
+    // Conservatively reserving path segments as well avoids emitting a token
+    // constant over a user import without needing a second Rust parser here.
+    members.module_symbols.extend(
+        rest.split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
+            .filter(|part| is_identifier(part))
+            .map(str::to_owned),
+    );
 }
 
 /// Finds the end of an item: the matching `}` of its first top-level brace
@@ -3994,7 +4024,8 @@ mod tests {
         let body = "i: i32 = 0;\n\
             #[allow(non_snake_case)]\n\
             fn Property(&self) -> bool {\n    true\n}\n\
-            struct LeafListener;\n";
+            struct LeafListener;\n\
+            use crate::AliasTypeParser_ID;\n";
         let mut members = MembersModel::default();
         classify_members(body, &mut members).expect("members classify");
 
@@ -4003,7 +4034,15 @@ mod tests {
         assert_eq!(members.fields[0].init, "0");
         assert_eq!(members.impl_items.len(), 1);
         assert!(members.impl_items[0].contains("fn Property"));
-        assert_eq!(members.module_items.len(), 1);
+        assert_eq!(members.module_items.len(), 2);
+        assert_eq!(
+            members.module_symbols,
+            BTreeSet::from([
+                "AliasTypeParser_ID".to_owned(),
+                "LeafListener".to_owned(),
+                "crate".to_owned(),
+            ])
+        );
     }
 
     #[test]

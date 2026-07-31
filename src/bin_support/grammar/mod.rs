@@ -26,6 +26,8 @@ mod transform_analysis;
 mod unicode;
 mod unicode_escape;
 
+pub(crate) use syntax::parse_loader_unit;
+
 #[cfg(test)]
 pub(crate) use semantics::{
     ParsedAttributeDeclaration as ScopeDecl, parse_attribute_declarations as parse_scope_decls,
