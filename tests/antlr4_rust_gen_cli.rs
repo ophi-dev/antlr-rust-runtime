@@ -500,6 +500,56 @@ fn eof_reaching_recursive_source_component_is_inferred_as_entries() {
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
+fn inferred_mutual_entries_survive_left_recursion_rewrite() {
+    let temp = temporary_directory("inferred-mutual-entries");
+    let grammar = temp.path().join("RecursiveLeftEntries.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar RecursiveLeftEntries;\n\
+         a : b 'a' | EOF ;\n\
+         b : a 'b' | ID ;\n\
+         ID : [a-z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--visitor"),
+        OsStr::new("--prune-unreachable"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("recursive_left_entries_parser.rs"))
+        .expect("parser should be emitted");
+    let api = generated_parser_api(&parser);
+    assert!(
+        api.iter().any(|symbol| symbol == "fn a"),
+        "inferred entry a should survive rewriting"
+    );
+    assert!(
+        api.iter().any(|symbol| symbol == "fn b"),
+        "inferred entry b should survive rewriting"
+    );
+    insta::assert_debug_snapshot!("inferred_mutual_entries_generated_api", api);
+    assert_generated_modules_compile(
+        temp.path(),
+        &[
+            "recursive_left_entries_lexer.rs",
+            "recursive_left_entries_parser.rs",
+        ],
+    );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
 fn configured_entry_survives_mutual_recursion_rewrite() {
     let temp = temporary_directory("configured-mutual-entry");
     let grammar = temp.path().join("ConfiguredMutualEntry.g4");
