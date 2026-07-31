@@ -548,6 +548,40 @@ fn configured_entry_survives_mutual_recursion_rewrite() {
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
+fn configured_entry_survives_precedence_ladder_optimization() {
+    let temp = temporary_directory("configured-precedence-entry");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--entry-rule"),
+        OsStr::new("conditionalOr"),
+        OsStr::new("--visitor"),
+        OsStr::new("--optimize-precedence-ladders"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(out.join("ladder_parser.rs")).expect("parser should be emitted");
+    let api = generated_parser_api(&parser);
+    assert!(
+        api.iter().any(|symbol| symbol == "fn conditional_or"),
+        "configured entry conditionalOr should survive optimization"
+    );
+    insta::assert_debug_snapshot!("configured_precedence_entry_generated_api", api);
+    assert_generated_modules_compile(temp.path(), &["ladder_lexer.rs", "ladder_parser.rs"]);
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
 fn configured_entry_rule_must_name_a_parser_rule() {
     let temp = temporary_directory("unknown-entry-rule");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

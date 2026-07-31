@@ -38,15 +38,21 @@ impl GrammarTransform for CollapsePrecedenceLadders {
         report: &mut TransformReport,
     ) -> Result<bool, Diagnostic> {
         let mut changed = false;
-        for unit in &mut grammar.units {
-            let discovery = discover_ladders(unit);
+        let TransformGrammar {
+            units,
+            preserved_rules,
+            provenance,
+            ..
+        } = grammar;
+        for unit in units {
+            let discovery = discover_ladders(unit, preserved_rules);
             for declined in discovery.declined {
                 report
                     .candidates
                     .push(declined_report(input, unit, declined));
             }
             for plan in discovery.plans {
-                let candidate = apply_plan(input, unit, plan, ids, &mut grammar.provenance);
+                let candidate = apply_plan(input, unit, plan, ids, provenance);
                 report.candidates.push(candidate);
                 changed = true;
             }
@@ -127,7 +133,7 @@ struct LadderDiscovery {
     declined: Vec<DeclinedLadder>,
 }
 
-fn discover_ladders(unit: &GrammarUnit) -> LadderDiscovery {
+fn discover_ladders(unit: &GrammarUnit, preserved_rules: &BTreeSet<RuleId>) -> LadderDiscovery {
     let rules_by_name = unit
         .rules
         .iter()
@@ -148,7 +154,8 @@ fn discover_ladders(unit: &GrammarUnit) -> LadderDiscovery {
     }
 
     let incoming = incoming_callers(unit, &rules_by_name);
-    let observed = observed_rule_contexts(unit, &rules_by_name);
+    let mut observed = observed_rule_contexts(unit, &rules_by_name);
+    observed.extend(preserved_rules);
     let parents = rung_parents(&rungs, &rules_by_name);
     let tops = rungs
         .keys()
@@ -1760,6 +1767,51 @@ atom : INT ;
     }
 
     #[test]
+    fn preserved_middle_rule_splits_the_ladder_and_becomes_a_hub() {
+        let (mut grammar, mut ids) = fixture(CEL_LADDER);
+        let conditional_or = grammar.units[0]
+            .rules
+            .iter()
+            .find(|rule| rule.name == "conditionalOr")
+            .expect("fixture should define conditionalOr")
+            .id;
+        grammar.preserved_rules.insert(conditional_or);
+        let mut registry = TransformRegistry::default();
+        registry.push(CollapsePrecedenceLadders);
+        let report = registry
+            .run(&mut grammar, &mut ids, false)
+            .expect("the ladder below the preserved rule should collapse");
+
+        assert_eq!(
+            grammar.units[0]
+                .rules
+                .iter()
+                .map(|rule| rule.name.as_str())
+                .collect::<Vec<_>>(),
+            ["expr", "conditionalOr", "member"]
+        );
+        let candidate = report
+            .candidates
+            .iter()
+            .find(|candidate| candidate.entry_rule == "conditionalOr")
+            .expect("the preserved rule should become the lower ladder hub");
+        assert_eq!(
+            candidate.rungs,
+            [
+                "conditionalOr",
+                "conditionalAnd",
+                "relation",
+                "calc",
+                "unary"
+            ]
+        );
+        assert_eq!(
+            candidate.removed_rules,
+            ["conditionalAnd", "relation", "calc", "unary"]
+        );
+    }
+
+    #[test]
     fn supports_delegation_base_rhs_and_binary_right_tail_rungs() {
         let (mut grammar, mut ids) = fixture(
             r#"
@@ -2061,6 +2113,7 @@ low : INT ;
             TransformGrammar {
                 units: vec![unit],
                 target_units: BTreeSet::from([GrammarId::new(0)]),
+                preserved_rules: BTreeSet::new(),
                 provenance,
             },
             ids,

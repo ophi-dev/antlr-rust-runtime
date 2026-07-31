@@ -8,8 +8,8 @@ use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
     GrammarKind, GrammarPrequel, GrammarUnit, Label, LexerCommand, Mode, ModelIdAllocator,
-    ModelNodeId, NamedAction, Quantifier, Rule, RuleKind, SetElement, Terminal, TokenDeclaration,
-    TransformId, VocabularySource,
+    ModelNodeId, NamedAction, Quantifier, Rule, RuleId, RuleKind, SetElement, Terminal,
+    TokenDeclaration, TransformId, VocabularySource,
 };
 use super::provenance::{MandatoryTransform, Origin, ProvenanceIndex, Tombstone};
 use super::syntax::parse_grammar_unit;
@@ -112,6 +112,7 @@ pub(crate) struct TransformContext<'a> {
 pub(crate) struct TransformGrammar {
     pub(crate) units: Vec<GrammarUnit>,
     pub(crate) target_units: BTreeSet<GrammarId>,
+    pub(crate) preserved_rules: BTreeSet<RuleId>,
     pub(crate) provenance: ProvenanceIndex,
 }
 
@@ -713,6 +714,7 @@ pub(crate) fn integrate_loaded(
     let grammar = TransformGrammar {
         units,
         target_units,
+        preserved_rules: BTreeSet::new(),
         provenance,
     };
     if let Err(diagnostic) = validate_model(&grammar) {

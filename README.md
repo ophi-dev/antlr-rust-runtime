@@ -746,12 +746,13 @@ diagnostic counts, error-listener calls, recovered trees, and stopping positions
 are not preserved. The guarantee is that complete inputs parse without syntax
 errors under the optimized grammar exactly when they do under the authored
 grammar; consumers requiring recovery parity should not enable this pass.
-Actions, predicates, rule attributes, unsupported shapes, overlapping
-same-fixity operator sets, and externally referenced middle rules are declined
-or treated as boundaries. A prefix level that is looser than another collapsed
-operator level is also declined: ANTLR precedence parameters constrain recursive
-operators, not entry into primary/prefix alternatives, so collapsing that order
-would admit the looser prefix inside a tighter operand.
+Configured `--entry-rule` rules and externally referenced middle rules are
+retained as collapse boundaries. Actions, predicates, rule attributes,
+unsupported shapes, and overlapping same-fixity operator sets are declined. A
+prefix level that is looser than another collapsed operator level is also
+declined: ANTLR precedence parameters constrain recursive operators, not entry
+into primary/prefix alternatives, so collapsing that order would admit the
+looser prefix inside a tighter operand.
 
 Every applied run writes `optimizations.json` beside `semantics.json` and
 `decisions.json`. The manifest records the safety class, original source

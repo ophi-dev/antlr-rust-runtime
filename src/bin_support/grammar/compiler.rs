@@ -95,6 +95,8 @@ pub(crate) fn compile_with_transforms(
             .collect();
         return Err(CompilationError::new(diagnostics).with_sources(&loaded.sources));
     }
+    integrated.grammar.preserved_rules =
+        entry_rules.matching_rule_ids(&integrated.grammar.units, &integrated.grammar.target_units);
     let authored_diagnostics = if transforms.is_empty() {
         None
     } else {
