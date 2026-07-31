@@ -25,7 +25,10 @@ recordComponentList
                 .map(|ctx| {
                     let rcs = ctx.recordComponent_all();
                     let count = rcs.len();
-                    (0..count).all(|i| rcs[i].ELLIPSIS().is_none() || i + 1 == count)
+                    (0..count).all(|i| {
+                        rcs[i].IDENTIFIER().is_some()
+                            && (rcs[i].ELLIPSIS().is_none() || i + 1 == count)
+                    })
                 })
                 .unwrap_or(true)
         }? EOF
@@ -64,7 +67,8 @@ nativeRecordComponentList
             ).collect::<Vec<_>>();
             let count = rcs.len();
             (0..count).all(|i| {
-                rcs[i].child_token(ELLIPSIS).is_none() || i + 1 == count
+                rcs[i].child_token(IDENTIFIER).is_some()
+                    && (rcs[i].child_token(ELLIPSIS).is_none() || i + 1 == count)
             })
         }? EOF
         | ASSIGN EOF

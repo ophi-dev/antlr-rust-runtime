@@ -691,6 +691,13 @@ inline at their ATN action/predicate coordinates. This is the mode the
 conformance harness uses after rendering descriptor grammars through
 `Rust.test.stg` (see below).
 
+In embedded mode, bodies produced by the antlr4rust transforms in
+`antlr/grammars-v4` need no additional flags. The generator lowers their
+observed `recog.input.la(...)` / `lt(...)` token access, token-view getters,
+generated parser token aliases, and `_localctx` child accessors onto native
+runtime APIs. Unsupported `recog` or `_localctx` shapes fail at generation
+with the owning grammar coordinate instead of becoming generated-crate errors.
+
 ### Decision Tiers and `--fixed-lookahead`
 
 ANTLR always generates an adaptive `ALL(*)` recognizer: every decision point

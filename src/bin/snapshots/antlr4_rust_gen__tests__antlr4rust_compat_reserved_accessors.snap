@@ -1,0 +1,12 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: rendered
+---
+    #[allow(non_snake_case)]
+    pub fn item_all(&self) -> Vec<ItemContext<'a>> {
+        self.item_children().collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ID(&self) -> Option<TerminalNode<'a>> {
+        self.id_token().ok()
+    }

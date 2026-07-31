@@ -3625,6 +3625,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     let output = run_antlr4_rust_gen(&[
         fixtures.join("CCompat.g4").as_os_str(),
         fixtures.join("JavaCompat.g4").as_os_str(),
+        fixtures.join("AliasOnly.g4").as_os_str(),
         OsStr::new("--actions"),
         OsStr::new("embedded"),
         OsStr::new("--sem-unknown"),
@@ -3648,6 +3649,12 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         fs::read_to_string(out.join("c_compat_parser.rs")).expect("C parser should be emitted");
     let java_parser = fs::read_to_string(out.join("java_compat_parser.rs"))
         .expect("Java parser should be emitted");
+    let alias_parser = fs::read_to_string(out.join("alias_only_parser.rs"))
+        .expect("alias-only parser should be emitted");
+    assert!(
+        !alias_parser.contains("__Antlr4RustInput"),
+        "token-alias-only bodies should not emit the input facade"
+    );
     let excerpt = |source: &str| {
         source
             .lines()
@@ -3657,7 +3664,9 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                     "__Antlr4RustTokenView",
                     "CCompatParser_",
                     "JavaCompatParser_",
+                    "AliasOnlyParser_",
                     "recordComponent_all",
+                    "pub fn IDENTIFIER",
                     "pub fn ELLIPSIS",
                     "let _localctx = __active_context_view",
                 ]
@@ -3671,15 +3680,18 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     insta::assert_snapshot!(
         "antlr4rust_compat_generated_surface",
         format!(
-            "=== C ===\n{}\n=== Java ===\n{}",
+            "=== C ===\n{}\n=== Java ===\n{}\n=== Alias only ===\n{}",
             excerpt(&c_parser),
-            excerpt(&java_parser)
+            excerpt(&java_parser),
+            excerpt(&alias_parser)
         )
     );
 
     let test_source = r####"
 #[cfg(test)]
 mod antlr4rust_compat_tests {
+    use super::alias_only_lexer::AliasOnlyLexer;
+    use super::alias_only_parser::AliasOnlyParser;
     use super::c_compat_lexer::CCompatLexer;
     use super::c_compat_parser::CCompatParser;
     use super::java_compat_lexer::JavaCompatLexer;
@@ -3696,6 +3708,14 @@ mod antlr4rust_compat_tests {
         }
         .is_ok();
         (parsed, parser.number_of_syntax_errors())
+    }
+
+    #[test]
+    fn token_aliases_are_available_without_an_input_or_context_receiver() {
+        let lexer = AliasOnlyLexer::new(InputStream::new("name!"));
+        let mut parser = AliasOnlyParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.start().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     fn java_not_assign(input: &str, native: bool) -> (bool, usize) {
@@ -3820,6 +3840,8 @@ mod antlr4rust_compat_tests {
     assert_generated_project(
         temp.path(),
         &[
+            "alias_only_lexer.rs",
+            "alias_only_parser.rs",
             "c_compat_lexer.rs",
             "c_compat_parser.rs",
             "java_compat_lexer.rs",
@@ -3872,7 +3894,15 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
         let path = grammar
             .to_str()
             .expect("temporary grammar path should be UTF-8");
-        diagnostics.push(utf8(&output.stderr).replace(path, "$GRAMMAR"));
+        let root = temp
+            .path()
+            .to_str()
+            .expect("temporary directory path should be UTF-8");
+        diagnostics.push(
+            utf8(&output.stderr)
+                .replace(path, "$GRAMMAR")
+                .replace(root, "$TMP"),
+        );
     }
     insta::assert_snapshot!(
         "unsupported_antlr4rust_surface_diagnostics",

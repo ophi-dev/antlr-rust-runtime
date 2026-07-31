@@ -6,16 +6,18 @@ assignment
     : {
         let __not_code = r#"recog.input.peek(1) _localctx.context()"#;
         // recog.output.write("not code")
-        let __first = recog.input.lt(1)
+        let __first = recog.input.lt(1);
+        let __first_value = __first.as_ref()
             .map(|t| (t.get_token_type(), t.get_text().to_owned()));
+        let __first_text = recog.input.lt(1).map(|t| t.get_text());
         let __eof = recog.input.lt(4)
             .map(|t| (t.get_token_type(), t.get_text().to_owned()));
-        __first == Some((CCompatParser_IDENTIFIER, "left".to_owned()))
+        __first_value == Some((CCompatParser_IDENTIFIER, "left".to_owned()))
+            && __first_text == Some("left")
             && !__not_code.is_empty()
             && recog.input.la(1) == CCompatParser_IDENTIFIER
             && recog.input.la(2) == CCompatParser_ASSIGN
             && __eof.as_ref().map(|token| token.0) == Some(antlr4_runtime::TOKEN_EOF)
-            && recog.input.lt(5).is_none()
     }? IDENTIFIER ASSIGN IDENTIFIER EOF
     ;
 
@@ -49,15 +51,17 @@ inlineAction
 // Native equivalents used by the differential regression.
 nativeAssignment
     : {
-        let __first = self.base.token_stream().lt(1)
+        let __first = self.base.token_stream().lt(1);
+        let __first_value = __first.as_ref()
             .map(|t| (t.token_type(), t.text_or_empty().to_owned()));
+        let __first_text = self.base.token_stream().lt(1).map(|t| t.text_or_empty());
         let __eof = self.base.token_stream().lt(4)
             .map(|t| (t.token_type(), t.text_or_empty().to_owned()));
-        __first == Some((IDENTIFIER, "left".to_owned()))
+        __first_value == Some((IDENTIFIER, "left".to_owned()))
+            && __first_text == Some("left")
             && self.base.token_stream().la_token(1) == IDENTIFIER
             && self.base.token_stream().la_token(2) == ASSIGN
             && __eof.as_ref().map(|token| token.0) == Some(antlr4_runtime::TOKEN_EOF)
-            && self.base.token_stream().lt(5).is_none()
     }? IDENTIFIER ASSIGN IDENTIFIER EOF
     ;
 

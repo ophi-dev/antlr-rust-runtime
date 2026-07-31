@@ -1557,31 +1557,57 @@ pub(crate) fn translate_parser_body(
     body: &str,
     ctx: &TranslationCtx<'_>,
     active_context_type: &str,
+    antlr4rust_token_aliases: &BTreeSet<String>,
     kind: ParserBodyKind,
-) -> io::Result<String> {
+) -> io::Result<ParserBodyTranslation> {
     let translated = translate_body(body, ctx)?;
-    let lowered = lower_antlr4rust_surface(&translated)?;
-    if kind == ParserBodyKind::Action && !lowered.uses_local_context {
-        return Ok(lowered.source);
+    let LoweredAntlr4RustBody {
+        source,
+        uses_input,
+        uses_local_context,
+        uses_token_alias,
+    } = lower_antlr4rust_surface(&translated, antlr4rust_token_aliases)?;
+    if kind == ParserBodyKind::Action && !uses_local_context {
+        return Ok(ParserBodyTranslation {
+            source,
+            uses_input,
+            uses_local_context,
+            uses_token_alias,
+        });
     }
 
     let mut out = String::from("{\n");
-    if lowered.uses_local_context {
+    if uses_local_context {
         writeln!(
             out,
             "let _localctx = __active_context_view::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n);"
         )
         .expect("writing to a string cannot fail");
     }
-    out.push_str(&lowered.source);
+    out.push_str(&source);
     out.push_str("\n}");
-    Ok(out)
+    Ok(ParserBodyTranslation {
+        source: out,
+        uses_input,
+        uses_local_context,
+        uses_token_alias,
+    })
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct ParserBodyTranslation {
+    pub(crate) source: String,
+    pub(crate) uses_input: bool,
+    pub(crate) uses_local_context: bool,
+    pub(crate) uses_token_alias: bool,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct LoweredAntlr4RustBody {
     source: String,
+    uses_input: bool,
     uses_local_context: bool,
+    uses_token_alias: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1606,19 +1632,28 @@ struct RustReplacement {
     text: &'static str,
 }
 
-fn lower_antlr4rust_surface(body: &str) -> io::Result<LoweredAntlr4RustBody> {
+fn lower_antlr4rust_surface(
+    body: &str,
+    token_aliases: &BTreeSet<String>,
+) -> io::Result<LoweredAntlr4RustBody> {
     let lexemes = lex_rust_body(body);
     let mut replacements = Vec::new();
+    let mut uses_input = false;
     let mut uses_local_context = false;
+    let mut uses_token_alias = false;
     for (position, lexeme) in lexemes.iter().enumerate() {
         if lexeme.kind != RustLexemeKind::Identifier {
             continue;
         }
-        match &body[lexeme.start..lexeme.end] {
+        let identifier = &body[lexeme.start..lexeme.end];
+        uses_token_alias |= token_aliases.contains(identifier);
+        // Standalone `recog` and `_localctx` are reserved compatibility
+        // receivers. Unknown shapes fail here so diagnostics retain the
+        // owning grammar coordinate instead of surfacing from rustc later.
+        match identifier {
             "recog" if is_standalone_identifier(&lexemes, position) => {
-                if let Some(replacement) = recog_input_replacement(body, &lexemes, position)? {
-                    replacements.push(replacement);
-                }
+                replacements.push(recog_input_replacement(body, &lexemes, position)?);
+                uses_input = true;
             }
             "_localctx" if is_standalone_identifier(&lexemes, position) => {
                 replacements.push(local_context_replacement(body, &lexemes, position)?);
@@ -1630,7 +1665,9 @@ fn lower_antlr4rust_surface(body: &str) -> io::Result<LoweredAntlr4RustBody> {
     replacements.sort_by_key(|replacement| replacement.range.start);
     Ok(LoweredAntlr4RustBody {
         source: apply_rust_replacements(body, &replacements)?,
+        uses_input,
         uses_local_context,
+        uses_token_alias,
     })
 }
 
@@ -1638,12 +1675,12 @@ fn recog_input_replacement(
     body: &str,
     lexemes: &[RustLexeme],
     position: usize,
-) -> io::Result<Option<RustReplacement>> {
+) -> io::Result<RustReplacement> {
     let Some(dot) = next_significant(lexemes, position) else {
-        return Ok(None);
+        return Err(unsupported_antlr4rust("unsupported bare `recog` reference"));
     };
     if lexemes[dot].kind != RustLexemeKind::Punctuation(b'.') {
-        return Ok(None);
+        return Err(unsupported_antlr4rust("unsupported bare `recog` reference"));
     }
     let Some(member) = next_significant(lexemes, dot) else {
         return Err(unsupported_antlr4rust("incomplete `recog` member access"));
@@ -1662,10 +1699,10 @@ fn recog_input_replacement(
         )));
     }
     require_nonempty_call_argument(body, lexemes, accessor, "recog.input")?;
-    Ok(Some(RustReplacement {
+    Ok(RustReplacement {
         range: lexemes[position].start..lexemes[member].end,
         text: "__Antlr4RustInput(self.base.token_stream())",
-    }))
+    })
 }
 
 fn local_context_replacement(
@@ -1680,6 +1717,7 @@ fn local_context_replacement(
             "unsupported `_localctx.{method_name}` accessor"
         )));
     }
+    require_empty_call_arguments(body, lexemes, method, "_localctx")?;
     Ok(RustReplacement {
         range: lexemes[method].start..lexemes[method].end,
         text: "as_ref",
@@ -1702,7 +1740,7 @@ fn required_member_call(
         .ok_or_else(|| {
             unsupported_antlr4rust(&format!("unsupported `{display_receiver}` shape"))
         })?;
-    let open = next_significant(lexemes, method)
+    next_significant(lexemes, method)
         .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'('))
         .ok_or_else(|| {
             unsupported_antlr4rust(&format!(
@@ -1710,14 +1748,27 @@ fn required_member_call(
                 lexeme_text(body, lexemes[method])
             ))
         })?;
-    if display_receiver == "_localctx" {
-        next_significant(lexemes, open)
-            .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b')'))
-            .ok_or_else(|| {
-                unsupported_antlr4rust("`_localctx.as_deref()` does not accept arguments")
-            })?;
-    }
     Ok(method)
+}
+
+fn require_empty_call_arguments(
+    body: &str,
+    lexemes: &[RustLexeme],
+    method: usize,
+    display_receiver: &str,
+) -> io::Result<()> {
+    let method_name = lexeme_text(body, lexemes[method]);
+    let open = next_significant(lexemes, method)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'('))
+        .expect("required_member_call already checked the opening parenthesis");
+    next_significant(lexemes, open)
+        .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b')'))
+        .ok_or_else(|| {
+            unsupported_antlr4rust(&format!(
+                "`{display_receiver}.{method_name}()` does not accept arguments"
+            ))
+        })?;
+    Ok(())
 }
 
 fn require_nonempty_call_argument(
@@ -1767,12 +1818,15 @@ fn unsupported_antlr4rust(message: &str) -> io::Error {
 }
 
 fn is_standalone_identifier(lexemes: &[RustLexeme], position: usize) -> bool {
-    previous_significant(lexemes, position).is_none_or(|previous| {
-        !matches!(
-            lexemes[previous].kind,
-            RustLexemeKind::Punctuation(b'.' | b':')
-        )
-    })
+    let Some(previous) = previous_significant(lexemes, position) else {
+        return true;
+    };
+    match lexemes[previous].kind {
+        RustLexemeKind::Punctuation(b'.') => false,
+        RustLexemeKind::Punctuation(b':') => previous_significant(lexemes, previous)
+            .is_none_or(|before| lexemes[before].kind != RustLexemeKind::Punctuation(b':')),
+        _ => true,
+    }
 }
 
 fn next_significant(lexemes: &[RustLexeme], position: usize) -> Option<usize> {
@@ -3967,6 +4021,7 @@ mod tests {
         assert_eq!(translate_body(body, &ctx).expect("translates"), body);
     }
 
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
     #[test]
     fn lowers_only_supported_antlr4rust_code_tokens() {
         let m = model(vec![rule("s")]);
@@ -3978,29 +4033,37 @@ mod tests {
             site: ActionSite::Body,
             token_types: &toks,
         };
+        let token_aliases = BTreeSet::from(["CompatParser_ID".to_owned()]);
         let body = r##"
             let _literal = r#"recog.output() _localctx.context()"#;
             // recog.input.peek(1)
             let _raw_recog = r#recog.input.peek(1);
             let _raw_context = r#_localctx.context();
+            let _qualified = module::recog.input.peek(1);
             let _before: &'a str = "before";
             let _token = recog /* receiver */ . input.lt(-offset);
+            let _probe = Probe { token: recog.input.la(1) };
+            let _kind = CompatParser_ID;
             let _after: &'b str = "after";
             _localctx.as_deref().is_some()
-        "##;
-        let lowered = translate_parser_body(body, &ctx, "SContext", ParserBodyKind::Predicate)
-            .expect("supported compatibility surface should lower");
+        "##
+        .trim_end();
+        let lowered = translate_parser_body(
+            body,
+            &ctx,
+            "SContext",
+            &token_aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect("supported compatibility surface should lower");
 
-        assert!(lowered.contains(r##"r#"recog.output() _localctx.context()"#"##));
-        assert!(lowered.contains("// recog.input.peek(1)"));
-        assert!(lowered.contains("r#recog.input.peek(1)"));
-        assert!(lowered.contains("r#_localctx.context()"));
-        assert!(
-            lowered.contains("__Antlr4RustInput(self.base.token_stream()).lt(-offset)"),
-            "{lowered}"
+        assert!(lowered.uses_input);
+        assert!(lowered.uses_local_context);
+        assert!(lowered.uses_token_alias);
+        insta::assert_snapshot!(
+            "lowers_only_supported_antlr4rust_code_tokens",
+            lowered.source
         );
-        assert!(lowered.contains("_localctx.as_ref().is_some()"));
-        assert!(lowered.contains("__active_context_view::<SContext"));
     }
 
     #[test]
@@ -4016,6 +4079,7 @@ mod tests {
         };
 
         for (body, expected) in [
+            ("recog", "unsupported bare `recog` reference"),
             ("recog.output()", "unsupported `recog.output` member"),
             (
                 "recog.input.peek(1)",
@@ -4030,8 +4094,14 @@ mod tests {
                 "unsupported `_localctx.context` accessor",
             ),
         ] {
-            let error = translate_parser_body(body, &ctx, "SContext", ParserBodyKind::Predicate)
-                .expect_err("unknown compatibility surface must fail");
+            let error = translate_parser_body(
+                body,
+                &ctx,
+                "SContext",
+                &BTreeSet::new(),
+                ParserBodyKind::Predicate,
+            )
+            .expect_err("unknown compatibility surface must fail");
             assert!(error.to_string().contains(expected), "{error}");
         }
     }
