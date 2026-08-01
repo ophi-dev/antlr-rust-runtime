@@ -10003,6 +10003,8 @@ fn build_embedded_parser_data(
     decisions: &DecisionClassification,
 ) -> io::Result<EmbeddedParserData> {
     let model = structural_embedded_model(data, true)?;
+    let antlr4rust_token_alias_module =
+        antlr4rust_token_alias_module_name(&model.parser_members.module_symbols);
     let context_names = context_surface_names(&model);
     let token_types: BTreeMap<String, i32> = data
         .symbolic_names
@@ -10032,6 +10034,7 @@ fn build_embedded_parser_data(
     let mut uses_antlr4rust_input = false;
     let mut antlr4rust_context_roots = BTreeSet::new();
     let mut antlr4rust_token_aliases = BTreeMap::new();
+    let mut antlr4rust_direct_alias_imports = BTreeSet::new();
     let mut antlr4rust_alias_inventory_cache = BTreeMap::new();
 
     for action in structural_actions(data)? {
@@ -10053,11 +10056,12 @@ fn build_embedded_parser_data(
             .or_insert_with(|| {
                 antlr4rust_token_alias_inventory(data, type_name, action.span.source)
             });
-        let translated = embedded::translate_parser_body(
+        let translated = embedded::translate_parser_body_with_alias_module(
             &action.body,
             &ctx,
             &context_names.rules[action.rule_index].context_type,
             &aliases.names,
+            &antlr4rust_token_alias_module,
             embedded::ParserBodyKind::Action,
         )
         .map_err(|error| {
@@ -10097,11 +10101,12 @@ fn build_embedded_parser_data(
             .or_insert_with(|| {
                 antlr4rust_token_alias_inventory(data, type_name, predicate.span.source)
             });
-        let translated = embedded::translate_parser_body(
+        let translated = embedded::translate_parser_body_with_alias_module(
             predicate.body.trim(),
             &ctx,
             &context_names.rules[predicate.rule_index].context_type,
             &aliases.names,
+            &antlr4rust_token_alias_module,
             embedded::ParserBodyKind::Predicate,
         )
         .map_err(|error| {
@@ -10153,42 +10158,23 @@ fn build_embedded_parser_data(
                 site: embedded::ActionSite::Init,
                 token_types: &token_types,
             };
-            let translated = embedded::translate_parser_body(
+            let translated = embedded::translate_parser_body_with_alias_module(
                 body,
                 &ctx,
                 &context_names.rules[rule_index].context_type,
                 &aliases.names,
+                &antlr4rust_token_alias_module,
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
-                semantic_rule
-                    .and_then(|semantic_rule| {
-                        semantic_rule
-                            .actions
-                            .iter()
-                            .find(|action| action.name == "init")
-                    })
-                    .map_or_else(
-                        || {
-                            io::Error::new(
-                                error.kind(),
-                                format!(
-                                    "cannot lower embedded @init body for parser rule {} \
-                                     ({rule_index}): {error}",
-                                    rule.name
-                                ),
-                            )
-                        },
-                        |action| {
-                            embedded_named_body_translation_error(
-                                data,
-                                &action.body_span,
-                                "parser @init",
-                                rule_index,
-                                &error,
-                            )
-                        },
-                    )
+                embedded_rule_action_translation_error(
+                    data,
+                    semantic_rule,
+                    "init",
+                    rule_index,
+                    &rule.name,
+                    &error,
+                )
             })?;
             record_antlr4rust_translation(
                 &translated,
@@ -10209,42 +10195,23 @@ fn build_embedded_parser_data(
                 site: embedded::ActionSite::After,
                 token_types: &token_types,
             };
-            let translated = embedded::translate_parser_body(
+            let translated = embedded::translate_parser_body_with_alias_module(
                 body,
                 &ctx,
                 &context_names.rules[rule_index].context_type,
                 &aliases.names,
+                &antlr4rust_token_alias_module,
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
-                semantic_rule
-                    .and_then(|semantic_rule| {
-                        semantic_rule
-                            .actions
-                            .iter()
-                            .find(|action| action.name == "after")
-                    })
-                    .map_or_else(
-                        || {
-                            io::Error::new(
-                                error.kind(),
-                                format!(
-                                    "cannot lower embedded @after body for parser rule {} \
-                                     ({rule_index}): {error}",
-                                    rule.name
-                                ),
-                            )
-                        },
-                        |action| {
-                            embedded_named_body_translation_error(
-                                data,
-                                &action.body_span,
-                                "parser @after",
-                                rule_index,
-                                &error,
-                            )
-                        },
-                    )
+                embedded_rule_action_translation_error(
+                    data,
+                    semantic_rule,
+                    "after",
+                    rule_index,
+                    &rule.name,
+                    &error,
+                )
             })?;
             record_antlr4rust_translation(
                 &translated,
@@ -10291,17 +10258,6 @@ fn build_embedded_parser_data(
             field.name, field.init
         );
     }
-    for item in &model.parser_members.impl_items {
-        let item = post_process_embedded(item, item, type_name);
-        let mut indented = String::with_capacity(item.len());
-        for (line_index, line) in item.lines().enumerate() {
-            if line_index > 0 {
-                indented.push_str("\n    ");
-            }
-            indented.push_str(line);
-        }
-        let _ = writeln!(out.impl_items, "    {indented}\n");
-    }
     let root_source = data
         .semantic
         .expect("embedded parser data has semantic grammar")
@@ -10313,8 +10269,34 @@ fn build_embedded_parser_data(
             .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, root_source));
         (aliases.names.clone(), aliases.values.clone())
     };
+    for item in &model.parser_members.impl_items {
+        let translated = embedded::translate_member_token_aliases(
+            item,
+            &root_alias_names,
+            &antlr4rust_token_alias_module,
+        )?;
+        antlr4rust_token_aliases.extend(translated.token_aliases.iter().filter_map(|name| {
+            root_alias_values
+                .get(name)
+                .map(|value| (name.clone(), *value))
+        }));
+        let item = post_process_embedded(item, &translated.source, type_name);
+        let mut indented = String::with_capacity(item.len());
+        for (line_index, line) in item.lines().enumerate() {
+            if line_index > 0 {
+                indented.push_str("\n    ");
+            }
+            indented.push_str(line);
+        }
+        let _ = writeln!(out.impl_items, "    {indented}\n");
+    }
     for item in &model.parser_members.module_items {
-        let translated = embedded::translate_member_token_alias_uses(item, &root_alias_names)?;
+        let translated = embedded::translate_member_token_aliases(
+            item,
+            &root_alias_names,
+            &antlr4rust_token_alias_module,
+        )?;
+        antlr4rust_direct_alias_imports.extend(translated.direct_alias_imports.iter().cloned());
         antlr4rust_token_aliases.extend(translated.token_aliases.iter().filter_map(|name| {
             root_alias_values
                 .get(name)
@@ -10357,6 +10339,8 @@ fn build_embedded_parser_data(
         out.module_items.push_str(&render_antlr4rust_token_aliases(
             &antlr4rust_token_aliases,
             &model.parser_members.module_symbol_cfgs,
+            &antlr4rust_direct_alias_imports,
+            &antlr4rust_token_alias_module,
         ));
     }
     let antlr4rust_context_rules =
@@ -10420,6 +10404,43 @@ fn embedded_named_body_translation_error(
              ({rule_index}): {error}"
         ),
     )
+}
+
+fn embedded_rule_action_translation_error(
+    data: &CodegenData<'_>,
+    semantic_rule: Option<&Rule>,
+    action_name: &str,
+    rule_index: usize,
+    rule_name: &str,
+    error: &io::Error,
+) -> io::Error {
+    semantic_rule
+        .and_then(|semantic_rule| {
+            semantic_rule
+                .actions
+                .iter()
+                .find(|action| action.name == action_name)
+        })
+        .map_or_else(
+            || {
+                io::Error::new(
+                    error.kind(),
+                    format!(
+                        "cannot lower embedded @{action_name} body for parser rule {rule_name} \
+                         ({rule_index}): {error}"
+                    ),
+                )
+            },
+            |action| {
+                embedded_named_body_translation_error(
+                    data,
+                    &action.body_span,
+                    &format!("parser @{action_name}"),
+                    rule_index,
+                    error,
+                )
+            },
+        )
 }
 
 fn build_structural_parser_surface(
@@ -13346,7 +13367,15 @@ impl<'a, L: TokenSource> __Antlr4RustInput<'a, L> {
     }
 
     fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView<'a>> {
-        self.0.lt(offset).map(__Antlr4RustTokenView)
+        let token = self.0.lt(offset).or_else(|| {
+            // ANTLR clamps every positive past-end request to the buffered EOF token.
+            if offset > 0 {
+                self.0.get(self.0.token_count().saturating_sub(1))
+            } else {
+                None
+            }
+        });
+        token.map(__Antlr4RustTokenView)
     }
 }
 
@@ -15362,15 +15391,31 @@ fn antlr4rust_token_alias_values(type_name: &str, data: &CodegenData<'_>) -> BTr
     aliases
 }
 
+fn antlr4rust_token_alias_module_name(member_symbols: &BTreeSet<String>) -> String {
+    let stem = embedded::ANTLR4RUST_TOKEN_ALIAS_MODULE;
+    if !member_symbols.contains(stem) {
+        return stem.to_owned();
+    }
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{stem}_{suffix}");
+        if !member_symbols.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
 fn render_antlr4rust_token_aliases(
     aliases: &BTreeMap<String, i32>,
     member_symbol_cfgs: &BTreeMap<String, Vec<Vec<String>>>,
+    direct_alias_imports: &BTreeSet<String>,
+    module_name: &str,
 ) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "#[allow(non_snake_case, dead_code, unused_imports)]\nmod {} {{",
-        embedded::ANTLR4RUST_TOKEN_ALIAS_MODULE
+        "#[allow(non_snake_case, dead_code, unused_imports)]\nmod {module_name} {{"
     );
     for (alias, token_type) in aliases {
         let value = if *token_type == TOKEN_EOF {
@@ -15378,7 +15423,9 @@ fn render_antlr4rust_token_aliases(
         } else {
             token_type.to_string()
         };
-        let declarations = member_symbol_cfgs.get(alias);
+        let declarations = (!direct_alias_imports.contains(alias))
+            .then(|| member_symbol_cfgs.get(alias))
+            .flatten();
         if declarations.is_some_and(|declarations| declarations.iter().any(Vec::is_empty)) {
             let _ = writeln!(out, "    pub(super) use super::{alias};");
             continue;

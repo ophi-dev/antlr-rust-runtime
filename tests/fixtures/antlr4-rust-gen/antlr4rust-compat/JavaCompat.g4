@@ -30,7 +30,7 @@ recordComponentList
                             && (rcs[i].ELLIPSIS().is_none() || i + 1 == count)
                     })
                 })
-                .unwrap_or(true)
+                .unwrap_or(false)
         }? EOF
         | ASSIGN EOF
       )
@@ -44,7 +44,7 @@ repeatedTokens
     : IDENTIFIER IDENTIFIER {
         _localctx.as_deref()
             .map(|ctx| ctx.IDENTIFIER_all().len() == 2)
-            .unwrap_or(true)
+            .unwrap_or(false)
     }? EOF
     ;
 
@@ -57,7 +57,7 @@ commonAccessorCollisions
                     && ctx.child_count().is_some()
                     && ctx.rule_node().is_some()
             })
-            .unwrap_or(true)
+            .unwrap_or(false)
     }? EOF
     ;
 
@@ -72,11 +72,20 @@ liveAttributes locals [int value=0]
     }? IDENTIFIER EOF
     ;
 
+sameBodyAttributes locals [int value=0]
+    : {
+        $value = 2;
+        _localctx.as_deref()
+            .map(|ctx| ctx.value == 2)
+            .unwrap_or(false)
+    }? IDENTIFIER EOF
+    ;
+
 keywordAccessor
     : type self {
         _localctx.as_deref()
             .map(|ctx| ctx.r#type().is_some() && ctx.self_().is_some())
-            .unwrap_or(true)
+            .unwrap_or(false)
     }? EOF
     ;
 

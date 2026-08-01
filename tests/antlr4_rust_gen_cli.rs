@@ -3676,7 +3676,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     );
     assert!(
         alias_collision_parser.contains(
-            "use self::{__antlr4rust_token_aliases::AliasCollisionParser_MEMBER_ONLY as \
+            "use self::{__antlr4rust_token_aliases_2::AliasCollisionParser_MEMBER_ONLY as \
              RenamedMemberOnly};"
         ),
         "member-only compatibility imports must target the generated alias namespace"
@@ -3689,12 +3689,49 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     assert!(
         alias_collision_parser.contains(
             "let before_scope = \
-             __antlr4rust_token_aliases::AliasCollisionParser_SCOPE;"
+             __antlr4rust_token_aliases_2::AliasCollisionParser_SCOPE;"
         ) && alias_collision_parser.contains(
             "let after_scope = \
-             __antlr4rust_token_aliases::AliasCollisionParser_SCOPE;"
+             __antlr4rust_token_aliases_2::AliasCollisionParser_SCOPE;"
         ) && alias_collision_parser.contains("let AliasCollisionParser_SCOPE = 99;"),
         "compatibility aliases must respect nested lexical bindings"
+    );
+    assert!(
+        alias_collision_parser.contains("mod __antlr4rust_token_aliases_2 {")
+            && alias_collision_parser.contains("struct __antlr4rust_token_aliases;"),
+        "the generated alias module must avoid user member symbols"
+    );
+    assert!(
+        alias_collision_parser
+            .contains("__antlr4rust_token_aliases_2::AliasCollisionParser_MODULE == Self::MODULE"),
+        "member methods must lower compatibility aliases"
+    );
+    assert!(
+        alias_collision_parser
+            .contains("use self::__antlr4rust_token_aliases_2::AliasCollisionParser_DIRECT;")
+            && alias_collision_parser.contains("const AliasCollisionParser_DIRECT")
+            && !alias_collision_parser.contains("use super::AliasCollisionParser_DIRECT"),
+        "unrenamed self imports must resolve to a defined compatibility alias"
+    );
+    assert!(
+        alias_collision_parser.contains("use std::fmt::Write as _;")
+            && alias_collision_parser
+                .contains("__antlr4rust_token_aliases_2::AliasCollisionParser_MODULE == MODULE"),
+        "member impls must preserve local uses while lowering compatibility aliases"
+    );
+    assert!(
+        ["MATCH", "ARM", "IF", "FOR", "PARAM"]
+            .iter()
+            .all(|name| !alias_collision_parser
+                .contains(&format!("const AliasCollisionParser_{name}"))),
+        "match, control-flow, and function bindings must not request compatibility aliases"
+    );
+    assert!(
+        alias_collision_parser.contains(
+            "AliasCollisionParser_FIELD: \
+             __antlr4rust_token_aliases_2::AliasCollisionParser_FIELD"
+        ),
+        "struct field names must remain intact while alias values are qualified"
     );
     assert!(
         java_parser.contains("pub fn r#type(&self) -> Option<TypeContext<'a>>")
@@ -3721,14 +3758,18 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     );
     let live_context = java_parser
         .find(
-            "let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>",
+            "__active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>",
         )
         .expect("live-attribute predicate should materialize its active context");
     assert!(
         java_parser[live_context..].starts_with(
-            "let _localctx = __active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(\n    &__ctx,\n    &__attrs,\n"
+            "__active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(\n    &__ctx,\n    &__attrs,\n"
         ),
         "active context must receive the rule's live attributes"
+    );
+    assert!(
+        !java_parser.contains("let _localctx"),
+        "active contexts must materialize at each use so same-body attribute writes stay visible"
     );
     let excerpt = |source: &str| {
         source
@@ -3752,7 +3793,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                     "pub fn self_",
                     "AliasCollisionParser_EOF",
                     "AliasCollisionParser_ID",
-                    "let _localctx = __active_context_view",
+                    "__active_context_view_with_attrs::<",
                 ]
                 .iter()
                 .any(|needle| line.contains(needle))
@@ -3956,6 +3997,11 @@ mod antlr4rust_compat_tests {
         let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
         assert!(parser.live_attributes().is_ok());
         assert_eq!(parser.number_of_syntax_errors(), 0);
+
+        let lexer = JavaCompatLexer::new(InputStream::new("value"));
+        let mut parser = JavaCompatParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.same_body_attributes().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]
@@ -4049,6 +4095,25 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
             "BadLexer",
             "lexer grammar BadLexer;\n\n\
              A: 'a' { let _ = recog.input.la(1); };\n"
+                .to_owned(),
+        ),
+        (
+            "BadLexerContext",
+            "lexer grammar BadLexerContext;\n\n\
+             A: 'a' { let _ = _localctx.as_deref(); };\n"
+                .to_owned(),
+        ),
+        (
+            "AccessorCollision",
+            "grammar AccessorCollision;\n\n\
+             start\n\
+                 : item+ item_all { _localctx.as_deref().is_some() }? EOF\n\
+                 ;\n\
+             item: ITEM;\n\
+             item_all: ALL;\n\
+             ITEM: 'item';\n\
+             ALL: 'all';\n\
+             WS: [ \\t\\r\\n]+ -> skip;\n"
                 .to_owned(),
         ),
     ]);
@@ -4190,35 +4255,27 @@ fn imported_parser_predicate_generates_typed_hook_from_structural_body() {
 #[test]
 fn imported_antlr4rust_alias_uses_the_action_source_owner() {
     let temp = temporary_directory("imported-antlr4rust-alias");
-    let root = temp.path().join("RootParser.g4");
-    let delegate = temp.path().join("DelegateParser.g4");
-    let tokens = temp.path().join("Tokens.g4");
+    let root = temp.path().join("Root.g4");
+    let delegate = temp.path().join("Delegate.g4");
     let out = temp.path().join("generated");
     fs::write(
         &root,
-        "parser grammar RootParser;\n\
-         import DelegateParser;\n\
-         options { tokenVocab=Tokens; }\n\
-         start: delegated EOF;\n",
+        "grammar Root;\n\
+         import Delegate;\n\
+         start: delegated EOF;\n\
+         WS: [ \\t\\r\\n]+ -> skip;\n",
     )
     .expect("root grammar should be writable");
     fs::write(
         &delegate,
-        "parser grammar DelegateParser;\n\
-         delegated: {DelegateParser_ID == ID}? ID;\n",
+        "grammar Delegate;\n\
+         delegated: {DelegateParser_ID == ID}? ID;\n\
+         ID: [a-z]+;\n",
     )
     .expect("delegate grammar should be writable");
-    fs::write(
-        &tokens,
-        "lexer grammar Tokens;\n\
-         ID: [a-z]+;\n\
-         WS: [ \\t\\r\\n]+ -> skip;\n",
-    )
-    .expect("token grammar should be writable");
 
     let output = run_antlr4_rust_gen(&[
         root.as_os_str(),
-        tokens.as_os_str(),
         OsStr::new("-I"),
         temp.path().as_os_str(),
         OsStr::new("--actions"),
@@ -4243,7 +4300,7 @@ fn imported_antlr4rust_alias_uses_the_action_source_owner() {
         .collect::<Vec<_>>()
         .join("\n");
     insta::assert_snapshot!("imported_antlr4rust_alias_owner", alias_excerpt);
-    assert_generated_modules_compile(temp.path(), &["tokens.rs", "root_parser.rs"]);
+    assert_generated_modules_compile(temp.path(), &["root_lexer.rs", "root_parser.rs"]);
 }
 
 /// Issue #241: antlr4rust grammars use `recog` as the parser-predicate receiver.

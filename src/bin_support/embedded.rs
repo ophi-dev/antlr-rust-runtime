@@ -432,23 +432,58 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
 }
 
 fn member_cfg_predicates(attributes: &str) -> Vec<String> {
-    attributes
-        .lines()
-        .filter_map(|attribute| {
-            let content = attribute
-                .trim()
-                .strip_prefix("#[")?
-                .strip_suffix(']')?
-                .trim();
-            let predicate = content.strip_prefix("cfg")?.trim();
-            predicate
-                .strip_prefix('(')?
-                .strip_suffix(')')
-                .map(str::trim)
-                .filter(|predicate| !predicate.is_empty())
-                .map(str::to_owned)
-        })
-        .collect()
+    let lexemes = lex_rust_body(attributes);
+    let delimiters = RustDelimiterMap::new(&lexemes);
+    let mut predicates = Vec::new();
+    let mut position = 0;
+    while position < lexemes.len() {
+        if lexemes[position].kind != RustLexemeKind::Punctuation(b'#') {
+            position += 1;
+            continue;
+        }
+        let Some(attribute_open) = next_significant(&lexemes, position) else {
+            break;
+        };
+        if lexemes[attribute_open].kind != RustLexemeKind::Punctuation(b'[') {
+            position += 1;
+            continue;
+        }
+        let Some(attribute_close) = delimiters.pairs[attribute_open] else {
+            position += 1;
+            continue;
+        };
+        position = attribute_close + 1;
+
+        let Some(name) = next_significant(&lexemes, attribute_open) else {
+            continue;
+        };
+        if name >= attribute_close
+            || lexemes[name].kind != RustLexemeKind::Identifier
+            || lexeme_text(attributes, lexemes[name]) != "cfg"
+        {
+            continue;
+        }
+        let Some(predicate_open) = next_significant(&lexemes, name) else {
+            continue;
+        };
+        if predicate_open >= attribute_close
+            || lexemes[predicate_open].kind != RustLexemeKind::Punctuation(b'(')
+        {
+            continue;
+        }
+        let Some(predicate_close) = delimiters.pairs[predicate_open] else {
+            continue;
+        };
+        if predicate_close >= attribute_close {
+            continue;
+        }
+        let predicate =
+            attributes[lexemes[predicate_open].end..lexemes[predicate_close].start].trim();
+        if !predicate.is_empty() {
+            predicates.push(predicate.to_owned());
+        }
+    }
+    predicates
 }
 
 fn record_member_module_symbols(
@@ -494,6 +529,7 @@ struct UseTreeTarget {
     name: String,
     range: Range<usize>,
     local_module_leaf: bool,
+    binding: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -556,8 +592,9 @@ impl UseTreeBindingParser<'_> {
         if self.peek_text() == Some("as") {
             self.position += 1;
             let alias = self.consume_identifier().ok_or_else(invalid_use_tree)?;
-            self.record_target(&path, global);
-            if alias.name != "_" {
+            let binding = (alias.name != "_").then_some(alias);
+            self.record_target(&path, global, binding.as_ref());
+            if let Some(alias) = binding {
                 self.record_binding(alias);
             }
             return Ok(());
@@ -567,13 +604,16 @@ impl UseTreeBindingParser<'_> {
         }
         if component.name == "self" {
             if let Some(parent) = prefix.last() {
-                self.record_target(prefix, global);
-                self.record_binding(parent.clone());
+                let binding = parent.clone();
+                self.record_target(prefix, global, Some(&binding));
+                self.record_binding(binding);
             }
         } else {
-            self.record_target(&path, global);
-            if !matches!(component.name.as_str(), "crate" | "super") {
-                self.record_binding(component);
+            let binding =
+                (!matches!(component.name.as_str(), "crate" | "super")).then_some(component);
+            self.record_target(&path, global, binding.as_ref());
+            if let Some(binding) = binding {
+                self.record_binding(binding);
             }
         }
         Ok(())
@@ -595,7 +635,12 @@ impl UseTreeBindingParser<'_> {
         }
     }
 
-    fn record_target(&mut self, path: &[UsePathComponent], global: bool) {
+    fn record_target(
+        &mut self,
+        path: &[UsePathComponent],
+        global: bool,
+        binding: Option<&UsePathComponent>,
+    ) {
         let Some(target) = path.last() else {
             return;
         };
@@ -607,6 +652,7 @@ impl UseTreeBindingParser<'_> {
                 && path
                     .first()
                     .is_some_and(|component| component.name == "self"),
+            binding: binding.map(|binding| binding.name.clone()),
         });
     }
 
@@ -679,40 +725,19 @@ fn invalid_use_tree() -> io::Error {
 pub(crate) struct MemberTokenAliasTranslation {
     pub(crate) source: String,
     pub(crate) token_aliases: BTreeSet<String>,
+    pub(crate) direct_alias_imports: BTreeSet<String>,
 }
 
-pub(crate) fn translate_member_token_alias_uses(
+pub(crate) fn translate_member_token_aliases(
     item: &str,
     token_aliases: &BTreeSet<String>,
+    token_alias_module: &str,
 ) -> io::Result<MemberTokenAliasTranslation> {
-    let lexemes = lex_rust_body(item);
-    let Some(use_lexeme) = lexemes.iter().find(|lexeme| {
-        lexeme.kind == RustLexemeKind::Identifier && lexeme_text(item, **lexeme) == "use"
-    }) else {
-        return Ok(MemberTokenAliasTranslation {
-            source: item.to_owned(),
-            token_aliases: BTreeSet::new(),
-        });
-    };
-    let tree_start = use_lexeme.end;
-    let analysis = analyze_use_tree(&item[tree_start..])?;
-    let mut used = BTreeSet::new();
-    let mut replacements = analysis
-        .targets
-        .into_iter()
-        .filter(|target| target.local_module_leaf && token_aliases.contains(&target.name))
-        .map(|target| {
-            used.insert(target.name.clone());
-            RustReplacement {
-                range: tree_start + target.range.start..tree_start + target.range.end,
-                text: format!("{ANTLR4RUST_TOKEN_ALIAS_MODULE}::{}", target.name),
-            }
-        })
-        .collect::<Vec<_>>();
-    replacements.sort_by_key(|replacement| replacement.range.start);
+    let lowered = lower_antlr4rust_surface(item, token_aliases, token_alias_module, None, false)?;
     Ok(MemberTokenAliasTranslation {
-        source: apply_rust_replacements(item, &replacements)?,
-        token_aliases: used,
+        source: lowered.source,
+        token_aliases: lowered.token_aliases,
+        direct_alias_imports: lowered.direct_alias_imports,
     })
 }
 
@@ -1872,8 +1897,10 @@ pub(crate) fn translate_body(body: &str, ctx: &TranslationCtx<'_>) -> io::Result
 /// Translates ANTLR attributes and the observed antlr4rust parser ABI.
 ///
 /// Predicates are always block expressions so a rendered body may contain
-/// statements before its final boolean expression. `_localctx` bodies also
-/// need a block to hold the active typed-context view.
+/// statements before its final boolean expression. Each `_localctx` read
+/// materializes a fresh typed-context view so earlier writes in the same body
+/// are visible through its copied compatibility attributes.
+#[cfg(test)]
 pub(crate) fn translate_parser_body(
     body: &str,
     ctx: &TranslationCtx<'_>,
@@ -1881,13 +1908,46 @@ pub(crate) fn translate_parser_body(
     antlr4rust_token_aliases: &BTreeSet<String>,
     kind: ParserBodyKind,
 ) -> io::Result<ParserBodyTranslation> {
+    translate_parser_body_with_alias_module(
+        body,
+        ctx,
+        active_context_type,
+        antlr4rust_token_aliases,
+        ANTLR4RUST_TOKEN_ALIAS_MODULE,
+        kind,
+    )
+}
+
+pub(crate) fn translate_parser_body_with_alias_module(
+    body: &str,
+    ctx: &TranslationCtx<'_>,
+    active_context_type: &str,
+    antlr4rust_token_aliases: &BTreeSet<String>,
+    token_alias_module: &str,
+    kind: ParserBodyKind,
+) -> io::Result<ParserBodyTranslation> {
     let translated = translate_body(body, ctx)?;
+    let live_attrs = if ctx.model.rules[ctx.rule_index].has_attrs() {
+        "&__attrs"
+    } else {
+        "&()"
+    };
+    let local_context = format!(
+        "__active_context_view_with_attrs::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    {live_attrs},\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n)"
+    );
     let LoweredAntlr4RustBody {
         source,
         uses_input,
         uses_local_context,
         token_aliases,
-    } = lower_antlr4rust_surface(&translated, antlr4rust_token_aliases)?;
+        ..
+    } = lower_antlr4rust_surface(
+        &translated,
+        antlr4rust_token_aliases,
+        token_alias_module,
+        Some(&local_context),
+        true,
+    )?;
     if kind == ParserBodyKind::Action && !uses_local_context {
         return Ok(ParserBodyTranslation {
             source,
@@ -1898,18 +1958,6 @@ pub(crate) fn translate_parser_body(
     }
 
     let mut out = String::from("{\n");
-    if uses_local_context {
-        let live_attrs = if ctx.model.rules[ctx.rule_index].has_attrs() {
-            "&__attrs"
-        } else {
-            "&()"
-        };
-        writeln!(
-            out,
-            "let _localctx = __active_context_view_with_attrs::<{active_context_type}<'_, __ActiveParserContext>>(\n    &__ctx,\n    {live_attrs},\n    self.base.active_invocation_states(),\n    self.base.parse_tree_storage(),\n    self.base.token_store(),\n);"
-        )
-        .expect("writing to a string cannot fail");
-    }
     out.push_str(&source);
     out.push_str("\n}");
     Ok(ParserBodyTranslation {
@@ -1934,6 +1982,7 @@ struct LoweredAntlr4RustBody {
     uses_input: bool,
     uses_local_context: bool,
     token_aliases: BTreeSet<String>,
+    direct_alias_imports: BTreeSet<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1961,14 +2010,18 @@ struct RustReplacement {
 fn lower_antlr4rust_surface(
     body: &str,
     token_aliases: &BTreeSet<String>,
+    token_alias_module: &str,
+    local_context_expression: Option<&str>,
+    lower_receivers: bool,
 ) -> io::Result<LoweredAntlr4RustBody> {
     let lexemes = lex_rust_body(body);
+    let delimiters = RustDelimiterMap::new(&lexemes);
     let has_token_alias_identifier = lexemes.iter().any(|lexeme| {
         lexeme.kind == RustLexemeKind::Identifier
             && token_aliases.contains(rust_identifier_name(lexeme_text(body, *lexeme)))
     });
     let local_bindings = if has_token_alias_identifier {
-        local_antlr4rust_alias_bindings(body, &lexemes, token_aliases)?
+        local_antlr4rust_alias_bindings(body, &lexemes, token_aliases, token_alias_module)?
     } else {
         AliasBindingScopes::default()
     };
@@ -1986,24 +2039,44 @@ fn lower_antlr4rust_surface(
         if token_aliases.contains(alias_identifier)
             && !local_bindings.binding_positions.contains(&position)
             && !local_bindings.is_bound(alias_identifier, position)
+            && !local_bindings
+                .use_target_replacements
+                .iter()
+                .any(|replacement| {
+                    replacement.range.start == lexeme.start && replacement.range.end == lexeme.end
+                })
             && is_unqualified_identifier(&lexemes, position)
+            && !is_pattern_path_or_field(&lexemes, position)
         {
             used_token_aliases.insert(alias_identifier.to_owned());
+            let qualified = format!("{token_alias_module}::{alias_identifier}");
+            let text = if is_struct_field_shorthand(body, &lexemes, position, &delimiters) {
+                format!("{source_identifier}: {qualified}")
+            } else {
+                qualified
+            };
             replacements.push(RustReplacement {
                 range: lexeme.start..lexeme.end,
-                text: format!("{ANTLR4RUST_TOKEN_ALIAS_MODULE}::{alias_identifier}"),
+                text,
             });
         }
         // Standalone `recog` and `_localctx` are reserved compatibility
         // receivers. Unknown shapes fail here so diagnostics retain the
         // owning grammar coordinate instead of surfacing from rustc later.
         match source_identifier {
+            _ if !lower_receivers => {}
             "recog" if is_standalone_identifier(&lexemes, position) => {
                 replacements.push(recog_input_replacement(body, &lexemes, position)?);
                 uses_input = true;
             }
             "_localctx" if is_standalone_identifier(&lexemes, position) => {
-                replacements.push(local_context_replacement(body, &lexemes, position)?);
+                replacements.push(local_context_replacement(
+                    body,
+                    &lexemes,
+                    position,
+                    local_context_expression
+                        .expect("parser receiver lowering provides a context expression"),
+                )?);
                 uses_local_context = true;
             }
             _ => {}
@@ -2015,11 +2088,18 @@ fn lower_antlr4rust_surface(
         uses_input,
         uses_local_context,
         token_aliases: used_token_aliases,
+        direct_alias_imports: local_bindings.direct_alias_imports,
     })
 }
 
 pub(crate) fn validate_lexer_body_compatibility_receivers(body: &str) -> io::Result<()> {
-    let lowered = lower_antlr4rust_surface(body, &BTreeSet::new())?;
+    let lowered = lower_antlr4rust_surface(
+        body,
+        &BTreeSet::new(),
+        ANTLR4RUST_TOKEN_ALIAS_MODULE,
+        Some("__antlr4rust_lexer_context"),
+        true,
+    )?;
     if lowered.uses_input {
         return Err(unsupported_antlr4rust(
             "`recog.input` is only supported in embedded parser bodies",
@@ -2039,6 +2119,7 @@ struct AliasBindingScopes {
     scopes: BTreeMap<String, Vec<Range<usize>>>,
     use_target_aliases: BTreeSet<String>,
     use_target_replacements: Vec<RustReplacement>,
+    direct_alias_imports: BTreeSet<String>,
 }
 
 impl AliasBindingScopes {
@@ -2060,6 +2141,7 @@ fn local_antlr4rust_alias_bindings(
     body: &str,
     lexemes: &[RustLexeme],
     token_aliases: &BTreeSet<String>,
+    token_alias_module: &str,
 ) -> io::Result<AliasBindingScopes> {
     let delimiters = RustDelimiterMap::new(lexemes);
     let mut bindings = AliasBindingScopes::default();
@@ -2095,7 +2177,7 @@ fn local_antlr4rust_alias_bindings(
                         pattern_alias_bindings(body, lexemes, start, end, token_aliases);
                     let scope = if is_conditional_let(body, lexemes, position) {
                         delimiters
-                            .next_block(lexemes, end + 1)
+                            .control_flow_body_block(lexemes, end + 1)
                             .and_then(|open| delimiters.block_contents(open))
                             .unwrap_or(end..end)
                     } else {
@@ -2119,7 +2201,7 @@ fn local_antlr4rust_alias_bindings(
                     let pattern_bindings =
                         pattern_alias_bindings(body, lexemes, start, end, token_aliases);
                     let scope = delimiters
-                        .next_block(lexemes, end + 1)
+                        .control_flow_body_block(lexemes, end + 1)
                         .and_then(|open| delimiters.block_contents(open))
                         .unwrap_or(end..end);
                     bindings.record(pattern_bindings, scope);
@@ -2138,6 +2220,7 @@ fn local_antlr4rust_alias_bindings(
                     let use_source = &body[source_start..lexemes[end].end];
                     let analysis = analyze_use_tree(use_source)?;
                     let scope = delimiters.enclosing_block(position);
+                    let module_scope = scope == (0..lexemes.len());
                     let use_bindings =
                         analysis
                             .binding_ranges
@@ -2154,11 +2237,14 @@ fn local_antlr4rust_alias_bindings(
                     for target in analysis.targets.into_iter().filter(|target| {
                         target.local_module_leaf && token_aliases.contains(&target.name)
                     }) {
+                        if module_scope && target.binding.as_deref() == Some(target.name.as_str()) {
+                            bindings.direct_alias_imports.insert(target.name.clone());
+                        }
                         bindings.use_target_aliases.insert(target.name.clone());
                         bindings.use_target_replacements.push(RustReplacement {
                             range: source_start + target.range.start
                                 ..source_start + target.range.end,
-                            text: format!("{ANTLR4RUST_TOKEN_ALIAS_MODULE}::{}", target.name),
+                            text: format!("{token_alias_module}::{}", target.name),
                         });
                     }
                 }
@@ -2200,7 +2286,16 @@ fn local_antlr4rust_alias_bindings(
             _ => {}
         }
     }
-    collect_closure_alias_bindings(body, lexemes, token_aliases, &delimiters, &mut bindings);
+    let match_patterns =
+        collect_match_alias_bindings(body, lexemes, token_aliases, &delimiters, &mut bindings);
+    collect_closure_alias_bindings(
+        body,
+        lexemes,
+        token_aliases,
+        &delimiters,
+        &match_patterns,
+        &mut bindings,
+    );
     Ok(bindings)
 }
 
@@ -2284,6 +2379,34 @@ impl RustDelimiterMap {
                 && self.enclosing_block(position) == self.enclosing_block(start)
                 && self.pairs[position].is_some_and(|close| close > position)
         })
+    }
+
+    fn control_flow_body_block(&self, lexemes: &[RustLexeme], start: usize) -> Option<usize> {
+        let expression_start = (start..lexemes.len())
+            .find(|&position| lexemes[position].kind != RustLexemeKind::Trivia)?;
+        let mut position = expression_start;
+        while position < lexemes.len() {
+            match lexemes[position].kind {
+                RustLexemeKind::Punctuation(b'(' | b'[') => {
+                    position = self.pairs[position]? + 1;
+                    continue;
+                }
+                RustLexemeKind::Punctuation(b'{') => {
+                    let expression_block = position == expression_start
+                        || previous_significant(lexemes, position).is_some_and(|previous| {
+                            lexemes[previous].kind == RustLexemeKind::Punctuation(b'!')
+                        });
+                    if expression_block {
+                        position = self.pairs[position]? + 1;
+                        continue;
+                    }
+                    return Some(position);
+                }
+                RustLexemeKind::Punctuation(b';' | b'}') => return None,
+                _ => position += 1,
+            }
+        }
+        None
     }
 
     fn block_contents(&self, open: usize) -> Option<Range<usize>> {
@@ -2414,12 +2537,7 @@ fn function_alias_bindings(
     token_aliases: &BTreeSet<String>,
     delimiters: &RustDelimiterMap,
 ) -> Option<(Vec<(String, usize)>, Range<usize>)> {
-    let open = find_top_level_lexeme(
-        body,
-        lexemes,
-        function_name + 1,
-        TopLevelLexeme::Punctuation(b'('),
-    )?;
+    let open = function_parameter_list_open(lexemes, function_name, delimiters)?;
     let close = delimiters.pairs.get(open).copied().flatten()?;
     let body_open = delimiters.next_block(lexemes, close + 1)?;
     let scope = delimiters.block_contents(body_open)?;
@@ -2445,16 +2563,171 @@ fn function_alias_bindings(
     Some((bindings, scope))
 }
 
-fn collect_closure_alias_bindings(
+fn function_parameter_list_open(
+    lexemes: &[RustLexeme],
+    function_name: usize,
+    delimiters: &RustDelimiterMap,
+) -> Option<usize> {
+    if lexemes.get(function_name)?.kind != RustLexemeKind::Identifier {
+        return None;
+    }
+    let mut angle_depth = 0_usize;
+    let mut position = function_name + 1;
+    while position < lexemes.len() {
+        match lexemes[position].kind {
+            RustLexemeKind::Punctuation(b'<') => angle_depth += 1,
+            RustLexemeKind::Punctuation(b'>') if angle_depth > 0 => angle_depth -= 1,
+            RustLexemeKind::Punctuation(b'(') if angle_depth == 0 => return Some(position),
+            RustLexemeKind::Punctuation(b'(' | b'[') => {
+                position = delimiters.pairs[position]? + 1;
+                continue;
+            }
+            RustLexemeKind::Punctuation(b'{') if angle_depth > 0 => {
+                position = delimiters.pairs[position]? + 1;
+                continue;
+            }
+            RustLexemeKind::Punctuation(b';' | b'{') if angle_depth == 0 => return None,
+            _ => {}
+        }
+        position += 1;
+    }
+    None
+}
+
+fn collect_match_alias_bindings(
     body: &str,
     lexemes: &[RustLexeme],
     token_aliases: &BTreeSet<String>,
     delimiters: &RustDelimiterMap,
     bindings: &mut AliasBindingScopes,
+) -> Vec<Range<usize>> {
+    let mut pattern_ranges = Vec::new();
+    for (position, lexeme) in lexemes.iter().enumerate() {
+        if lexeme.kind != RustLexemeKind::Identifier
+            || lexeme_text(body, *lexeme) != "match"
+            || !is_standalone_identifier(lexemes, position)
+        {
+            continue;
+        }
+        let Some(open) = delimiters.control_flow_body_block(lexemes, position + 1) else {
+            continue;
+        };
+        let Some(close) = delimiters.pairs[open] else {
+            continue;
+        };
+        let mut arm_start = open + 1;
+        while arm_start < close {
+            arm_start = (arm_start..close)
+                .find(|&candidate| {
+                    lexemes[candidate].kind != RustLexemeKind::Trivia
+                        && lexemes[candidate].kind != RustLexemeKind::Punctuation(b',')
+                })
+                .unwrap_or(close);
+            if arm_start >= close {
+                break;
+            }
+            let Some(arrow) = find_match_arm_fat_arrow(lexemes, arm_start, close, delimiters)
+            else {
+                break;
+            };
+            let pattern_end = find_top_level_lexeme(
+                body,
+                &lexemes[..arrow],
+                arm_start,
+                TopLevelLexeme::Identifier("if"),
+            )
+            .unwrap_or(arrow);
+            pattern_ranges.push(arm_start..pattern_end);
+            let pattern_bindings = match_pattern_alias_bindings(
+                body,
+                lexemes,
+                arm_start,
+                pattern_end,
+                token_aliases,
+                delimiters,
+            );
+            let Some(body_start) = next_significant(lexemes, arrow) else {
+                break;
+            };
+            let body_end = delimiters.expression_end(lexemes, body_start).min(close);
+            bindings.record(pattern_bindings, arm_start..body_end);
+            arm_start = body_end.saturating_add(1);
+        }
+    }
+    pattern_ranges
+}
+
+fn match_pattern_alias_bindings(
+    body: &str,
+    lexemes: &[RustLexeme],
+    start: usize,
+    end: usize,
+    token_aliases: &BTreeSet<String>,
+    delimiters: &RustDelimiterMap,
+) -> Vec<(String, usize)> {
+    (start..end)
+        .filter_map(|position| {
+            let lexeme = lexemes[position];
+            if lexeme.kind != RustLexemeKind::Identifier
+                || !is_unqualified_identifier(lexemes, position)
+            {
+                return None;
+            }
+            let explicit_at_binding = next_significant(lexemes, position)
+                .is_some_and(|next| lexemes[next].kind == RustLexemeKind::Punctuation(b'@'));
+            let explicit_modifier =
+                previous_significant(lexemes, position).is_some_and(|previous| {
+                    lexemes[previous].kind == RustLexemeKind::Identifier
+                        && matches!(lexeme_text(body, lexemes[previous]), "ref" | "mut")
+                });
+            let field_shorthand = is_struct_field_shorthand(body, lexemes, position, delimiters);
+            (explicit_at_binding || explicit_modifier || field_shorthand)
+                .then(|| alias_binding(body, lexeme, position, token_aliases))
+                .flatten()
+        })
+        .collect()
+}
+
+fn find_match_arm_fat_arrow(
+    lexemes: &[RustLexeme],
+    start: usize,
+    end: usize,
+    delimiters: &RustDelimiterMap,
+) -> Option<usize> {
+    let mut position = start;
+    while position < end {
+        let lexeme = lexemes[position];
+        if lexeme.kind == RustLexemeKind::Punctuation(b'=')
+            && let Some(arrow) = next_significant(lexemes, position)
+            && lexemes[arrow].kind == RustLexemeKind::Punctuation(b'>')
+        {
+            return Some(arrow);
+        }
+        if matches!(lexeme.kind, RustLexemeKind::Punctuation(b'(' | b'[' | b'{'))
+            && let Some(close) = delimiters.pairs[position]
+        {
+            position = close + 1;
+            continue;
+        }
+        position += 1;
+    }
+    None
+}
+
+fn collect_closure_alias_bindings(
+    body: &str,
+    lexemes: &[RustLexeme],
+    token_aliases: &BTreeSet<String>,
+    delimiters: &RustDelimiterMap,
+    match_patterns: &[Range<usize>],
+    bindings: &mut AliasBindingScopes,
 ) {
     let mut position = 0;
     while position < lexemes.len() {
         if lexemes[position].kind != RustLexemeKind::Punctuation(b'|')
+            || match_patterns
+                .iter()
+                .any(|pattern| pattern.contains(&position))
             || !can_start_closure(lexemes, position, body)
         {
             position += 1;
@@ -2529,6 +2802,94 @@ fn is_pattern_path_or_field(lexemes: &[RustLexeme], position: usize) -> bool {
     })
 }
 
+fn is_struct_field_shorthand(
+    body: &str,
+    lexemes: &[RustLexeme],
+    position: usize,
+    delimiters: &RustDelimiterMap,
+) -> bool {
+    let block = delimiters.enclosing_block(position);
+    let Some(open) = block.start.checked_sub(1) else {
+        return false;
+    };
+    let Some(close) = delimiters.pairs.get(open).copied().flatten() else {
+        return false;
+    };
+    if lexemes[open].kind != RustLexemeKind::Punctuation(b'{')
+        || !is_struct_literal_open(body, lexemes, open)
+        || (open + 1..position).any(|candidate| {
+            matches!(
+                lexemes[candidate].kind,
+                RustLexemeKind::Punctuation(b'(' | b'[')
+            ) && delimiters.pairs[candidate].is_some_and(|end| end >= position)
+        })
+    {
+        return false;
+    }
+    let field_start = previous_significant(lexemes, position).is_some_and(|previous| {
+        previous == open || lexemes[previous].kind == RustLexemeKind::Punctuation(b',')
+    });
+    let field_end = next_significant(lexemes, position).is_some_and(|next| {
+        next == close || lexemes[next].kind == RustLexemeKind::Punctuation(b',')
+    });
+    field_start && field_end
+}
+
+fn is_struct_literal_open(body: &str, lexemes: &[RustLexeme], open: usize) -> bool {
+    let Some(mut path_start) = previous_significant(lexemes, open) else {
+        return false;
+    };
+    if lexemes[path_start].kind != RustLexemeKind::Identifier {
+        return false;
+    }
+    if matches!(
+        lexeme_text(body, lexemes[path_start]),
+        "else" | "loop" | "unsafe" | "async" | "const"
+    ) {
+        return false;
+    }
+    while let Some(second_colon) = previous_significant(lexemes, path_start) {
+        if lexemes[second_colon].kind != RustLexemeKind::Punctuation(b':') {
+            break;
+        }
+        let Some(first_colon) = previous_significant(lexemes, second_colon) else {
+            break;
+        };
+        if lexemes[first_colon].kind != RustLexemeKind::Punctuation(b':') {
+            break;
+        }
+        let Some(component) = previous_significant(lexemes, first_colon) else {
+            break;
+        };
+        if lexemes[component].kind != RustLexemeKind::Identifier {
+            break;
+        }
+        path_start = component;
+    }
+    previous_significant(lexemes, path_start).is_none_or(|before| {
+        lexemes[before].kind != RustLexemeKind::Identifier
+            || !matches!(
+                lexeme_text(body, lexemes[before]),
+                "if" | "while"
+                    | "for"
+                    | "in"
+                    | "match"
+                    | "else"
+                    | "loop"
+                    | "unsafe"
+                    | "async"
+                    | "const"
+                    | "fn"
+                    | "struct"
+                    | "enum"
+                    | "union"
+                    | "impl"
+                    | "trait"
+                    | "mod"
+            )
+    })
+}
+
 fn recog_input_replacement(
     body: &str,
     lexemes: &[RustLexeme],
@@ -2567,6 +2928,7 @@ fn local_context_replacement(
     body: &str,
     lexemes: &[RustLexeme],
     position: usize,
+    local_context_expression: &str,
 ) -> io::Result<RustReplacement> {
     let method = required_member_call(body, lexemes, position, "_localctx")?;
     let method_name = lexeme_text(body, lexemes[method]);
@@ -2575,10 +2937,10 @@ fn local_context_replacement(
             "unsupported `_localctx.{method_name}` accessor"
         )));
     }
-    require_empty_call_arguments(body, lexemes, method, "_localctx")?;
+    let close = require_empty_call_arguments(body, lexemes, method, "_localctx")?;
     Ok(RustReplacement {
-        range: lexemes[method].start..lexemes[method].end,
-        text: "as_ref".to_owned(),
+        range: lexemes[position].start..lexemes[close].end,
+        text: local_context_expression.to_owned(),
     })
 }
 
@@ -2614,7 +2976,7 @@ fn require_empty_call_arguments(
     lexemes: &[RustLexeme],
     method: usize,
     display_receiver: &str,
-) -> io::Result<()> {
+) -> io::Result<usize> {
     let method_name = lexeme_text(body, lexemes[method]);
     let open = next_significant(lexemes, method)
         .filter(|&index| lexemes[index].kind == RustLexemeKind::Punctuation(b'('))
@@ -2625,8 +2987,7 @@ fn require_empty_call_arguments(
             unsupported_antlr4rust(&format!(
                 "`{display_receiver}.{method_name}()` does not accept arguments"
             ))
-        })?;
-    Ok(())
+        })
 }
 
 fn require_nonempty_call_argument(
@@ -4914,7 +5275,9 @@ mod tests {
                 *,\n\
             };\n\
             use ::{std::fmt};\n\
-            #[cfg(any())]\n\
+            #[cfg(\n\
+                any()\n\
+            )]\n\
             use crate::CONDITIONAL as AliasTypeParser_CONDITIONAL;\n";
         let mut members = MembersModel::default();
         classify_members(body, &mut members).expect("members classify");
@@ -4937,14 +5300,15 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_member_imports_of_compatibility_aliases() {
+    fn rewrites_member_compatibility_aliases() {
         let aliases = BTreeSet::from([
             "CompatParser_ID".to_owned(),
             "CompatParser_OTHER".to_owned(),
         ]);
-        let translated = translate_member_token_alias_uses(
+        let translated = translate_member_token_aliases(
             "use self::{CompatParser_ID as Renamed, nested::CompatParser_OTHER};",
             &aliases,
+            ANTLR4RUST_TOKEN_ALIAS_MODULE,
         )
         .expect("member use tree should translate");
 
@@ -4957,6 +5321,63 @@ mod tests {
             translated.token_aliases,
             BTreeSet::from(["CompatParser_ID".to_owned()])
         );
+        assert!(translated.direct_alias_imports.is_empty());
+
+        let translated = translate_member_token_aliases(
+            "use self::CompatParser_ID;",
+            &aliases,
+            ANTLR4RUST_TOKEN_ALIAS_MODULE,
+        )
+        .expect("unrenamed member import should translate");
+        assert_eq!(
+            translated.source,
+            "use self::__antlr4rust_token_aliases::CompatParser_ID;"
+        );
+        assert_eq!(
+            translated.direct_alias_imports,
+            BTreeSet::from(["CompatParser_ID".to_owned()])
+        );
+
+        let translated = translate_member_token_aliases(
+            "fn sees_id(&self) -> bool { CompatParser_ID == Self::ID }",
+            &aliases,
+            "__antlr4rust_token_aliases_2",
+        )
+        .expect("member method should translate");
+        assert_eq!(
+            translated.source,
+            "fn sees_id(&self) -> bool { \
+             __antlr4rust_token_aliases_2::CompatParser_ID == Self::ID }"
+        );
+        assert_eq!(
+            translated.token_aliases,
+            BTreeSet::from(["CompatParser_ID".to_owned()])
+        );
+
+        let translated = translate_member_token_aliases(
+            "impl Helper {\n\
+                 fn sees_id(&self) -> bool {\n\
+                     use std::fmt::Write as _;\n\
+                     CompatParser_ID == 1\n\
+                 }\n\
+             }",
+            &aliases,
+            ANTLR4RUST_TOKEN_ALIAS_MODULE,
+        )
+        .expect("local use statements in member impls should remain valid");
+        assert!(
+            translated.source.contains("use std::fmt::Write as _;"),
+            "{}",
+            translated.source
+        );
+        assert!(
+            translated
+                .source
+                .contains("__antlr4rust_token_aliases::CompatParser_ID == 1"),
+            "{}",
+            translated.source
+        );
+        assert!(translated.direct_alias_imports.is_empty());
     }
 
     #[test]
@@ -5047,6 +5468,16 @@ mod tests {
             "static CompatParser_ID: i32 = 7; CompatParser_ID == 7",
             "fn CompatParser_ID() -> i32 { 7 } CompatParser_ID() == 7",
             "fn helper(CompatParser_ID: i32) -> bool { CompatParser_ID == 7 } helper(7)",
+            "fn helper<F: Fn(i32) -> i32>(CompatParser_ID: i32, f: F) -> bool { \
+             f(CompatParser_ID) == 7 } helper(7, |value| value)",
+            "if let Some(CompatParser_ID) = make(Foo { value: 7 }) { \
+             CompatParser_ID == 7 } else { false }",
+            "for CompatParser_ID in make(Foo { values: [7] }).values { \
+             let _ = CompatParser_ID; } true",
+            "match Some(7) { Some(CompatParser_ID @ _) => CompatParser_ID == 7, None => false }",
+            "match Some(7) { Some(ref CompatParser_ID) => *CompatParser_ID == 7, None => false }",
+            "match Some(7) { | Some(CompatParser_ID @ _) => \
+             CompatParser_ID == 7, None => false }",
             "struct CompatParser_ID; let _ = CompatParser_ID; true",
             "union CompatParser_ID { value: i32 } let _ = CompatParser_ID { value: 7 }; true",
             "let r#CompatParser_ID = 7; r#CompatParser_ID == 7",
@@ -5065,6 +5496,8 @@ mod tests {
         for body in [
             "let value = CompatParser_ID; value == 7",
             "matches!(kind, CompatParser_ID)",
+            "match kind { | CompatParser_ID => true, _ => false }",
+            "match kind { Some(CompatParser_ID) => true, _ => false }",
         ] {
             let lowered = translate_parser_body(
                 body,
@@ -5090,6 +5523,78 @@ mod tests {
         )
         .expect("qualified user symbols should remain ordinary Rust");
         assert!(qualified.token_aliases.is_empty());
+    }
+
+    #[test]
+    fn preserves_struct_literal_fields_when_lowering_alias_values() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CompatParser_ID".to_owned()]);
+        let body = "struct Fields { CompatParser_ID: i32 }\n\
+                    let explicit = Fields { CompatParser_ID: CompatParser_ID };\n\
+                    let shorthand = Fields { CompatParser_ID };\n\
+                    explicit.CompatParser_ID == shorthand.CompatParser_ID";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("struct literal fields should lower");
+
+        assert_eq!(lowered.token_aliases, aliases);
+        assert_eq!(
+            lowered
+                .source
+                .matches(
+                    "Fields { CompatParser_ID: \
+                     __antlr4rust_token_aliases::CompatParser_ID }"
+                )
+                .count(),
+            2,
+            "{}",
+            lowered.source
+        );
+    }
+
+    #[test]
+    fn materializes_local_context_after_same_body_attribute_writes() {
+        let mut start = rule("s");
+        start.attrs.push(AttrDecl {
+            name: "value".to_owned(),
+            ty: "i32".to_owned(),
+        });
+        let m = model(vec![start]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let lowered = translate_parser_body(
+            "$value = 7; _localctx.as_deref().map(|ctx| ctx.value == 7).unwrap_or(false)",
+            &ctx,
+            "SContext",
+            &BTreeSet::new(),
+            ParserBodyKind::Predicate,
+        )
+        .expect("same-body context reads should lower");
+
+        let write = lowered
+            .source
+            .find("__attrs.value = 7")
+            .expect("attribute write should translate");
+        let read = lowered
+            .source
+            .find("__active_context_view_with_attrs::<SContext")
+            .expect("context should materialize at the read");
+        assert!(write < read, "{}", lowered.source);
+        assert!(!lowered.source.contains("let _localctx"));
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
@@ -5122,6 +5627,14 @@ mod tests {
     fn lexer_bodies_reject_parser_only_compatibility_receivers() {
         let error = validate_lexer_body_compatibility_receivers("recog.input.la(1)")
             .expect_err("parser input compatibility is unavailable in lexers");
+        assert!(
+            error
+                .to_string()
+                .contains("only supported in embedded parser bodies"),
+            "{error}"
+        );
+        let error = validate_lexer_body_compatibility_receivers("_localctx.as_deref().is_some()")
+            .expect_err("parser context compatibility is unavailable in lexers");
         assert!(
             error
                 .to_string()

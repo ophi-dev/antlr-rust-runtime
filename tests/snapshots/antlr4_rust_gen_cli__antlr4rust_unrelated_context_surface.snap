@@ -4,6 +4,7 @@ expression: "unrelated_context.lines().filter(|line|\nline.trim_start().starts_w
 ---
 pub fn rule_node(&self) -> RuleNodeView<'a> {
 pub fn child_count(&self) -> usize {
+pub fn direct_terminals(
 pub fn start(&self) -> __GeneratedTokenView {
 pub fn text(&self) -> String {
 pub fn text_rule_child(&self) -> Result<TextContext<'a>, MissingChildError> {
