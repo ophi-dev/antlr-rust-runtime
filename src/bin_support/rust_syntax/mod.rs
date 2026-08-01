@@ -42,6 +42,7 @@ pub(crate) struct RustSyntax {
     declaration_identifier_byte_starts: BTreeSet<usize>,
     non_value_identifier_byte_starts: BTreeSet<usize>,
     opaque_macro_identifier_byte_starts: BTreeSet<usize>,
+    opaque_macro_byte_ranges: Vec<Range<usize>>,
     struct_field_shorthand_byte_starts: BTreeSet<usize>,
     pattern_field_shorthand_byte_starts: BTreeSet<usize>,
     value_binding_byte_starts: BTreeSet<usize>,
@@ -134,6 +135,12 @@ impl RustSyntax {
     pub(crate) fn is_opaque_macro_identifier(&self, byte_start: usize) -> bool {
         self.opaque_macro_identifier_byte_starts
             .contains(&byte_start)
+    }
+
+    pub(crate) fn is_opaque_macro_byte(&self, byte_start: usize) -> bool {
+        self.opaque_macro_byte_ranges
+            .iter()
+            .any(|range| range.contains(&byte_start))
     }
 
     pub(crate) fn is_struct_field_shorthand(&self, byte_start: usize) -> bool {
@@ -489,9 +496,13 @@ fn collect_opaque_macro_identifiers(
     let Some((macro_name, unqualified)) = macro_invocation_name(parent, tokens) else {
         return;
     };
-    if !macro_allows_value_alias_lowering(&macro_name)
-        || unqualified && local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings)
+    if !unqualified
+        || !macro_allows_value_alias_lowering(&macro_name)
+        || local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings)
     {
+        if let Some(range) = body_byte_range(macro_tail, tokens, body_len) {
+            syntax.opaque_macro_byte_ranges.push(range);
+        }
         collect_identifier_starts(
             macro_tail.node(),
             tokens,
@@ -537,10 +548,13 @@ fn collect_opaque_macro_invocation_identifiers(
     let Some((macro_name, unqualified)) = macro_invocation_name(invocation, tokens) else {
         return;
     };
-    if !macro_allows_value_alias_lowering(&macro_name)
-        || unqualified
-            && local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings)
+    if !unqualified
+        || !macro_allows_value_alias_lowering(&macro_name)
+        || local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings)
     {
+        if let Some(range) = body_byte_range(invocation, tokens, body_len) {
+            syntax.opaque_macro_byte_ranges.push(range);
+        }
         collect_identifier_starts(
             invocation.node(),
             tokens,
@@ -564,7 +578,7 @@ fn macro_invocation_name(
         if terminal.text() == "!" {
             break;
         }
-        if terminal.text() == ":" {
+        if matches!(terminal.text(), ":" | "::") {
             qualified = true;
         }
         if matches!(
@@ -1087,6 +1101,18 @@ mod tests {
     }
 
     #[test]
+    fn preserves_qualified_macros_with_standard_leaf_names() {
+        let body = "let custom = my_macros::assert!(Alias);\n\
+                    let standard = assert!(Alias == 1);";
+        let syntax = analyze(body);
+
+        assert!(syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 1)));
+        assert!(syntax.is_opaque_macro_byte(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_opaque_macro_byte(occurrence(body, "Alias", 1)));
+    }
+
+    #[test]
     fn records_lifetime_and_loop_label_identifiers() {
         let body = "fn borrow<'Alias>(value: &'Alias i32) -> &'Alias i32 {\n\
                         'Alias: loop { break 'Alias value; }\n\
@@ -1228,6 +1254,18 @@ mod tests {
     #[test]
     fn parses_inline_const_blocks() {
         let body = "let value = const { Alias };";
+        let syntax = analyze(body);
+        let alias = occurrence(body, "Alias", 0);
+
+        assert!(!syntax.is_type_identifier(alias));
+        assert!(!syntax.is_declaration_identifier(alias));
+    }
+
+    #[test]
+    fn parses_c_string_literals() {
+        let body = r##"let normal = c"value";
+                       let raw = cr#"raw value"#;
+                       normal.to_bytes() == raw.to_bytes() && Alias == 1;"##;
         let syntax = analyze(body);
         let alias = occurrence(body, "Alias", 0);
 

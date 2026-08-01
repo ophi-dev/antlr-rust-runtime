@@ -622,10 +622,13 @@ fn record_member_module_symbols(
     members: &mut MembersModel,
 ) -> io::Result<()> {
     let item = item.trim_start();
-    if let Some(rest) = item.strip_prefix("struct ") {
-        if let Some(name) = rest
-            .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
-            .find(|part| !part.is_empty())
+    if item.starts_with("struct ") {
+        let lexemes = lex_rust_body(item);
+        if let Some(keyword) = lexemes.iter().position(|lexeme| {
+            lexeme.kind == RustLexemeKind::Identifier && lexeme_text(item, *lexeme) == "struct"
+        }) && let Some(name) = next_significant(&lexemes, keyword)
+            .filter(|position| lexemes[*position].kind == RustLexemeKind::Identifier)
+            .map(|position| rust_identifier_name(lexeme_text(item, lexemes[position])))
         {
             members.module_symbols.insert(name.to_owned());
             if rust_syntax::struct_has_value_constructor(item)? {
@@ -2209,6 +2212,13 @@ struct RustReplacement {
     text: String,
 }
 
+#[derive(Debug)]
+struct FormatMacroCaptures {
+    format_literal: usize,
+    close: usize,
+    aliases: BTreeSet<String>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Antlr4RustSourceKind {
     Body,
@@ -2225,11 +2235,14 @@ fn lower_antlr4rust_surface(
 ) -> io::Result<LoweredAntlr4RustBody> {
     let lexemes = lex_rust_body(body);
     let delimiters = RustDelimiterMap::new(&lexemes);
+    let format_captures =
+        format_macro_capture_candidates(body, &lexemes, &delimiters, token_aliases);
     let has_token_alias_identifier = lexemes.iter().any(|lexeme| {
         lexeme.kind == RustLexemeKind::Identifier
             && token_aliases.contains(rust_identifier_name(lexeme_text(body, *lexeme)))
     });
-    let syntax = if has_token_alias_identifier {
+    let needs_alias_analysis = has_token_alias_identifier || !format_captures.is_empty();
+    let syntax = if needs_alias_analysis {
         if source_kind == Antlr4RustSourceKind::MemberItem {
             rust_syntax::analyze_member_item(body)?
         } else {
@@ -2238,7 +2251,7 @@ fn lower_antlr4rust_surface(
     } else {
         rust_syntax::RustSyntax::default()
     };
-    let local_bindings = if has_token_alias_identifier {
+    let local_bindings = if needs_alias_analysis {
         local_antlr4rust_alias_bindings(body, &lexemes, token_aliases, token_alias_module, &syntax)?
     } else {
         AliasBindingScopes::default()
@@ -2248,6 +2261,38 @@ fn lower_antlr4rust_surface(
     let mut uses_local_context = false;
     let mut used_token_aliases = local_bindings.use_target_aliases.clone();
     replacements.extend(local_bindings.use_target_replacements.iter().cloned());
+    for capture in format_captures {
+        if syntax.is_opaque_macro_byte(lexemes[capture.format_literal].start) {
+            continue;
+        }
+        let aliases = capture
+            .aliases
+            .into_iter()
+            .filter(|alias| !local_bindings.is_bound(alias, capture.format_literal))
+            .collect::<BTreeSet<_>>();
+        if aliases.is_empty() {
+            continue;
+        }
+        used_token_aliases.extend(aliases.iter().cloned());
+        let trailing_comma = previous_significant(&lexemes, capture.close)
+            .is_some_and(|previous| lexemes[previous].kind == RustLexemeKind::Punctuation(b','));
+        let mut text = if trailing_comma {
+            " ".to_owned()
+        } else {
+            ", ".to_owned()
+        };
+        text.push_str(
+            &aliases
+                .iter()
+                .map(|alias| format!("{alias} = {token_alias_module}::{alias}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        replacements.push(RustReplacement {
+            range: lexemes[capture.close].start..lexemes[capture.close].start,
+            text,
+        });
+    }
     for (position, lexeme) in lexemes.iter().enumerate() {
         if lexeme.kind != RustLexemeKind::Identifier {
             continue;
@@ -2447,7 +2492,7 @@ fn local_antlr4rust_alias_bindings(
                     let pattern_bindings =
                         pattern_alias_bindings(body, lexemes, start, end, token_aliases);
                     let scope = delimiters
-                        .control_flow_body_block(lexemes, end + 1)
+                        .control_flow_body_block(body, lexemes, end + 1)
                         .and_then(|open| delimiters.block_contents(open))
                         .unwrap_or(end..end);
                     bindings.record(pattern_bindings, scope);
@@ -2513,7 +2558,7 @@ fn local_antlr4rust_alias_bindings(
         syntax,
         &mut bindings,
     );
-    collect_matches_macro_alias_bindings(body, lexemes, token_aliases, &delimiters, &mut bindings);
+    collect_matches_macro_alias_bindings(body, lexemes, token_aliases, &delimiters, &mut bindings)?;
     collect_function_alias_bindings(body, lexemes, token_aliases, syntax, &mut bindings);
     collect_closure_alias_bindings(body, lexemes, token_aliases, syntax, &mut bindings);
     Ok(bindings)
@@ -2569,7 +2614,7 @@ fn conditional_let_scope(
     assignment: usize,
     delimiters: &RustDelimiterMap,
 ) -> Option<Range<usize>> {
-    let body_open = delimiters.control_flow_body_block(lexemes, assignment + 1)?;
+    let body_open = delimiters.control_flow_body_block(body, lexemes, assignment + 1)?;
     let body_close = delimiters.pairs.get(body_open).copied().flatten()?;
     let scope_start = find_top_level_logical_and(body, lexemes, assignment + 1, body_open)
         .and_then(|and| next_significant(&lexemes[..body_open], and))
@@ -2662,7 +2707,12 @@ impl RustDelimiterMap {
             .unwrap_or(0..self.pairs.len())
     }
 
-    fn control_flow_body_block(&self, lexemes: &[RustLexeme], start: usize) -> Option<usize> {
+    fn control_flow_body_block(
+        &self,
+        body: &str,
+        lexemes: &[RustLexeme],
+        start: usize,
+    ) -> Option<usize> {
         let expression_start = (start..lexemes.len())
             .find(|&position| lexemes[position].kind != RustLexemeKind::Trivia)?;
         let mut position = expression_start;
@@ -2674,9 +2724,7 @@ impl RustDelimiterMap {
                 }
                 RustLexemeKind::Punctuation(b'{') => {
                     let expression_block = position == expression_start
-                        || previous_significant(lexemes, position).is_some_and(|previous| {
-                            lexemes[previous].kind == RustLexemeKind::Punctuation(b'!')
-                        });
+                        || is_prefixed_expression_block(body, lexemes, position);
                     if expression_block {
                         position = self.pairs[position]? + 1;
                         continue;
@@ -2713,6 +2761,26 @@ impl RustDelimiterMap {
             position += 1;
         }
         position
+    }
+}
+
+fn is_prefixed_expression_block(body: &str, lexemes: &[RustLexeme], open: usize) -> bool {
+    let Some(previous) = previous_significant(lexemes, open) else {
+        return false;
+    };
+    if lexemes[previous].kind == RustLexemeKind::Punctuation(b'!') {
+        return true;
+    }
+    if lexemes[previous].kind != RustLexemeKind::Identifier {
+        return false;
+    }
+    match lexeme_text(body, lexemes[previous]) {
+        "const" | "async" | "unsafe" => true,
+        "move" => previous_significant(lexemes, previous).is_some_and(|prefix| {
+            lexemes[prefix].kind == RustLexemeKind::Identifier
+                && lexeme_text(body, lexemes[prefix]) == "async"
+        }),
+        _ => false,
     }
 }
 
@@ -2826,7 +2894,7 @@ fn collect_match_alias_bindings(
         {
             continue;
         }
-        let Some(open) = delimiters.control_flow_body_block(lexemes, position + 1) else {
+        let Some(open) = delimiters.control_flow_body_block(body, lexemes, position + 1) else {
             continue;
         };
         let Some(close) = delimiters.pairs[open] else {
@@ -2884,7 +2952,7 @@ fn collect_matches_macro_alias_bindings(
     token_aliases: &BTreeSet<String>,
     delimiters: &RustDelimiterMap,
     bindings: &mut AliasBindingScopes,
-) {
+) -> io::Result<()> {
     const PATTERN_PREFIX: &str = "match () { ";
     const PATTERN_SUFFIX: &str = " => (), _ => () }";
 
@@ -2938,7 +3006,7 @@ fn collect_matches_macro_alias_bindings(
         let pattern_byte_end = lexemes[pattern_end].start;
         let pattern_source = &body[pattern_byte_start..pattern_byte_end];
         let synthetic = format!("{PATTERN_PREFIX}{pattern_source}{PATTERN_SUFFIX}");
-        let pattern_syntax = rust_syntax::analyze(&synthetic).ok();
+        let pattern_syntax = rust_syntax::analyze(&synthetic)?;
         let pattern_bindings = (pattern_start..pattern_end)
             .filter_map(|candidate| {
                 let candidate_lexeme = lexemes[candidate];
@@ -2957,9 +3025,7 @@ fn collect_matches_macro_alias_bindings(
                     });
                 let synthetic_start =
                     PATTERN_PREFIX.len() + candidate_lexeme.start - pattern_byte_start;
-                let field_shorthand = pattern_syntax
-                    .as_ref()
-                    .is_some_and(|syntax| syntax.is_pattern_field_shorthand(synthetic_start));
+                let field_shorthand = pattern_syntax.is_pattern_field_shorthand(synthetic_start);
                 (explicit_at_binding || explicit_modifier || field_shorthand)
                     .then(|| alias_binding(body, candidate_lexeme, candidate, token_aliases))
                     .flatten()
@@ -2970,6 +3036,7 @@ fn collect_matches_macro_alias_bindings(
             .map_or(close..close, |start| start..close);
         bindings.record(pattern_bindings, guard_scope);
     }
+    Ok(())
 }
 
 fn match_pattern_alias_bindings(
@@ -3125,7 +3192,7 @@ fn is_control_flow_body_open(
                 lexeme_text(body, lexemes[position]),
                 "if" | "while" | "for" | "match"
             )
-            && delimiters.control_flow_body_block(lexemes, position + 1) == Some(open)
+            && delimiters.control_flow_body_block(body, lexemes, position + 1) == Some(open)
     })
 }
 
@@ -3407,6 +3474,177 @@ fn lexeme_text(body: &str, lexeme: RustLexeme) -> &str {
 
 fn rust_identifier_name(identifier: &str) -> &str {
     identifier.strip_prefix("r#").unwrap_or(identifier)
+}
+
+fn format_macro_capture_candidates(
+    body: &str,
+    lexemes: &[RustLexeme],
+    delimiters: &RustDelimiterMap,
+    token_aliases: &BTreeSet<String>,
+) -> Vec<FormatMacroCaptures> {
+    let mut captures = Vec::new();
+    for (position, lexeme) in lexemes.iter().enumerate() {
+        if lexeme.kind != RustLexemeKind::Identifier
+            || !is_unqualified_identifier(lexemes, position)
+        {
+            continue;
+        }
+        let Some(format_argument) = format_string_argument_index(lexeme_text(body, *lexeme)) else {
+            continue;
+        };
+        let Some(bang) = next_significant(lexemes, position) else {
+            continue;
+        };
+        let Some(open) = next_significant(lexemes, bang) else {
+            continue;
+        };
+        if lexemes[bang].kind != RustLexemeKind::Punctuation(b'!')
+            || !matches!(
+                lexemes[open].kind,
+                RustLexemeKind::Punctuation(b'(' | b'[' | b'{')
+            )
+        {
+            continue;
+        }
+        let Some(close) = delimiters.pairs[open] else {
+            continue;
+        };
+        let arguments = macro_argument_ranges(lexemes, open, close, delimiters);
+        let Some(format_range) = arguments.get(format_argument) else {
+            continue;
+        };
+        let Some(format_literal) = first_significant_in(lexemes, format_range.clone()) else {
+            continue;
+        };
+        if lexemes[format_literal].kind != RustLexemeKind::Literal
+            || next_significant(&lexemes[..format_range.end], format_literal).is_some()
+        {
+            continue;
+        }
+        let Some(content) = rust_format_literal_content(body, lexemes[format_literal]) else {
+            continue;
+        };
+        let mut aliases = format_capture_aliases(content, token_aliases);
+        for argument in arguments.iter().skip(format_argument + 1) {
+            let Some(name) = first_significant_in(lexemes, argument.clone()) else {
+                continue;
+            };
+            let Some(equal) = next_significant(&lexemes[..argument.end], name) else {
+                continue;
+            };
+            if lexemes[name].kind == RustLexemeKind::Identifier
+                && lexemes[equal].kind == RustLexemeKind::Punctuation(b'=')
+            {
+                aliases.remove(rust_identifier_name(lexeme_text(body, lexemes[name])));
+            }
+        }
+        if !aliases.is_empty() {
+            captures.push(FormatMacroCaptures {
+                format_literal,
+                close,
+                aliases,
+            });
+        }
+    }
+    captures
+}
+
+fn format_string_argument_index(macro_name: &str) -> Option<usize> {
+    match macro_name {
+        "format" | "format_args" | "eprint" | "eprintln" | "panic" | "print" | "println"
+        | "todo" | "unreachable" => Some(0),
+        "assert" | "debug_assert" | "write" | "writeln" => Some(1),
+        "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Some(2),
+        _ => None,
+    }
+}
+
+fn macro_argument_ranges(
+    lexemes: &[RustLexeme],
+    open: usize,
+    close: usize,
+    delimiters: &RustDelimiterMap,
+) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut start = open + 1;
+    let mut position = start;
+    while position < close {
+        if matches!(
+            lexemes[position].kind,
+            RustLexemeKind::Punctuation(b'(' | b'[' | b'{')
+        ) && let Some(nested_close) = delimiters.pairs[position]
+            && nested_close < close
+        {
+            position = nested_close + 1;
+            continue;
+        }
+        if lexemes[position].kind == RustLexemeKind::Punctuation(b',') {
+            ranges.push(start..position);
+            start = position + 1;
+        }
+        position += 1;
+    }
+    if start < close {
+        ranges.push(start..close);
+    }
+    ranges
+}
+
+fn first_significant_in(lexemes: &[RustLexeme], mut range: Range<usize>) -> Option<usize> {
+    range.find(|position| lexemes[*position].kind != RustLexemeKind::Trivia)
+}
+
+fn rust_format_literal_content(body: &str, literal: RustLexeme) -> Option<&str> {
+    let source = lexeme_text(body, literal);
+    if source.starts_with('"') && source.ends_with('"') {
+        return source.get(1..source.len().checked_sub(1)?);
+    }
+    let hashes = source
+        .strip_prefix('r')?
+        .bytes()
+        .take_while(|byte| *byte == b'#')
+        .count();
+    let content_start = 2 + hashes;
+    let content_end = source.len().checked_sub(1 + hashes)?;
+    source.get(content_start..content_end)
+}
+
+fn format_capture_aliases(
+    format_string: &str,
+    token_aliases: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let bytes = format_string.as_bytes();
+    let mut aliases = BTreeSet::new();
+    let mut offset = 0;
+    while offset < bytes.len() {
+        let Some(relative) = format_string[offset..].find('{') else {
+            break;
+        };
+        let open = offset + relative;
+        if bytes.get(open + 1) == Some(&b'{') {
+            offset = open + 2;
+            continue;
+        }
+        let mut identifier_start = open + 1;
+        while bytes
+            .get(identifier_start)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            identifier_start += 1;
+        }
+        let identifier_end = raw_identifier_end(format_string, identifier_start)
+            .or_else(|| identifier_end(format_string, identifier_start));
+        if let Some(identifier_end) = identifier_end {
+            let identifier = rust_identifier_name(&format_string[identifier_start..identifier_end]);
+            if token_aliases.contains(identifier)
+                && matches!(bytes.get(identifier_end), Some(b'}' | b':'))
+            {
+                aliases.insert(identifier.to_owned());
+            }
+        }
+        offset = open + 1;
+    }
+    aliases
 }
 
 fn apply_rust_replacements(body: &str, replacements: &[RustReplacement]) -> io::Result<String> {
@@ -5647,7 +5885,9 @@ mod tests {
              struct GenericBraced<T> { value: T }\n\
              struct GenericTuple<T>(T);\n\
              struct WhereBraced<T> where T: Copy { value: T }\n\
-             struct WhereTuple<T>(T) where T: Copy;\n",
+             struct WhereTuple<T>(T) where T: Copy;\n\
+             struct r#__Antlr4RustInput;\n\
+             struct Ωmega;\n",
             SourceId::new(0),
             &mut members,
         )
@@ -5661,6 +5901,8 @@ mod tests {
             "Tuple",
             "Unit",
             "WhereTuple",
+            "__Antlr4RustInput",
+            "Ωmega",
         ]
         "#
         );
@@ -5881,6 +6123,42 @@ mod tests {
         assert_eq!(lowered.token_aliases, aliases);
     }
 
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn resolves_unbound_format_captures_without_rewriting_the_literal() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from([
+            "CompatParser_ID".to_owned(),
+            "CompatParser_LOCAL".to_owned(),
+            "CompatParser_SHADOWED".to_owned(),
+        ]);
+        let body = "let token = format!(\"{CompatParser_ID}\");\n\
+                    let CompatParser_LOCAL = 7;\n\
+                    let local = format!(\"{CompatParser_LOCAL}\");\n\
+                    macro_rules! format {\n\
+                        (\"{CompatParser_SHADOWED}\") => { \"shadowed\" };\n\
+                    }\n\
+                    let shadowed = format!(\"{CompatParser_SHADOWED}\");\n\
+                    token == \"1\" && local == \"7\" && shadowed == \"shadowed\"";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("format captures should resolve token aliases");
+
+        insta::assert_snapshot!("antlr4rust_format_capture_lowering", lowered.source);
+        assert_eq!(
+            lowered.token_aliases,
+            BTreeSet::from(["CompatParser_ID".to_owned()])
+        );
+    }
+
     #[test]
     fn preserves_matches_pattern_bindings_and_lowers_pattern_constants() {
         let m = model(vec![rule("s")]);
@@ -5933,6 +6211,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reports_invalid_matches_patterns_during_alias_analysis() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CompatParser_FIELD".to_owned()]);
+        let error = translate_parser_body(
+            "matches!(value, Fields { CompatParser_FIELD: })",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect_err("invalid synthetic patterns must not silently lose bindings");
+
+        assert!(
+            error
+                .to_string()
+                .contains("cannot classify embedded Rust syntax"),
+            "{error}"
+        );
+    }
+
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
     #[test]
     fn preserves_shadowed_macro_and_attribute_token_trees() {
@@ -5964,6 +6271,35 @@ mod tests {
             lowered.source
         );
         assert_eq!(lowered.token_aliases, aliases);
+    }
+
+    #[test]
+    fn preserves_qualified_macros_with_allowlisted_leaf_names() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CompatParser_ID".to_owned()]);
+        let lowered = translate_parser_body(
+            "my_macros::assert!(CompatParser_ID)",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect("qualified macro token trees should remain opaque");
+
+        assert!(
+            lowered
+                .source
+                .contains("my_macros::assert!(CompatParser_ID)")
+        );
+        assert!(lowered.token_aliases.is_empty());
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
@@ -6183,9 +6519,13 @@ mod tests {
                     let after_cfg = ScopeParser_ID;\n\
                     let after = ScopeParser_ID;\n\
                     let inline_const = const { ScopeParser_ID };\n\
+                    let const_condition = if let Some(ScopeParser_ID @ _) = const { Some(8) } {\n\
+                        ScopeParser_ID == 8\n\
+                    } else { false };\n\
                     let closure = |ScopeParser_ID| ScopeParser_ID;\n\
                     let nested = |_outer| |ScopeParser_ID: i32| ScopeParser_ID;\n\
                     before == after && after_cfg == before && inline_const == before\n\
+                        && const_condition\n\
                         && closure(7) == 7 && nested(1)(2) == 2\n\
                         && matches!(before, ScopeParser_ID)";
         let lowered =

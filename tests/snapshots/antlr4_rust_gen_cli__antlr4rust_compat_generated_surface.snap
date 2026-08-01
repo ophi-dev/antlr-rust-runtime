@@ -80,7 +80,7 @@ pub(super) const AliasOnlyParser_T__0: i32 = 1;
 __antlr4rust_token_aliases::AliasOnlyParser_ID == ID && __antlr4rust_token_aliases::AliasOnlyParser_T__0 == T__0
 === Alias collision ===
 struct AliasCollisionParser_ID;
-struct __Antlr4RustInput;
+struct r#__Antlr4RustInput;
 struct __Antlr4RustTokenView;
 use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_EOF;
 struct __Antlr4RustInput_2<'a, L: TokenSource>(&'a CommonTokenStream<L>);

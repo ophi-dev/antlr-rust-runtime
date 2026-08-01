@@ -16,7 +16,7 @@ grammar AliasCollision;
     }
     struct __antlr4rust_token_aliases;
     struct __Antlr4RustContext;
-    struct __Antlr4RustInput;
+    struct r#__Antlr4RustInput;
     struct __Antlr4RustTokenView;
     struct ConstGenericMember<const N: usize>;
     struct ConstExpression<const N: usize>;
@@ -100,6 +100,15 @@ start
             const { AliasCollisionParser_CONST_BLOCK } == CONST_BLOCK;
         let associated_const_alias_ok =
             AssociatedConstMember::token_alias() == ASSOCIATED_CONST;
+        let format_capture_ok =
+            format!("{AliasCollisionParser_FORMAT_CAPTURE}")
+                == Self::FORMAT_CAPTURE.to_string();
+        let AliasCollisionParser_FORMAT_LOCAL = "local";
+        let format_local_ok =
+            format!("{AliasCollisionParser_FORMAT_LOCAL}") == "local";
+        let c_strings_ok =
+            c"value".to_bytes() == b"value"
+                && cr#"raw value"#.to_bytes() == b"raw value";
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
         macro_rules! assert {
@@ -108,6 +117,16 @@ start
             };
         }
         let shadowed_macro_ok = assert!(AliasCollisionParser_SHADOWED_MACRO);
+        mod my_macros {
+            macro_rules! assert {
+                (AliasCollisionParser_QUALIFIED_MACRO) => {
+                    true
+                };
+            }
+            pub(crate) use assert;
+        }
+        let qualified_macro_ok =
+            my_macros::assert!(AliasCollisionParser_QUALIFIED_MACRO);
         #[allow(unexpected_cfgs)]
         #[cfg(AliasCollisionParser_ATTRIBUTE)]
         let _attribute_token_tree = ();
@@ -189,6 +208,14 @@ start
         } else {
             false
         };
+        let const_block_binding_ok =
+            if let Some(AliasCollisionParser_CONST_CHAIN @ _) =
+                const { Some(24) }
+            {
+                AliasCollisionParser_CONST_CHAIN == 24
+            } else {
+                false
+            };
         let leading_or_alias_ok = matches!(
             MODULE,
             | AliasCollisionParser_MODULE | AliasCollisionParser_SCOPE
@@ -266,12 +293,17 @@ start
             && while_head_alias_ok
             && match_head_alias_ok
             && let_chain_binding_ok
+            && const_block_binding_ok
             && cfg_attr_alias_ok
             && action_cfg_alias_ok
             && inline_const_alias_ok
             && associated_const_alias_ok
+            && format_capture_ok
+            && format_local_ok
+            && c_strings_ok
             && raw_macro_ok
             && shadowed_macro_ok
+            && qualified_macro_ok
             && macro_ident_ok
             && unicode_identifiers_ok
             && input_facade_ok
@@ -340,6 +372,10 @@ start
         | ASSOCIATED_CONST
         | MATCHES_BINDING
         | PRECISE_CAPTURE
+        | FORMAT_CAPTURE
+        | FORMAT_LOCAL
+        | QUALIFIED_MACRO
+        | CONST_CHAIN
     ) EOF
     ;
 
@@ -383,5 +419,9 @@ CONST_BLOCK: 'const_block';
 ASSOCIATED_CONST: 'associated_const';
 MATCHES_BINDING: 'matches_binding';
 PRECISE_CAPTURE: 'precise_capture';
+FORMAT_CAPTURE: 'format_capture';
+FORMAT_LOCAL: 'format_local';
+QUALIFIED_MACRO: 'qualified_macro';
+CONST_CHAIN: 'const_chain';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

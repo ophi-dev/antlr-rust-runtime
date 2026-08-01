@@ -1,5 +1,5 @@
 // Pinned from Perses commit 29f9553367654ca682a8aca40b92ce5139114a7e.
-// Locally modified to remove Java semantics and recognize modern let chains.
+// Locally modified to remove Java semantics and recognize modern Rust syntax.
 // See README.md for provenance, licensing, and the exact adaptation.
 grammar Rust;
 
@@ -1666,7 +1666,8 @@ lit:
     | ByteStringLit
     | FloatLit
     | CharLit
-    | StringLit;
+    | StringLit
+    | CStringLit;
 
 closure_params
     : '|' '|'
@@ -2033,6 +2034,10 @@ fragment RAW_STRING_BODY:
 StringLit:
     '"' STRING_ELEMENT* '"'
     | 'r' RAW_STRING_BODY;
+
+CStringLit:
+    'c"' STRING_ELEMENT* '"'
+    | 'cr' RAW_STRING_BODY;
 
 fragment BYTE:
     ' '               // any ASCII character from 32 (space) to 126 (`~`),

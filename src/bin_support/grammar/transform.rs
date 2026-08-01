@@ -1323,24 +1323,13 @@ fn split_combined(
         .flat_map(|mode| mode.rules.iter())
         .copied()
         .collect::<BTreeSet<_>>();
-    let mut lexer_rules = Vec::new();
-    let mut parser_rules = Vec::new();
-    for rule in std::mem::take(&mut combined.rules) {
-        match (rule.kind, modal_rules.contains(&rule.id)) {
-            (_, true) => parser_rules.push(rule),
-            (RuleKind::Lexer, false) => lexer_rules.push(rule),
-            (RuleKind::Parser, false) => parser_rules.push(rule),
-        }
-    }
+    let (parser_rules, mut lexer_rules) =
+        partition_combined_rules(std::mem::take(&mut combined.rules), &modal_rules);
     combined.rules = parser_rules;
 
-    let literals = parser_literals(&combined.rules);
-    let aliases = literal_aliases(&lexer_rules);
+    let literals = implicit_literal_order(&combined.rules, &lexer_rules);
     let mut implicit_rules = Vec::new();
     for literal in literals {
-        if aliases.contains(&literal) {
-            continue;
-        }
         let (original, source) = find_literal_element(&combined.rules, &literal)
             .expect("collected parser literal has an owning element");
         implicit_rules.push(implicit_literal_rule(
@@ -1478,17 +1467,25 @@ pub(crate) fn source_implicit_token_literals(file: &SourceFile) -> Option<Vec<St
         .flat_map(|mode| mode.rules.iter())
         .copied()
         .collect::<BTreeSet<_>>();
-    let (parser_rules, lexer_rules): (Vec<_>, Vec<_>) = unit
-        .rules
+    let (parser_rules, lexer_rules) = partition_combined_rules(unit.rules, &modal_rules);
+    Some(implicit_literal_order(&parser_rules, &lexer_rules))
+}
+
+fn partition_combined_rules(
+    rules: Vec<Rule>,
+    modal_rules: &BTreeSet<RuleId>,
+) -> (Vec<Rule>, Vec<Rule>) {
+    rules
         .into_iter()
-        .partition(|rule| modal_rules.contains(&rule.id) || rule.kind == RuleKind::Parser);
-    let aliases = literal_aliases(&lexer_rules);
-    Some(
-        parser_literals(&parser_rules)
-            .into_iter()
-            .filter(|literal| !aliases.contains(literal))
-            .collect(),
-    )
+        .partition(|rule| modal_rules.contains(&rule.id) || rule.kind == RuleKind::Parser)
+}
+
+fn implicit_literal_order(parser_rules: &[Rule], lexer_rules: &[Rule]) -> Vec<String> {
+    let aliases = literal_aliases(lexer_rules);
+    parser_literals(parser_rules)
+        .into_iter()
+        .filter(|literal| !aliases.contains(literal))
+        .collect()
 }
 
 fn literal_aliases(rules: &[Rule]) -> BTreeSet<String> {

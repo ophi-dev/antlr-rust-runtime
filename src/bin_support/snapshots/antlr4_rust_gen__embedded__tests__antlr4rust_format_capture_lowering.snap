@@ -1,0 +1,14 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+let token = format!("{CompatParser_ID}", CompatParser_ID = __antlr4rust_token_aliases::CompatParser_ID);
+let CompatParser_LOCAL = 7;
+let local = format!("{CompatParser_LOCAL}");
+macro_rules! format {
+("{CompatParser_SHADOWED}") => { "shadowed" };
+}
+let shadowed = format!("{CompatParser_SHADOWED}");
+token == "1" && local == "7" && shadowed == "shadowed"
+}

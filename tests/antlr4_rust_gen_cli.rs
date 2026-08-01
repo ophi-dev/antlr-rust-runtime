@@ -3630,6 +3630,11 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_ASSOCIATED_CONST",
                 "AliasCollisionParser_MATCHES_BINDING",
                 "AliasCollisionParser_PRECISE_CAPTURE",
+                "AliasCollisionParser_FORMAT_CAPTURE",
+                "AliasCollisionParser_FORMAT_LOCAL",
+                "AliasCollisionParser_QUALIFIED_MACRO",
+                "AliasCollisionParser_CONST_CHAIN",
+                "c_strings_ok",
             ]
             .iter()
             .any(|needle| line.contains(needle))
@@ -3642,19 +3647,7 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
 #[track_caller]
 fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
     assert!(
-        source.contains(
-            "fn precise_capture<T>() -> impl Copy + use<T> {\n            \
-             __antlr4rust_token_aliases_2::AliasCollisionParser_PRECISE_CAPTURE"
-        ),
-        "precise-capture bounds must parse before compatibility aliases are lowered"
-    );
-    assert!(
-        source.contains("AliasCollisionParser_MATCHES_BINDING @ Some(_)")
-            && source.contains(
-                "if AliasCollisionParser_MATCHES_BINDING\n                    \
-                 == Some(Self::MATCHES_BINDING)"
-            )
-            && !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32"),
+        !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32"),
         "matches! pattern bindings and guard reads must remain ordinary Rust bindings"
     );
 }
@@ -3795,7 +3788,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "the generated context wrapper must avoid user member symbols"
     );
     assert!(
-        alias_collision_parser.contains("struct __Antlr4RustInput;")
+        alias_collision_parser.contains("struct r#__Antlr4RustInput;")
             && alias_collision_parser.contains("struct __Antlr4RustInput_2<'a, L: TokenSource>")
             && alias_collision_parser.contains("__Antlr4RustInput_2(self.base.token_stream())")
             && alias_collision_parser.contains("struct __Antlr4RustTokenView;")
@@ -3822,21 +3815,25 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                 .contains("__antlr4rust_token_aliases_2::AliasCollisionParser_MODULE == MODULE"),
         "member impls must preserve local uses while lowering compatibility aliases"
     );
+    let unexpected_local_aliases = [
+        "MATCH",
+        "ARM",
+        "CHAIN",
+        "IF",
+        "FOR",
+        "PARAM",
+        "MACRO_IDENT",
+        "BRACED_PARAM",
+        "FORMAT_LOCAL",
+        "QUALIFIED_MACRO",
+        "CONST_CHAIN",
+    ]
+    .into_iter()
+    .filter(|name| alias_collision_parser.contains(&format!("const AliasCollisionParser_{name}:")))
+    .collect::<Vec<_>>();
     assert!(
-        [
-            "MATCH",
-            "ARM",
-            "CHAIN",
-            "IF",
-            "FOR",
-            "PARAM",
-            "MACRO_IDENT",
-            "BRACED_PARAM",
-        ]
-            .iter()
-            .all(|name| !alias_collision_parser
-                .contains(&format!("const AliasCollisionParser_{name}"))),
-        "macro identifiers, lifetimes, labels, and local bindings must not request compatibility aliases"
+        unexpected_local_aliases.is_empty(),
+        "macro identifiers, lifetimes, labels, and local bindings must not request compatibility aliases: {unexpected_local_aliases:?}"
     );
     assert!(
         alias_collision_parser.contains(
