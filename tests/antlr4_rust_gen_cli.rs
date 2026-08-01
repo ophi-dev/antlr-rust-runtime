@@ -21,6 +21,8 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
     let source = project.join("src");
     let uses_insta = test_source.contains("insta::") || test_source.contains("use insta ");
     let dev_dependencies = if uses_insta {
+        // Keep this exact pin aligned with Cargo.lock so offline temp crates reuse
+        // the workspace's cached Insta version.
         "\n[dev-dependencies]\ninsta = { version = \"=1.48.0\", default-features = false }\n"
     } else {
         ""
@@ -3245,6 +3247,27 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
 }
 
 #[test]
+fn colliding_context_accessor_names_compile() {
+    let temp = temporary_directory("context-accessor-collision");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/context-accessor-collision/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_generated_modules_compile(temp.path(), &["t.rs"]);
+}
+
+#[test]
 fn embedded_parser_semantics_satisfy_strict_manifest_checks() {
     let temp = temporary_directory("embedded-parser-semantics");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4949,7 +4972,7 @@ mod inlined_token_tests {
         insta::assert_snapshot!(active.seen, @"left,=");
     }
 
-    fn recovered_terminals(input: &str) -> (usize, Vec<(String, bool)>) {
+    fn recovered_terminals(input: &str) -> (usize, Vec<(String, bool, bool)>) {
         let lexer = InlinedTokensLexer::new(InputStream::new(input));
         let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
         let root = parser.recovered().expect("invalid input should recover");
@@ -4963,7 +4986,7 @@ mod inlined_token_tests {
             .expect("typed recovered context");
         let terminals = recovered
             .direct_terminals()
-            .map(|token| (token.to_string(), token.is_error()))
+            .map(|token| (token.to_string(), token.is_error(), token.is_missing()))
             .collect::<Vec<_>>();
         (syntax_errors, terminals)
     }
@@ -4985,17 +5008,21 @@ mod inlined_token_tests {
                     (
                         "left",
                         false,
+                        false,
                     ),
                     (
                         "<missing '='>",
+                        true,
                         true,
                     ),
                     (
                         "right",
                         false,
+                        false,
                     ),
                     (
                         "<EOF>",
+                        false,
                         false,
                     ),
                 ],
@@ -5006,21 +5033,26 @@ mod inlined_token_tests {
                     (
                         "left",
                         false,
+                        false,
                     ),
                     (
                         "=",
+                        false,
                         false,
                     ),
                     (
                         "=",
                         true,
+                        false,
                     ),
                     (
                         "right",
                         false,
+                        false,
                     ),
                     (
                         "<EOF>",
+                        false,
                         false,
                     ),
                 ],

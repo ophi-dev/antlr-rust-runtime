@@ -11112,9 +11112,10 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12064,6 +12065,11 @@ impl<'a> TerminalNode<'a> {
             antlr4_runtime::NodeKind::Error
         )
     }
+
+    pub fn is_missing(&self) -> bool {
+        let symbol = self.__node.symbol();
+        symbol.start() == usize::MAX && symbol.stop() == usize::MAX
+    }
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
@@ -12148,7 +12154,8 @@ fn __rule_children<'a>(
     })
 }
 
-// This is lint-live because every typed context exposes direct_terminals().
+// Keep this triage aligned with runtime `RuleNodeView::terminal_children()` and
+// `ParserRuleContext::terminal_children()`.
 fn __terminal_children<'a>(
     source: __GeneratedRuleContext<'a>,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {

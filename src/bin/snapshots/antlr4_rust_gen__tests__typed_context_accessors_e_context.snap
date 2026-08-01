@@ -13,9 +13,10 @@ expression: e_context
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }

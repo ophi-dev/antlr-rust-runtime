@@ -42,6 +42,7 @@ expression: api
     "fn into_token_store",
     "fn into_token_stream",
     "fn is_error",
+    "fn is_missing",
     "fn junk",
     "fn la",
     "fn lt",

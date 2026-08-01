@@ -586,6 +586,11 @@ impl<'a> TerminalNode<'a> {
             antlr4_runtime::NodeKind::Error
         )
     }
+
+    pub fn is_missing(&self) -> bool {
+        let symbol = self.__node.symbol();
+        symbol.start() == usize::MAX && symbol.stop() == usize::MAX
+    }
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
@@ -670,7 +675,8 @@ fn __rule_children<'a>(
     })
 }
 
-// This is lint-live because every typed context exposes direct_terminals().
+// Keep this triage aligned with runtime `RuleNodeView::terminal_children()` and
+// `ParserRuleContext::terminal_children()`.
 fn __terminal_children<'a>(
     source: __GeneratedRuleContext<'a>,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
@@ -1059,9 +1065,10 @@ impl<'a, State> GrammarSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -1316,9 +1323,10 @@ impl<'a, State> GrammarDeclContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -1557,9 +1565,10 @@ impl<'a, State> GrammarTypeContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -1788,9 +1797,10 @@ impl<'a, State> PrequelConstructContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -2037,9 +2047,10 @@ impl<'a, State> OptionsSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -2274,9 +2285,10 @@ impl<'a, State> OptionContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -2515,9 +2527,10 @@ impl<'a, State> OptionValueContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -2758,9 +2771,10 @@ impl<'a, State> DelegateGrammarsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -2995,9 +3009,10 @@ impl<'a, State> DelegateGrammarContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -3212,9 +3227,10 @@ impl<'a, State> TokensSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -3445,9 +3461,10 @@ impl<'a, State> ChannelsSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -3678,9 +3695,10 @@ impl<'a, State> IdListContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -3891,9 +3909,10 @@ impl<'a, State> ActionContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -4152,9 +4171,10 @@ impl<'a, State> ActionScopeNameContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -4381,9 +4401,10 @@ impl<'a, State> ActionBlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -4592,9 +4613,10 @@ impl<'a, State> ArgActionBlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -4821,9 +4843,10 @@ impl<'a, State> ModeSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -5067,9 +5090,10 @@ impl<'a, State> RulesContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -5274,9 +5298,10 @@ impl<'a, State> RuleSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -5493,9 +5518,10 @@ impl<'a, State> ParserRuleSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -5816,9 +5842,10 @@ impl<'a, State> ExceptionGroupContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -6033,9 +6060,10 @@ impl<'a, State> ExceptionHandlerContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -6274,9 +6302,10 @@ impl<'a, State> FinallyClauseContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -6500,9 +6529,10 @@ impl<'a, State> RulePrequelContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -6719,9 +6749,10 @@ impl<'a, State> RuleReturnsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -6945,9 +6976,10 @@ impl<'a, State> ThrowsSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -7170,9 +7202,10 @@ impl<'a, State> LocalsSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -7396,9 +7429,10 @@ impl<'a, State> RuleActionContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -7637,9 +7671,10 @@ impl<'a, State> RuleModifiersContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -7844,9 +7879,10 @@ impl<'a, State> RuleModifierContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -8083,9 +8119,10 @@ impl<'a, State> RuleBlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -8297,9 +8334,10 @@ impl<'a, State> RuleAltListContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -8510,9 +8548,10 @@ impl<'a, State> LabeledAltContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -8744,9 +8783,10 @@ impl<'a, State> LexerRuleSpecContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -9014,9 +9054,10 @@ impl<'a, State> LexerRuleBlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -9228,9 +9269,10 @@ impl<'a, State> LexerAltListContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -9441,9 +9483,10 @@ impl<'a, State> LexerAltContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -9660,9 +9703,10 @@ impl<'a, State> LexerElementsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -9867,9 +9911,10 @@ impl<'a, State> LexerElementContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -10116,9 +10161,10 @@ impl<'a, State> LexerBlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -10354,9 +10400,10 @@ impl<'a, State> LexerCommandsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -10579,9 +10626,10 @@ impl<'a, State> LexerCommandContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -10823,9 +10871,10 @@ impl<'a, State> LexerCommandNameContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -11042,9 +11091,10 @@ impl<'a, State> LexerCommandExprContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -11261,9 +11311,10 @@ impl<'a, State> AltListContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -11474,9 +11525,10 @@ impl<'a, State> AlternativeContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -11691,9 +11743,10 @@ impl<'a, State> ElementContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -11960,9 +12013,10 @@ impl<'a, State> PredicateOptionsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12197,9 +12251,10 @@ impl<'a, State> PredicateOptionContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12456,9 +12511,10 @@ impl<'a, State> LabeledElementContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12710,9 +12766,10 @@ impl<'a, State> EbnfContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12934,9 +12991,10 @@ impl<'a, State> BlockSuffixContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -13148,9 +13206,10 @@ impl<'a, State> EbnfSuffixContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -13373,9 +13432,10 @@ impl<'a, State> LexerAtomContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -13632,9 +13692,10 @@ impl<'a, State> AtomContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -13871,9 +13932,10 @@ impl<'a, State> WildcardContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -14092,9 +14154,10 @@ impl<'a, State> NotSetContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -14323,9 +14386,10 @@ impl<'a, State> BlockSetContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -14560,9 +14624,10 @@ impl<'a, State> SetElementContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -14809,9 +14874,10 @@ impl<'a, State> BlockContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -15075,9 +15141,10 @@ impl<'a, State> RulerefContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -15306,9 +15373,10 @@ impl<'a, State> CharacterRangeContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -15523,9 +15591,10 @@ impl<'a, State> TerminalDefContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -15752,9 +15821,10 @@ impl<'a, State> ElementOptionsContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -15989,9 +16059,10 @@ impl<'a, State> ElementOptionContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -16238,9 +16309,10 @@ impl<'a, State> IdentifierContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -16457,9 +16529,10 @@ impl<'a, State> QualifiedIdentifierContext<'a, State> {
     /// Iterates terminals owned directly by this context without descending
     /// into nested rule contexts.
     ///
-    /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to distinguish them.
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
