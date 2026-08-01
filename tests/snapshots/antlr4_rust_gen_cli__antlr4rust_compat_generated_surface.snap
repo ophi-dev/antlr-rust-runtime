@@ -89,6 +89,7 @@ fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView_2<'a>> {
 token.map(__Antlr4RustTokenView_2)
 struct __Antlr4RustTokenView_2<'a>(antlr4_runtime::TokenView<'a>);
 impl<'a> __Antlr4RustTokenView_2<'a> {
+pub(crate) const AliasCollisionParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
 pub(super) use super::AliasCollisionParser_EOF;
 pub(super) use super::AliasCollisionParser_ID;
 let _user_symbol = __antlr4rust_token_aliases_2::AliasCollisionParser_ID;

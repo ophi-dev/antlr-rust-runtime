@@ -40,6 +40,8 @@ grammar AliasCollision;
     use self::{AliasCollisionParser_MEMBER_ONLY as RenamedMemberOnly};
     use self::AliasCollisionParser_DIRECT;
     use ::{std::fmt};
+    use std::fmt::Result as AliasCollisionParser_TYPE_ONLY;
+    use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_VALUE_IMPORT;
     #[cfg(
         any()
     )]
@@ -91,6 +93,10 @@ start
         let _renamed_import = RenamedModule;
         let _member_only_import = RenamedMemberOnly;
         let _conditional_alias = AliasCollisionParser_CFG;
+        let type_only_import_alias_ok =
+            AliasCollisionParser_TYPE_ONLY == Self::TYPE_ONLY;
+        let value_import_alias_ok =
+            AliasCollisionParser_VALUE_IMPORT == antlr4_runtime::TOKEN_EOF;
         let cfg_attr_alias_ok = AliasCollisionParser_CFG_ATTR == CFG_ATTR;
         #[cfg(any())]
         use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_ACTION_CFG;
@@ -109,6 +115,9 @@ start
         let c_strings_ok =
             c"value".to_bytes() == b"value"
                 && cr#"raw value"#.to_bytes() == b"raw value";
+        unsafe extern "C" {}
+        let unsafe_extern_alias_ok =
+            AliasCollisionParser_UNSAFE_EXTERN == Self::UNSAFE_EXTERN;
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
         macro_rules! assert {
@@ -127,6 +136,8 @@ start
         }
         let qualified_macro_ok =
             my_macros::assert!(AliasCollisionParser_QUALIFIED_MACRO);
+        let standard_qualified_macro_ok =
+            std::matches!(Self::MODULE, AliasCollisionParser_MODULE);
         #[allow(unexpected_cfgs)]
         #[cfg(AliasCollisionParser_ATTRIBUTE)]
         let _attribute_token_tree = ();
@@ -174,6 +185,11 @@ start
         }
         let match_binding_ok = match Some(7) {
             Some(AliasCollisionParser_MATCH @ _) => AliasCollisionParser_MATCH == 7,
+            None => false,
+        };
+        let turbofish_match_binding_ok = match Some(16) {
+            Some(AliasCollisionParser_TURBOFISH @ _) =>
+                Ok::<i32, ()>(AliasCollisionParser_TURBOFISH).unwrap() == 16,
             None => false,
         };
         let leading_match_binding_ok = match Some(8) {
@@ -286,6 +302,7 @@ start
             && if_binding_ok
             && for_binding_ok
             && match_binding_ok
+            && turbofish_match_binding_ok
             && leading_match_binding_ok
             && block_match_binding_ok
             && not_equal_alias_ok
@@ -296,14 +313,18 @@ start
             && const_block_binding_ok
             && cfg_attr_alias_ok
             && action_cfg_alias_ok
+            && type_only_import_alias_ok
+            && value_import_alias_ok
             && inline_const_alias_ok
             && associated_const_alias_ok
             && format_capture_ok
             && format_local_ok
             && c_strings_ok
+            && unsafe_extern_alias_ok
             && raw_macro_ok
             && shadowed_macro_ok
             && qualified_macro_ok
+            && standard_qualified_macro_ok
             && macro_ident_ok
             && unicode_identifiers_ok
             && input_facade_ok
@@ -376,6 +397,10 @@ start
         | FORMAT_LOCAL
         | QUALIFIED_MACRO
         | CONST_CHAIN
+        | TYPE_ONLY
+        | VALUE_IMPORT
+        | UNSAFE_EXTERN
+        | TURBOFISH
     ) EOF
     ;
 
@@ -423,5 +448,9 @@ FORMAT_CAPTURE: 'format_capture';
 FORMAT_LOCAL: 'format_local';
 QUALIFIED_MACRO: 'qualified_macro';
 CONST_CHAIN: 'const_chain';
+TYPE_ONLY: 'type_only';
+VALUE_IMPORT: 'value_import';
+UNSAFE_EXTERN: 'unsafe_extern';
+TURBOFISH: 'turbofish';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

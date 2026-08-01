@@ -15,8 +15,14 @@ ScopeParser_ID == 8
 } else { false };
 let closure = |ScopeParser_ID| ScopeParser_ID;
 let nested = |_outer| |ScopeParser_ID: i32| ScopeParser_ID;
+let turbofish_match = match Some(5) {
+Some(ScopeParser_ID @ _) =>
+Ok::<i32, ()>(ScopeParser_ID).unwrap() == 5,
+None => false,
+};
 before == after && after_cfg == before && inline_const == before
 && const_condition
+&& turbofish_match
 && closure(7) == 7 && nested(1)(2) == 2
 && matches!(before, __antlr4rust_token_aliases::ScopeParser_ID)
 }

@@ -3634,6 +3634,11 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_FORMAT_LOCAL",
                 "AliasCollisionParser_QUALIFIED_MACRO",
                 "AliasCollisionParser_CONST_CHAIN",
+                "AliasCollisionParser_TYPE_ONLY",
+                "AliasCollisionParser_VALUE_IMPORT",
+                "AliasCollisionParser_UNSAFE_EXTERN",
+                "AliasCollisionParser_TURBOFISH",
+                "standard_qualified_macro_ok",
                 "c_strings_ok",
             ]
             .iter()
@@ -3647,8 +3652,38 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
 #[track_caller]
 fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
     assert!(
-        !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32"),
-        "matches! pattern bindings and guard reads must remain ordinary Rust bindings"
+        !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32")
+            && !source.contains("const AliasCollisionParser_TURBOFISH: i32"),
+        "pattern bindings and their reads must remain ordinary Rust bindings"
+    );
+}
+
+#[track_caller]
+fn assert_antlr4rust_import_namespace_fallbacks(source: &str) {
+    assert!(
+        source.contains("pub(super) use super::AliasCollisionParser_EOF;")
+            && source.contains(
+                "pub(crate) const AliasCollisionParser_EOF: i32 = \
+                 antlr4_runtime::TOKEN_EOF;"
+            ),
+        "a value import must override a namespace-safe compatibility fallback"
+    );
+    assert!(
+        source.contains("#[cfg(any())]\n    pub(super) use super::AliasCollisionParser_CFG;")
+            && source.contains("pub(crate) const AliasCollisionParser_CFG: i32"),
+        "a cfg-disabled member import must retain a compatibility fallback"
+    );
+    assert!(
+        source.contains("use std::fmt::Result as AliasCollisionParser_TYPE_ONLY;")
+            && source.contains("pub(super) use super::AliasCollisionParser_TYPE_ONLY;")
+            && source.contains("pub(crate) const AliasCollisionParser_TYPE_ONLY: i32"),
+        "type-only imports must coexist with the token-value fallback"
+    );
+    assert!(
+        source.contains("use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_VALUE_IMPORT;")
+            && source.contains("pub(super) use super::AliasCollisionParser_VALUE_IMPORT;")
+            && source.contains("pub(crate) const AliasCollisionParser_VALUE_IMPORT: i32"),
+        "value imports must override the token-value fallback"
     );
 }
 
@@ -3696,13 +3731,10 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         !alias_parser.contains("__Antlr4RustInput"),
         "token-alias-only bodies should not emit the input facade"
     );
+    assert_antlr4rust_import_namespace_fallbacks(&alias_collision_parser);
     assert!(
         !alias_collision_parser.contains("const AliasCollisionParser_ID"),
         "a user member symbol must suppress the colliding token alias"
-    );
-    assert!(
-        !alias_collision_parser.contains("const AliasCollisionParser_EOF"),
-        "a user import must suppress the colliding token alias"
     );
     assert!(
         alias_collision_parser.contains("const AliasCollisionParser_MODULE"),
@@ -3718,11 +3750,6 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
              RenamedMemberOnly};"
         ),
         "member-only compatibility imports must target the generated alias namespace"
-    );
-    assert!(
-        alias_collision_parser.contains("#[cfg(not(any()))]")
-            && alias_collision_parser.contains("const AliasCollisionParser_CFG"),
-        "a cfg-disabled member binding must retain a complementary compatibility alias"
     );
     assert!(
         alias_collision_parser.contains(
@@ -3827,6 +3854,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "FORMAT_LOCAL",
         "QUALIFIED_MACRO",
         "CONST_CHAIN",
+        "TURBOFISH",
     ]
     .into_iter()
     .filter(|name| alias_collision_parser.contains(&format!("const AliasCollisionParser_{name}:")))

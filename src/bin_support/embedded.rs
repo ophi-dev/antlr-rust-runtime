@@ -299,9 +299,13 @@ pub(crate) struct MembersModel {
     pub(crate) module_symbols: BTreeSet<String>,
     /// Activation predicates for declarations that occupy the value namespace.
     /// An empty predicate list denotes an unconditional declaration. Braced
-    /// structs are type-only; tuple/unit constructors and imports also occupy
-    /// the value namespace and can shadow compatibility token aliases.
+    /// structs are type-only, while tuple/unit constructors occupy both the
+    /// type and value namespaces.
     pub(crate) module_symbol_cfgs: BTreeMap<String, Vec<Vec<String>>>,
+    /// Activation predicates for imports whose target namespace is resolved by
+    /// Rust. Rendering keeps a token-value fallback alongside the import so a
+    /// type-only target does not hide the compatibility alias.
+    pub(crate) module_import_cfgs: BTreeMap<String, Vec<Vec<String>>>,
 }
 
 /// Full grammar model for embedded translation.
@@ -642,7 +646,11 @@ fn record_member_module_symbols(
     };
     for name in use_tree_bindings(rest)? {
         members.module_symbols.insert(name.clone());
-        record_member_value_symbol(&name, cfg_predicates, members);
+        members
+            .module_import_cfgs
+            .entry(name)
+            .or_default()
+            .push(cfg_predicates.to_vec());
     }
     Ok(())
 }
@@ -2745,6 +2753,7 @@ impl RustDelimiterMap {
 
     fn expression_end(&self, lexemes: &[RustLexeme], start: usize) -> usize {
         let mut position = start;
+        let mut generic_depth = 0_usize;
         while position < lexemes.len() {
             match lexemes[position].kind {
                 RustLexemeKind::Punctuation(b'(' | b'[' | b'{') => {
@@ -2753,7 +2762,17 @@ impl RustDelimiterMap {
                         continue;
                     }
                 }
-                RustLexemeKind::Punctuation(b',' | b';' | b')' | b']' | b'}') => {
+                RustLexemeKind::Punctuation(b'<')
+                    if generic_depth > 0 || is_turbofish_open(lexemes, position) =>
+                {
+                    generic_depth += 1;
+                }
+                RustLexemeKind::Punctuation(b'>') if generic_depth > 0 => {
+                    generic_depth -= 1;
+                }
+                RustLexemeKind::Punctuation(b',' | b';' | b')' | b']' | b'}')
+                    if generic_depth == 0 =>
+                {
                     return position;
                 }
                 _ => {}
@@ -5848,15 +5867,15 @@ mod tests {
             vec![Vec::<String>::new()]
         );
         assert_eq!(
-            members.module_symbol_cfgs["AliasTypeParser_CONDITIONAL"],
+            members.module_import_cfgs["AliasTypeParser_CONDITIONAL"],
             vec![vec!["any()".to_owned()]]
         );
         assert_eq!(
-            members.module_symbol_cfgs["AliasTypeParser_CFG_ATTR"],
+            members.module_import_cfgs["AliasTypeParser_CFG_ATTR"],
             vec![vec!["any(not(all()), any())".to_owned()]]
         );
         assert_eq!(
-            members.module_symbol_cfgs["fmt"],
+            members.module_import_cfgs["fmt"],
             vec![Vec::<String>::new()]
         );
     }
@@ -6274,7 +6293,7 @@ mod tests {
     }
 
     #[test]
-    fn preserves_qualified_macros_with_allowlisted_leaf_names() {
+    fn preserves_custom_qualified_macros_and_lowers_standard_paths() {
         let m = model(vec![rule("s")]);
         let toks = tokens(&[]);
         let ctx = TranslationCtx {
@@ -6286,7 +6305,8 @@ mod tests {
         };
         let aliases = BTreeSet::from(["CompatParser_ID".to_owned()]);
         let lowered = translate_parser_body(
-            "my_macros::assert!(CompatParser_ID)",
+            "my_macros::assert!(CompatParser_ID);\n\
+             std::matches!(kind, CompatParser_ID)",
             &ctx,
             "SContext",
             &aliases,
@@ -6299,7 +6319,12 @@ mod tests {
                 .source
                 .contains("my_macros::assert!(CompatParser_ID)")
         );
-        assert!(lowered.token_aliases.is_empty());
+        assert!(
+            lowered
+                .source
+                .contains("std::matches!(kind, __antlr4rust_token_aliases::CompatParser_ID)")
+        );
+        assert_eq!(lowered.token_aliases, aliases);
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
@@ -6524,8 +6549,14 @@ mod tests {
                     } else { false };\n\
                     let closure = |ScopeParser_ID| ScopeParser_ID;\n\
                     let nested = |_outer| |ScopeParser_ID: i32| ScopeParser_ID;\n\
+                    let turbofish_match = match Some(5) {\n\
+                        Some(ScopeParser_ID @ _) =>\n\
+                            Ok::<i32, ()>(ScopeParser_ID).unwrap() == 5,\n\
+                        None => false,\n\
+                    };\n\
                     before == after && after_cfg == before && inline_const == before\n\
                         && const_condition\n\
+                        && turbofish_match\n\
                         && closure(7) == 7 && nested(1)(2) == 2\n\
                         && matches!(before, ScopeParser_ID)";
         let lowered =

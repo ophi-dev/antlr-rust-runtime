@@ -949,7 +949,7 @@ mod_decl:
 // --- Foreign modules
 
 extern_mod:
-    extern_abi '{' inner_attr* foreign_item* '}';
+    'unsafe'? extern_abi '{' inner_attr* foreign_item* '}';
 
 foreign_item:
     attr* visibility? foreign_item_tail

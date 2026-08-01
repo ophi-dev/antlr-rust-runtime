@@ -10406,6 +10406,7 @@ fn build_embedded_parser_data(
         out.module_items.push_str(&render_antlr4rust_token_aliases(
             &antlr4rust_token_aliases,
             &model.parser_members.module_symbol_cfgs,
+            &model.parser_members.module_import_cfgs,
             &antlr4rust_direct_alias_imports,
             &antlr4rust_token_alias_module,
         ));
@@ -15699,6 +15700,7 @@ fn antlr4rust_compatibility_symbol_name(stem: &str, member_symbols: &BTreeSet<St
 fn render_antlr4rust_token_aliases(
     aliases: &BTreeMap<String, i32>,
     member_symbol_cfgs: &BTreeMap<String, Vec<Vec<String>>>,
+    member_import_cfgs: &BTreeMap<String, Vec<Vec<String>>>,
     direct_alias_imports: &BTreeSet<String>,
     module_name: &str,
 ) -> String {
@@ -15707,22 +15709,54 @@ fn render_antlr4rust_token_aliases(
         out,
         "#[allow(non_snake_case, dead_code, unused_imports)]\nmod {module_name} {{"
     );
+    let imported_aliases = aliases
+        .iter()
+        .filter(|(alias, _)| {
+            !direct_alias_imports.contains(*alias) && member_import_cfgs.contains_key(*alias)
+        })
+        .collect::<Vec<_>>();
+    if !imported_aliases.is_empty() {
+        out.push_str("    mod __fallback {\n");
+        for (alias, token_type) in imported_aliases {
+            let value = if *token_type == TOKEN_EOF {
+                "antlr4_runtime::TOKEN_EOF".to_owned()
+            } else {
+                token_type.to_string()
+            };
+            let _ = writeln!(
+                out,
+                "        #[allow(non_upper_case_globals)]\n        \
+                 pub(crate) const {alias}: i32 = {value};"
+            );
+        }
+        out.push_str("    }\n    pub(super) use __fallback::*;\n");
+    }
     for (alias, token_type) in aliases {
         let value = if *token_type == TOKEN_EOF {
             "antlr4_runtime::TOKEN_EOF".to_owned()
         } else {
             token_type.to_string()
         };
-        let declarations = (!direct_alias_imports.contains(alias))
+        let value_declarations = (!direct_alias_imports.contains(alias))
             .then(|| member_symbol_cfgs.get(alias))
             .flatten();
-        if declarations.is_some_and(|declarations| declarations.iter().any(Vec::is_empty)) {
+        let import_declarations = (!direct_alias_imports.contains(alias))
+            .then(|| member_import_cfgs.get(alias))
+            .flatten();
+        let declarations = value_declarations
+            .into_iter()
+            .flatten()
+            .chain(import_declarations.into_iter().flatten())
+            .collect::<Vec<_>>();
+        if declarations
+            .iter()
+            .any(|declaration| declaration.is_empty())
+        {
             let _ = writeln!(out, "    pub(super) use super::{alias};");
             continue;
         }
         let conditions = declarations
-            .into_iter()
-            .flatten()
+            .iter()
             .map(|predicates| match predicates.as_slice() {
                 [predicate] => predicate.clone(),
                 predicates => format!("all({})", predicates.join(", ")),
@@ -15733,6 +15767,9 @@ fn render_antlr4rust_token_aliases(
                 out,
                 "    #[cfg({condition})]\n    pub(super) use super::{alias};"
             );
+        }
+        if import_declarations.is_some() {
+            continue;
         }
         if !conditions.is_empty() {
             let active = if conditions.len() == 1 {

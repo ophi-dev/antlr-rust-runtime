@@ -493,12 +493,13 @@ fn collect_opaque_macro_identifiers(
     let Some(parent) = macro_tail.node().parent().and_then(Node::as_rule) else {
         return;
     };
-    let Some((macro_name, unqualified)) = macro_invocation_name(parent, tokens) else {
+    let Some((macro_name, qualification)) = macro_invocation_name(parent, tokens) else {
         return;
     };
-    if !unqualified
+    if qualification == MacroQualification::Other
         || !macro_allows_value_alias_lowering(&macro_name)
-        || local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings)
+        || (qualification == MacroQualification::Unqualified
+            && local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings))
     {
         if let Some(range) = body_byte_range(macro_tail, tokens, body_len) {
             syntax.opaque_macro_byte_ranges.push(range);
@@ -545,12 +546,13 @@ fn collect_opaque_macro_invocation_identifiers(
     macro_bindings: &[ScopedMacroBinding],
     syntax: &mut RustSyntax,
 ) {
-    let Some((macro_name, unqualified)) = macro_invocation_name(invocation, tokens) else {
+    let Some((macro_name, qualification)) = macro_invocation_name(invocation, tokens) else {
         return;
     };
-    if !unqualified
+    if qualification == MacroQualification::Other
         || !macro_allows_value_alias_lowering(&macro_name)
-        || local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings)
+        || (qualification == MacroQualification::Unqualified
+            && local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings))
     {
         if let Some(range) = body_byte_range(invocation, tokens, body_len) {
             syntax.opaque_macro_byte_ranges.push(range);
@@ -564,11 +566,18 @@ fn collect_opaque_macro_invocation_identifiers(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacroQualification {
+    Unqualified,
+    Standard,
+    Other,
+}
+
 fn macro_invocation_name(
     invocation: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
-) -> Option<(String, bool)> {
-    let mut macro_name = None;
+) -> Option<(String, MacroQualification)> {
+    let mut path = Vec::new();
     let mut qualified = false;
     for terminal in invocation
         .node()
@@ -585,7 +594,7 @@ fn macro_invocation_name(
             tokens.token_type(terminal.token_id()),
             Some(IDENT | RAW_IDENTIFIER)
         ) {
-            macro_name = Some(
+            path.push(
                 terminal
                     .text()
                     .strip_prefix("r#")
@@ -594,7 +603,15 @@ fn macro_invocation_name(
             );
         }
     }
-    macro_name.map(|name| (name, !qualified))
+    let name = path.pop()?;
+    let qualification = if !qualified {
+        MacroQualification::Unqualified
+    } else if path.as_slice() == ["std"] || path.as_slice() == ["core"] {
+        MacroQualification::Standard
+    } else {
+        MacroQualification::Other
+    };
+    Some((name, qualification))
 }
 
 fn local_macro_shadows(
@@ -1101,15 +1118,30 @@ mod tests {
     }
 
     #[test]
-    fn preserves_qualified_macros_with_standard_leaf_names() {
+    fn preserves_custom_qualified_macros_and_lowers_standard_paths() {
         let body = "let custom = my_macros::assert!(Alias);\n\
-                    let standard = assert!(Alias == 1);";
+                    let std_macro = std::assert!(Alias == 1);\n\
+                    let core_macro = core::matches!(value, Alias);\n\
+                    let unqualified = assert!(Alias == 1);";
         let syntax = analyze(body);
 
         assert!(syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 0)));
         assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 1)));
+        assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 2)));
+        assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 3)));
         assert!(syntax.is_opaque_macro_byte(occurrence(body, "Alias", 0)));
         assert!(!syntax.is_opaque_macro_byte(occurrence(body, "Alias", 1)));
+        assert!(!syntax.is_opaque_macro_byte(occurrence(body, "Alias", 2)));
+        assert!(!syntax.is_opaque_macro_byte(occurrence(body, "Alias", 3)));
+    }
+
+    #[test]
+    fn parses_edition_2024_unsafe_extern_blocks() {
+        let body = "unsafe extern \"C\" { fn foreign(); }\nAlias == 1";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
     }
 
     #[test]
