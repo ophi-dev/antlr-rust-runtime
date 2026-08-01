@@ -318,9 +318,15 @@ fn generated_modules_enforce_codegen_api_compatibility() {
     assert_eq!(utf8(&output.stdout), "");
     let diagnostic = utf8(&output.stderr)
         .lines()
+        .skip_while(|line| !line.starts_with("error:"))
         .take(2)
         .collect::<Vec<_>>()
         .join("\n");
+    let supported_revision = antlr4_runtime::__ANTLR4_RUST_CODEGEN_API;
+    assert!(
+        diagnostic.contains(&format!("supports revision {supported_revision}")),
+        "diagnostic should name runtime revision {supported_revision}: {diagnostic}"
+    );
     insta::assert_snapshot!(
         "generated_codegen_api_mismatch_diagnostic",
         normalize_current_package_version(&diagnostic)
