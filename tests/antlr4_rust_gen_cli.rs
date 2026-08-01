@@ -19,8 +19,9 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
-    let dev_dependencies = if test_source.contains("insta::") {
-        "\n[dev-dependencies]\ninsta = { version = \"1\", default-features = false }\n"
+    let uses_insta = test_source.contains("insta::") || test_source.contains("use insta ");
+    let dev_dependencies = if uses_insta {
+        "\n[dev-dependencies]\ninsta = { version = \"=1.48.0\", default-features = false }\n"
     } else {
         ""
     };
@@ -4846,6 +4847,8 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
 
     let output = run_antlr4_rust_gen(&[
         grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
         OsStr::new("--out-dir"),
         out.as_os_str(),
     ]);
@@ -4872,7 +4875,8 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
 mod inlined_token_tests {
     use super::inlined_tokens_lexer::InlinedTokensLexer;
     use super::inlined_tokens_parser::{
-        CollisionContext, ExprContext, InlinedTokensParser, RecoveredContext, StartContext,
+        ActiveContext, CollisionContext, ExprContext, InlinedTokensParser, RecoveredContext,
+        StartContext,
     };
     use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
 
@@ -4929,13 +4933,27 @@ mod inlined_token_tests {
     }
 
     #[test]
-    fn includes_recovered_error_nodes() {
-        let lexer = InlinedTokensLexer::new(InputStream::new("left right"));
+    fn active_context_accessors_use_live_children() {
+        let lexer = InlinedTokensLexer::new(InputStream::new("left=right"));
         let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
-        let root = parser
-            .recovered()
-            .expect("missing operator should recover by insertion");
-        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let root = parser.active().expect("active-context input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let active = parsed
+            .tree()
+            .as_rule()
+            .expect("active rule")
+            .downcast_ref::<ActiveContext>()
+            .expect("typed active context");
+
+        insta::assert_snapshot!(active.seen, @"left,=");
+    }
+
+    fn recovered_terminals(input: &str) -> (usize, Vec<(String, bool)>) {
+        let lexer = InlinedTokensLexer::new(InputStream::new(input));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.recovered().expect("invalid input should recover");
+        let syntax_errors = parser.number_of_syntax_errors();
         let parsed = parser.into_parsed_file(root);
         let recovered = parsed
             .tree()
@@ -4945,17 +4963,71 @@ mod inlined_token_tests {
             .expect("typed recovered context");
         let terminals = recovered
             .direct_terminals()
-            .map(|token| token.to_string())
+            .map(|token| (token.to_string(), token.is_error()))
             .collect::<Vec<_>>();
+        (syntax_errors, terminals)
+    }
 
-        insta::assert_debug_snapshot!(terminals, @r###"
+    #[test]
+    fn distinguishes_recovered_error_nodes() {
+        let (missing_errors, missing) = recovered_terminals("left right");
+        assert_eq!(missing_errors, 1);
+        let (deleted_errors, deleted) = recovered_terminals("left = = right");
+        assert_eq!(deleted_errors, 1);
+
+        insta::assert_debug_snapshot!(
+            [("inserted", missing), ("deleted", deleted)],
+            @r###"
         [
-            "left",
-            "<missing '='>",
-            "right",
-            "<EOF>",
+            (
+                "inserted",
+                [
+                    (
+                        "left",
+                        false,
+                    ),
+                    (
+                        "<missing '='>",
+                        true,
+                    ),
+                    (
+                        "right",
+                        false,
+                    ),
+                    (
+                        "<EOF>",
+                        false,
+                    ),
+                ],
+            ),
+            (
+                "deleted",
+                [
+                    (
+                        "left",
+                        false,
+                    ),
+                    (
+                        "=",
+                        false,
+                    ),
+                    (
+                        "=",
+                        true,
+                    ),
+                    (
+                        "right",
+                        false,
+                    ),
+                    (
+                        "<EOF>",
+                        false,
+                    ),
+                ],
+            ),
         ]
-        "###);
+        "###
+        );
     }
 
     #[test]

@@ -11113,7 +11113,8 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
     /// into nested rule contexts.
     ///
     /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface.
+    /// tokens through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to distinguish them.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -12056,6 +12057,13 @@ impl<'a> TerminalNode<'a> {
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
         self.__node.symbol()
     }
+
+    pub fn is_error(&self) -> bool {
+        matches!(
+            self.__node.node().kind(),
+            antlr4_runtime::NodeKind::Error
+        )
+    }
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
@@ -12140,6 +12148,7 @@ fn __rule_children<'a>(
     })
 }
 
+// This is lint-live because every typed context exposes direct_terminals().
 fn __terminal_children<'a>(
     source: __GeneratedRuleContext<'a>,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
@@ -17259,6 +17268,33 @@ mod tests {
             .expect("e context display impl")
             .0;
         insta::assert_snapshot!("typed_context_accessors_e_context", e_context);
+    }
+
+    #[test]
+    fn typed_context_accessors_reserve_direct_terminals() {
+        let rendered = render_parser(
+            "TParser",
+            &parser_fixture_data("context-accessor-collision/T.g4"),
+        )
+        .expect("parser should render");
+        let context_impl = |name: &str| {
+            rendered
+                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+                .unwrap_or_else(|| panic!("{name} impl"))
+                .1
+                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+                .unwrap_or_else(|| panic!("{name} display impl"))
+                .0
+        };
+        let start_context = context_impl("StartContext");
+        let labeled_context = context_impl("LabeledContext");
+        let context_surface =
+            format!("StartContext\n{start_context}LabeledContext\n{labeled_context}");
+
+        insta::assert_snapshot!(
+            "typed_context_accessors_reserved_direct_terminals",
+            context_surface
+        );
     }
 
     #[test]

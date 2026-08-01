@@ -37,6 +37,7 @@ expression: api
     "fn into_parsed_file",
     "fn into_token_store",
     "fn into_token_stream",
+    "fn is_error",
     "fn la",
     "fn lt",
     "fn metadata",

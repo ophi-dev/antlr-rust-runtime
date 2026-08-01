@@ -15,7 +15,8 @@ ExpressionContext
     /// into nested rule contexts.
     ///
     /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface.
+    /// tokens through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to distinguish them.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -190,7 +191,8 @@ OperatorSequenceContext
     /// into nested rule contexts.
     ///
     /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface.
+    /// tokens through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to distinguish them.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
@@ -313,7 +315,8 @@ EofChoiceContext
     /// into nested rule contexts.
     ///
     /// Recovered trees include error nodes such as synthetic `<missing ...>`
-    /// tokens through the same `TerminalNode` surface.
+    /// tokens through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to distinguish them.
     pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
