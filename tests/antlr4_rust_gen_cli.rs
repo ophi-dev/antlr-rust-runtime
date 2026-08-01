@@ -316,13 +316,14 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "unsupported generated-code API unexpectedly compiled"
     );
     assert_eq!(utf8(&output.stdout), "");
-    let stderr = utf8(&output.stderr);
-    let diagnostic = stderr
-        .split_once("\n\n")
-        .map_or(stderr, |(diagnostic, _)| diagnostic);
+    let diagnostic = utf8(&output.stderr)
+        .lines()
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("\n");
     insta::assert_snapshot!(
         "generated_codegen_api_mismatch_diagnostic",
-        normalize_current_package_version(diagnostic)
+        normalize_current_package_version(&diagnostic)
     );
 }
 

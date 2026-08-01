@@ -1,11 +1,6 @@
 ---
 source: tests/antlr4_rust_gen_cli.rs
-expression: normalize_current_package_version(diagnostic)
+expression: normalize_current_package_version(&diagnostic)
 ---
 error: antlr4-rust generated-code API mismatch: antlr4-rust-gen v<generator-version> emitted generated-code API revision 999, but the selected antlr-rust-runtime supports revision 1; regenerate this recognizer with a compatible antlr4-rust-gen or select a compatible antlr-rust-runtime dependency
  --> src/codegen_api_parser.rs:3:1
-  |
-3 | antlr4_runtime::__antlr4_rust_require_codegen_api!(999, "<generator-version>");
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: this error originates in the macro `antlr4_runtime::__antlr4_rust_require_codegen_api` (in Nightly builds, run with -Z macro-backtrace for more info)
