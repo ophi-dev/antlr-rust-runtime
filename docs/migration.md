@@ -12,6 +12,9 @@ no enforceable revision. Regenerate every committed lexer and parser once when
 first adopting a release with this mechanism. If a later build reports a
 generated-code API mismatch, either regenerate the named module with a
 compatible generator or select a runtime that accepts its requested revision.
+When new generated source is compiled against a runtime that predates the
+check, Rust reports the missing generated-code API macro instead; upgrade that
+runtime or regenerate with its matching older generator.
 `antlr4-rust-gen --version` reports the generator package version for auditing
 and reproducible regeneration.
 

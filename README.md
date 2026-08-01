@@ -81,7 +81,10 @@ Every newly generated lexer and parser contains a compile-time generated-code
 API check. The check records both the API revision and the
 `antlr4-rust-gen` package version that produced the module. A mismatch reports
 the generated file directly and asks you to either regenerate it with a
-compatible generator or select a compatible `antlr-rust-runtime` dependency.
+compatible generator or select a compatible `antlr-rust-runtime` dependency,
+provided the selected runtime implements this check. A runtime released before
+the check was introduced instead reports that the generated-code API macro is
+missing; upgrade that runtime or regenerate with its matching older generator.
 
 The generated-code API revision tracks the Rust source interface between
 generated recognizers and the runtime. It is independent of package SemVer and
