@@ -87,6 +87,7 @@ fn run_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) -
                 .expect("temporary path should be UTF-8"),
         ])
         .env("CARGO_TARGET_DIR", project.join("target"))
+        .env("CARGO_TERM_COLOR", "never")
         .output()
         .expect("cargo check should run")
 }
@@ -315,9 +316,13 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "unsupported generated-code API unexpectedly compiled"
     );
     assert_eq!(utf8(&output.stdout), "");
+    let stderr = utf8(&output.stderr);
+    let diagnostic = stderr
+        .split_once("\n\n")
+        .map_or(stderr, |(diagnostic, _)| diagnostic);
     insta::assert_snapshot!(
         "generated_codegen_api_mismatch_diagnostic",
-        normalize_current_package_version(utf8(&output.stderr))
+        normalize_current_package_version(diagnostic)
     );
 }
 
