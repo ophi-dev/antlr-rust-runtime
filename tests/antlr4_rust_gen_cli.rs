@@ -19,7 +19,7 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
-    let uses_insta = test_source.contains("insta::") || test_source.contains("use insta ");
+    let uses_insta = test_source.contains("insta");
     let dev_dependencies = if uses_insta {
         // Keep this exact pin aligned with Cargo.lock so offline temp crates reuse
         // the workspace's cached Insta version.
@@ -4893,15 +4893,26 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
         temp.path(),
         &["inlined_tokens_lexer.rs", "inlined_tokens_parser.rs"],
         r####"
+// Inline snapshots are intentional: the temporary crate is deleted after this
+// test, so external snapshots cannot be accepted from the repository.
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod inlined_token_tests {
     use super::inlined_tokens_lexer::InlinedTokensLexer;
     use super::inlined_tokens_parser::{
-        ActiveContext, CollisionContext, ExprContext, InlinedTokensParser, RecoveredContext,
-        StartContext,
+        ActiveContext, CollisionContext, ErrorNode, ExprContext, InlinedTokensListener,
+        InlinedTokensParser, RecoveredContext, StartContext,
     };
     use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+    use std::convert::Infallible;
+
+    fn detached_direct_terminals<'a>(
+        context: ExprContext<'a>,
+    ) -> impl Iterator<Item = String> + 'a {
+        context
+            .direct_terminals()
+            .map(|terminal| terminal.to_string())
+    }
 
     fn direct_expression_terminals(input: &str) -> Vec<String> {
         let lexer = InlinedTokensLexer::new(InputStream::new(input));
@@ -4916,10 +4927,7 @@ mod inlined_token_tests {
             .downcast_ref::<StartContext>()
             .expect("typed start context");
         let expression: ExprContext<'_> = start.expr().expect("root expression");
-        expression
-            .direct_terminals()
-            .map(|token| token.to_string())
-            .collect()
+        detached_direct_terminals(expression).collect()
     }
 
     #[test]
@@ -4972,14 +4980,33 @@ mod inlined_token_tests {
         insta::assert_snapshot!(active.seen, @"left,=");
     }
 
-    fn recovered_terminals(input: &str) -> (usize, Vec<(String, bool, bool)>) {
+    #[derive(Default)]
+    struct RecoveryTrace {
+        errors: Vec<(String, bool)>,
+    }
+
+    impl InlinedTokensListener for RecoveryTrace {
+        fn visit_error_node(&mut self, node: &ErrorNode) -> Result<(), Infallible> {
+            self.errors.push((node.to_string(), node.is_missing()));
+            Ok(())
+        }
+    }
+
+    type RecoveredTerminal = (String, bool, bool);
+    type RecoveredError = (String, bool);
+
+    fn recovered_terminals(
+        input: &str,
+    ) -> (usize, Vec<RecoveredTerminal>, Vec<RecoveredError>) {
         let lexer = InlinedTokensLexer::new(InputStream::new(input));
         let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
         let root = parser.recovered().expect("invalid input should recover");
         let syntax_errors = parser.number_of_syntax_errors();
         let parsed = parser.into_parsed_file(root);
-        let recovered = parsed
-            .tree()
+        let tree = parsed.tree();
+        let mut trace = RecoveryTrace::default();
+        trace.walk(tree).expect("error-node walk");
+        let recovered = tree
             .as_rule()
             .expect("recovered rule")
             .downcast_ref::<RecoveredContext>()
@@ -4988,18 +5015,22 @@ mod inlined_token_tests {
             .direct_terminals()
             .map(|token| (token.to_string(), token.is_error(), token.is_missing()))
             .collect::<Vec<_>>();
-        (syntax_errors, terminals)
+        (syntax_errors, terminals, trace.errors)
     }
 
     #[test]
     fn distinguishes_recovered_error_nodes() {
-        let (missing_errors, missing) = recovered_terminals("left right");
+        let (missing_errors, missing, missing_trace) = recovered_terminals("left right");
         assert_eq!(missing_errors, 1);
-        let (deleted_errors, deleted) = recovered_terminals("left = = right");
+        let (deleted_errors, deleted, deleted_trace) =
+            recovered_terminals("left = = right");
         assert_eq!(deleted_errors, 1);
 
         insta::assert_debug_snapshot!(
-            [("inserted", missing), ("deleted", deleted)],
+            [
+                ("inserted", missing, missing_trace),
+                ("deleted", deleted, deleted_trace),
+            ],
             @r###"
         [
             (
@@ -5024,6 +5055,12 @@ mod inlined_token_tests {
                         "<EOF>",
                         false,
                         false,
+                    ),
+                ],
+                [
+                    (
+                        "<missing '='>",
+                        true,
                     ),
                 ],
             ),
@@ -5053,6 +5090,12 @@ mod inlined_token_tests {
                     (
                         "<EOF>",
                         false,
+                        false,
+                    ),
+                ],
+                [
+                    (
+                        "=",
                         false,
                     ),
                 ],

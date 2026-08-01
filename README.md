@@ -138,9 +138,10 @@ On recovered trees, the iterator includes error nodes such as synthetic
 `<missing ...>` tokens through the same `TerminalNode` surface.
 `TerminalNode::is_error()` reports both inserted and deleted recovery nodes,
 while `TerminalNode::is_missing()` identifies inserted synthetic tokens.
-`direct_terminals` is a reserved accessor name, so grammar rules or labels that
-normalize to it use collision fallbacks such as `direct_terminals_rule_child()`
-or `direct_terminals_label()`.
+Recovery callbacks expose the same discriminator as `ErrorNode::is_missing()`.
+`direct_terminals` is a reserved accessor name, so grammar rules or labels
+that normalize to it use collision fallbacks such as
+`direct_terminals_rule_child()` or `direct_terminals_label()`.
 
 Call `parse_validated` when the application rejects recovered parses. It checks
 lexer and parser syntax-error counts, recovered error nodes, and every generated

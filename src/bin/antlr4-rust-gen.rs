@@ -11116,7 +11116,9 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11334,10 +11336,7 @@ fn __labeled_token_child(
             let terminal = child
                 .as_error()
                 .map(antlr4_runtime::ErrorNodeView::terminal)?;
-            let symbol = terminal.symbol();
-            // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
-            // deleted input tokens retain real source boundaries.
-            (symbol.start() == usize::MAX && symbol.stop() == usize::MAX).then_some(terminal)
+            terminal.symbol().is_synthetic().then_some(terminal)
         }
         antlr4_runtime::NodeKind::Rule => None,
     }
@@ -12067,8 +12066,7 @@ impl<'a> TerminalNode<'a> {
     }
 
     pub fn is_missing(&self) -> bool {
-        let symbol = self.__node.symbol();
-        symbol.start() == usize::MAX && symbol.stop() == usize::MAX
+        self.symbol().is_synthetic()
     }
 }
 
@@ -12092,6 +12090,10 @@ impl<'a> ErrorNode<'a> {
 
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
         self.__node.symbol()
+    }
+
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
     }
 }
 

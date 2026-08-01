@@ -588,8 +588,7 @@ impl<'a> TerminalNode<'a> {
     }
 
     pub fn is_missing(&self) -> bool {
-        let symbol = self.__node.symbol();
-        symbol.start() == usize::MAX && symbol.stop() == usize::MAX
+        self.symbol().is_synthetic()
     }
 }
 
@@ -613,6 +612,10 @@ impl<'a> ErrorNode<'a> {
 
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
         self.__node.symbol()
+    }
+
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
     }
 }
 
@@ -717,10 +720,7 @@ fn __labeled_token_child(
             let terminal = child
                 .as_error()
                 .map(antlr4_runtime::ErrorNodeView::terminal)?;
-            let symbol = terminal.symbol();
-            // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
-            // deleted input tokens retain real source boundaries.
-            (symbol.start() == usize::MAX && symbol.stop() == usize::MAX).then_some(terminal)
+            terminal.symbol().is_synthetic().then_some(terminal)
         }
         antlr4_runtime::NodeKind::Rule => None,
     }
@@ -1069,7 +1069,9 @@ impl<'a, State> GrammarSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -1327,7 +1329,9 @@ impl<'a, State> GrammarDeclContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -1569,7 +1573,9 @@ impl<'a, State> GrammarTypeContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -1801,7 +1807,9 @@ impl<'a, State> PrequelConstructContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -2051,7 +2059,9 @@ impl<'a, State> OptionsSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -2289,7 +2299,9 @@ impl<'a, State> OptionContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -2531,7 +2543,9 @@ impl<'a, State> OptionValueContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -2775,7 +2789,9 @@ impl<'a, State> DelegateGrammarsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -3013,7 +3029,9 @@ impl<'a, State> DelegateGrammarContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -3231,7 +3249,9 @@ impl<'a, State> TokensSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -3465,7 +3485,9 @@ impl<'a, State> ChannelsSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -3699,7 +3721,9 @@ impl<'a, State> IdListContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -3913,7 +3937,9 @@ impl<'a, State> ActionContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -4175,7 +4201,9 @@ impl<'a, State> ActionScopeNameContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -4405,7 +4433,9 @@ impl<'a, State> ActionBlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -4617,7 +4647,9 @@ impl<'a, State> ArgActionBlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -4847,7 +4879,9 @@ impl<'a, State> ModeSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -5094,7 +5128,9 @@ impl<'a, State> RulesContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -5302,7 +5338,9 @@ impl<'a, State> RuleSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -5522,7 +5560,9 @@ impl<'a, State> ParserRuleSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -5846,7 +5886,9 @@ impl<'a, State> ExceptionGroupContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -6064,7 +6106,9 @@ impl<'a, State> ExceptionHandlerContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -6306,7 +6350,9 @@ impl<'a, State> FinallyClauseContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -6533,7 +6579,9 @@ impl<'a, State> RulePrequelContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -6753,7 +6801,9 @@ impl<'a, State> RuleReturnsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -6980,7 +7030,9 @@ impl<'a, State> ThrowsSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -7206,7 +7258,9 @@ impl<'a, State> LocalsSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -7433,7 +7487,9 @@ impl<'a, State> RuleActionContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -7675,7 +7731,9 @@ impl<'a, State> RuleModifiersContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -7883,7 +7941,9 @@ impl<'a, State> RuleModifierContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -8123,7 +8183,9 @@ impl<'a, State> RuleBlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -8338,7 +8400,9 @@ impl<'a, State> RuleAltListContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -8552,7 +8616,9 @@ impl<'a, State> LabeledAltContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -8787,7 +8853,9 @@ impl<'a, State> LexerRuleSpecContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -9058,7 +9126,9 @@ impl<'a, State> LexerRuleBlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -9273,7 +9343,9 @@ impl<'a, State> LexerAltListContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -9487,7 +9559,9 @@ impl<'a, State> LexerAltContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -9707,7 +9781,9 @@ impl<'a, State> LexerElementsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -9915,7 +9991,9 @@ impl<'a, State> LexerElementContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -10165,7 +10243,9 @@ impl<'a, State> LexerBlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -10404,7 +10484,9 @@ impl<'a, State> LexerCommandsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -10630,7 +10712,9 @@ impl<'a, State> LexerCommandContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -10875,7 +10959,9 @@ impl<'a, State> LexerCommandNameContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11095,7 +11181,9 @@ impl<'a, State> LexerCommandExprContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11315,7 +11403,9 @@ impl<'a, State> AltListContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11529,7 +11619,9 @@ impl<'a, State> AlternativeContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11747,7 +11839,9 @@ impl<'a, State> ElementContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -12017,7 +12111,9 @@ impl<'a, State> PredicateOptionsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -12255,7 +12351,9 @@ impl<'a, State> PredicateOptionContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -12515,7 +12613,9 @@ impl<'a, State> LabeledElementContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -12770,7 +12870,9 @@ impl<'a, State> EbnfContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -12995,7 +13097,9 @@ impl<'a, State> BlockSuffixContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -13210,7 +13314,9 @@ impl<'a, State> EbnfSuffixContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -13436,7 +13542,9 @@ impl<'a, State> LexerAtomContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -13696,7 +13804,9 @@ impl<'a, State> AtomContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -13936,7 +14046,9 @@ impl<'a, State> WildcardContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -14158,7 +14270,9 @@ impl<'a, State> NotSetContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -14390,7 +14504,9 @@ impl<'a, State> BlockSetContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -14628,7 +14744,9 @@ impl<'a, State> SetElementContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -14878,7 +14996,9 @@ impl<'a, State> BlockContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -15145,7 +15265,9 @@ impl<'a, State> RulerefContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -15377,7 +15499,9 @@ impl<'a, State> CharacterRangeContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -15595,7 +15719,9 @@ impl<'a, State> TerminalDefContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -15825,7 +15951,9 @@ impl<'a, State> ElementOptionsContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -16063,7 +16191,9 @@ impl<'a, State> ElementOptionContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -16313,7 +16443,9 @@ impl<'a, State> IdentifierContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -16533,7 +16665,9 @@ impl<'a, State> QualifiedIdentifierContext<'a, State> {
     /// nodes through the same `TerminalNode` surface. Use
     /// `TerminalNode::is_error()` to identify recovery nodes and
     /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
