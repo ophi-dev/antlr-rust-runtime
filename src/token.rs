@@ -609,6 +609,14 @@ impl<'a> TokenView<'a> {
     pub fn text_or_empty(&self) -> &'a str {
         self.text().unwrap_or("")
     }
+
+    /// Returns whether parser recovery synthesized this token with ANTLR's
+    /// `-1:-1` source span.
+    #[must_use]
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_synthetic(&self) -> bool {
+        self.start() == usize::MAX && self.stop() == usize::MAX
+    }
 }
 
 impl fmt::Debug for TokenView<'_> {
@@ -694,7 +702,7 @@ impl fmt::Display for TokenView<'_> {
         write!(
             f,
             "[@{},{}:{}='{}',<{}>{},{}:{}]",
-            display_token_index(self),
+            display_token_index(*self),
             display_token_boundary(self.start()),
             display_token_boundary(self.stop()),
             display_text(self.text_or_empty()),
@@ -816,8 +824,8 @@ pub trait TokenSource {
     }
 }
 
-fn display_token_index(token: &impl Token) -> String {
-    if token.start() == usize::MAX && token.stop() == usize::MAX {
+fn display_token_index(token: TokenView<'_>) -> String {
+    if token.is_synthetic() {
         "-1".to_owned()
     } else {
         token.token_id().index().to_string()
@@ -864,6 +872,7 @@ mod tests {
                 .with_span(2, 4)
                 .with_position(3, 9),
         );
+        assert!(!store.view(TokenId(0)).expect("token").is_synthetic());
         assert_eq!(
             store.view(TokenId(0)).expect("token").to_string(),
             "[@0,2:4='abc',<7>,3:9]"
@@ -877,10 +886,17 @@ mod tests {
                 .with_span(usize::MAX, usize::MAX)
                 .with_position(3, 9),
         );
+        assert!(store.view(TokenId(0)).expect("token").is_synthetic());
         assert_eq!(
             store.view(TokenId(0)).expect("token").to_string(),
             "[@-1,-1:-1='<missing X>',<7>,3:9]"
         );
+    }
+
+    #[test]
+    fn eof_at_the_start_of_input_is_not_synthetic() {
+        let store = one_token(TokenSpec::eof(0, 0, 1, 0));
+        assert!(!store.view(TokenId(0)).expect("EOF").is_synthetic());
     }
 
     #[test]

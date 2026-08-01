@@ -11109,6 +11109,19 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
         }
     }
 
+    /// Iterates terminals owned directly by this context without descending
+    /// into nested rule contexts.
+    ///
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
+        __terminal_children(self.__node).map(TerminalNode::new)
+    }
+
     pub fn start(&self) -> __GeneratedTokenView {
         let token = match &self.__node {
             __GeneratedRuleContext::Stored(node) => node.start(),
@@ -11149,6 +11162,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
     let mut rendered = RenderedContextAccessors::default();
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
+        "direct_terminals".to_owned(),
         "rule_node".to_owned(),
         "start".to_owned(),
         "text".to_owned(),
@@ -11322,10 +11336,7 @@ fn __labeled_token_child(
             let terminal = child
                 .as_error()
                 .map(antlr4_runtime::ErrorNodeView::terminal)?;
-            let symbol = terminal.symbol();
-            // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
-            // deleted input tokens retain real source boundaries.
-            (symbol.start() == usize::MAX && symbol.stop() == usize::MAX).then_some(terminal)
+            terminal.symbol().is_synthetic().then_some(terminal)
         }
         antlr4_runtime::NodeKind::Rule => None,
     }
@@ -11981,8 +11992,9 @@ impl<T: {validated_visitor_trait}> antlr4_runtime::ParseTreeVisitor
 ///
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
 ///   alternative) with cardinality-aware rule, token, and label accessors,
-///   `child_count()`, `start()`, `text()`, public attribute fields, and a
-///   `FromRuleNode` impl backing `ctx.downcast_ref::<XContext>()`;
+///   `child_count()`, `direct_terminals()`, `start()`, `text()`, public attribute
+///   fields, and a `FromRuleNode` impl backing
+///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -12045,6 +12057,17 @@ impl<'a> TerminalNode<'a> {
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
         self.__node.symbol()
     }
+
+    pub fn is_error(&self) -> bool {
+        matches!(
+            self.__node.node().kind(),
+            antlr4_runtime::NodeKind::Error
+        )
+    }
+
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
+    }
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
@@ -12067,6 +12090,10 @@ impl<'a> ErrorNode<'a> {
 
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
         self.__node.symbol()
+    }
+
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
     }
 }
 
@@ -12129,21 +12156,27 @@ fn __rule_children<'a>(
     })
 }
 
+// Keep this triage aligned with runtime `RuleNodeView::terminal_children()` and
+// `ParserRuleContext::terminal_children()`.
+fn __terminal_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(|child| match child.kind() {
+        antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+        antlr4_runtime::NodeKind::Error => {
+            child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
+        }
+        antlr4_runtime::NodeKind::Rule => None,
+    })
+}
+
 #[allow(dead_code)]
 fn __token_children<'a>(
     source: __GeneratedRuleContext<'a>,
     token_type: i32,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = match child.kind() {
-            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
-            antlr4_runtime::NodeKind::Error => {
-                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
-            }
-            antlr4_runtime::NodeKind::Rule => None,
-        }?;
-        (terminal.symbol().token_type() == token_type).then_some(terminal)
-    })
+    __terminal_children(source)
+        .filter(move |terminal| terminal.symbol().token_type() == token_type)
 }
 
 #[allow(dead_code)]
@@ -12151,18 +12184,8 @@ fn __token_children_matching<'a>(
     source: __GeneratedRuleContext<'a>,
     token_types: &'static [i32],
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = match child.kind() {
-            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
-            antlr4_runtime::NodeKind::Error => {
-                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
-            }
-            antlr4_runtime::NodeKind::Rule => None,
-        }?;
-        token_types
-            .contains(&terminal.symbol().token_type())
-            .then_some(terminal)
-    })
+    __terminal_children(source)
+        .filter(move |terminal| token_types.contains(&terminal.symbol().token_type()))
 }
 
 "#,
@@ -17254,6 +17277,33 @@ mod tests {
             .expect("e context display impl")
             .0;
         insta::assert_snapshot!("typed_context_accessors_e_context", e_context);
+    }
+
+    #[test]
+    fn typed_context_accessors_reserve_direct_terminals() {
+        let rendered = render_parser(
+            "TParser",
+            &parser_fixture_data("context-accessor-collision/T.g4"),
+        )
+        .expect("parser should render");
+        let context_impl = |name: &str| {
+            rendered
+                .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
+                .unwrap_or_else(|| panic!("{name} impl"))
+                .1
+                .split_once(&format!("impl<State> std::fmt::Display for {name}"))
+                .unwrap_or_else(|| panic!("{name} display impl"))
+                .0
+        };
+        let start_context = context_impl("StartContext");
+        let labeled_context = context_impl("LabeledContext");
+        let context_surface =
+            format!("StartContext\n{start_context}LabeledContext\n{labeled_context}");
+
+        insta::assert_snapshot!(
+            "typed_context_accessors_reserved_direct_terminals",
+            context_surface
+        );
     }
 
     #[test]

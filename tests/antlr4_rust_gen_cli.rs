@@ -19,6 +19,14 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
+    let uses_insta = test_source.contains("insta");
+    let dev_dependencies = if uses_insta {
+        // Keep this exact pin aligned with Cargo.lock so offline temp crates reuse
+        // the workspace's cached Insta version.
+        "\n[dev-dependencies]\ninsta = { version = \"=1.48.0\", default-features = false }\n"
+    } else {
+        ""
+    };
     fs::create_dir_all(&source).expect("generated-module check should be writable");
     fs::write(
         project.join("Cargo.toml"),
@@ -29,8 +37,9 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
              edition = \"2024\"\n\
              \n\
              [dependencies]\n\
-             antlr-rust-runtime = {{ path = {:?} }}\n",
-            env!("CARGO_MANIFEST_DIR")
+             antlr-rust-runtime = {{ path = {:?} }}\n\
+             {dev_dependencies}",
+            env!("CARGO_MANIFEST_DIR"),
         ),
     )
     .expect("generated-module manifest should be writable");
@@ -3238,6 +3247,27 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
 }
 
 #[test]
+fn colliding_context_accessor_names_compile() {
+    let temp = temporary_directory("context-accessor-collision");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/context-accessor-collision/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert_generated_modules_compile(temp.path(), &["t.rs"]);
+}
+
+#[test]
 fn embedded_parser_semantics_satisfy_strict_manifest_checks() {
     let temp = temporary_directory("embedded-parser-semantics");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4823,6 +4853,306 @@ mod mutual_left_recursion_tests {
     }
 }
 "#,
+    );
+}
+
+/// Issue #269: terminals from a hub-only mutual-left-recursion satellite must
+/// remain reachable without descending into nested expression children. The
+/// operators are anonymous literals, so no stable per-token accessor name
+/// exists; `direct_terminals()` provides the typed, grammar-agnostic surface.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn inlined_satellite_terminals_are_typed_direct_children() {
+    let temp = temporary_directory("inlined-token-accessors");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/inlined-token-accessors/InlinedTokens.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser =
+        fs::read_to_string(out.join("inlined_tokens_parser.rs")).expect("parser should be emitted");
+    insta::assert_debug_snapshot!(
+        "inlined_token_accessors_generated_api",
+        generated_parser_api(&parser)
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["inlined_tokens_lexer.rs", "inlined_tokens_parser.rs"],
+        r####"
+// Inline snapshots are intentional: the temporary crate is deleted after this
+// test, so external snapshots cannot be accepted from the repository.
+#[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+mod inlined_token_tests {
+    use super::inlined_tokens_lexer::InlinedTokensLexer;
+    use super::inlined_tokens_parser::{
+        ActiveContext, CollisionContext, ErrorNode, ExprContext, InlinedTokensListener,
+        InlinedTokensParser, RecoveredContext, StartContext,
+    };
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+    use std::convert::Infallible;
+
+    fn detached_direct_terminals<'a>(
+        context: ExprContext<'a>,
+    ) -> impl Iterator<Item = String> + 'a {
+        context
+            .direct_terminals()
+            .map(|terminal| terminal.to_string())
+    }
+
+    fn direct_expression_terminals(input: &str) -> Vec<String> {
+        let lexer = InlinedTokensLexer::new(InputStream::new(input));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.start().expect("operator input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let start = parsed
+            .tree()
+            .as_rule()
+            .expect("start rule")
+            .downcast_ref::<StartContext>()
+            .expect("typed start context");
+        let expression: ExprContext<'_> = start.expr().expect("root expression");
+        detached_direct_terminals(expression).collect()
+    }
+
+    #[test]
+    fn returns_only_the_operator_owned_by_the_hub_context() {
+        insta::assert_debug_snapshot!(
+            [
+                ("assignment", direct_expression_terminals("left=right")),
+                ("addition", direct_expression_terminals("left+right")),
+                ("subtraction", direct_expression_terminals("left-right")),
+            ],
+            @r###"
+        [
+            (
+                "assignment",
+                [
+                    "=",
+                ],
+            ),
+            (
+                "addition",
+                [
+                    "+",
+                ],
+            ),
+            (
+                "subtraction",
+                [
+                    "-",
+                ],
+            ),
+        ]
+        "###
+        );
+    }
+
+    #[test]
+    fn active_context_accessors_use_live_children() {
+        let lexer = InlinedTokensLexer::new(InputStream::new("left=right"));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.active().expect("active-context input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let active = parsed
+            .tree()
+            .as_rule()
+            .expect("active rule")
+            .downcast_ref::<ActiveContext>()
+            .expect("typed active context");
+
+        insta::assert_snapshot!(active.seen, @"left,=");
+    }
+
+    #[derive(Default)]
+    struct RecoveryTrace {
+        errors: Vec<(String, bool)>,
+    }
+
+    impl InlinedTokensListener for RecoveryTrace {
+        fn visit_error_node(&mut self, node: &ErrorNode) -> Result<(), Infallible> {
+            self.errors.push((node.to_string(), node.is_missing()));
+            Ok(())
+        }
+    }
+
+    type RecoveredTerminal = (String, bool, bool);
+    type RecoveredError = (String, bool);
+
+    fn recovered_terminals(
+        input: &str,
+    ) -> (usize, Vec<RecoveredTerminal>, Vec<RecoveredError>) {
+        let lexer = InlinedTokensLexer::new(InputStream::new(input));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.recovered().expect("invalid input should recover");
+        let syntax_errors = parser.number_of_syntax_errors();
+        let parsed = parser.into_parsed_file(root);
+        let tree = parsed.tree();
+        let mut trace = RecoveryTrace::default();
+        trace.walk(tree).expect("error-node walk");
+        let recovered = tree
+            .as_rule()
+            .expect("recovered rule")
+            .downcast_ref::<RecoveredContext>()
+            .expect("typed recovered context");
+        let terminals = recovered
+            .direct_terminals()
+            .map(|token| (token.to_string(), token.is_error(), token.is_missing()))
+            .collect::<Vec<_>>();
+        (syntax_errors, terminals, trace.errors)
+    }
+
+    #[test]
+    fn distinguishes_recovered_error_nodes() {
+        let (missing_errors, missing, missing_trace) = recovered_terminals("left right");
+        assert_eq!(missing_errors, 1);
+        let (deleted_errors, deleted, deleted_trace) =
+            recovered_terminals("left = = right");
+        assert_eq!(deleted_errors, 1);
+
+        insta::assert_debug_snapshot!(
+            [
+                ("inserted", missing, missing_trace),
+                ("deleted", deleted, deleted_trace),
+            ],
+            @r###"
+        [
+            (
+                "inserted",
+                [
+                    (
+                        "left",
+                        false,
+                        false,
+                    ),
+                    (
+                        "<missing '='>",
+                        true,
+                        true,
+                    ),
+                    (
+                        "right",
+                        false,
+                        false,
+                    ),
+                    (
+                        "<EOF>",
+                        false,
+                        false,
+                    ),
+                ],
+                [
+                    (
+                        "<missing '='>",
+                        true,
+                    ),
+                ],
+            ),
+            (
+                "deleted",
+                [
+                    (
+                        "left",
+                        false,
+                        false,
+                    ),
+                    (
+                        "=",
+                        false,
+                        false,
+                    ),
+                    (
+                        "=",
+                        true,
+                        false,
+                    ),
+                    (
+                        "right",
+                        false,
+                        false,
+                    ),
+                    (
+                        "<EOF>",
+                        false,
+                        false,
+                    ),
+                ],
+                [
+                    (
+                        "=",
+                        false,
+                    ),
+                ],
+            ),
+        ]
+        "###
+        );
+    }
+
+    #[test]
+    fn preserves_repeated_direct_token_accessor() {
+        let lexer = InlinedTokensLexer::new(InputStream::new("direct direct value"));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.collision().expect("collision input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let collision = parsed
+            .tree()
+            .as_rule()
+            .expect("collision rule")
+            .downcast_ref::<CollisionContext>()
+            .expect("typed collision context");
+        let direct = collision
+            .direct_tokens()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>();
+        let all = collision
+            .direct_terminals()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(
+            [("direct_tokens", direct), ("direct_terminals", all)],
+            @r###"
+        [
+            (
+                "direct_tokens",
+                [
+                    "direct",
+                    "direct",
+                ],
+            ),
+            (
+                "direct_terminals",
+                [
+                    "direct",
+                    "direct",
+                    "value",
+                    "<EOF>",
+                ],
+            ),
+        ]
+        "###
+        );
+    }
+}
+"####,
     );
 }
 

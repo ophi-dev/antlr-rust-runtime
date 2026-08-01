@@ -1182,11 +1182,7 @@ impl ParserRuleContext {
                 NodeKind::Terminal => child.as_terminal(),
                 NodeKind::Error => {
                     let terminal = child.as_error().map(ErrorNodeView::terminal)?;
-                    let symbol = terminal.symbol();
-                    // Inserted missing tokens carry ANTLR's synthetic -1:-1 span;
-                    // deleted input tokens retain real source boundaries.
-                    (symbol.start() == usize::MAX && symbol.stop() == usize::MAX)
-                        .then_some(terminal)
+                    terminal.symbol().is_synthetic().then_some(terminal)
                 }
                 NodeKind::Rule => None,
             })
