@@ -14,6 +14,8 @@ assignment
         __first_type == Some(CCompatParser_IDENTIFIER)
             && __first_text == Some("left")
             && !__not_code.is_empty()
+            && recog.input.la(0) == antlr4_runtime::INVALID_TOKEN_TYPE
+            && recog.input.la(-1) == antlr4_runtime::INVALID_TOKEN_TYPE
             && recog.input.la(1) == CCompatParser_IDENTIFIER
             && recog.input.la(2) == CCompatParser_ASSIGN
             && recog.input.lt(0).is_none()
@@ -58,6 +60,14 @@ nativeAssignment
             .map(|t| (t.token_type(), t.text_or_empty().to_owned()));
         __first_type == Some(IDENTIFIER)
             && __first_text == Some("left")
+            && self.base.token_stream().lt(0).map_or(
+                antlr4_runtime::INVALID_TOKEN_TYPE,
+                |token| token.token_type(),
+            ) == antlr4_runtime::INVALID_TOKEN_TYPE
+            && self.base.token_stream().lt(-1).map_or(
+                antlr4_runtime::INVALID_TOKEN_TYPE,
+                |token| token.token_type(),
+            ) == antlr4_runtime::INVALID_TOKEN_TYPE
             && self.base.token_stream().la_token(1) == IDENTIFIER
             && self.base.token_stream().la_token(2) == ASSIGN
             && self.base.token_stream().lt(0).is_none()

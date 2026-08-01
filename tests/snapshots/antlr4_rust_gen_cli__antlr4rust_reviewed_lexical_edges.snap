@@ -9,6 +9,7 @@ pub(super) const AliasCollisionParser_ASSOCIATED_CONST: i32 = 34;
 pub(super) const AliasCollisionParser_CONST_BLOCK: i32 = 33;
 pub(super) const AliasCollisionParser_CONST_EXPRESSION: i32 = 28;
 pub(super) const AliasCollisionParser_METHOD_NAME: i32 = 27;
+pub(super) const AliasCollisionParser_PRECISE_CAPTURE: i32 = 36;
 use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_ACTION_CFG;
 __antlr4rust_token_aliases_2::AliasCollisionParser_ACTION_CFG == ACTION_CFG;
 const { __antlr4rust_token_aliases_2::AliasCollisionParser_CONST_BLOCK } == CONST_BLOCK;
@@ -18,6 +19,9 @@ let shadowed_macro_ok = assert!(AliasCollisionParser_SHADOWED_MACRO);
 let πrecog = 41;
 let πAliasCollisionParser_UNICODE = 42;
 πrecog + 1 == πAliasCollisionParser_UNICODE;
+AliasCollisionParser_MATCHES_BINDING @ Some(_)
+if AliasCollisionParser_MATCHES_BINDING
+__antlr4rust_token_aliases_2::AliasCollisionParser_PRECISE_CAPTURE
 __antlr4rust_token_aliases_2::AliasCollisionParser_CONST_EXPRESSION as usize
 && self.AliasCollisionParser_METHOD_NAME()
 fn AliasCollisionParser_METHOD_NAME(&self) -> bool {

@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 
 use super::char_support::get_char_value_from_grammar_char_literal;
 use super::diagnostic::{CompilationError, Diagnostic};
-use super::frontend::{SourceId, SourceSpan};
+use super::frontend::{SourceFile, SourceId, SourceSpan};
 use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
@@ -1462,6 +1462,33 @@ fn parser_literals(rules: &[Rule]) -> Vec<String> {
         visit(&rule.block, &mut seen, &mut literals);
     }
     literals
+}
+
+pub(crate) fn source_implicit_token_literals(file: &SourceFile) -> Option<Vec<String>> {
+    let mut ids = ModelIdAllocator::after_loaded_grammars(1);
+    let mut provenance = ProvenanceIndex::default();
+    let unit = parse_grammar_unit(file, GrammarId::new(0), &mut ids, &mut provenance);
+    if unit.kind != GrammarKind::Combined {
+        return None;
+    }
+
+    let modal_rules = unit
+        .modes
+        .iter()
+        .flat_map(|mode| mode.rules.iter())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let (parser_rules, lexer_rules): (Vec<_>, Vec<_>) = unit
+        .rules
+        .into_iter()
+        .partition(|rule| modal_rules.contains(&rule.id) || rule.kind == RuleKind::Parser);
+    let aliases = literal_aliases(&lexer_rules);
+    Some(
+        parser_literals(&parser_rules)
+            .into_iter()
+            .filter(|literal| !aliases.contains(literal))
+            .collect(),
+    )
 }
 
 fn literal_aliases(rules: &[Rule]) -> BTreeSet<String> {

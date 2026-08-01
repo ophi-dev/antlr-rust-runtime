@@ -25,7 +25,9 @@ use grammar::provenance::{Origin, ProvenanceIndex};
 use grammar::prune_unreachable::PruneUnreachableRules;
 use grammar::rule_reachability::EntryRuleConfig;
 use grammar::source::SourceSet;
-use grammar::transform::{TransformRegistry, render_optimization_manifest};
+use grammar::transform::{
+    TransformRegistry, render_optimization_manifest, source_implicit_token_literals,
+};
 use petgraph::graph::DiGraph;
 use petgraph::visit::{Dfs, Reversed};
 
@@ -9941,7 +9943,7 @@ fn antlr4rust_token_alias_inventory(
                 name
             },
         );
-    let values = antlr4rust_token_alias_values(&owner_type, data);
+    let values = antlr4rust_token_alias_values(&owner_type, data, source);
     let names = values.keys().cloned().collect();
     Antlr4RustTokenAliasInventory { names, values }
 }
@@ -13608,7 +13610,9 @@ struct __Antlr4RustInput<'a, L: TokenSource>(&'a CommonTokenStream<L>);
 #[allow(dead_code)]
 impl<'a, L: TokenSource> __Antlr4RustInput<'a, L> {
     fn la(&self, offset: isize) -> i32 {
-        self.0.la_token(offset)
+        self.lt(offset).map_or(antlr4_runtime::INVALID_TOKEN_TYPE, |token| {
+            token.get_token_type()
+        })
     }
 
     fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView<'a>> {
@@ -15604,11 +15608,32 @@ fn antlr4rust_token_alias_name(type_name: &str, token_name: &str) -> String {
 fn antlr4rust_implicit_token_aliases(
     type_name: &str,
     data: &CodegenData<'_>,
+    source: SourceId,
 ) -> Vec<(String, i32)> {
     let Some(semantic) = data.semantic else {
         return Vec::new();
     };
     let vocabulary = &semantic.recognizer.vocabulary;
+    let source_literals = if source == semantic.unit.source {
+        None
+    } else {
+        data.sources
+            .and_then(|sources| sources.get(source))
+            .and_then(source_implicit_token_literals)
+    };
+    if let Some(literals) = source_literals {
+        return literals
+            .iter()
+            .enumerate()
+            .filter_map(|(index, literal)| {
+                let token_type = vocabulary.by_literal.get(literal)?;
+                Some((
+                    antlr4rust_token_alias_name(type_name, &format!("T__{index}")),
+                    *token_type,
+                ))
+            })
+            .collect();
+    }
     vocabulary
         .name_order
         .iter()
@@ -15622,10 +15647,14 @@ fn antlr4rust_implicit_token_aliases(
         .collect()
 }
 
-fn antlr4rust_token_alias_values(type_name: &str, data: &CodegenData<'_>) -> BTreeMap<String, i32> {
+fn antlr4rust_token_alias_values(
+    type_name: &str,
+    data: &CodegenData<'_>,
+    source: SourceId,
+) -> BTreeMap<String, i32> {
     let eof = antlr4rust_token_alias_name(type_name, "EOF");
     let mut aliases = BTreeMap::from([(eof, TOKEN_EOF)]);
-    for (alias, token_type) in antlr4rust_implicit_token_aliases(type_name, data) {
+    for (alias, token_type) in antlr4rust_implicit_token_aliases(type_name, data, source) {
         aliases.entry(alias).or_insert(token_type);
     }
     for (token_type, name) in data.symbolic_names.iter().enumerate() {

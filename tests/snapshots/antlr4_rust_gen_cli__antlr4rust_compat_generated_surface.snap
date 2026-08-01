@@ -14,6 +14,8 @@ pub(super) const CCompatParser_IDENTIFIER: i32 = 2;
 let __first = __Antlr4RustInput(self.base.token_stream()).lt(1);
 let __eof = __Antlr4RustInput(self.base.token_stream()).lt(5)
 __first_type == Some(__antlr4rust_token_aliases::CCompatParser_IDENTIFIER)
+&& __Antlr4RustInput(self.base.token_stream()).la(0) == antlr4_runtime::INVALID_TOKEN_TYPE
+&& __Antlr4RustInput(self.base.token_stream()).la(-1) == antlr4_runtime::INVALID_TOKEN_TYPE
 && __Antlr4RustInput(self.base.token_stream()).la(1) == __antlr4rust_token_aliases::CCompatParser_IDENTIFIER
 && __Antlr4RustInput(self.base.token_stream()).la(2) == __antlr4rust_token_aliases::CCompatParser_ASSIGN
 && __Antlr4RustInput(self.base.token_stream()).lt(0).is_none()

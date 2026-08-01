@@ -2455,6 +2455,7 @@ fn local_antlr4rust_alias_bindings(
             }
             "use" => {
                 if let Some(start) = next_significant(lexemes, position)
+                    && lexemes[start].kind != RustLexemeKind::Punctuation(b'<')
                     && let Some(end) = find_top_level_lexeme(
                         body,
                         lexemes,
@@ -2512,6 +2513,7 @@ fn local_antlr4rust_alias_bindings(
         syntax,
         &mut bindings,
     );
+    collect_matches_macro_alias_bindings(body, lexemes, token_aliases, &delimiters, &mut bindings);
     collect_function_alias_bindings(body, lexemes, token_aliases, syntax, &mut bindings);
     collect_closure_alias_bindings(body, lexemes, token_aliases, syntax, &mut bindings);
     Ok(bindings)
@@ -2873,6 +2875,100 @@ fn collect_match_alias_bindings(
             bindings.record(pattern_bindings, arm_start..body_end);
             arm_start = body_end.saturating_add(1);
         }
+    }
+}
+
+fn collect_matches_macro_alias_bindings(
+    body: &str,
+    lexemes: &[RustLexeme],
+    token_aliases: &BTreeSet<String>,
+    delimiters: &RustDelimiterMap,
+    bindings: &mut AliasBindingScopes,
+) {
+    const PATTERN_PREFIX: &str = "match () { ";
+    const PATTERN_SUFFIX: &str = " => (), _ => () }";
+
+    for (position, lexeme) in lexemes.iter().enumerate() {
+        if lexeme.kind != RustLexemeKind::Identifier || lexeme_text(body, *lexeme) != "matches" {
+            continue;
+        }
+        let Some(bang) = next_significant(lexemes, position) else {
+            continue;
+        };
+        let Some(open) = next_significant(lexemes, bang) else {
+            continue;
+        };
+        if lexemes[bang].kind != RustLexemeKind::Punctuation(b'!')
+            || !matches!(
+                lexemes[open].kind,
+                RustLexemeKind::Punctuation(b'(' | b'[' | b'{')
+            )
+        {
+            continue;
+        }
+        let Some(close) = delimiters.pairs[open] else {
+            continue;
+        };
+        let Some(comma) = find_top_level_lexeme(
+            body,
+            &lexemes[..close],
+            open + 1,
+            TopLevelLexeme::Punctuation(b','),
+        ) else {
+            continue;
+        };
+        let Some(pattern_start) = next_significant(&lexemes[..close], comma) else {
+            continue;
+        };
+        let trailing_comma = previous_significant(lexemes, close)
+            .filter(|candidate| lexemes[*candidate].kind == RustLexemeKind::Punctuation(b','));
+        let pattern_tail = trailing_comma.unwrap_or(close);
+        let guard = find_top_level_lexeme(
+            body,
+            &lexemes[..pattern_tail],
+            pattern_start,
+            TopLevelLexeme::Identifier("if"),
+        );
+        let pattern_end = guard.unwrap_or(pattern_tail);
+        if pattern_start >= pattern_end {
+            continue;
+        }
+
+        let pattern_byte_start = lexemes[pattern_start].start;
+        let pattern_byte_end = lexemes[pattern_end].start;
+        let pattern_source = &body[pattern_byte_start..pattern_byte_end];
+        let synthetic = format!("{PATTERN_PREFIX}{pattern_source}{PATTERN_SUFFIX}");
+        let pattern_syntax = rust_syntax::analyze(&synthetic).ok();
+        let pattern_bindings = (pattern_start..pattern_end)
+            .filter_map(|candidate| {
+                let candidate_lexeme = lexemes[candidate];
+                if candidate_lexeme.kind != RustLexemeKind::Identifier
+                    || !is_unqualified_identifier(lexemes, candidate)
+                {
+                    return None;
+                }
+                let explicit_at_binding = next_significant(&lexemes[..pattern_end], candidate)
+                    .is_some_and(|next| lexemes[next].kind == RustLexemeKind::Punctuation(b'@'));
+                let explicit_modifier =
+                    previous_significant(lexemes, candidate).is_some_and(|previous| {
+                        previous >= pattern_start
+                            && lexemes[previous].kind == RustLexemeKind::Identifier
+                            && matches!(lexeme_text(body, lexemes[previous]), "ref" | "mut")
+                    });
+                let synthetic_start =
+                    PATTERN_PREFIX.len() + candidate_lexeme.start - pattern_byte_start;
+                let field_shorthand = pattern_syntax
+                    .as_ref()
+                    .is_some_and(|syntax| syntax.is_pattern_field_shorthand(synthetic_start));
+                (explicit_at_binding || explicit_modifier || field_shorthand)
+                    .then(|| alias_binding(body, candidate_lexeme, candidate, token_aliases))
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        let guard_scope = guard
+            .and_then(|guard| next_significant(&lexemes[..close], guard))
+            .map_or(close..close, |start| start..close);
+        bindings.record(pattern_bindings, guard_scope);
     }
 }
 
@@ -5783,6 +5879,58 @@ mod tests {
             lowered.source
         );
         assert_eq!(lowered.token_aliases, aliases);
+    }
+
+    #[test]
+    fn preserves_matches_pattern_bindings_and_lowers_pattern_constants() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from([
+            "CompatParser_BINDING".to_owned(),
+            "CompatParser_FIELD".to_owned(),
+            "CompatParser_ID".to_owned(),
+        ]);
+        let body = "let explicit = matches!(\n\
+                        value,\n\
+                        CompatParser_BINDING @ Some(CompatParser_ID)\n\
+                            if CompatParser_BINDING == Some(CompatParser_ID),\n\
+                    );\n\
+                    let shorthand = matches!(\n\
+                        value,\n\
+                        Fields { CompatParser_FIELD }\n\
+                            if CompatParser_FIELD == 1,\n\
+                    );\n\
+                    explicit && shorthand && matches!(kind, CompatParser_ID)";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("matches pattern bindings should remain ordinary Rust");
+
+        assert!(
+            lowered.source.contains(
+                "CompatParser_BINDING @ Some(__antlr4rust_token_aliases::CompatParser_ID)"
+            )
+        );
+        assert!(lowered.source.contains(
+            "if CompatParser_BINDING == Some(__antlr4rust_token_aliases::CompatParser_ID)"
+        ));
+        assert!(
+            lowered
+                .source
+                .contains("Fields { CompatParser_FIELD }\nif CompatParser_FIELD == 1"),
+            "{}",
+            lowered.source
+        );
+        assert_eq!(
+            lowered.token_aliases,
+            BTreeSet::from(["CompatParser_ID".to_owned()])
+        );
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.

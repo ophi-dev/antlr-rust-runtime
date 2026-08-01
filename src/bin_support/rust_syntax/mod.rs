@@ -1236,6 +1236,17 @@ mod tests {
     }
 
     #[test]
+    fn parses_precise_capture_bounds() {
+        let body = "fn capture<'a, T, const N: usize>()\n\
+                    -> impl Copy + use<'a, T, N> { Alias }";
+        let syntax = analyze(body);
+        let alias = occurrence(body, "Alias", 0);
+
+        assert!(!syntax.is_type_identifier(alias));
+        assert!(!syntax.is_declaration_identifier(alias));
+    }
+
+    #[test]
     fn separates_type_declarations_from_value_constructors() {
         let body = "fn Function() {}\n\
                     const Constant: i32 = 1;\n\

@@ -1390,6 +1390,7 @@ type_param_bounds
 type_param_bound
     : lifetime
     | trait_bound
+    | 'use' '<' ((lifetime | ident | 'Self') (',' (lifetime | ident | 'Self'))* ','?)? '>'
     ;
 
 trait_object_type

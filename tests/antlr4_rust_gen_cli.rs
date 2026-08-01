@@ -3628,6 +3628,8 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_ACTION_CFG",
                 "AliasCollisionParser_CONST_BLOCK",
                 "AliasCollisionParser_ASSOCIATED_CONST",
+                "AliasCollisionParser_MATCHES_BINDING",
+                "AliasCollisionParser_PRECISE_CAPTURE",
             ]
             .iter()
             .any(|needle| line.contains(needle))
@@ -3635,6 +3637,26 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
         .map(str::trim)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[track_caller]
+fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
+    assert!(
+        source.contains(
+            "fn precise_capture<T>() -> impl Copy + use<T> {\n            \
+             __antlr4rust_token_aliases_2::AliasCollisionParser_PRECISE_CAPTURE"
+        ),
+        "precise-capture bounds must parse before compatibility aliases are lowered"
+    );
+    assert!(
+        source.contains("AliasCollisionParser_MATCHES_BINDING @ Some(_)")
+            && source.contains(
+                "if AliasCollisionParser_MATCHES_BINDING\n                    \
+                 == Some(Self::MATCHES_BINDING)"
+            )
+            && !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32"),
+        "matches! pattern bindings and guard reads must remain ordinary Rust bindings"
+    );
 }
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
@@ -3765,6 +3787,7 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
             && !alias_collision_parser.contains("const AliasCollisionParser_IMPL_CONST: i32"),
         "impl const-generic bindings must remain local to the member item"
     );
+    assert_antlr4rust_reviewed_rust_syntax(&alias_collision_parser);
     assert!(
         alias_collision_parser.contains("struct __Antlr4RustContext;")
             && alias_collision_parser.contains("struct __Antlr4RustContext_2<T>(T);")
@@ -4465,6 +4488,81 @@ fn imported_antlr4rust_alias_uses_the_action_source_owner() {
         "imported member fields and methods must use their source grammar's alias owner"
     );
     assert_generated_modules_compile(temp.path(), &["root_lexer.rs", "root_parser.rs"]);
+}
+
+#[test]
+fn imported_antlr4rust_implicit_alias_uses_its_source_literal() {
+    let temp = temporary_directory("imported-antlr4rust-implicit-alias");
+    let root = temp.path().join("Root.g4");
+    let delegate = temp.path().join("Delegate.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "grammar Root;\n\
+         import Delegate;\n\
+         start: 'r' {\n\
+             recog.input.la(1) == RootParser_T__1\n\
+         }? delegated EOF;\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "grammar Delegate;\n\
+         delegated: {\n\
+             recog.input.la(1) == DelegateParser_T__0\n\
+         }? 'd';\n",
+    )
+    .expect("delegate grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("root_parser.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("const DelegateParser_T__0: i32 = 2;"),
+        "the delegate's local T__0 must map to its 'd' literal, not root 'r'\n{}",
+        matching_lines(&parser, "DelegateParser_T__0")
+    );
+    assert!(
+        parser.contains("const RootParser_T__1: i32 = 2;"),
+        "the root owner must retain merged implicit-token numbering\n{}",
+        matching_lines(&parser, "RootParser_T__1")
+    );
+    assert_generated_project(
+        temp.path(),
+        &["root_lexer.rs", "root_parser.rs"],
+        r#"
+#[cfg(test)]
+mod imported_implicit_alias_tests {
+    use super::root_lexer::RootLexer;
+    use super::root_parser::RootParser;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    #[test]
+    fn delegate_predicate_matches_its_local_literal() {
+        let lexer = RootLexer::new(InputStream::new("rd"));
+        let mut parser = RootParser::new(CommonTokenStream::new(lexer));
+        assert!(parser.start().is_ok());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+}
+"#,
+    );
 }
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.

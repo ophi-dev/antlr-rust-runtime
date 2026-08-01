@@ -193,6 +193,12 @@ start
             MODULE,
             | AliasCollisionParser_MODULE | AliasCollisionParser_SCOPE
         );
+        let matches_binding_ok = matches!(
+            Some(Self::MATCHES_BINDING),
+            AliasCollisionParser_MATCHES_BINDING @ Some(_)
+                if AliasCollisionParser_MATCHES_BINDING
+                    == Some(Self::MATCHES_BINDING)
+        );
         let nested_closure_binding_ok =
             (|_outer| |AliasCollisionParser_PARAM: i32| {
                 AliasCollisionParser_PARAM
@@ -207,6 +213,10 @@ start
             AliasCollisionParser_CONST_GENERIC
         }
         let const_generic_ok = const_generic_value::<17>() == 17;
+        fn precise_capture<T>() -> impl Copy + use<T> {
+            AliasCollisionParser_PRECISE_CAPTURE
+        }
+        let _precise_capture = precise_capture::<u8>();
         let impl_const_generic_ok = ConstGenericMember::<19>::value() == 19;
         let _: ConstExpression<{
             AliasCollisionParser_CONST_EXPRESSION as usize
@@ -266,6 +276,7 @@ start
             && unicode_identifiers_ok
             && input_facade_ok
             && leading_or_alias_ok
+            && matches_binding_ok
             && nested_closure_binding_ok
             && const_generic_ok
             && impl_const_generic_ok
@@ -327,6 +338,8 @@ start
         | ACTION_CFG
         | CONST_BLOCK
         | ASSOCIATED_CONST
+        | MATCHES_BINDING
+        | PRECISE_CAPTURE
     ) EOF
     ;
 
@@ -368,5 +381,7 @@ UNICODE: 'unicode';
 ACTION_CFG: 'action_cfg';
 CONST_BLOCK: 'const_block';
 ASSOCIATED_CONST: 'associated_const';
+MATCHES_BINDING: 'matches_binding';
+PRECISE_CAPTURE: 'precise_capture';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;
