@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.24.0...v0.25.0) (2026-08-01)
+
+
+### Features
+
+* **codegen:** expose direct context terminals ([#271](https://github.com/ophi-dev/antlr-rust-runtime/issues/271)) ([d090dd5](https://github.com/ophi-dev/antlr-rust-runtime/commit/d090dd563a574d4bd71daf952175234fb36ce641))
+
 ## [0.24.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.23.0...v0.24.0) (2026-07-31)
 
 
