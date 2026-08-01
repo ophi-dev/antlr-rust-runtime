@@ -2,7 +2,12 @@
 grammar AliasCollision;
 
 @parser::members {
+    marker: i32 = AliasCollisionParser_FIELD_INIT;
+
     struct AliasCollisionParser_ID;
+    struct AliasCollisionParser_NAMED {
+        marker: i32,
+    }
     struct __antlr4rust_token_aliases;
     use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_EOF;
     use self::{AliasCollisionParser_MODULE as RenamedModule};
@@ -73,6 +78,14 @@ start
             | Some(AliasCollisionParser_ARM @ _) => AliasCollisionParser_ARM == 8,
             None => false,
         };
+        let let_chain_binding_ok = if let Some(AliasCollisionParser_CHAIN) = Some(12)
+            && AliasCollisionParser_CHAIN == 12
+        {
+            true
+        } else {
+            false
+        };
+        let named_struct = AliasCollisionParser_NAMED { marker: 14 };
         struct AliasFields {
             AliasCollisionParser_FIELD: i32,
         }
@@ -94,6 +107,10 @@ start
             && for_binding_ok
             && match_binding_ok
             && leading_match_binding_ok
+            && let_chain_binding_ok
+            && named_struct.marker == 14
+            && AliasCollisionParser_NAMED == NAMED
+            && self.marker == Self::FIELD_INIT
             && explicit.AliasCollisionParser_FIELD == FIELD
             && shorthand.AliasCollisionParser_FIELD == FIELD
             && apply(11, |value| value) == 11
@@ -111,6 +128,9 @@ start
         | LOCAL
         | MATCH
         | ARM
+        | CHAIN
+        | NAMED
+        | FIELD_INIT
         | FIELD
         | IF
         | FOR
@@ -131,6 +151,9 @@ CROSS: 'cross';
 LOCAL: 'local';
 MATCH: 'match';
 ARM: 'arm';
+CHAIN: 'chain';
+NAMED: 'named';
+FIELD_INIT: 'field_init';
 FIELD: 'field';
 IF: 'if';
 FOR: 'for';

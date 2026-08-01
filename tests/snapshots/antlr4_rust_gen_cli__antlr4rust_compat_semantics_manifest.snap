@@ -68,8 +68,8 @@ expression: manifest
       "kind": "parser",
       "name": "AliasCollisionParser",
       "coordinates": [
-        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 34, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; let _co...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-predicate", "rule": "crossBody", "rule_index": 1, "index": 1, "atn_state": null, "line": 122, "column": 6, "body": "AliasCollisionParser_CROSS == CROSS", "disposition": "translated", "template": "Embedded"}
+        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 39, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; let _co...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "crossBody", "rule_index": 1, "index": 1, "atn_state": null, "line": 142, "column": 6, "body": "AliasCollisionParser_CROSS == CROSS", "disposition": "translated", "template": "Embedded"}
       ]
     }
   ]

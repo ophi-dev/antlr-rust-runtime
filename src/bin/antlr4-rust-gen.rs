@@ -2844,7 +2844,11 @@ fn structural_embedded_model(
                     .as_deref()
                     .is_none_or(|scope| scope == "parser")
             {
-                embedded::classify_members(&action.body, &mut parser_members)?;
+                embedded::classify_members(
+                    &action.body,
+                    action.body_span.source,
+                    &mut parser_members,
+                )?;
             }
         }
     }
@@ -10251,36 +10255,43 @@ fn build_embedded_parser_data(
     out.field_inits
         .push_str("            __embedded_pending_arg: None,\n");
     for field in &model.parser_members.fields {
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(field.source)
+            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, field.source));
+        let translated = embedded::translate_member_token_aliases(
+            &field.init,
+            &aliases.names,
+            &antlr4rust_token_alias_module,
+        )?;
+        antlr4rust_token_aliases.extend(
+            translated
+                .token_aliases
+                .iter()
+                .filter_map(|name| aliases.values.get(name).map(|value| (name.clone(), *value))),
+        );
         let _ = writeln!(out.struct_fields, "    {}: {},", field.name, field.ty);
         let _ = writeln!(
             out.field_inits,
             "            {}: {},",
-            field.name, field.init
+            field.name, translated.source
         );
     }
-    let root_source = data
-        .semantic
-        .expect("embedded parser data has semantic grammar")
-        .unit
-        .source;
-    let (root_alias_names, root_alias_values) = {
-        let aliases = antlr4rust_alias_inventory_cache
-            .entry(root_source)
-            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, root_source));
-        (aliases.names.clone(), aliases.values.clone())
-    };
     for item in &model.parser_members.impl_items {
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(item.source)
+            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, item.source));
         let translated = embedded::translate_member_token_aliases(
-            item,
-            &root_alias_names,
+            &item.body,
+            &aliases.names,
             &antlr4rust_token_alias_module,
         )?;
-        antlr4rust_token_aliases.extend(translated.token_aliases.iter().filter_map(|name| {
-            root_alias_values
-                .get(name)
-                .map(|value| (name.clone(), *value))
-        }));
-        let item = post_process_embedded(item, &translated.source, type_name);
+        antlr4rust_token_aliases.extend(
+            translated
+                .token_aliases
+                .iter()
+                .filter_map(|name| aliases.values.get(name).map(|value| (name.clone(), *value))),
+        );
+        let item = post_process_embedded(&item.body, &translated.source, type_name);
         let mut indented = String::with_capacity(item.len());
         for (line_index, line) in item.lines().enumerate() {
             if line_index > 0 {
@@ -10291,18 +10302,22 @@ fn build_embedded_parser_data(
         let _ = writeln!(out.impl_items, "    {indented}\n");
     }
     for item in &model.parser_members.module_items {
+        let aliases = antlr4rust_alias_inventory_cache
+            .entry(item.source)
+            .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, item.source));
         let translated = embedded::translate_member_token_aliases(
-            item,
-            &root_alias_names,
+            &item.body,
+            &aliases.names,
             &antlr4rust_token_alias_module,
         )?;
         antlr4rust_direct_alias_imports.extend(translated.direct_alias_imports.iter().cloned());
-        antlr4rust_token_aliases.extend(translated.token_aliases.iter().filter_map(|name| {
-            root_alias_values
-                .get(name)
-                .map(|value| (name.clone(), *value))
-        }));
-        let item = post_process_embedded(item, &translated.source, type_name);
+        antlr4rust_token_aliases.extend(
+            translated
+                .token_aliases
+                .iter()
+                .filter_map(|name| aliases.values.get(name).map(|value| (name.clone(), *value))),
+        );
+        let item = post_process_embedded(&item.body, &translated.source, type_name);
         let _ = writeln!(out.module_items, "{item}\n");
     }
 

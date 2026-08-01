@@ -3708,6 +3708,16 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
     );
     assert!(
         alias_collision_parser
+            .contains("marker: __antlr4rust_token_aliases_2::AliasCollisionParser_FIELD_INIT"),
+        "member field initializers must lower compatibility aliases"
+    );
+    assert!(
+        alias_collision_parser.contains("const AliasCollisionParser_NAMED")
+            && !alias_collision_parser.contains("use super::AliasCollisionParser_NAMED;"),
+        "a braced struct must not suppress the same-named value alias"
+    );
+    assert!(
+        alias_collision_parser
             .contains("use self::__antlr4rust_token_aliases_2::AliasCollisionParser_DIRECT;")
             && alias_collision_parser.contains("const AliasCollisionParser_DIRECT")
             && !alias_collision_parser.contains("use super::AliasCollisionParser_DIRECT"),
@@ -3720,11 +3730,11 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "member impls must preserve local uses while lowering compatibility aliases"
     );
     assert!(
-        ["MATCH", "ARM", "IF", "FOR", "PARAM"]
+        ["MATCH", "ARM", "CHAIN", "IF", "FOR", "PARAM"]
             .iter()
             .all(|name| !alias_collision_parser
                 .contains(&format!("const AliasCollisionParser_{name}"))),
-        "match, control-flow, and function bindings must not request compatibility aliases"
+        "match, let-chain, control-flow, and function bindings must not request compatibility aliases"
     );
     assert!(
         alias_collision_parser.contains(
@@ -4269,7 +4279,15 @@ fn imported_antlr4rust_alias_uses_the_action_source_owner() {
     fs::write(
         &delegate,
         "grammar Delegate;\n\
-         delegated: {DelegateParser_ID == ID}? ID;\n\
+         @parser::members {\n\
+             marker: i32 = DelegateParser_ID;\n\
+             fn imported_member_alias_matches(&self) -> bool {\n\
+                 DelegateParser_ID == Self::ID && self.marker == Self::ID\n\
+             }\n\
+         }\n\
+         delegated: {\n\
+             DelegateParser_ID == ID && self.imported_member_alias_matches()\n\
+         }? ID;\n\
          ID: [a-z]+;\n",
     )
     .expect("delegate grammar should be writable");
@@ -4300,6 +4318,12 @@ fn imported_antlr4rust_alias_uses_the_action_source_owner() {
         .collect::<Vec<_>>()
         .join("\n");
     insta::assert_snapshot!("imported_antlr4rust_alias_owner", alias_excerpt);
+    assert!(
+        parser.contains("marker: __antlr4rust_token_aliases::DelegateParser_ID")
+            && parser.contains("__antlr4rust_token_aliases::DelegateParser_ID == Self::ID")
+            && parser.contains("self.marker == Self::ID"),
+        "imported member fields and methods must use their source grammar's alias owner"
+    );
     assert_generated_modules_compile(temp.path(), &["root_lexer.rs", "root_parser.rs"]);
 }
 

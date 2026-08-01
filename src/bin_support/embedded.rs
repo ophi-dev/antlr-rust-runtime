@@ -19,6 +19,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::ops::Range;
 
+use crate::grammar::frontend::SourceId;
 use crate::templates::{matching_action_brace, skip_ascii_whitespace};
 
 /// One `name: type` attribute declared in a rule's `[...]` args clause or
@@ -265,9 +266,17 @@ impl RuleModel {
 /// members convention (`i: i32 = 0;`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct MemberField {
+    pub(crate) source: SourceId,
     pub(crate) name: String,
     pub(crate) ty: String,
     pub(crate) init: String,
+}
+
+/// One source-owned item from a grammar-level `@members` block.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct MemberItem {
+    pub(crate) source: SourceId,
+    pub(crate) body: String,
 }
 
 /// `@members` content split by item kind.
@@ -276,17 +285,16 @@ pub(crate) struct MembersModel {
     /// Field declarations lowered onto the recognizer struct.
     pub(crate) fields: Vec<MemberField>,
     /// `fn` items spliced into the recognizer's inherent `impl` block.
-    pub(crate) impl_items: Vec<String>,
+    pub(crate) impl_items: Vec<MemberItem>,
     /// `struct` / `impl` / attribute-prefixed items emitted at module level
     /// (test listeners, custom nodes, …).
-    pub(crate) module_items: Vec<String>,
+    pub(crate) module_items: Vec<MemberItem>,
     /// Names introduced into the generated module's value/type namespaces.
-    ///
-    /// Compatibility token aliases resolve through user-authored `struct`
-    /// declarations or imports with the same identifier.
     pub(crate) module_symbols: BTreeSet<String>,
-    /// Activation predicates from `#[cfg(...)]` attributes on each module
-    /// symbol. An empty predicate list denotes an unconditional declaration.
+    /// Activation predicates for declarations that occupy the value namespace.
+    /// An empty predicate list denotes an unconditional declaration. Braced
+    /// structs are type-only; tuple/unit constructors and imports also occupy
+    /// the value namespace and can shadow compatibility token aliases.
     pub(crate) module_symbol_cfgs: BTreeMap<String, Vec<Vec<String>>>,
 }
 
@@ -364,7 +372,11 @@ fn is_identifier(value: &str) -> bool {
 
 /// Splits a members body into field declarations, impl items, and module
 /// items.
-pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
+pub(crate) fn classify_members(
+    body: &str,
+    source: SourceId,
+    members: &mut MembersModel,
+) -> io::Result<()> {
     let mut offset = 0;
     let mut pending_attrs = String::new();
     while offset < body.len() {
@@ -390,7 +402,7 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
             let item_end = item_end_from(body, offset)?;
             let mut item = std::mem::take(&mut pending_attrs);
             item.push_str(body[offset..item_end].trim());
-            members.impl_items.push(item);
+            members.impl_items.push(MemberItem { source, body: item });
             offset = item_end;
         } else if rest.starts_with("struct ") || rest.starts_with("impl ") {
             let item_end = item_end_from(body, offset)?;
@@ -401,7 +413,7 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
             )?;
             let mut item = std::mem::take(&mut pending_attrs);
             item.push_str(body[offset..item_end].trim());
-            members.module_items.push(item);
+            members.module_items.push(MemberItem { source, body: item });
             offset = item_end;
         } else if rest.starts_with("use ") {
             let item_end = use_item_end_from(body, offset)?;
@@ -412,9 +424,9 @@ pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Re
             )?;
             let mut item = std::mem::take(&mut pending_attrs);
             item.push_str(body[offset..item_end].trim());
-            members.module_items.push(item);
+            members.module_items.push(MemberItem { source, body: item });
             offset = item_end;
-        } else if let Some(field) = parse_member_field(&body[offset..]) {
+        } else if let Some(field) = parse_member_field(&body[offset..], source) {
             let (field, consumed) = field;
             members.fields.push(field);
             offset += consumed;
@@ -498,11 +510,9 @@ fn record_member_module_symbols(
             .find(|part| !part.is_empty())
         {
             members.module_symbols.insert(name.to_owned());
-            members
-                .module_symbol_cfgs
-                .entry(name.to_owned())
-                .or_default()
-                .push(cfg_predicates.to_vec());
+            if struct_has_value_constructor(item) {
+                record_member_value_symbol(name, cfg_predicates, members);
+            }
         }
         return Ok(());
     }
@@ -511,13 +521,49 @@ fn record_member_module_symbols(
     };
     for name in use_tree_bindings(rest)? {
         members.module_symbols.insert(name.clone());
-        members
-            .module_symbol_cfgs
-            .entry(name)
-            .or_default()
-            .push(cfg_predicates.to_vec());
+        record_member_value_symbol(&name, cfg_predicates, members);
     }
     Ok(())
+}
+
+fn record_member_value_symbol(name: &str, cfg_predicates: &[String], members: &mut MembersModel) {
+    members
+        .module_symbol_cfgs
+        .entry(name.to_owned())
+        .or_default()
+        .push(cfg_predicates.to_vec());
+}
+
+fn struct_has_value_constructor(item: &str) -> bool {
+    let lexemes = lex_rust_body(item)
+        .into_iter()
+        .filter(|lexeme| lexeme.kind != RustLexemeKind::Trivia)
+        .collect::<Vec<_>>();
+    let Some(name) = lexemes.iter().position(|lexeme| {
+        lexeme.kind == RustLexemeKind::Identifier && lexeme_text(item, *lexeme) == "struct"
+    }) else {
+        return false;
+    };
+    let mut angle_depth = 0_usize;
+    let mut in_where_clause = false;
+    for lexeme in lexemes.iter().skip(name + 2) {
+        match lexeme.kind {
+            RustLexemeKind::Identifier
+                if angle_depth == 0 && lexeme_text(item, *lexeme) == "where" =>
+            {
+                in_where_clause = true;
+            }
+            RustLexemeKind::Punctuation(b'<') if !in_where_clause => angle_depth += 1,
+            RustLexemeKind::Punctuation(b'>') if angle_depth > 0 => angle_depth -= 1,
+            RustLexemeKind::Punctuation(b'(') if angle_depth == 0 && !in_where_clause => {
+                return true;
+            }
+            RustLexemeKind::Punctuation(b'{') if angle_depth == 0 => return false,
+            RustLexemeKind::Punctuation(b';') if angle_depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 fn use_tree_bindings(source: &str) -> io::Result<BTreeSet<String>> {
@@ -791,7 +837,7 @@ fn item_end_from(body: &str, offset: usize) -> io::Result<usize> {
 
 /// Parses one `name: type = init;` member-field declaration; returns the
 /// field and the number of bytes consumed.
-fn parse_member_field(rest: &str) -> Option<(MemberField, usize)> {
+fn parse_member_field(rest: &str, source: SourceId) -> Option<(MemberField, usize)> {
     let semicolon = rest.find(';')?;
     let decl = &rest[..semicolon];
     if decl.contains('{') || decl.contains('(') {
@@ -801,6 +847,7 @@ fn parse_member_field(rest: &str) -> Option<(MemberField, usize)> {
     let (name, ty) = split_name_colon_type(name_ty.trim())?;
     Some((
         MemberField {
+            source,
             name: name.to_owned(),
             ty: ty.to_owned(),
             init: init.trim().to_owned(),
@@ -2176,10 +2223,7 @@ fn local_antlr4rust_alias_bindings(
                     let pattern_bindings =
                         pattern_alias_bindings(body, lexemes, start, end, token_aliases);
                     let scope = if is_conditional_let(body, lexemes, position) {
-                        delimiters
-                            .control_flow_body_block(lexemes, end + 1)
-                            .and_then(|open| delimiters.block_contents(open))
-                            .unwrap_or(end..end)
+                        conditional_let_scope(body, lexemes, end, &delimiters).unwrap_or(end..end)
                     } else {
                         find_top_level_lexeme(body, lexemes, end, TopLevelLexeme::Punctuation(b';'))
                             .map_or(end..end, |semicolon| {
@@ -2309,6 +2353,44 @@ fn is_conditional_let(body: &str, lexemes: &[RustLexeme], position: usize) -> bo
     lexemes[previous].kind == RustLexemeKind::Punctuation(b'&')
         && previous_significant(lexemes, previous)
             .is_some_and(|before| lexemes[before].kind == RustLexemeKind::Punctuation(b'&'))
+}
+
+fn conditional_let_scope(
+    body: &str,
+    lexemes: &[RustLexeme],
+    assignment: usize,
+    delimiters: &RustDelimiterMap,
+) -> Option<Range<usize>> {
+    let body_open = delimiters.control_flow_body_block(lexemes, assignment + 1)?;
+    let body_close = delimiters.pairs.get(body_open).copied().flatten()?;
+    let scope_start = find_top_level_logical_and(body, lexemes, assignment + 1, body_open)
+        .and_then(|and| next_significant(&lexemes[..body_open], and))
+        .unwrap_or(body_open + 1);
+    Some(scope_start..body_close)
+}
+
+fn find_top_level_logical_and(
+    body: &str,
+    lexemes: &[RustLexeme],
+    start: usize,
+    end: usize,
+) -> Option<usize> {
+    let mut search = start;
+    while search < end {
+        let first = find_top_level_lexeme(
+            body,
+            &lexemes[..end],
+            search,
+            TopLevelLexeme::Punctuation(b'&'),
+        )?;
+        if let Some(second) = next_significant(&lexemes[..end], first)
+            && lexemes[second].kind == RustLexemeKind::Punctuation(b'&')
+        {
+            return Some(second);
+        }
+        search = first + 1;
+    }
+    None
 }
 
 #[derive(Debug)]
@@ -5280,13 +5362,13 @@ mod tests {
             )]\n\
             use crate::CONDITIONAL as AliasTypeParser_CONDITIONAL;\n";
         let mut members = MembersModel::default();
-        classify_members(body, &mut members).expect("members classify");
+        classify_members(body, SourceId::new(0), &mut members).expect("members classify");
 
         assert_eq!(members.fields.len(), 1);
         assert_eq!(members.fields[0].name, "i");
         assert_eq!(members.fields[0].init, "0");
         assert_eq!(members.impl_items.len(), 1);
-        assert!(members.impl_items[0].contains("fn Property"));
+        assert!(members.impl_items[0].body.contains("fn Property"));
         assert_eq!(members.module_items.len(), 4);
         insta::assert_debug_snapshot!("member_module_symbols", members.module_symbols);
         assert_eq!(
@@ -5297,6 +5379,24 @@ mod tests {
             members.module_symbol_cfgs["fmt"],
             vec![Vec::<String>::new()]
         );
+    }
+
+    #[test]
+    fn classifies_struct_names_by_rust_namespace() {
+        let mut members = MembersModel::default();
+        classify_members(
+            "struct Braced { value: i32 }\n\
+             struct Tuple(i32);\n\
+             struct Unit;\n",
+            SourceId::new(0),
+            &mut members,
+        )
+        .expect("struct members should classify");
+
+        assert!(members.module_symbols.contains("Braced"));
+        assert!(!members.module_symbol_cfgs.contains_key("Braced"));
+        assert!(members.module_symbol_cfgs.contains_key("Tuple"));
+        assert!(members.module_symbol_cfgs.contains_key("Unit"));
     }
 
     #[test]
@@ -5472,6 +5572,8 @@ mod tests {
              f(CompatParser_ID) == 7 } helper(7, |value| value)",
             "if let Some(CompatParser_ID) = make(Foo { value: 7 }) { \
              CompatParser_ID == 7 } else { false }",
+            "if let Some(CompatParser_ID) = make(Foo { value: 7 }) \
+             && CompatParser_ID == 7 { true } else { false }",
             "for CompatParser_ID in make(Foo { values: [7] }).values { \
              let _ = CompatParser_ID; } true",
             "match Some(7) { Some(CompatParser_ID @ _) => CompatParser_ID == 7, None => false }",
