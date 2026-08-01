@@ -19,6 +19,11 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
+    let dev_dependencies = if test_source.contains("insta::") {
+        "\n[dev-dependencies]\ninsta = { version = \"1\", default-features = false }\n"
+    } else {
+        ""
+    };
     fs::create_dir_all(&source).expect("generated-module check should be writable");
     fs::write(
         project.join("Cargo.toml"),
@@ -29,8 +34,9 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
              edition = \"2024\"\n\
              \n\
              [dependencies]\n\
-             antlr-rust-runtime = {{ path = {:?} }}\n",
-            env!("CARGO_MANIFEST_DIR")
+             antlr-rust-runtime = {{ path = {:?} }}\n\
+             {dev_dependencies}",
+            env!("CARGO_MANIFEST_DIR"),
         ),
     )
     .expect("generated-module manifest should be writable");
@@ -4860,8 +4866,9 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
     assert_generated_project(
         temp.path(),
         &["inlined_tokens_lexer.rs", "inlined_tokens_parser.rs"],
-        r#"
+        r####"
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod inlined_token_tests {
     use super::inlined_tokens_lexer::InlinedTokensLexer;
     use super::inlined_tokens_parser::{
@@ -4890,9 +4897,35 @@ mod inlined_token_tests {
 
     #[test]
     fn returns_only_the_operator_owned_by_the_hub_context() {
-        assert_eq!(direct_expression_terminals("left=right"), ["="]);
-        assert_eq!(direct_expression_terminals("left+right"), ["+"]);
-        assert_eq!(direct_expression_terminals("left-right"), ["-"]);
+        insta::assert_debug_snapshot!(
+            [
+                ("assignment", direct_expression_terminals("left=right")),
+                ("addition", direct_expression_terminals("left+right")),
+                ("subtraction", direct_expression_terminals("left-right")),
+            ],
+            @r###"
+        [
+            (
+                "assignment",
+                [
+                    "=",
+                ],
+            ),
+            (
+                "addition",
+                [
+                    "+",
+                ],
+            ),
+            (
+                "subtraction",
+                [
+                    "-",
+                ],
+            ),
+        ]
+        "###
+        );
     }
 
     #[test]
@@ -4915,7 +4948,14 @@ mod inlined_token_tests {
             .map(|token| token.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(terminals, ["left", "<missing '='>", "right", "<EOF>"]);
+        insta::assert_debug_snapshot!(terminals, @r###"
+        [
+            "left",
+            "<missing '='>",
+            "right",
+            "<EOF>",
+        ]
+        "###);
     }
 
     #[test]
@@ -4940,11 +4980,32 @@ mod inlined_token_tests {
             .map(|token| token.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(direct, ["direct", "direct"]);
-        assert_eq!(all, ["direct", "direct", "value", "<EOF>"]);
+        insta::assert_debug_snapshot!(
+            [("direct_tokens", direct), ("direct_terminals", all)],
+            @r###"
+        [
+            (
+                "direct_tokens",
+                [
+                    "direct",
+                    "direct",
+                ],
+            ),
+            (
+                "direct_terminals",
+                [
+                    "direct",
+                    "direct",
+                    "value",
+                    "<EOF>",
+                ],
+            ),
+        ]
+        "###
+        );
     }
 }
-"#,
+"####,
     );
 }
 
