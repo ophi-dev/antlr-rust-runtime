@@ -78,6 +78,27 @@ start
             | Some(AliasCollisionParser_ARM @ _) => AliasCollisionParser_ARM == 8,
             None => false,
         };
+        let block_match_binding_ok = match Some(13) {
+            None => { false }
+            Some(AliasCollisionParser_ARM @ _) => {
+                AliasCollisionParser_ARM == 13
+            }
+        };
+        let not_equal_alias_ok = AliasCollisionParser_MODULE != 0;
+        let if_head_alias_ok = if MODULE == AliasCollisionParser_MODULE {
+            true
+        } else {
+            false
+        };
+        let mut while_head_alias_ok = false;
+        while MODULE == AliasCollisionParser_MODULE {
+            while_head_alias_ok = true;
+            break;
+        }
+        let match_head_alias_ok = match AliasCollisionParser_MODULE {
+            value if value == MODULE => true,
+            _ => false,
+        };
         let let_chain_binding_ok = if let Some(AliasCollisionParser_CHAIN) = Some(12)
             && AliasCollisionParser_CHAIN == 12
         {
@@ -107,6 +128,11 @@ start
             && for_binding_ok
             && match_binding_ok
             && leading_match_binding_ok
+            && block_match_binding_ok
+            && not_equal_alias_ok
+            && if_head_alias_ok
+            && while_head_alias_ok
+            && match_head_alias_ok
             && let_chain_binding_ok
             && named_struct.marker == 14
             && AliasCollisionParser_NAMED == NAMED

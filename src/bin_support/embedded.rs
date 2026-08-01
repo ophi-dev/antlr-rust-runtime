@@ -2093,7 +2093,7 @@ fn lower_antlr4rust_surface(
                     replacement.range.start == lexeme.start && replacement.range.end == lexeme.end
                 })
             && is_unqualified_identifier(&lexemes, position)
-            && !is_pattern_path_or_field(&lexemes, position)
+            && !is_token_alias_path_or_field(body, &lexemes, position, &delimiters)
         {
             used_token_aliases.insert(alias_identifier.to_owned());
             let qualified = format!("{token_alias_module}::{alias_identifier}");
@@ -2731,7 +2731,13 @@ fn collect_match_alias_bindings(
             let Some(body_start) = next_significant(lexemes, arrow) else {
                 break;
             };
-            let body_end = delimiters.expression_end(lexemes, body_start).min(close);
+            let body_end = if lexemes[body_start].kind == RustLexemeKind::Punctuation(b'{') {
+                delimiters.pairs[body_start]
+                    .unwrap_or_else(|| delimiters.expression_end(lexemes, body_start))
+            } else {
+                delimiters.expression_end(lexemes, body_start)
+            }
+            .min(close);
             bindings.record(pattern_bindings, arm_start..body_end);
             arm_start = body_end.saturating_add(1);
         }
@@ -2881,6 +2887,43 @@ fn is_pattern_path_or_field(lexemes: &[RustLexeme], position: usize) -> bool {
         RustLexemeKind::Punctuation(b':') => next_significant(lexemes, next)
             .is_none_or(|after| lexemes[after].kind != RustLexemeKind::Punctuation(b':')),
         _ => false,
+    })
+}
+
+fn is_token_alias_path_or_field(
+    body: &str,
+    lexemes: &[RustLexeme],
+    position: usize,
+    delimiters: &RustDelimiterMap,
+) -> bool {
+    next_significant(lexemes, position).is_some_and(|next| match lexemes[next].kind {
+        RustLexemeKind::Punctuation(b'(') => true,
+        RustLexemeKind::Punctuation(b'{') => {
+            is_struct_literal_open(body, lexemes, next)
+                && !is_control_flow_body_open(body, lexemes, next, delimiters)
+        }
+        RustLexemeKind::Punctuation(b'!') => next_significant(lexemes, next)
+            .is_none_or(|after| lexemes[after].kind != RustLexemeKind::Punctuation(b'=')),
+        RustLexemeKind::Punctuation(b':') => next_significant(lexemes, next)
+            .is_none_or(|after| lexemes[after].kind != RustLexemeKind::Punctuation(b':')),
+        _ => false,
+    })
+}
+
+fn is_control_flow_body_open(
+    body: &str,
+    lexemes: &[RustLexeme],
+    open: usize,
+    delimiters: &RustDelimiterMap,
+) -> bool {
+    let scope_start = delimiters.enclosing_block(open).start.min(open);
+    (scope_start..open).rev().any(|position| {
+        lexemes[position].kind == RustLexemeKind::Identifier
+            && matches!(
+                lexeme_text(body, lexemes[position]),
+                "if" | "while" | "for" | "match"
+            )
+            && delimiters.control_flow_body_block(lexemes, position + 1) == Some(open)
     })
 }
 
@@ -5580,6 +5623,8 @@ mod tests {
             "match Some(7) { Some(ref CompatParser_ID) => *CompatParser_ID == 7, None => false }",
             "match Some(7) { | Some(CompatParser_ID @ _) => \
              CompatParser_ID == 7, None => false }",
+            "match Some(7) { None => { false } \
+             Some(CompatParser_ID @ _) => { CompatParser_ID == 7 } }",
             "struct CompatParser_ID; let _ = CompatParser_ID; true",
             "union CompatParser_ID { value: i32 } let _ = CompatParser_ID { value: 7 }; true",
             "let r#CompatParser_ID = 7; r#CompatParser_ID == 7",
@@ -5597,6 +5642,10 @@ mod tests {
 
         for body in [
             "let value = CompatParser_ID; value == 7",
+            "CompatParser_ID != 0",
+            "if 1 == CompatParser_ID { true } else { false }",
+            "while 1 == CompatParser_ID { break; } true",
+            "match CompatParser_ID { 1 => true, _ => false }",
             "matches!(kind, CompatParser_ID)",
             "match kind { | CompatParser_ID => true, _ => false }",
             "match kind { Some(CompatParser_ID) => true, _ => false }",
