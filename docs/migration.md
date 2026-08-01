@@ -1,10 +1,22 @@
 # Migration Notes
 
 `antlr-rust-runtime` is pre-1.0. Minor releases may include breaking runtime and
-generator changes. Generated lexers and parsers must use the same release of
-`antlr4-rust-gen` as the runtime. Before regenerating, run
-`antlr4-rust-gen --version` and compare the reported release with the
-`antlr-rust-runtime` dependency version.
+generator changes. Using the same release of `antlr4-rust-gen` and
+`antlr-rust-runtime` remains recommended. Newly generated modules also carry a
+generated-code API revision that is checked against the selected runtime at
+compile time, so releases that deliberately preserve the source contract can
+remain compatible without exact SemVer equality.
+
+Generated modules created before the compatibility check was introduced carry
+no enforceable revision. Regenerate every committed lexer and parser once when
+first adopting a release with this mechanism. If a later build reports a
+generated-code API mismatch, either regenerate the named module with a
+compatible generator or select a runtime that accepts its requested revision.
+When new generated source is compiled against a runtime that predates the
+check, Rust reports the missing generated-code API macro instead; upgrade that
+runtime or regenerate with its matching older generator.
+`antlr4-rust-gen --version` reports the generator package version for auditing
+and reproducible regeneration.
 
 ## Structured Syntax Error Events and Byte Spans
 

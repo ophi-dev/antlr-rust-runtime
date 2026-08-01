@@ -75,6 +75,31 @@ antlr4-rust-gen \
 Use multiple roots when a build should emit several independent recognizers in
 one deterministic source-set compilation.
 
+### Generated-source/runtime compatibility
+
+Every newly generated lexer and parser contains a compile-time generated-code
+API check. The check records both the API revision and the
+`antlr4-rust-gen` package version that produced the module. A mismatch reports
+the generated file directly and asks you to either regenerate it with a
+compatible generator or select a compatible `antlr-rust-runtime` dependency,
+provided the selected runtime implements this check. A runtime released before
+the check was introduced instead reports that the generated-code API macro is
+missing; upgrade that runtime or regenerate with its matching older generator.
+
+The generated-code API revision tracks the Rust source interface between
+generated recognizers and the runtime. It is independent of package SemVer and
+the serialized ATN/DFA format versions: compatible package releases may share
+one revision, while an incompatible source-contract change increments it.
+Using the same package release for `antlr4-rust-gen` and
+`antlr-rust-runtime` remains the recommended workflow, but matching the
+generated-code API is the compile-time requirement.
+
+Generated modules created before this check was introduced cannot be detected
+retroactively. When first upgrading to a release that includes the check,
+regenerate every committed lexer and parser once. Thereafter, normal
+`cargo check` builds enforce compatibility for every compiled generated
+module.
+
 ## Complete Example
 
 Suppose you are using `JSON.g4` from `antlr/grammars-v4/json`. Generate both

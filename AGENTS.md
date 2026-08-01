@@ -8,6 +8,23 @@ workarounds to `src/bin/antlr4-rust-gen.rs` or runtime modules; model the
 behavior from ANTLR metadata/ATN structure instead, and keep language-specific
 guidance in docs or tests for that language.
 
+## Generated-code API revision
+
+`src/lib.rs::__ANTLR4_RUST_CODEGEN_API` is the single current revision emitted
+by `antlr4-rust-gen`. The accepted revisions are the literal match arms in
+`src/lib.rs::__antlr4_rust_require_codegen_api!`.
+
+Any change that makes newly generated source require an incompatible runtime
+interface, or makes existing generated source incompatible with the runtime,
+MUST increment `__ANTLR4_RUST_CODEGEN_API`. When incrementing it, update the
+macro's accepted revision arms and supported-revision diagnostic, the
+`generated_modules_enforce_codegen_api_compatibility` integration test and
+snapshots, all checked-in generated recognizers, and the compatibility
+documentation. Retain an older accepted arm only while the runtime still
+provides every API surface that revision's generated source needs. Package
+releases that preserve the generated-source/runtime contract MUST NOT increment
+the revision automatically.
+
 ## Kotlin parser parity perf benchmark
 
 Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.

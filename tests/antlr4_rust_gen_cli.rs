@@ -17,6 +17,16 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 }
 
 fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
+    let output = run_generated_project(temp_dir, modules, test_source);
+    assert!(
+        output.status.success(),
+        "generated project failed\nstdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+}
+
+fn run_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) -> Output {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
     let uses_insta = test_source.contains("insta");
@@ -61,7 +71,7 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
             .expect("generated module should be copied into the check crate");
     }
 
-    let output = Command::new(env!("CARGO"))
+    Command::new(env!("CARGO"))
         .args([
             if test_source.is_empty() {
                 "check"
@@ -77,18 +87,26 @@ fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str
                 .expect("temporary path should be UTF-8"),
         ])
         .env("CARGO_TARGET_DIR", project.join("target"))
+        .env("CARGO_TERM_COLOR", "never")
         .output()
-        .expect("cargo check should run");
-    assert!(
-        output.status.success(),
-        "generated project failed\nstdout: {}\nstderr: {}",
-        utf8(&output.stdout),
-        utf8(&output.stderr)
-    );
+        .expect("cargo check should run")
 }
 
 fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
+}
+
+fn normalize_current_package_version(value: &str) -> String {
+    const PLACEHOLDER: &str = "<generator-version>";
+    let version = env!("CARGO_PKG_VERSION");
+    let mut normalized = value.to_owned();
+    let mut search_from = 0;
+    while let Some(relative_start) = normalized[search_from..].find(version) {
+        let start = search_from + relative_start;
+        normalized.replace_range(start..start + version.len(), PLACEHOLDER);
+        search_from = start + PLACEHOLDER.len();
+    }
+    normalized
 }
 
 fn generated_parser_api(source: &str) -> Vec<String> {
@@ -230,6 +248,89 @@ fn long_and_short_version_exit_successfully_on_stdout() {
             concat!("antlr4-rust-gen ", env!("CARGO_PKG_VERSION"), "\n")
         );
     }
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn generated_modules_enforce_codegen_api_compatibility() {
+    let temp = temporary_directory("codegen-api-compatibility");
+    let grammar = temp.path().join("CodegenApi.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar CodegenApi;\n\
+         root : ID EOF ;\n\
+         ID : [a-z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let lexer_path = out.join("codegen_api_lexer.rs");
+    let parser_path = out.join("codegen_api_parser.rs");
+    let lexer = fs::read_to_string(&lexer_path).expect("lexer should be emitted");
+    let parser = fs::read_to_string(&parser_path).expect("parser should be emitted");
+    let lexer_check = lexer
+        .lines()
+        .find(|line| line.contains("__antlr4_rust_require_codegen_api"))
+        .expect("lexer should require a generated-code API");
+    let parser_check = parser
+        .lines()
+        .find(|line| line.contains("__antlr4_rust_require_codegen_api"))
+        .expect("parser should require a generated-code API");
+    let checks = format!("lexer: {lexer_check}\nparser: {parser_check}");
+    insta::assert_snapshot!(
+        "generated_codegen_api_checks",
+        normalize_current_package_version(&checks)
+    );
+
+    let modules = ["codegen_api_lexer.rs", "codegen_api_parser.rs"];
+    assert_generated_modules_compile(temp.path(), &modules);
+
+    let current = format!(
+        "__antlr4_rust_require_codegen_api!({},",
+        antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
+    );
+    let unsupported = "__antlr4_rust_require_codegen_api!(999,";
+    let mut incompatible_parser = parser;
+    let check_start = incompatible_parser
+        .find(&current)
+        .expect("parser check should contain the current API revision");
+    incompatible_parser.replace_range(check_start..check_start + current.len(), unsupported);
+    fs::write(parser_path, incompatible_parser).expect("parser should be writable");
+
+    let output = run_generated_project(temp.path(), &modules, "");
+    assert!(
+        !output.status.success(),
+        "unsupported generated-code API unexpectedly compiled"
+    );
+    assert_eq!(utf8(&output.stdout), "");
+    let diagnostic = utf8(&output.stderr)
+        .lines()
+        .skip_while(|line| !line.starts_with("error:"))
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let supported_revision = antlr4_runtime::__ANTLR4_RUST_CODEGEN_API;
+    assert!(
+        diagnostic.contains(&format!("supports revision {supported_revision}")),
+        "diagnostic should name runtime revision {supported_revision}: {diagnostic}"
+    );
+    insta::assert_snapshot!(
+        "generated_codegen_api_mismatch_diagnostic",
+        normalize_current_package_version(&diagnostic)
+    );
 }
 
 #[test]
