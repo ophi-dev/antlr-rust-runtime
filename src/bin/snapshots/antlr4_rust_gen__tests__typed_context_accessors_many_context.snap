@@ -10,7 +10,12 @@ expression: many_context
         }
     }
 
-    pub fn direct_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    /// Iterates terminals owned directly by this context without descending
+    /// into nested rule contexts.
+    ///
+    /// Recovered trees include error nodes such as synthetic `<missing ...>`
+    /// tokens through the same `TerminalNode` surface.
+    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 

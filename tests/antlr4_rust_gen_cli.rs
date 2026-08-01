@@ -4829,7 +4829,8 @@ mod mutual_left_recursion_tests {
 /// Issue #269: terminals from a hub-only mutual-left-recursion satellite must
 /// remain reachable without descending into nested expression children. The
 /// operators are anonymous literals, so no stable per-token accessor name
-/// exists; `direct_tokens()` provides the typed, grammar-agnostic surface.
+/// exists; `direct_terminals()` provides the typed, grammar-agnostic surface.
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn inlined_satellite_terminals_are_typed_direct_children() {
     let temp = temporary_directory("inlined-token-accessors");
@@ -4851,12 +4852,10 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
 
     let parser =
         fs::read_to_string(out.join("inlined_tokens_parser.rs")).expect("parser should be emitted");
-    for collapsed in ["AssignContext", "BinopContext"] {
-        assert!(
-            !parser.contains(collapsed),
-            "hub-only satellite context {collapsed} should be inlined away"
-        );
-    }
+    insta::assert_debug_snapshot!(
+        "inlined_token_accessors_generated_api",
+        generated_parser_api(&parser)
+    );
 
     assert_generated_project(
         temp.path(),
@@ -4865,10 +4864,12 @@ fn inlined_satellite_terminals_are_typed_direct_children() {
 #[cfg(test)]
 mod inlined_token_tests {
     use super::inlined_tokens_lexer::InlinedTokensLexer;
-    use super::inlined_tokens_parser::{ExprContext, InlinedTokensParser, StartContext};
+    use super::inlined_tokens_parser::{
+        CollisionContext, ExprContext, InlinedTokensParser, RecoveredContext, StartContext,
+    };
     use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
 
-    fn direct_expression_tokens(input: &str) -> Vec<String> {
+    fn direct_expression_terminals(input: &str) -> Vec<String> {
         let lexer = InlinedTokensLexer::new(InputStream::new(input));
         let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
         let root = parser.start().expect("operator input should parse");
@@ -4882,16 +4883,65 @@ mod inlined_token_tests {
             .expect("typed start context");
         let expression: ExprContext<'_> = start.expr().expect("root expression");
         expression
-            .direct_tokens()
+            .direct_terminals()
             .map(|token| token.to_string())
             .collect()
     }
 
     #[test]
     fn returns_only_the_operator_owned_by_the_hub_context() {
-        assert_eq!(direct_expression_tokens("left=right"), ["="]);
-        assert_eq!(direct_expression_tokens("left+right"), ["+"]);
-        assert_eq!(direct_expression_tokens("left-right"), ["-"]);
+        assert_eq!(direct_expression_terminals("left=right"), ["="]);
+        assert_eq!(direct_expression_terminals("left+right"), ["+"]);
+        assert_eq!(direct_expression_terminals("left-right"), ["-"]);
+    }
+
+    #[test]
+    fn includes_recovered_error_nodes() {
+        let lexer = InlinedTokensLexer::new(InputStream::new("left right"));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser
+            .recovered()
+            .expect("missing operator should recover by insertion");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        let parsed = parser.into_parsed_file(root);
+        let recovered = parsed
+            .tree()
+            .as_rule()
+            .expect("recovered rule")
+            .downcast_ref::<RecoveredContext>()
+            .expect("typed recovered context");
+        let terminals = recovered
+            .direct_terminals()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(terminals, ["left", "<missing '='>", "right", "<EOF>"]);
+    }
+
+    #[test]
+    fn preserves_repeated_direct_token_accessor() {
+        let lexer = InlinedTokensLexer::new(InputStream::new("direct direct value"));
+        let mut parser = InlinedTokensParser::new(CommonTokenStream::new(lexer));
+        let root = parser.collision().expect("collision input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        let collision = parsed
+            .tree()
+            .as_rule()
+            .expect("collision rule")
+            .downcast_ref::<CollisionContext>()
+            .expect("typed collision context");
+        let direct = collision
+            .direct_tokens()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>();
+        let all = collision
+            .direct_terminals()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(direct, ["direct", "direct"]);
+        assert_eq!(all, ["direct", "direct", "value", "<EOF>"]);
     }
 }
 "#,

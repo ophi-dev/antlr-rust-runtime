@@ -11109,7 +11109,12 @@ const CONTEXT_COMMON_ACCESSORS: &str = r#"    pub fn child_count(&self) -> usize
         }
     }
 
-    pub fn direct_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+    /// Iterates terminals owned directly by this context without descending
+    /// into nested rule contexts.
+    ///
+    /// Recovered trees include error nodes such as synthetic `<missing ...>`
+    /// tokens through the same `TerminalNode` surface.
+    pub fn direct_terminals(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
         __terminal_children(self.__node).map(TerminalNode::new)
     }
 
@@ -11153,7 +11158,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
     let mut rendered = RenderedContextAccessors::default();
     let mut used_methods = BTreeSet::from([
         "child_count".to_owned(),
-        "direct_tokens".to_owned(),
+        "direct_terminals".to_owned(),
         "rule_node".to_owned(),
         "start".to_owned(),
         "text".to_owned(),
@@ -11986,7 +11991,7 @@ impl<T: {validated_visitor_trait}> antlr4_runtime::ParseTreeVisitor
 ///
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
 ///   alternative) with cardinality-aware rule, token, and label accessors,
-///   `child_count()`, `direct_tokens()`, `start()`, `text()`, public attribute
+///   `child_count()`, `direct_terminals()`, `start()`, `text()`, public attribute
 ///   fields, and a `FromRuleNode` impl backing
 ///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
@@ -12135,7 +12140,6 @@ fn __rule_children<'a>(
     })
 }
 
-#[allow(dead_code)]
 fn __terminal_children<'a>(
     source: __GeneratedRuleContext<'a>,
 ) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {

@@ -134,7 +134,7 @@ expression: api
     "fn direct_entry",
     "fn direct_entry_children",
     "fn direct_start",
-    "fn direct_tokens",
+    "fn direct_terminals",
     "fn downcast_ref",
     "fn e",
     "fn else_branch",

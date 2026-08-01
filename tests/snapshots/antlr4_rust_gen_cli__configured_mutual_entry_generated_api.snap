@@ -27,7 +27,7 @@ expression: api
     "fn child_count",
     "fn clear_dfa",
     "fn compile_parse_tree_pattern",
-    "fn direct_tokens",
+    "fn direct_terminals",
     "fn downcast_ref",
     "fn e",
     "fn id_token",

@@ -131,9 +131,11 @@ Generated child accessors follow grammar cardinality. Required children return
 `Result<T, MissingChildError>`, optional children return `Option<T>`, and
 repeated children are lazy iterators. Rule labels keep their grammar names
 (`left()`), while token accessors use snake_case names such as `int_token()` and
-`comma_tokens()`. Every typed context also exposes `direct_tokens()`, which
+`comma_tokens()`. Every typed context also exposes `direct_terminals()`, which
 iterates only terminals owned directly by that context. It is the stable
 fallback for anonymous literal tokens and does not descend into nested rules.
+On recovered trees, the iterator includes error nodes such as synthetic
+`<missing ...>` tokens through the same `TerminalNode` surface.
 
 Call `parse_validated` when the application rejects recovered parses. It checks
 lexer and parser syntax-error counts, recovered error nodes, and every generated
