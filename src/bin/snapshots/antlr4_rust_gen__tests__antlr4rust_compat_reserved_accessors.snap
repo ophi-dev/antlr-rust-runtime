@@ -3,30 +3,30 @@ source: src/bin/antlr4-rust-gen.rs
 expression: rendered
 ---
     #[allow(non_snake_case)]
-    pub fn item_all(&self) -> Vec<ItemContext<'a>> {
-        self.item_children().collect()
+    pub fn item_all(&self) -> Vec<__Antlr4RustContext<ItemContext<'a>>> {
+        self.0.item_children().map(__Antlr4RustContext).collect()
     }
     #[allow(non_snake_case)]
-    pub fn text(&self) -> Option<TextContext<'a>> {
-        self.text_rule_child()
+    pub fn text(&self) -> Option<__Antlr4RustContext<TextContext<'a>>> {
+        self.0.text_rule_child().map(__Antlr4RustContext)
     }
     #[allow(non_snake_case)]
-    pub fn required(&self) -> Option<RequiredContext<'a>> {
-        self.required_rule_child().ok()
+    pub fn required(&self) -> Option<__Antlr4RustContext<RequiredContext<'a>>> {
+        self.0.required_rule_child().ok().map(__Antlr4RustContext)
     }
     #[allow(non_snake_case)]
-    pub fn r#type(&self) -> Option<TypeContext<'a>> {
-        self.type_rule_child()
+    pub fn r#type(&self) -> Option<__Antlr4RustContext<TypeContext<'a>>> {
+        self.0.type_rule_child().map(__Antlr4RustContext)
     }
     #[allow(non_snake_case)]
-    pub fn self_(&self) -> Option<SelfContext<'a>> {
-        self.self_rule_child()
+    pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>> {
+        self.0.self_rule_child().map(__Antlr4RustContext)
     }
     #[allow(non_snake_case)]
     pub fn ID(&self) -> Option<TerminalNode<'a>> {
-        self.id_token().ok()
+        self.0.id_token().ok()
     }
     #[allow(non_snake_case)]
     pub fn IDS_all(&self) -> Vec<TerminalNode<'a>> {
-        self.ids_tokens().collect()
+        self.0.ids_tokens().collect()
     }

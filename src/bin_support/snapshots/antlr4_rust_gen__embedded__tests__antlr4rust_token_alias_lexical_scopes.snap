@@ -5,7 +5,14 @@ expression: lowered.source
 {
 let before = __antlr4rust_token_aliases::ScopeParser_ID;
 { let ScopeParser_ID = 99; let inside = ScopeParser_ID; assert_eq!(inside, 99); }
+#[cfg(any())]
+use crate::OTHER as ScopeParser_ID;
+let after_cfg = __antlr4rust_token_aliases::ScopeParser_ID;
 let after = __antlr4rust_token_aliases::ScopeParser_ID;
+let inline_const = const { __antlr4rust_token_aliases::ScopeParser_ID };
 let closure = |ScopeParser_ID| ScopeParser_ID;
-before == after && closure(7) == 7 && matches!(before, __antlr4rust_token_aliases::ScopeParser_ID)
+let nested = |_outer| |ScopeParser_ID: i32| ScopeParser_ID;
+before == after && after_cfg == before && inline_const == before
+&& closure(7) == 7 && nested(1)(2) == 2
+&& matches!(before, __antlr4rust_token_aliases::ScopeParser_ID)
 }

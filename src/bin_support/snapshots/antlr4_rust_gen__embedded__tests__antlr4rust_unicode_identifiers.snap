@@ -1,0 +1,9 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+let πrecog = 1;
+let πCompatParser_ID = 2;
+πrecog + 1 == πCompatParser_ID
+}

@@ -9927,26 +9927,20 @@ fn antlr4rust_token_alias_inventory(
     root_type_name: &str,
     source: SourceId,
 ) -> Antlr4RustTokenAliasInventory {
-    let owner_type = if data
-        .semantic
-        .is_some_and(|semantic| semantic.unit.source == source)
-    {
-        root_type_name.to_owned()
-    } else {
-        data.sources
-            .and_then(|sources| sources.get(source))
-            .map(grammar::parse_loader_unit)
-            .map_or_else(
-                || root_type_name.to_owned(),
-                |parsed| {
-                    let mut name = parsed.header.name.value;
-                    if parsed.header.kind == GrammarKind::Combined {
-                        name.push_str("Parser");
-                    }
-                    rust_type_name(&name)
-                },
-            )
-    };
+    let owner_type = data
+        .sources
+        .and_then(|sources| sources.get(source))
+        .map(grammar::parse_loader_unit)
+        .map_or_else(
+            || root_type_name.to_owned(),
+            |parsed| {
+                let mut name = parsed.header.name.value;
+                if parsed.header.kind == GrammarKind::Combined {
+                    name.push_str("Parser");
+                }
+                name
+            },
+        );
     let values = antlr4rust_token_alias_values(&owner_type, data);
     let names = values.keys().cloned().collect();
     Antlr4RustTokenAliasInventory { names, values }
@@ -10009,6 +10003,16 @@ fn build_embedded_parser_data(
     let model = structural_embedded_model(data, true)?;
     let antlr4rust_token_alias_module =
         antlr4rust_token_alias_module_name(&model.parser_members.module_symbols);
+    let antlr4rust_context_wrapper =
+        antlr4rust_context_wrapper_name(&model.parser_members.module_symbols);
+    let antlr4rust_input_facade =
+        antlr4rust_input_facade_name(&model.parser_members.module_symbols);
+    let antlr4rust_token_view = antlr4rust_token_view_name(&model.parser_members.module_symbols);
+    let antlr4rust_names = embedded::Antlr4RustNames {
+        token_alias_module: &antlr4rust_token_alias_module,
+        context_wrapper: &antlr4rust_context_wrapper,
+        input_facade: &antlr4rust_input_facade,
+    };
     let context_names = context_surface_names(&model);
     let token_types: BTreeMap<String, i32> = data
         .symbolic_names
@@ -10065,7 +10069,7 @@ fn build_embedded_parser_data(
             &ctx,
             &context_names.rules[action.rule_index].context_type,
             &aliases.names,
-            &antlr4rust_token_alias_module,
+            antlr4rust_names,
             embedded::ParserBodyKind::Action,
         )
         .map_err(|error| {
@@ -10110,7 +10114,7 @@ fn build_embedded_parser_data(
             &ctx,
             &context_names.rules[predicate.rule_index].context_type,
             &aliases.names,
-            &antlr4rust_token_alias_module,
+            antlr4rust_names,
             embedded::ParserBodyKind::Predicate,
         )
         .map_err(|error| {
@@ -10167,7 +10171,7 @@ fn build_embedded_parser_data(
                 &ctx,
                 &context_names.rules[rule_index].context_type,
                 &aliases.names,
-                &antlr4rust_token_alias_module,
+                antlr4rust_names,
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
@@ -10204,7 +10208,7 @@ fn build_embedded_parser_data(
                 &ctx,
                 &context_names.rules[rule_index].context_type,
                 &aliases.names,
-                &antlr4rust_token_alias_module,
+                antlr4rust_names,
                 embedded::ParserBodyKind::Action,
             )
             .map_err(|error| {
@@ -10258,22 +10262,54 @@ fn build_embedded_parser_data(
         let aliases = antlr4rust_alias_inventory_cache
             .entry(field.source)
             .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, field.source));
-        let translated = embedded::translate_member_token_aliases(
+        let translated_type = embedded::translate_member_field_type_token_aliases(
+            &field.ty,
+            &aliases.names,
+            &antlr4rust_token_alias_module,
+        )
+        .map_err(|error| {
+            embedded_member_translation_error(
+                data,
+                field.source,
+                "parser member field type",
+                &error,
+            )
+        })?;
+        let translated_init = embedded::translate_member_token_aliases(
             &field.init,
             &aliases.names,
             &antlr4rust_token_alias_module,
-        )?;
-        antlr4rust_token_aliases.extend(
-            translated
-                .token_aliases
-                .iter()
-                .filter_map(|name| aliases.values.get(name).map(|value| (name.clone(), *value))),
+        )
+        .map_err(|error| {
+            embedded_member_translation_error(
+                data,
+                field.source,
+                "parser member field initializer",
+                &error,
+            )
+        })?;
+        for translated in [&translated_type, &translated_init] {
+            antlr4rust_token_aliases.extend(
+                translated.token_aliases.iter().filter_map(|name| {
+                    aliases.values.get(name).map(|value| (name.clone(), *value))
+                }),
+            );
+        }
+        for attribute in field.attributes.lines() {
+            let _ = writeln!(out.struct_fields, "    {attribute}");
+        }
+        for attribute in embedded::member_field_initializer_attributes(&field.attributes).lines() {
+            let _ = writeln!(out.field_inits, "            {attribute}");
+        }
+        let _ = writeln!(
+            out.struct_fields,
+            "    {}: {},",
+            field.name, translated_type.source
         );
-        let _ = writeln!(out.struct_fields, "    {}: {},", field.name, field.ty);
         let _ = writeln!(
             out.field_inits,
             "            {}: {},",
-            field.name, translated.source
+            field.name, translated_init.source
         );
     }
     for item in &model.parser_members.impl_items {
@@ -10284,7 +10320,10 @@ fn build_embedded_parser_data(
             &item.body,
             &aliases.names,
             &antlr4rust_token_alias_module,
-        )?;
+        )
+        .map_err(|error| {
+            embedded_member_translation_error(data, item.source, "parser member impl item", &error)
+        })?;
         antlr4rust_token_aliases.extend(
             translated
                 .token_aliases
@@ -10309,7 +10348,15 @@ fn build_embedded_parser_data(
             &item.body,
             &aliases.names,
             &antlr4rust_token_alias_module,
-        )?;
+        )
+        .map_err(|error| {
+            embedded_member_translation_error(
+                data,
+                item.source,
+                "parser member module item",
+                &error,
+            )
+        })?;
         antlr4rust_direct_alias_imports.extend(translated.direct_alias_imports.iter().cloned());
         antlr4rust_token_aliases.extend(
             translated
@@ -10348,7 +10395,10 @@ fn build_embedded_parser_data(
     out.impl_items.push_str(&embedded_parser_facades());
     out.module_items.push_str(EMBEDDED_INPUT_FACADE);
     if uses_antlr4rust_input {
-        out.module_items.push_str(ANTLR4RUST_INPUT_FACADE);
+        out.module_items.push_str(&render_antlr4rust_input_facade(
+            &antlr4rust_input_facade,
+            &antlr4rust_token_view,
+        ));
     }
     if !antlr4rust_token_aliases.is_empty() {
         out.module_items.push_str(&render_antlr4rust_token_aliases(
@@ -10366,6 +10416,7 @@ fn build_embedded_parser_data(
         &model,
         options,
         &antlr4rust_context_rules,
+        &antlr4rust_context_wrapper,
     )?);
     Ok(out)
 }
@@ -10393,6 +10444,22 @@ fn embedded_body_translation_error(
             "{path}:{line}:{column}: cannot lower embedded {kind} coordinate \
              ({rule_index}, {coordinate_index}) in rule {rule}: {error}"
         ),
+    )
+}
+
+fn embedded_member_translation_error(
+    data: &CodegenData<'_>,
+    source: SourceId,
+    kind: &str,
+    error: &io::Error,
+) -> io::Error {
+    let path = data
+        .sources
+        .and_then(|sources| sources.logical_path(source))
+        .map_or_else(|| "<grammar>".to_owned(), |path| path.display().to_string());
+    io::Error::new(
+        error.kind(),
+        format!("{path}: cannot lower embedded {kind}: {error}"),
     )
 }
 
@@ -10458,6 +10525,44 @@ fn embedded_rule_action_translation_error(
         )
 }
 
+fn embedded_context_accessor_translation_error(
+    data: &CodegenData<'_>,
+    rule_index: usize,
+    error: &io::Error,
+) -> io::Error {
+    let semantic_rule = data.semantic.and_then(|semantic| {
+        semantic
+            .unit
+            .rules
+            .iter()
+            .find(|rule| semantic.recognizer.rule_numbers.get(&rule.id) == Some(&rule_index))
+    });
+    semantic_rule.map_or_else(
+        || {
+            let rule_name = data
+                .rule_names
+                .get(rule_index)
+                .map_or("<unknown>", String::as_str);
+            io::Error::new(
+                error.kind(),
+                format!(
+                    "cannot lower embedded antlr4rust compatibility accessors in rule \
+                     {rule_name} ({rule_index}): {error}"
+                ),
+            )
+        },
+        |rule| {
+            embedded_named_body_translation_error(
+                data,
+                &rule.name_span,
+                "antlr4rust compatibility accessors",
+                rule_index,
+                error,
+            )
+        },
+    )
+}
+
 fn build_structural_parser_surface(
     data: &CodegenData<'_>,
     grammar_name: &str,
@@ -10495,6 +10600,7 @@ fn build_structural_parser_surface(
         &model,
         options,
         &BTreeSet::new(),
+        embedded::ANTLR4RUST_CONTEXT_WRAPPER,
     )?);
     Ok(out)
 }
@@ -11521,6 +11627,7 @@ struct RenderedContextAccessors {
     recovered: String,
     validated: String,
     validation: String,
+    compatibility: String,
 }
 
 fn render_required_accessor_validation(
@@ -11560,6 +11667,7 @@ fn render_antlr4rust_rule_all_accessor(
     source_name: &str,
     native_method: &str,
     child_view: &str,
+    context_wrapper: &str,
     emitted_methods: &mut BTreeSet<String>,
 ) {
     let method = antlr4rust_compat_method_name(&format!("{source_name}_all"));
@@ -11568,18 +11676,49 @@ fn render_antlr4rust_rule_all_accessor(
     }
     let _ = writeln!(
         out,
-        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Vec<{child_view}<'a>> {{\n        self.{native_method}().collect()\n    }}"
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Vec<{context_wrapper}<{child_view}<'a>>> {{\n        self.0.{native_method}().map({context_wrapper}).collect()\n    }}"
     );
 }
 
-fn render_antlr4rust_single_rule_accessor(
+fn render_antlr4rust_indexed_rule_accessor(
     out: &mut String,
     source_name: &str,
     native_method: &str,
     child_view: &str,
-    required: bool,
+    context_wrapper: &str,
     emitted_methods: &mut BTreeSet<String>,
 ) {
+    let method = antlr4rust_compat_method_name(source_name);
+    if !emitted_methods.insert(method.clone()) {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self, index: usize) -> Option<{context_wrapper}<{child_view}<'a>>> {{\n        self.0.{native_method}().nth(index).map({context_wrapper})\n    }}"
+    );
+}
+
+#[derive(Clone, Copy)]
+struct Antlr4RustSingleRuleAccessorRender<'a> {
+    source_name: &'a str,
+    native_method: &'a str,
+    child_view: &'a str,
+    required: bool,
+    context_wrapper: &'a str,
+}
+
+fn render_antlr4rust_single_rule_accessor(
+    out: &mut String,
+    context: Antlr4RustSingleRuleAccessorRender<'_>,
+    emitted_methods: &mut BTreeSet<String>,
+) {
+    let Antlr4RustSingleRuleAccessorRender {
+        source_name,
+        native_method,
+        child_view,
+        required,
+        context_wrapper,
+    } = context;
     let method = antlr4rust_compat_method_name(source_name);
     if !emitted_methods.insert(method.clone()) {
         return;
@@ -11587,7 +11726,7 @@ fn render_antlr4rust_single_rule_accessor(
     let recover_missing = if required { ".ok()" } else { "" };
     let _ = writeln!(
         out,
-        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        self.{native_method}(){recover_missing}\n    }}"
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Option<{context_wrapper}<{child_view}<'a>>> {{\n        self.0.{native_method}(){recover_missing}.map({context_wrapper})\n    }}"
     );
 }
 
@@ -11605,7 +11744,23 @@ fn render_antlr4rust_single_token_accessor(
     let recover_missing = if required { ".ok()" } else { "" };
     let _ = writeln!(
         out,
-        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        self.{native_method}(){recover_missing}\n    }}"
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        self.0.{native_method}(){recover_missing}\n    }}"
+    );
+}
+
+fn render_antlr4rust_indexed_token_accessor(
+    out: &mut String,
+    token_name: &str,
+    native_method: &str,
+    emitted_methods: &mut BTreeSet<String>,
+) {
+    let method = antlr4rust_compat_method_name(token_name);
+    if !emitted_methods.insert(method.clone()) {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self, index: usize) -> Option<TerminalNode<'a>> {{\n        self.0.{native_method}().nth(index)\n    }}"
     );
 }
 
@@ -11621,7 +11776,7 @@ fn render_antlr4rust_token_all_accessor(
     }
     let _ = writeln!(
         out,
-        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Vec<TerminalNode<'a>> {{\n        self.{native_method}().collect()\n    }}"
+        "    #[allow(non_snake_case)]\n    pub fn {method}(&self) -> Vec<TerminalNode<'a>> {{\n        self.0.{native_method}().collect()\n    }}"
     );
 }
 
@@ -11654,6 +11809,12 @@ fn antlr4rust_compat_method_names(
             antlr4rust_compat_method_name(&child.name)
         };
         register(method, format!("parser rule `{}`", child.name))?;
+        if cardinality.is_repeated() {
+            register(
+                antlr4rust_compat_method_name(&child.name),
+                format!("indexed parser rule `{}`", child.name),
+            )?;
+        }
     }
     for (token_name, _) in token_accessors {
         let Some(cardinality) = child_cardinalities.get(token_name.as_str()) else {
@@ -11665,6 +11826,12 @@ fn antlr4rust_compat_method_names(
             antlr4rust_compat_method_name(token_name)
         };
         register(method, format!("token `{token_name}`"))?;
+        if cardinality.is_repeated() {
+            register(
+                antlr4rust_compat_method_name(token_name),
+                format!("indexed token `{token_name}`"),
+            )?;
+        }
     }
     Ok(methods.into_keys().collect())
 }
@@ -11900,7 +12067,7 @@ struct ContextAccessorsRender<'a> {
     label_accessors: &'a [ContextLabelAccessor],
     validation_error_name: &'a str,
     antlr4rust_compat: bool,
-    compatibility_methods: &'a BTreeSet<String>,
+    antlr4rust_context_wrapper: &'a str,
     common_methods: &'a ContextCommonMethodNames,
 }
 
@@ -11914,12 +12081,11 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         label_accessors,
         validation_error_name,
         antlr4rust_compat,
-        compatibility_methods,
+        antlr4rust_context_wrapper,
         common_methods,
     } = context;
     let mut rendered = RenderedContextAccessors::default();
-    let mut used_methods = compatibility_methods.clone();
-    used_methods.extend([
+    let mut used_methods = BTreeSet::from([
         common_methods.child_count.clone(),
         common_methods.direct_terminals.clone(),
         common_methods.rule_node.clone(),
@@ -11961,11 +12127,20 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
                 validation_error_name,
             );
             if antlr4rust_compat {
-                render_antlr4rust_rule_all_accessor(
-                    &mut rendered.recovered,
+                render_antlr4rust_indexed_rule_accessor(
+                    &mut rendered.compatibility,
                     &child.name,
                     &method,
                     child_view,
+                    antlr4rust_context_wrapper,
+                    &mut emitted_compatibility_methods,
+                );
+                render_antlr4rust_rule_all_accessor(
+                    &mut rendered.compatibility,
+                    &child.name,
+                    &method,
+                    child_view,
+                    antlr4rust_context_wrapper,
                     &mut emitted_compatibility_methods,
                 );
             }
@@ -11997,11 +12172,14 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         }
         if antlr4rust_compat && !cardinality.is_repeated() {
             render_antlr4rust_single_rule_accessor(
-                &mut rendered.recovered,
-                &child.name,
-                &method,
-                child_view,
-                cardinality.is_required_single(),
+                &mut rendered.compatibility,
+                Antlr4RustSingleRuleAccessorRender {
+                    source_name: &child.name,
+                    native_method: &method,
+                    child_view,
+                    required: cardinality.is_required_single(),
+                    context_wrapper: antlr4rust_context_wrapper,
+                },
                 &mut emitted_compatibility_methods,
             );
         }
@@ -12040,8 +12218,14 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
                 validation_error_name,
             );
             if antlr4rust_compat {
+                render_antlr4rust_indexed_token_accessor(
+                    &mut rendered.compatibility,
+                    token_name,
+                    &method,
+                    &mut emitted_compatibility_methods,
+                );
                 render_antlr4rust_token_all_accessor(
-                    &mut rendered.recovered,
+                    &mut rendered.compatibility,
                     token_name,
                     &method,
                     &mut emitted_compatibility_methods,
@@ -12063,7 +12247,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             );
             if antlr4rust_compat {
                 render_antlr4rust_single_token_accessor(
-                    &mut rendered.recovered,
+                    &mut rendered.compatibility,
                     token_name,
                     &method,
                     true,
@@ -12081,7 +12265,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             );
             if antlr4rust_compat {
                 render_antlr4rust_single_token_accessor(
-                    &mut rendered.recovered,
+                    &mut rendered.compatibility,
                     token_name,
                     &method,
                     false,
@@ -12815,6 +12999,7 @@ fn render_embedded_context_types(
     model: &embedded::EmbeddedModel,
     options: ParserRenderOptions<'_>,
     antlr4rust_context_rules: &BTreeSet<usize>,
+    antlr4rust_context_wrapper: &str,
 ) -> io::Result<String> {
     let mut out = String::new();
     let context_names = context_surface_names(model);
@@ -12996,6 +13181,22 @@ fn __token_children_matching<'a>(
 
 "#,
     );
+    if !antlr4rust_context_rules.is_empty() {
+        let _ = writeln!(
+            out,
+            "#[allow(dead_code)]
+struct {antlr4rust_context_wrapper}<T>(T);
+
+impl<T> std::ops::Deref for {antlr4rust_context_wrapper}<T> {{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {{
+        &self.0
+    }}
+}}
+"
+        );
+    }
     out.push_str(LABELED_TOKEN_CHILD_HELPERS);
     out.push_str(
         r#"#[allow(dead_code)]
@@ -13082,12 +13283,10 @@ fn __write_invocation_states(
         let antlr4rust_compat =
             alternative_label.is_none() && antlr4rust_context_rules.contains(rule_index);
         let compatibility_methods = if antlr4rust_compat {
-            antlr4rust_compat_method_names(
-                view_name,
-                model,
-                &token_accessors,
-                &child_cardinalities,
-            )?
+            antlr4rust_compat_method_names(view_name, model, &token_accessors, &child_cardinalities)
+                .map_err(|error| {
+                    embedded_context_accessor_translation_error(data, *rule_index, &error)
+                })?
         } else {
             BTreeSet::new()
         };
@@ -13150,14 +13349,21 @@ fn __write_invocation_states(
             label_accessors: &label_accessors,
             validation_error_name: &validation_error,
             antlr4rust_compat,
-            compatibility_methods: &compatibility_methods,
+            antlr4rust_context_wrapper,
             common_methods: &common_methods,
+        });
+        let compatibility_impl = (!rendered_accessors.compatibility.is_empty()).then(|| {
+            format!(
+                "\n#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {antlr4rust_context_wrapper}<{view_name}<'a, State>> {{\n{compatibility}}}\n",
+                compatibility = rendered_accessors.compatibility,
+            )
         });
         let _ = writeln!(
             out,
-            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{common_accessors}}}\n\n#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated_constructors}{validated}}}\n",
+            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{common_accessors}}}\n\n#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated_constructors}{validated}}}\n{compatibility_impl}",
             recovered = rendered_accessors.recovered,
             validated = rendered_accessors.validated,
+            compatibility_impl = compatibility_impl.unwrap_or_default(),
         );
         let validation_body = if rendered_accessors.validation.is_empty() {
             String::new()
@@ -13369,7 +13575,31 @@ impl __GeneratedTokenView {
 }
 "#;
 
-const ANTLR4RUST_INPUT_FACADE: &str = r#"
+fn render_antlr4rust_input_facade(input_facade: &str, token_view: &str) -> String {
+    let mut out = String::with_capacity(ANTLR4RUST_INPUT_FACADE_TEMPLATE.len());
+    let mut rest = ANTLR4RUST_INPUT_FACADE_TEMPLATE;
+    loop {
+        let next = [
+            rest.find(embedded::ANTLR4RUST_INPUT_FACADE)
+                .map(|index| (index, embedded::ANTLR4RUST_INPUT_FACADE, input_facade)),
+            rest.find(embedded::ANTLR4RUST_TOKEN_VIEW)
+                .map(|index| (index, embedded::ANTLR4RUST_TOKEN_VIEW, token_view)),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|(index, _, _)| *index);
+        let Some((index, needle, replacement)) = next else {
+            break;
+        };
+        out.push_str(&rest[..index]);
+        out.push_str(replacement);
+        rest = &rest[index + needle.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+const ANTLR4RUST_INPUT_FACADE_TEMPLATE: &str = r#"
 /// Borrowed parser-input facade for embedded bodies produced by antlr4rust
 /// grammar transforms.
 #[allow(dead_code)]
@@ -13395,6 +13625,7 @@ impl<'a, L: TokenSource> __Antlr4RustInput<'a, L> {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Copy)]
 struct __Antlr4RustTokenView<'a>(antlr4_runtime::TokenView<'a>);
 
 #[allow(dead_code)]
@@ -15407,7 +15638,22 @@ fn antlr4rust_token_alias_values(type_name: &str, data: &CodegenData<'_>) -> BTr
 }
 
 fn antlr4rust_token_alias_module_name(member_symbols: &BTreeSet<String>) -> String {
-    let stem = embedded::ANTLR4RUST_TOKEN_ALIAS_MODULE;
+    antlr4rust_compatibility_symbol_name(embedded::ANTLR4RUST_TOKEN_ALIAS_MODULE, member_symbols)
+}
+
+fn antlr4rust_context_wrapper_name(member_symbols: &BTreeSet<String>) -> String {
+    antlr4rust_compatibility_symbol_name(embedded::ANTLR4RUST_CONTEXT_WRAPPER, member_symbols)
+}
+
+fn antlr4rust_input_facade_name(member_symbols: &BTreeSet<String>) -> String {
+    antlr4rust_compatibility_symbol_name(embedded::ANTLR4RUST_INPUT_FACADE, member_symbols)
+}
+
+fn antlr4rust_token_view_name(member_symbols: &BTreeSet<String>) -> String {
+    antlr4rust_compatibility_symbol_name(embedded::ANTLR4RUST_TOKEN_VIEW, member_symbols)
+}
+
+fn antlr4rust_compatibility_symbol_name(stem: &str, member_symbols: &BTreeSet<String>) -> String {
     if !member_symbols.contains(stem) {
         return stem.to_owned();
     }
@@ -18404,38 +18650,51 @@ mod tests {
             "item",
             "item_children",
             "ItemContext",
+            embedded::ANTLR4RUST_CONTEXT_WRAPPER,
             &mut emitted_methods,
         );
         render_antlr4rust_single_rule_accessor(
             &mut rendered,
-            "text",
-            "text_rule_child",
-            "TextContext",
-            false,
+            Antlr4RustSingleRuleAccessorRender {
+                source_name: "text",
+                native_method: "text_rule_child",
+                child_view: "TextContext",
+                required: false,
+                context_wrapper: embedded::ANTLR4RUST_CONTEXT_WRAPPER,
+            },
             &mut emitted_methods,
         );
         render_antlr4rust_single_rule_accessor(
             &mut rendered,
-            "required",
-            "required_rule_child",
-            "RequiredContext",
-            true,
+            Antlr4RustSingleRuleAccessorRender {
+                source_name: "required",
+                native_method: "required_rule_child",
+                child_view: "RequiredContext",
+                required: true,
+                context_wrapper: embedded::ANTLR4RUST_CONTEXT_WRAPPER,
+            },
             &mut emitted_methods,
         );
         render_antlr4rust_single_rule_accessor(
             &mut rendered,
-            "type",
-            "type_rule_child",
-            "TypeContext",
-            false,
+            Antlr4RustSingleRuleAccessorRender {
+                source_name: "type",
+                native_method: "type_rule_child",
+                child_view: "TypeContext",
+                required: false,
+                context_wrapper: embedded::ANTLR4RUST_CONTEXT_WRAPPER,
+            },
             &mut emitted_methods,
         );
         render_antlr4rust_single_rule_accessor(
             &mut rendered,
-            "self",
-            "self_rule_child",
-            "SelfContext",
-            false,
+            Antlr4RustSingleRuleAccessorRender {
+                source_name: "self",
+                native_method: "self_rule_child",
+                child_view: "SelfContext",
+                required: false,
+                context_wrapper: embedded::ANTLR4RUST_CONTEXT_WRAPPER,
+            },
             &mut emitted_methods,
         );
         render_antlr4rust_single_token_accessor(

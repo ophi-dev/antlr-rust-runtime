@@ -1,0 +1,6 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: alias_excerpt
+---
+pub(super) const XMLParser_ID: i32 = 1;
+__antlr4rust_token_aliases::XMLParser_ID == ID

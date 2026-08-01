@@ -25,10 +25,11 @@ recordComponentList
                 .map(|ctx| {
                     let rcs = ctx.recordComponent_all();
                     let count = rcs.len();
-                    (0..count).all(|i| {
+                    ctx.recordComponent(0).is_some()
+                        && (0..count).all(|i| {
                         rcs[i].IDENTIFIER().is_some()
                             && (rcs[i].ELLIPSIS().is_none() || i + 1 == count)
-                    })
+                        })
                 })
                 .unwrap_or(false)
         }? EOF
@@ -43,7 +44,11 @@ recordComponent
 repeatedTokens
     : IDENTIFIER IDENTIFIER {
         _localctx.as_deref()
-            .map(|ctx| ctx.IDENTIFIER_all().len() == 2)
+            .map(|ctx| {
+                ctx.IDENTIFIER_all().len() == 2
+                    && ctx.IDENTIFIER(1).is_some()
+                    && ctx.IDENTIFIER(2).is_none()
+            })
             .unwrap_or(false)
     }? EOF
     ;

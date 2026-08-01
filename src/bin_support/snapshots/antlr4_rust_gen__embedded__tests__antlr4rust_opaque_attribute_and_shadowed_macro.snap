@@ -1,0 +1,11 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+macro_rules! assert { (CompatParser_ID) => { true }; }
+let shadowed = assert!(CompatParser_ID);
+let builtin = matches!(kind, __antlr4rust_token_aliases::CompatParser_ID);
+#[cfg(CompatParser_ID)] let guarded = 1;
+shadowed && builtin && guarded == __antlr4rust_token_aliases::CompatParser_ID
+}

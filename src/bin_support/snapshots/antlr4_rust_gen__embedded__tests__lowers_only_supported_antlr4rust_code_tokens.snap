@@ -20,5 +20,5 @@ expression: lowered.source
     self.base.active_invocation_states(),
     self.base.parse_tree_storage(),
     self.base.token_store(),
-).is_some()
+).map(__Antlr4RustContext).is_some()
 }
