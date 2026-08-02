@@ -1463,8 +1463,21 @@ fn complete_ll1_recovery_matches_java_without_adaptive_fallback() {
     );
 
     let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
-    assert!(!parser.contains("adaptive_predict_stream_info_sll_probe("));
-    assert!(!parser.contains("adaptive_predict_stream_info_with_context("));
+    assert_eq!(
+        parser
+            .matches("let __prediction = match self.base.la(1) {")
+            .count(),
+        7,
+        "all complete LL(1) decisions should emit direct lookahead dispatch"
+    );
+    assert!(
+        !parser.contains("adaptive_predict_stream_info_sll_probe("),
+        "complete LL(1) decisions should not emit SLL fallback"
+    );
+    assert!(
+        !parser.contains("adaptive_predict_stream_info_with_context("),
+        "complete LL(1) decisions should not emit full-context fallback"
+    );
     let manifest =
         fs::read_to_string(out.join("decisions.json")).expect("manifest should be emitted");
     insta::assert_snapshot!("ll1_no_fallback_decisions_manifest", manifest);

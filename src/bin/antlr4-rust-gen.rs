@@ -4394,6 +4394,31 @@ struct GeneratedStepRenderContext<'a> {
     adaptive_atn_probe_rule_slots: &'a [Vec<usize>],
 }
 
+struct ResolvedDecisionDispatch<'a> {
+    complete_ll1_dispatch: Option<&'a CompleteLl1Dispatch>,
+    fast_path: Option<&'a GeneratedDecisionFastPath>,
+}
+
+fn resolve_decision_dispatch<'a>(
+    render_context: GeneratedStepRenderContext<'a>,
+    decision: usize,
+    fallback_fast_path: Option<&'a GeneratedDecisionFastPath>,
+) -> ResolvedDecisionDispatch<'a> {
+    let tool_dispatch = render_context
+        .embedded
+        .and_then(|embedded| embedded.tool_ll1_dispatch(decision));
+    ResolvedDecisionDispatch {
+        complete_ll1_dispatch: tool_dispatch.or_else(|| {
+            render_context
+                .decision_routing
+                .complete_ll1_dispatch(decision)
+        }),
+        fast_path: tool_dispatch
+            .map(|dispatch| &dispatch.fast_path)
+            .or(fallback_fast_path),
+    }
+}
+
 struct GeneratedParserCompileContext<'a> {
     atn: &'a ParserAtn,
     decision_by_state: &'a [Option<usize>],
@@ -7419,21 +7444,12 @@ fn render_generated_decision(
                 .static_dispatch_table(decision)
         })
         .flatten();
-    let complete_ll1_dispatch = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_dispatch(decision))
-        .or_else(|| {
-            render_context
-                .decision_routing
-                .complete_ll1_dispatch(decision)
-        });
     // A tool-LL(1) decision dispatches on the tool's complete LOOK table
     // (exit alternatives included), like Java's switch compilation.
-    let tool_fast_path = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_dispatch(decision))
-        .map(|dispatch| &dispatch.fast_path);
-    let fast_path = tool_fast_path.or(fast_path);
+    let ResolvedDecisionDispatch {
+        complete_ll1_dispatch,
+        fast_path,
+    } = resolve_decision_dispatch(render_context, decision, fast_path);
     if let Some(table) = static_table {
         render_generated_fixed_lookahead_prediction(
             out,
@@ -8250,21 +8266,12 @@ fn render_generated_star_loop(
                 .static_dispatch_table(decision)
         })
         .flatten();
-    let complete_ll1_dispatch = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_dispatch(decision))
-        .or_else(|| {
-            render_context
-                .decision_routing
-                .complete_ll1_dispatch(decision)
-        });
     // A tool-LL(1) loop decision dispatches on the tool's complete LOOK
     // table (exit alternative included), like Java's switch-driven loops.
-    let tool_fast_path = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_dispatch(decision))
-        .map(|dispatch| &dispatch.fast_path);
-    let fast_path = tool_fast_path.or(fast_path);
+    let ResolvedDecisionDispatch {
+        complete_ll1_dispatch,
+        fast_path,
+    } = resolve_decision_dispatch(render_context, decision, fast_path);
     // Per-loop "iteration started" flag, threaded into `sync_decision` so it
     // recovers like ANTLR: a `*` loop's first sync is at the loop ENTRY
     // (single-token deletion), every later sync is a loop-BACK (multi-token
