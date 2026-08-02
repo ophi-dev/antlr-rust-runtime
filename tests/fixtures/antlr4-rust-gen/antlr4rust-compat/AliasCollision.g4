@@ -118,7 +118,8 @@ start
         let c_strings_ok =
             c"value".to_bytes() == b"value"
                 && cr#"raw value"#.to_bytes() == b"raw value"
-                && c"\xE6".to_bytes() == b"\xE6";
+                && c"\xE6".to_bytes() == b"\xE6"
+                && c"\u{0_0E6}".to_bytes() == "\u{00E6}".as_bytes();
         unsafe extern "C" {}
         let unsafe_extern_alias_ok =
             AliasCollisionParser_UNSAFE_EXTERN == Self::UNSAFE_EXTERN;
@@ -137,6 +138,9 @@ start
         let raw_lifetime_value = 37;
         let raw_lifetime_ok =
             *raw_lifetime(&raw_lifetime_value) == raw_lifetime_value;
+        let placeholder_lifetime: Option<&'_ i32> = None;
+        let placeholder_lifetime_ok =
+            placeholder_lifetime.is_none();
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
         macro_rules! alias_value {
@@ -164,11 +168,21 @@ start
                     true
                 };
             }
+            macro_rules! imported_assert_eq {
+                (AliasCollisionParser_IMPORTED_MACRO) => {
+                    true
+                };
+            }
             pub(crate) use assert;
+            pub(crate) use imported_assert_eq;
             pub(crate) use matches;
         }
         let qualified_macro_ok =
             my_macros::assert!(AliasCollisionParser_QUALIFIED_MACRO);
+        let imported_macro_ok = {
+            use my_macros::imported_assert_eq as assert_eq;
+            assert_eq!(AliasCollisionParser_IMPORTED_MACRO)
+        };
         let standard_qualified_macro_ok =
             std::matches!(Self::MODULE, AliasCollisionParser_MODULE);
         let custom_matches_macro_ok =
@@ -176,6 +190,25 @@ start
                 Self::MODULE,
                 AliasCollisionParser_CUSTOM_MATCHES => fallback
             );
+        macro_rules! alias_type {
+            (AliasCollisionParser_TYPE_MACRO) => {
+                i32
+            };
+        }
+        let opaque_type_value:
+            alias_type!(AliasCollisionParser_TYPE_MACRO) = 2;
+        let opaque_type_macro_ok = opaque_type_value == 2;
+        macro_rules! alias_pattern {
+            (AliasCollisionParser_PATTERN_MACRO) => {
+                2
+            };
+        }
+        let opaque_pattern_macro_ok =
+            if let alias_pattern!(AliasCollisionParser_PATTERN_MACRO) = 2 {
+                true
+            } else {
+                false
+            };
         #[allow(unexpected_cfgs)]
         #[cfg(AliasCollisionParser_ATTRIBUTE)]
         let _attribute_token_tree = ();
@@ -256,6 +289,14 @@ start
         let inactive_cfg_let_ok =
             AliasCollisionParser_INACTIVE_CFG_LET
                 == Self::INACTIVE_CFG_LET;
+        #[cfg(any())]
+        let AliasCollisionParser_DUPLICATE_CFG = 75;
+        #[cfg(any())]
+        use antlr4_runtime::DEFAULT_CHANNEL
+            as AliasCollisionParser_DUPLICATE_CFG;
+        let duplicate_cfg_ok =
+            AliasCollisionParser_DUPLICATE_CFG
+                == Self::DUPLICATE_CFG;
         let leading_match_binding_ok = match Some(8) {
             | Some(AliasCollisionParser_ARM @ _) => AliasCollisionParser_ARM == 8,
             None => false,
@@ -275,6 +316,17 @@ start
         let mut while_head_alias_ok = false;
         while MODULE == AliasCollisionParser_MODULE {
             while_head_alias_ok = true;
+            break;
+        }
+        let if_let_constant_ok =
+            if let AliasCollisionParser_MODULE = MODULE {
+                true
+            } else {
+                false
+            };
+        let mut while_let_constant_ok = false;
+        while let AliasCollisionParser_MODULE = MODULE {
+            while_let_constant_ok = true;
             break;
         }
         let match_head_alias_ok = match AliasCollisionParser_MODULE {
@@ -372,11 +424,14 @@ start
             && inactive_cfg_use_ok
             && active_cfg_let_ok
             && inactive_cfg_let_ok
+            && duplicate_cfg_ok
             && leading_match_binding_ok
             && block_match_binding_ok
             && not_equal_alias_ok
             && if_head_alias_ok
             && while_head_alias_ok
+            && if_let_constant_ok
+            && while_let_constant_ok
             && match_head_alias_ok
             && let_chain_binding_ok
             && const_block_binding_ok
@@ -393,12 +448,16 @@ start
             && unsafe_extern_alias_ok
             && safe_foreign_alias_ok
             && raw_lifetime_ok
+            && placeholder_lifetime_ok
             && raw_macro_ok
             && opaque_macro_alias_ok
             && shadowed_macro_ok
             && qualified_macro_ok
+            && imported_macro_ok
             && standard_qualified_macro_ok
             && custom_matches_macro_ok
+            && opaque_type_macro_ok
+            && opaque_pattern_macro_ok
             && macro_ident_ok
             && unicode_identifiers_ok
             && input_facade_ok
@@ -485,6 +544,10 @@ start
         | INACTIVE_CFG_USE
         | ACTIVE_CFG_LET
         | INACTIVE_CFG_LET
+        | DUPLICATE_CFG
+        | IMPORTED_MACRO
+        | TYPE_MACRO
+        | PATTERN_MACRO
     ) EOF
     ;
 
@@ -546,5 +609,9 @@ ACTIVE_CFG_USE: 'active_cfg_use';
 INACTIVE_CFG_USE: 'inactive_cfg_use';
 ACTIVE_CFG_LET: 'active_cfg_let';
 INACTIVE_CFG_LET: 'inactive_cfg_let';
+DUPLICATE_CFG: 'duplicate_cfg';
+IMPORTED_MACRO: 'imported_macro';
+TYPE_MACRO: 'type_macro';
+PATTERN_MACRO: 'pattern_macro';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

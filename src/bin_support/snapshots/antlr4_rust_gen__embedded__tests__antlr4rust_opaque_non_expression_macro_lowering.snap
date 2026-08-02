@@ -1,0 +1,25 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+macro_rules! alias_type { ($i:ident) => { i32 }; }
+macro_rules! alias_pattern { ($i:ident) => { 1 }; }
+macro_rules! alias_expr { ($i:ident) => { $i }; }
+let _: alias_type!(CompatParser_TYPE) = 0;
+let pattern = if let alias_pattern!(CompatParser_PATTERN) = 1 {
+true
+} else {
+false
+};
+let expression = {
+mod __antlr4rust_opaque_aliases_300 {
+    #[allow(unused_imports)]
+    pub(super) use super::__antlr4rust_token_aliases::{CompatParser_EXPR};
+}
+#[allow(unused_imports)]
+use __antlr4rust_opaque_aliases_300::*;
+alias_expr!(CompatParser_EXPR)
+};
+pattern && expression > 0
+}

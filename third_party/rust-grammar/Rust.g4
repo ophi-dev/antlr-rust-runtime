@@ -2044,7 +2044,32 @@ fragment C_BYTE_ESCAPE:
     | '\\x' ('0' [1-9a-fA-F] | [1-9a-fA-F] [0-9a-fA-F]);
 
 fragment C_UNICODE_ESCAPE:
-    '\\u{' [0-9a-fA-F]* [1-9a-fA-F] [0-9a-fA-F]* '}';
+    '\\u{' (
+        [1-9a-fA-F] C_UNICODE_HEX_TAIL_5
+        | '0' '_'* [1-9a-fA-F] C_UNICODE_HEX_TAIL_4
+        | '0' '_'* '0' '_'* [1-9a-fA-F] C_UNICODE_HEX_TAIL_3
+        | '0' '_'* '0' '_'* '0' '_'* [1-9a-fA-F] C_UNICODE_HEX_TAIL_2
+        | '0' '_'* '0' '_'* '0' '_'* '0' '_'* [1-9a-fA-F] C_UNICODE_HEX_TAIL_1
+        | '0' '_'* '0' '_'* '0' '_'* '0' '_'* '0' '_'* [1-9a-fA-F] C_UNICODE_HEX_TAIL_0
+    ) '}';
+
+fragment C_UNICODE_HEX_TAIL_5:
+    '_'* ([0-9a-fA-F] C_UNICODE_HEX_TAIL_4)?;
+
+fragment C_UNICODE_HEX_TAIL_4:
+    '_'* ([0-9a-fA-F] C_UNICODE_HEX_TAIL_3)?;
+
+fragment C_UNICODE_HEX_TAIL_3:
+    '_'* ([0-9a-fA-F] C_UNICODE_HEX_TAIL_2)?;
+
+fragment C_UNICODE_HEX_TAIL_2:
+    '_'* ([0-9a-fA-F] C_UNICODE_HEX_TAIL_1)?;
+
+fragment C_UNICODE_HEX_TAIL_1:
+    '_'* ([0-9a-fA-F] C_UNICODE_HEX_TAIL_0)?;
+
+fragment C_UNICODE_HEX_TAIL_0:
+    '_'*;
 
 fragment C_STRING_ELEMENT:
     C_STRING_CHAR

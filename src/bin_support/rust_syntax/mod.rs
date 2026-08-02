@@ -28,10 +28,12 @@ use generated::parser::{
     RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION, RULE_MACRO_INVOCATION_SEMI,
     RULE_MACRO_RULES_DEFINITION, RULE_MACRO_TAIL, RULE_METHOD_DECL, RULE_METHOD_PARAM_LIST,
     RULE_MOD_DECL, RULE_MOD_DECL_SHORT, RULE_PARAM, RULE_PARAM_LIST, RULE_PATTERN,
-    RULE_PATTERN_NO_TOP_ALT, RULE_PRIM_EXPR_NO_STRUCT, RULE_STATIC_DECL, RULE_STRUCT_DECL,
-    RULE_STRUCT_TAIL, RULE_TRAIT_ALIAS, RULE_TRAIT_DECL, RULE_TRAIT_ITEM, RULE_TRAIT_METHOD_DECL,
-    RULE_TRAIT_METHOD_PARAM, RULE_TRAIT_METHOD_PARAM_LIST, RULE_TYPE_DECL, RULE_TYPE_PARAMETER,
-    RULE_TYPE_PATH_MAIN, RULE_UNION_DECL, RULE_VARIADIC_PARAM_LIST, RustParser,
+    RULE_PATTERN_NO_TOP_ALT, RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT, RULE_RENAME,
+    RULE_STATIC_DECL, RULE_STRUCT_DECL, RULE_STRUCT_TAIL, RULE_TRAIT_ALIAS, RULE_TRAIT_DECL,
+    RULE_TRAIT_ITEM, RULE_TRAIT_METHOD_DECL, RULE_TRAIT_METHOD_PARAM, RULE_TRAIT_METHOD_PARAM_LIST,
+    RULE_TYPE_DECL, RULE_TYPE_NO_BOUNDS, RULE_TYPE_PARAMETER, RULE_TYPE_PATH_MAIN, RULE_UNION_DECL,
+    RULE_USE_DECL, RULE_USE_ITEM, RULE_USE_ITEM_LIST, RULE_USE_PATH, RULE_USE_SUFFIX,
+    RULE_VARIADIC_PARAM_LIST, RustParser,
 };
 
 const WRAPPER_PREFIX: &str = "{\n";
@@ -43,6 +45,7 @@ pub(crate) struct RustSyntax {
     non_value_identifier_byte_starts: BTreeSet<usize>,
     opaque_macro_identifier_byte_starts: BTreeSet<usize>,
     opaque_macro_byte_ranges: Vec<Range<usize>>,
+    opaque_expression_macro_byte_ranges: Vec<Range<usize>>,
     struct_field_shorthand_byte_starts: BTreeSet<usize>,
     pattern_field_shorthand_byte_starts: BTreeSet<usize>,
     value_binding_byte_starts: BTreeSet<usize>,
@@ -139,6 +142,12 @@ impl RustSyntax {
 
     pub(crate) fn is_opaque_macro_byte(&self, byte_start: usize) -> bool {
         self.opaque_macro_byte_ranges
+            .iter()
+            .any(|range| range.contains(&byte_start))
+    }
+
+    pub(crate) fn opaque_macro_accepts_expression_fallback(&self, byte_start: usize) -> bool {
+        self.opaque_expression_macro_byte_ranges
             .iter()
             .any(|range| range.contains(&byte_start))
     }
@@ -502,6 +511,11 @@ fn collect_opaque_macro_identifiers(
             && local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings))
     {
         if let Some(range) = body_byte_range(macro_tail, tokens, body_len) {
+            if macro_accepts_expression_fallback(parent) {
+                syntax
+                    .opaque_expression_macro_byte_ranges
+                    .push(range.clone());
+            }
             syntax.opaque_macro_byte_ranges.push(range);
         }
         collect_identifier_starts(
@@ -555,6 +569,11 @@ fn collect_opaque_macro_invocation_identifiers(
             && local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings))
     {
         if let Some(range) = body_byte_range(invocation, tokens, body_len) {
+            if macro_accepts_expression_fallback(invocation) {
+                syntax
+                    .opaque_expression_macro_byte_ranges
+                    .push(range.clone());
+            }
             syntax.opaque_macro_byte_ranges.push(range);
         }
         collect_identifier_starts(
@@ -564,6 +583,21 @@ fn collect_opaque_macro_invocation_identifiers(
             &mut syntax.opaque_macro_identifier_byte_starts,
         );
     }
+}
+
+fn macro_accepts_expression_fallback(invocation: antlr4_runtime::RuleNodeView<'_>) -> bool {
+    let mut node = Some(invocation.node());
+    while let Some(current) = node {
+        if let Some(rule) = current.as_rule() {
+            match rule.rule_index() {
+                RULE_PATTERN_WITHOUT_MUT | RULE_TYPE_NO_BOUNDS => return false,
+                RULE_PRIM_EXPR_NO_STRUCT | RULE_MACRO_INVOCATION_SEMI => return true,
+                _ => {}
+            }
+        }
+        node = current.parent();
+    }
+    true
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -637,19 +671,121 @@ fn collect_scoped_macro_bindings(
     tokens: &TokenStore,
     body_len: usize,
 ) -> Vec<ScopedMacroBinding> {
-    root.descendants()
+    let mut bindings = Vec::new();
+    for rule in root.descendants().filter_map(Node::as_rule) {
+        match rule.rule_index() {
+            RULE_MACRO_RULES_DEFINITION => {
+                let Some(name) = macro_rules_name(rule, tokens) else {
+                    continue;
+                };
+                let Some(declaration) = body_byte_range(rule, tokens, body_len) else {
+                    continue;
+                };
+                let mut scope = enclosing_block(rule)
+                    .and_then(|block| body_byte_range(block, tokens, body_len))
+                    .unwrap_or(0..body_len);
+                scope.start = declaration.end.min(scope.end);
+                bindings.push(ScopedMacroBinding { name, scope });
+            }
+            RULE_USE_DECL => {
+                let scope = enclosing_block(rule)
+                    .and_then(|block| body_byte_range(block, tokens, body_len))
+                    .unwrap_or(0..body_len);
+                bindings.extend(
+                    use_decl_binding_names(rule, tokens)
+                        .into_iter()
+                        .filter(|name| macro_allows_value_alias_lowering(name))
+                        .map(|name| ScopedMacroBinding {
+                            name,
+                            scope: scope.clone(),
+                        }),
+                );
+            }
+            _ => {}
+        }
+    }
+    bindings
+}
+
+fn use_decl_binding_names(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(path) = declaration.child_rule(RULE_USE_PATH) {
+        collect_use_path_binding_names(path, tokens, &mut names);
+    }
+    names
+}
+
+fn collect_use_path_binding_names(
+    path: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    names: &mut Vec<String>,
+) {
+    if let Some(list) = path.child_rule(RULE_USE_ITEM_LIST) {
+        collect_use_item_list_binding_names(list, tokens, names);
+        return;
+    }
+    if let Some(suffix) = path.child_rule(RULE_USE_SUFFIX) {
+        if let Some(rename) = suffix.child_rule(RULE_RENAME) {
+            if let Some(name) = identifier_name(rename, tokens) {
+                names.push(name);
+            }
+        } else if let Some(list) = suffix.child_rule(RULE_USE_ITEM_LIST) {
+            collect_use_item_list_binding_names(list, tokens, names);
+        }
+        return;
+    }
+    if let Some(name) = path
+        .children()
         .filter_map(Node::as_rule)
-        .filter(|rule| rule.rule_index() == RULE_MACRO_RULES_DEFINITION)
-        .filter_map(|definition| {
-            let name = macro_rules_name(definition, tokens)?;
-            let declaration = body_byte_range(definition, tokens, body_len)?;
-            let mut scope = enclosing_block(definition)
-                .and_then(|block| body_byte_range(block, tokens, body_len))
-                .unwrap_or(0..body_len);
-            scope.start = declaration.end.min(scope.end);
-            Some(ScopedMacroBinding { name, scope })
+        .filter_map(|child| identifier_name(child, tokens))
+        .next_back()
+    {
+        names.push(name);
+    }
+}
+
+fn collect_use_item_list_binding_names(
+    list: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    names: &mut Vec<String>,
+) {
+    for item in list
+        .children()
+        .filter_map(Node::as_rule)
+        .filter(|child| child.rule_index() == RULE_USE_ITEM)
+    {
+        if let Some(rename) = item.child_rule(RULE_RENAME) {
+            if let Some(name) = identifier_name(rename, tokens) {
+                names.push(name);
+            }
+        } else if let Some(path) = item.child_rule(RULE_USE_PATH) {
+            collect_use_path_binding_names(path, tokens, names);
+        } else if let Some(name) = identifier_name(item, tokens) {
+            names.push(name);
+        }
+    }
+}
+
+fn identifier_name(rule: antlr4_runtime::RuleNodeView<'_>, tokens: &TokenStore) -> Option<String> {
+    rule.node()
+        .descendants()
+        .filter_map(Node::as_terminal)
+        .find(|terminal| {
+            matches!(
+                tokens.token_type(terminal.token_id()),
+                Some(IDENT | RAW_IDENTIFIER)
+            )
         })
-        .collect()
+        .map(|terminal| {
+            terminal
+                .text()
+                .strip_prefix("r#")
+                .unwrap_or_else(|| terminal.text())
+                .to_owned()
+        })
 }
 
 fn macro_rules_name(
@@ -1118,6 +1254,41 @@ mod tests {
     }
 
     #[test]
+    fn preserves_imported_macros_bound_to_standard_names() {
+        let body = "use crate::macros::{custom as assert, matches};\n\
+                    let renamed = assert!(RenamedAlias);\n\
+                    let direct = matches!(value, DirectAlias);\n\
+                    let standard = std::matches!(value, StandardAlias);";
+        let syntax = analyze(body);
+
+        assert!(syntax.is_opaque_macro_identifier(occurrence(body, "RenamedAlias", 0)));
+        assert!(syntax.is_opaque_macro_identifier(occurrence(body, "DirectAlias", 0)));
+        assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "StandardAlias", 0)));
+    }
+
+    #[test]
+    fn distinguishes_expression_macros_from_type_and_pattern_macros() {
+        let body = "macro_rules! type_value { ($i:ident) => { i32 }; }\n\
+                    macro_rules! pattern_value { ($i:ident) => { 1 }; }\n\
+                    macro_rules! expr_value { ($i:ident) => { $i }; }\n\
+                    let _: type_value!(TypeAlias) = 0;\n\
+                    let pattern = if let pattern_value!(PatternAlias) = 1 { true } else { false };\n\
+                    let expression = expr_value!(ExprAlias);";
+        let syntax = analyze(body);
+
+        for alias in ["TypeAlias", "PatternAlias", "ExprAlias"] {
+            assert!(syntax.is_opaque_macro_identifier(occurrence(body, alias, 0)));
+        }
+        assert!(!syntax.opaque_macro_accepts_expression_fallback(occurrence(body, "TypeAlias", 0)));
+        assert!(!syntax.opaque_macro_accepts_expression_fallback(occurrence(
+            body,
+            "PatternAlias",
+            0
+        )));
+        assert!(syntax.opaque_macro_accepts_expression_fallback(occurrence(body, "ExprAlias", 0)));
+    }
+
+    #[test]
     fn nested_module_macros_do_not_shadow_outer_invocations() {
         let body = "mod macros {\n\
                         macro_rules! matches { ($($tokens:tt)*) => { true }; }\n\
@@ -1320,9 +1491,11 @@ mod tests {
         let body = r##"let normal = c"value";
                        let escaped = c"\xE6";
                        let unicode = c"\u{00E6}";
+                       let underscored = c"\u{0_0E6}";
                        let raw = cr#"raw value"#;
                        normal.to_bytes() == raw.to_bytes()
                            && escaped.to_bytes() == unicode.to_bytes()
+                           && unicode.to_bytes() == underscored.to_bytes()
                            && Alias == 1;"##;
         let syntax = analyze(body);
         let alias = occurrence(body, "Alias", 0);
@@ -1337,14 +1510,25 @@ mod tests {
             r#"let _ = c"\0";"#,
             r#"let _ = c"\x00";"#,
             r#"let _ = c"\u{0}";"#,
+            r#"let _ = c"\u{00}";"#,
+            r#"let _ = c"\u{0000000}";"#,
+            r#"let _ = c"\u{0_000000}";"#,
+            r#"let _ = c"\u{1234567}";"#,
+            r#"let _ = c"\u{1_234567}";"#,
             "let _ = c\"raw\0value\";",
             "let _ = cr\"raw\0value\";",
             "let _ = cr\"raw\rvalue\";",
         ] {
-            assert!(
-                super::analyze(body).is_err(),
-                "invalid C string parsed without an error: {body:?}"
+            let error = super::analyze(body)
+                .expect_err("an invalid C string must not parse without an error");
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::InvalidData,
+                "{body:?}: {error}"
             );
+            if body == r#"let _ = c"\0";"# {
+                insta::assert_snapshot!("invalid_c_string_literal_error", error);
+            }
         }
     }
 

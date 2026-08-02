@@ -3648,8 +3648,15 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_INACTIVE_CFG_USE",
                 "AliasCollisionParser_ACTIVE_CFG_LET",
                 "AliasCollisionParser_INACTIVE_CFG_LET",
+                "AliasCollisionParser_DUPLICATE_CFG",
+                "AliasCollisionParser_IMPORTED_MACRO",
+                "AliasCollisionParser_TYPE_MACRO",
+                "AliasCollisionParser_PATTERN_MACRO",
                 "standard_qualified_macro_ok",
                 "c_strings_ok",
+                "placeholder_lifetime",
+                "if_let_constant_ok",
+                "while_let_constant_ok",
             ]
             .iter()
             .any(|needle| line.contains(needle))
@@ -3668,6 +3675,10 @@ fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
         "Ok::<i32, ()>(AliasCollisionParser_TURBOFISH)",
         "AliasCollisionParser_CLOSURE_MATCH @ _",
         "|x, y| AliasCollisionParser_CLOSURE_MATCH",
+        "if let __antlr4rust_token_aliases_2::AliasCollisionParser_MODULE = MODULE",
+        "while let __antlr4rust_token_aliases_2::AliasCollisionParser_MODULE = MODULE",
+        "alias_type!(AliasCollisionParser_TYPE_MACRO)",
+        "alias_pattern!(AliasCollisionParser_PATTERN_MACRO)",
     ] {
         assert!(
             source.contains(expected),

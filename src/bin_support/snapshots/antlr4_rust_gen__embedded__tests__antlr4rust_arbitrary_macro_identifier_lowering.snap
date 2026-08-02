@@ -1,0 +1,26 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+macro_rules! value { ($i:ident) => { $i } }
+let value = {
+mod __antlr4rust_opaque_aliases_56 {
+    #[allow(unused_imports)]
+    pub(super) use super::__antlr4rust_token_aliases::{CompatParser_ID};
+}
+#[allow(unused_imports)]
+use __antlr4rust_opaque_aliases_56::*;
+value!(CompatParser_ID)
+};
+{
+mod __antlr4rust_opaque_aliases_81 {
+    #[allow(unused_imports)]
+    pub(super) use super::__antlr4rust_token_aliases::{CompatParser_ID};
+}
+#[allow(unused_imports)]
+use __antlr4rust_opaque_aliases_81::*;
+take_ident!(CompatParser_ID)
+};
+value == __antlr4rust_token_aliases::CompatParser_ID && matches!(kind, __antlr4rust_token_aliases::CompatParser_ID)
+}

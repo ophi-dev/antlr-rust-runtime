@@ -1,0 +1,40 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+#[cfg(not(all()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_ACTIVE_USE};
+#[cfg(all())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_ACTIVE_USE;
+let active_use = CfgParser_ACTIVE_USE;
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_INACTIVE_USE};
+#[cfg(any())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_INACTIVE_USE;
+let inactive_use = CfgParser_INACTIVE_USE;
+#[cfg(not(all()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_ACTIVE_LET};
+#[cfg(all())]
+let CfgParser_ACTIVE_LET = 7;
+let active_let = CfgParser_ACTIVE_LET;
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_INACTIVE_LET};
+#[cfg(any())]
+let CfgParser_INACTIVE_LET = 8;
+let inactive_let = CfgParser_INACTIVE_LET;
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_DUPLICATE};
+#[cfg(any())]
+let CfgParser_DUPLICATE = 9;
+#[cfg(any())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_DUPLICATE;
+let duplicate = CfgParser_DUPLICATE;
+active_use == 0 && inactive_use > 0
+&& active_let == 7 && inactive_let > 0 && duplicate > 0
+}

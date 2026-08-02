@@ -147,7 +147,7 @@ fragment NESTED_ACTION
     ;
 
 fragment ApostropheIdentifier
-    : '\'' ('r#')? NameStartChar NameChar*
+    : '\'' ('_' | ('r#')? NameStartChar NameChar*)
     ;
 
 // -------------------------

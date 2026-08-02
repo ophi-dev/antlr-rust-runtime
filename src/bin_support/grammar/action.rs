@@ -38,9 +38,7 @@ fn collect_references<'a>(
                     .map_or(bytes.len(), |newline| index + 2 + newline + 1);
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = body[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |close| index + 2 + close + 2);
+                index = block_comment_end(body, index);
             }
             b'\\' => {
                 index += 1;
@@ -107,11 +105,12 @@ fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usiz
                     .map_or(bytes.len(), |newline| index + 2 + newline + 1);
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = body[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |close| index + 2 + close + 2);
+                index = block_comment_end(body, index);
             }
-            quote @ (b'"' | b'\'' | b'`') => {
+            b'\'' => {
+                index = char_literal_end(body, index).unwrap_or(index + 1);
+            }
+            quote @ (b'"' | b'`') => {
                 index = quoted_end(body, index, quote);
             }
             b'(' => {
@@ -139,6 +138,46 @@ fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usiz
     None
 }
 
+fn block_comment_end(body: &str, open: usize) -> usize {
+    let bytes = body.as_bytes();
+    let mut depth = 1_usize;
+    let mut index = open + 2;
+    while index + 1 < bytes.len() {
+        match &bytes[index..index + 2] {
+            b"/*" => {
+                depth += 1;
+                index += 2;
+            }
+            b"*/" => {
+                depth -= 1;
+                index += 2;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
+fn char_literal_end(body: &str, open: usize) -> Option<usize> {
+    let bytes = body.as_bytes();
+    let content = open + 1;
+    let end = match bytes.get(content)? {
+        b'\\' => match bytes.get(content + 1)? {
+            b'x' => content + 4,
+            b'u' if bytes.get(content + 2) == Some(&b'{') => {
+                let close = body[content + 3..].find('}')? + content + 3;
+                close + 1
+            }
+            _ => content + 1 + next_char_len(body, content + 1),
+        },
+        _ => content + next_char_len(body, content),
+    };
+    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
+}
+
 fn quoted_end(body: &str, open: usize, quote: u8) -> usize {
     let bytes = body.as_bytes();
     let mut index = open + 1;
@@ -146,7 +185,6 @@ fn quoted_end(body: &str, open: usize, quote: u8) -> usize {
         match bytes[index] {
             b'\\' => index = (index + 2).min(bytes.len()),
             byte if byte == quote => return index + 1,
-            b'\n' | b'\r' if quote == b'\'' => return open + 1,
             _ => index += next_char_len(body, index),
         }
     }
@@ -381,5 +419,29 @@ mod tests {
 
         assert_eq!(references.len(), 1);
         assert_eq!(references[0].expression, "$actual");
+    }
+
+    #[test]
+    fn macro_rules_bodies_skip_lifetimes_and_quoted_delimiters() {
+        for body in [
+            "macro_rules! m { ($t:ty) => { fn f<'a>(v: &'a $t) {} } }\n$actual",
+            r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
+$actual"#,
+            r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }
+$actual"#,
+            r"macro_rules! m { ($t:ty) => { let _ = '('; let _ = '\''; } }
+$actual",
+        ] {
+            let references = action_references(body);
+            assert_eq!(references.len(), 1, "{body}");
+            assert_eq!(references[0].expression, "$actual", "{body}");
+        }
+    }
+
+    #[test]
+    fn unterminated_macro_rules_token_trees_are_not_treated_as_complete() {
+        let body = "macro_rules! value { ($i:ident) => { $i }";
+
+        assert_eq!(macro_rules_definition_end(body, 0), None);
     }
 }
