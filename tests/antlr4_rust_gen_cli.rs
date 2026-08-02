@@ -3667,6 +3667,7 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "standard_qualified_macro_ok",
                 "c_strings_ok",
                 "placeholder_lifetime",
+                "raw_reference_ok",
                 "if_let_constant_ok",
                 "while_let_constant_ok",
                 "cfg_disabled_format_ok",
@@ -3685,6 +3686,9 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "cfg_const_generic_ok",
                 "cfg_closure_ok",
                 "unicode_macro_name_ok",
+                "commented_macro_header_ok",
+                "module_item_macro_ok",
+                "impl_item_macro_ok",
             ]
             .iter()
             .any(|needle| line.contains(needle))
@@ -3710,6 +3714,9 @@ fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
         "pair.0.1",
         "pub(self) fn helper()",
         "λ!(AliasCollisionParser_UNICODE_MACRO_NAME)",
+        "& raw const raw_reference_value",
+        "define_module_alias!(AliasCollisionParser_OPAQUE_MACRO)",
+        "define_impl_alias!(AliasCollisionParser_OPAQUE_MACRO)",
     ] {
         assert!(
             source.contains(expected),

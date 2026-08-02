@@ -1292,7 +1292,7 @@ type_path_segment:
 
 ty_path_segment_no_super:
     '(' (ident | 'Self')? ')' type_arguments?
-    | (ident | 'Self'| '&raw') type_arguments?;
+    | (ident | 'Self'| '&' 'raw') type_arguments?;
 
 
 // === Type bounds
@@ -1534,10 +1534,10 @@ pat_field:
 // === Expressions
 
 expr:
-   '&raw'? mut_or_const? assign_expr;
+   ('&' 'raw')? mut_or_const? assign_expr;
 
 expr_no_struct:
-    '&raw'? mut_or_const? assign_expr_no_struct;
+    ('&' 'raw')? mut_or_const? assign_expr_no_struct;
 
 expr_list:
     expr (',' expr)* ','?;
@@ -1736,7 +1736,7 @@ pre_expr:
     | expr_attrs pre_expr
     | '-' pre_expr
     | '!' pre_expr
-    | '&raw'
+    | '&' 'raw'
     | '&' 'mut'? pre_expr
     | '&&' 'mut'? pre_expr   // meaning `& & expr`
     | '*' pre_expr
@@ -1852,7 +1852,7 @@ bit_or_expr_no_struct:
 
 cmp_expr_no_struct:
     bit_or_expr_no_struct
-    | '&raw'? mut_or_const? bit_or_expr_no_struct ('==' | '!=' | '<' | '<=' | '>' | '>' '=') '&raw'? mut_or_const? bit_or_expr_no_struct;
+    | ('&' 'raw')? mut_or_const? bit_or_expr_no_struct ('==' | '!=' | '<' | '<=' | '>' | '>' '=') ('&' 'raw')? mut_or_const? bit_or_expr_no_struct;
 
 and_expr_no_struct:
     cmp_expr_no_struct
@@ -1887,6 +1887,7 @@ ident:
     | 'try'
     | 'crate'
     | 'macro_rules'
+    | 'raw'
     | RawIdentifier
     ;
 

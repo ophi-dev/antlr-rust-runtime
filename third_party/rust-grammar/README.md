@@ -23,7 +23,9 @@ alternative so those bindings parse without recovery. Associated-type bounds
 in generic arguments and `pub(self)` visibility are accepted without
 target-specific actions. Tuple-field indices include their leading dot as a
 token so chained accesses such as `pair.0.1` cannot be lexed as a decimal
-floating-point literal.
+floating-point literal. Raw-reference expressions model `&` and the contextual
+`raw` keyword as separate tokens, so comments or whitespace may separate them
+without preventing `raw` from being used as an identifier elsewhere.
 Closure parameters use Rust's `PatternNoTopAlt` split so a following closure's
 opening pipe cannot be consumed as part of the preceding parameter pattern,
 async closures accept the stable form without `move`, and stable inline

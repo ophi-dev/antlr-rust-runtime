@@ -2361,7 +2361,13 @@ fn lower_antlr4rust_surface(
                     .or_default()
                     .insert(alias_identifier.to_owned());
             } else {
-                let block = delimiters.enclosing_block(position);
+                let invocation = lexemes.partition_point(|candidate| candidate.end <= range.start);
+                let mut block = delimiters.enclosing_block(invocation);
+                if syntax.opaque_macro_requires_parent_block_fallback(lexeme.start)
+                    && let Some(open) = block.start.checked_sub(1)
+                {
+                    block = delimiters.enclosing_block(open);
+                }
                 if let Some(insertion) = block_cfg_fallback_insertion(&lexemes, &block, &delimiters)
                 {
                     let mut module_path =
@@ -6843,6 +6849,48 @@ mod tests {
             "antlr4rust_opaque_non_expression_macro_lowering",
             lowered.source
         );
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn keeps_opaque_item_macro_aliases_in_valid_item_scopes() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from([
+            "CompatParser_IMPL_ITEM".to_owned(),
+            "CompatParser_MODULE_ITEM".to_owned(),
+        ]);
+        let lowered = translate_parser_body(
+            "macro_rules! define_module_alias {\n\
+                 ($i:ident) => { pub(super) fn value() -> i32 { $i } };\n\
+             }\n\
+             macro_rules! define_impl_alias {\n\
+                 ($i:ident) => { fn value() -> i32 { $i } };\n\
+             }\n\
+             mod nested {\n\
+                 define_module_alias!(CompatParser_MODULE_ITEM);\n\
+             }\n\
+             struct Local;\n\
+             impl Local {\n\
+                 define_impl_alias!(CompatParser_IMPL_ITEM);\n\
+             }\n\
+             nested::value() > 0 && Local::value() > 0",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect("item macros must receive aliases from valid enclosing item scopes");
+
+        assert_eq!(lowered.token_aliases, aliases);
+        insta::assert_snapshot!("antlr4rust_opaque_item_macro_lowering", lowered.source);
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.

@@ -24,16 +24,16 @@ use generated::parser::{
     RULE_BLOCK_WITH_INNER_ATTRS, RULE_CLOSURE_PARAM, RULE_CLOSURE_PARAMS, RULE_CLOSURE_TAIL,
     RULE_CONST_DECL, RULE_ENUM_DECL, RULE_ENUM_VARIANT_MAIN, RULE_EXPR, RULE_EXTERN_CRATE,
     RULE_FIELD, RULE_FIELD_NAME, RULE_FN_DECL, RULE_FN_HEAD, RULE_FOREIGN_FN_DECL,
-    RULE_FOREIGN_ITEM_TAIL, RULE_IDENT, RULE_IMPL_BLOCK, RULE_IMPL_ITEM_TAIL, RULE_INNER_ATTR,
-    RULE_ITEM, RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION, RULE_MACRO_INVOCATION_SEMI,
-    RULE_MACRO_RULES_DEFINITION, RULE_MACRO_TAIL, RULE_METHOD_DECL, RULE_METHOD_PARAM_LIST,
-    RULE_MOD_DECL, RULE_MOD_DECL_SHORT, RULE_PARAM, RULE_PARAM_LIST, RULE_PATTERN,
-    RULE_PATTERN_NO_TOP_ALT, RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT, RULE_RENAME,
-    RULE_STATIC_DECL, RULE_STRUCT_DECL, RULE_STRUCT_TAIL, RULE_TRAIT_ALIAS, RULE_TRAIT_DECL,
-    RULE_TRAIT_ITEM, RULE_TRAIT_METHOD_DECL, RULE_TRAIT_METHOD_PARAM, RULE_TRAIT_METHOD_PARAM_LIST,
-    RULE_TYPE_DECL, RULE_TYPE_NO_BOUNDS, RULE_TYPE_PARAMETER, RULE_TYPE_PATH_MAIN, RULE_UNION_DECL,
-    RULE_USE_DECL, RULE_USE_ITEM, RULE_USE_ITEM_LIST, RULE_USE_PATH, RULE_USE_SUFFIX,
-    RULE_VARIADIC_PARAM_LIST, RustParser,
+    RULE_FOREIGN_ITEM, RULE_FOREIGN_ITEM_TAIL, RULE_IDENT, RULE_IMPL_BLOCK, RULE_IMPL_ITEM_TAIL,
+    RULE_INNER_ATTR, RULE_ITEM, RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION,
+    RULE_MACRO_INVOCATION_SEMI, RULE_MACRO_RULES_DEFINITION, RULE_MACRO_TAIL, RULE_METHOD_DECL,
+    RULE_METHOD_PARAM_LIST, RULE_MOD_DECL, RULE_MOD_DECL_SHORT, RULE_PARAM, RULE_PARAM_LIST,
+    RULE_PATTERN, RULE_PATTERN_NO_TOP_ALT, RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT,
+    RULE_RENAME, RULE_STATIC_DECL, RULE_STMT, RULE_STRUCT_DECL, RULE_STRUCT_TAIL, RULE_TRAIT_ALIAS,
+    RULE_TRAIT_DECL, RULE_TRAIT_ITEM, RULE_TRAIT_METHOD_DECL, RULE_TRAIT_METHOD_PARAM,
+    RULE_TRAIT_METHOD_PARAM_LIST, RULE_TYPE_DECL, RULE_TYPE_NO_BOUNDS, RULE_TYPE_PARAMETER,
+    RULE_TYPE_PATH_MAIN, RULE_UNION_DECL, RULE_USE_DECL, RULE_USE_ITEM, RULE_USE_ITEM_LIST,
+    RULE_USE_PATH, RULE_USE_SUFFIX, RULE_VARIADIC_PARAM_LIST, RustParser,
 };
 
 const WRAPPER_PREFIX: &str = "{\n";
@@ -46,6 +46,7 @@ pub(crate) struct RustSyntax {
     opaque_macro_identifier_byte_starts: BTreeSet<usize>,
     opaque_macro_byte_ranges: Vec<Range<usize>>,
     opaque_expression_macro_byte_ranges: Vec<Range<usize>>,
+    opaque_parent_block_macro_byte_ranges: Vec<Range<usize>>,
     conditional_macro_shadows: Vec<ConditionalMacroShadow>,
     struct_field_shorthand_byte_starts: BTreeSet<usize>,
     pattern_field_shorthand_byte_starts: BTreeSet<usize>,
@@ -197,6 +198,12 @@ impl RustSyntax {
 
     pub(crate) fn opaque_macro_accepts_expression_fallback(&self, byte_start: usize) -> bool {
         self.opaque_expression_macro_byte_ranges
+            .iter()
+            .any(|range| range.contains(&byte_start))
+    }
+
+    pub(crate) fn opaque_macro_requires_parent_block_fallback(&self, byte_start: usize) -> bool {
+        self.opaque_parent_block_macro_byte_ranges
             .iter()
             .any(|range| range.contains(&byte_start))
     }
@@ -675,10 +682,14 @@ fn collect_opaque_macro_identifiers(
                         active_predicate,
                     });
             }
-            if macro_accepts_expression_fallback(parent) {
-                syntax
+            match macro_fallback_kind(parent) {
+                OpaqueMacroFallbackKind::Expression => syntax
                     .opaque_expression_macro_byte_ranges
-                    .push(range.clone());
+                    .push(range.clone()),
+                OpaqueMacroFallbackKind::ParentBlock => syntax
+                    .opaque_parent_block_macro_byte_ranges
+                    .push(range.clone()),
+                OpaqueMacroFallbackKind::EnclosingBlock => {}
             }
             syntax.opaque_macro_byte_ranges.push(range);
         }
@@ -750,10 +761,14 @@ fn collect_opaque_macro_invocation_identifiers(
                         active_predicate,
                     });
             }
-            if macro_accepts_expression_fallback(invocation) {
-                syntax
+            match macro_fallback_kind(invocation) {
+                OpaqueMacroFallbackKind::Expression => syntax
                     .opaque_expression_macro_byte_ranges
-                    .push(range.clone());
+                    .push(range.clone()),
+                OpaqueMacroFallbackKind::ParentBlock => syntax
+                    .opaque_parent_block_macro_byte_ranges
+                    .push(range.clone()),
+                OpaqueMacroFallbackKind::EnclosingBlock => {}
             }
             syntax.opaque_macro_byte_ranges.push(range);
         }
@@ -766,19 +781,49 @@ fn collect_opaque_macro_invocation_identifiers(
     }
 }
 
-fn macro_accepts_expression_fallback(invocation: antlr4_runtime::RuleNodeView<'_>) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OpaqueMacroFallbackKind {
+    Expression,
+    EnclosingBlock,
+    ParentBlock,
+}
+
+fn macro_fallback_kind(invocation: antlr4_runtime::RuleNodeView<'_>) -> OpaqueMacroFallbackKind {
+    let mut semicolon_invocation = false;
     let mut node = Some(invocation.node());
     while let Some(current) = node {
         if let Some(rule) = current.as_rule() {
             match rule.rule_index() {
-                RULE_PATTERN_WITHOUT_MUT | RULE_TYPE_NO_BOUNDS => return false,
-                RULE_PRIM_EXPR_NO_STRUCT | RULE_MACRO_INVOCATION_SEMI => return true,
+                RULE_PATTERN_WITHOUT_MUT | RULE_TYPE_NO_BOUNDS => {
+                    return OpaqueMacroFallbackKind::EnclosingBlock;
+                }
+                RULE_PRIM_EXPR_NO_STRUCT => return OpaqueMacroFallbackKind::Expression,
+                RULE_MACRO_INVOCATION_SEMI => semicolon_invocation = true,
+                RULE_IMPL_ITEM_TAIL | RULE_TRAIT_ITEM | RULE_FOREIGN_ITEM
+                    if semicolon_invocation =>
+                {
+                    return OpaqueMacroFallbackKind::ParentBlock;
+                }
+                RULE_ITEM if semicolon_invocation => {
+                    let local_statement = current
+                        .parent()
+                        .and_then(Node::as_rule)
+                        .is_some_and(|parent| parent.rule_index() == RULE_STMT);
+                    return if local_statement {
+                        OpaqueMacroFallbackKind::Expression
+                    } else {
+                        OpaqueMacroFallbackKind::EnclosingBlock
+                    };
+                }
+                RULE_STMT if semicolon_invocation => {
+                    return OpaqueMacroFallbackKind::Expression;
+                }
                 _ => {}
             }
         }
         node = current.parent();
     }
-    true
+    OpaqueMacroFallbackKind::Expression
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1643,6 +1688,38 @@ mod tests {
             0
         )));
         assert!(syntax.opaque_macro_accepts_expression_fallback(occurrence(body, "ExprAlias", 0)));
+    }
+
+    #[test]
+    fn distinguishes_item_macro_alias_scopes() {
+        let body = "macro_rules! item_value { ($i:ident) => { const VALUE: i32 = $i; }; }\n\
+                    mod nested { item_value!(ModuleItemAlias); }\n\
+                    struct Local;\n\
+                    impl Local { item_value!(ImplItemAlias); }\n\
+                    fn local() { item_value!(LocalItemAlias); }";
+        let syntax = analyze(body);
+        let module_alias = occurrence(body, "ModuleItemAlias", 0);
+        let impl_alias = occurrence(body, "ImplItemAlias", 0);
+        let local_alias = occurrence(body, "LocalItemAlias", 0);
+
+        assert!(!syntax.opaque_macro_accepts_expression_fallback(module_alias));
+        assert!(!syntax.opaque_macro_requires_parent_block_fallback(module_alias));
+        assert!(!syntax.opaque_macro_accepts_expression_fallback(impl_alias));
+        assert!(syntax.opaque_macro_requires_parent_block_fallback(impl_alias));
+        assert!(syntax.opaque_macro_accepts_expression_fallback(local_alias));
+        assert!(!syntax.opaque_macro_requires_parent_block_fallback(local_alias));
+    }
+
+    #[test]
+    fn parses_spaced_raw_reference_expressions() {
+        let body = "let value = 1;\n\
+                    let compact = &raw const value;\n\
+                    let spaced = & raw const value;\n\
+                    Alias == 1 && compact == spaced";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
     }
 
     #[test]

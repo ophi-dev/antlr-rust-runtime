@@ -72,18 +72,18 @@ fn macro_rules_definition_end(body: &str, start: usize) -> Option<usize> {
         return None;
     }
     let bytes = body.as_bytes();
-    let mut cursor = skip_whitespace(bytes, start + PREFIX.len());
+    let mut cursor = skip_rust_trivia(body, start + PREFIX.len());
     if bytes.get(cursor) != Some(&b'!') {
         return None;
     }
-    cursor = skip_whitespace(bytes, cursor + 1);
+    cursor = skip_rust_trivia(body, cursor + 1);
     let name_start = if bytes.get(cursor..cursor + 2) == Some(b"r#") {
         cursor + 2
     } else {
         cursor
     };
-    cursor = skip_whitespace(
-        bytes,
+    cursor = skip_rust_trivia(
+        body,
         crate::rust_names::rust_identifier_end(body, name_start)?,
     );
     let expected = match bytes.get(cursor)? {
@@ -356,6 +356,22 @@ fn skip_whitespace(bytes: &[u8], mut index: usize) -> usize {
     index
 }
 
+fn skip_rust_trivia(body: &str, mut index: usize) -> usize {
+    let bytes = body.as_bytes();
+    loop {
+        index = skip_whitespace(bytes, index);
+        if bytes.get(index..index + 2) == Some(b"//") {
+            index = body[index + 2..]
+                .find('\n')
+                .map_or(bytes.len(), |newline| index + 2 + newline + 1);
+        } else if bytes.get(index..index + 2) == Some(b"/*") {
+            index = block_comment_end(body, index);
+        } else {
+            return index;
+        }
+    }
+}
+
 fn next_char_len(text: &str, index: usize) -> usize {
     text[index..].chars().next().map_or(1, char::len_utf8)
 }
@@ -456,6 +472,8 @@ mod tests {
             "macro_rules! r#match { ($i:ident) => { $i } }\n$actual",
             "macro_rules! λ { ($i:ident) => { $i } }\n$actual",
             "macro_rules! r#λ { ($i:ident) => { $i } }\n$actual",
+            "macro_rules /* keyword */ ! /* bang */ value /* name */ \
+             { ($i:ident) => { $i } }\n$actual",
             r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
 $actual"#,
             r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }

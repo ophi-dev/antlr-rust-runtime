@@ -147,6 +147,9 @@ start
         let placeholder_lifetime: Option<&'_ i32> = None;
         let placeholder_lifetime_ok =
             placeholder_lifetime.is_none();
+        let raw_reference_value = 43;
+        let raw_reference = & raw const raw_reference_value;
+        let raw_reference_ok = !raw_reference.is_null();
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
         macro_rules! r#match {
@@ -179,6 +182,39 @@ start
         let opaque_macro_alias_ok =
             alias_value!(AliasCollisionParser_OPAQUE_MACRO)
                 == Self::OPAQUE_MACRO;
+        macro_rules /* keyword */ ! /* bang */ commented_alias /* name */ {
+            ($i:ident) => {
+                $i
+            };
+        }
+        let commented_macro_header_ok =
+            commented_alias!(AliasCollisionParser_OPAQUE_MACRO)
+                == Self::OPAQUE_MACRO;
+        macro_rules! define_module_alias {
+            ($i:ident) => {
+                pub(super) fn value() -> i32 {
+                    $i
+                }
+            };
+        }
+        mod item_macro_module {
+            define_module_alias!(AliasCollisionParser_OPAQUE_MACRO);
+        }
+        let module_item_macro_ok =
+            item_macro_module::value() == Self::OPAQUE_MACRO;
+        macro_rules! define_impl_alias {
+            ($i:ident) => {
+                fn value() -> i32 {
+                    $i
+                }
+            };
+        }
+        struct ItemMacro;
+        impl ItemMacro {
+            define_impl_alias!(AliasCollisionParser_OPAQUE_MACRO);
+        }
+        let impl_item_macro_ok =
+            ItemMacro::value() == Self::OPAQUE_MACRO;
         macro_rules! assert {
             (AliasCollisionParser_SHADOWED_MACRO) => {
                 true
@@ -556,11 +592,15 @@ start
             && safe_foreign_alias_ok
             && raw_lifetime_ok
             && placeholder_lifetime_ok
+            && raw_reference_ok
             && raw_macro_ok
             && raw_macro_name_ok
             && raw_string_macro_ok
             && unicode_macro_name_ok
             && opaque_macro_alias_ok
+            && commented_macro_header_ok
+            && module_item_macro_ok
+            && impl_item_macro_ok
             && shadowed_macro_ok
             && qualified_macro_ok
             && imported_macro_ok

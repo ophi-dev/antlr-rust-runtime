@@ -46,7 +46,7 @@ pub(super) const AliasCollisionParser_UNICODE_MACRO_NAME: i32 = 70;
 pub(super) const AliasCollisionParser_UNSAFE_EXTERN: i32 = 43;
 pub(super) use super::AliasCollisionParser_VALUE_IMPORT;
 let AliasCollisionParser_DUPLICATE_CFG = __antlr4rust_token_aliases_2::AliasCollisionParser_DUPLICATE_CFG;
-use __antlr4rust_token_aliases_2::{AliasCollisionParser_PATTERN_MACRO, AliasCollisionParser_TYPE_MACRO};
+use __antlr4rust_token_aliases_2::{AliasCollisionParser_OPAQUE_MACRO, AliasCollisionParser_PATTERN_MACRO, AliasCollisionParser_TYPE_MACRO};
 __antlr4rust_token_aliases_2::AliasCollisionParser_TYPE_ONLY == Self::TYPE_ONLY;
 __antlr4rust_token_aliases_2::AliasCollisionParser_VALUE_IMPORT == antlr4_runtime::TOKEN_EOF;
 use __antlr4rust_token_aliases_2::{AliasCollisionParser_ACTION_CFG};
@@ -67,6 +67,7 @@ let _alias = __antlr4rust_token_aliases_2::AliasCollisionParser_RAW_LIFETIME;
 let placeholder_lifetime: Option<&'_ i32> = None;
 let placeholder_lifetime_ok =
 placeholder_lifetime.is_none();
+let raw_reference_ok = !raw_reference.is_null();
 stringify!($i) == "AliasCollisionParser_RAW_MACRO_NAME"
 let raw_macro_name_ok =
 pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_RAW_MACRO_NAME};
@@ -81,6 +82,14 @@ pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_UNICOD
 λ!(AliasCollisionParser_UNICODE_MACRO_NAME)
 pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_OPAQUE_MACRO};
 alias_value!(AliasCollisionParser_OPAQUE_MACRO)
+let commented_macro_header_ok =
+pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_OPAQUE_MACRO};
+commented_alias!(AliasCollisionParser_OPAQUE_MACRO)
+use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_OPAQUE_MACRO};
+define_module_alias!(AliasCollisionParser_OPAQUE_MACRO);
+let module_item_macro_ok =
+define_impl_alias!(AliasCollisionParser_OPAQUE_MACRO);
+let impl_item_macro_ok =
 (AliasCollisionParser_SHADOWED_MACRO) => {
 pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_SHADOWED_MACRO};
 assert!(AliasCollisionParser_SHADOWED_MACRO)
@@ -169,9 +178,13 @@ let cfg_closure_ok =
 && cfg_disabled_format_ok
 && c_strings_ok
 && placeholder_lifetime_ok
+&& raw_reference_ok
 && raw_macro_name_ok
 && raw_string_macro_ok
 && unicode_macro_name_ok
+&& commented_macro_header_ok
+&& module_item_macro_ok
+&& impl_item_macro_ok
 && standard_qualified_macro_ok
 && associated_type_bound_ok
 && tuple_field_ok
