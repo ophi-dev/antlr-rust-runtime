@@ -125,6 +125,24 @@ start
             format!("{AliasCollisionParser_CFG_FORMAT}")
                 == Self::CFG_FORMAT.to_string()
         };
+        let shadowed_standard_path_ok = {
+            mod std {
+                macro_rules! format {
+                    ("{AliasCollisionParser_OPAQUE_MACRO}") => {
+                        "AliasCollisionParser_OPAQUE_MACRO"
+                    };
+                }
+                pub(super) use format;
+
+                pub(super) fn external_format() -> String {
+                    std::format!("{AliasCollisionParser_STANDARD_FORMAT}")
+                }
+            }
+            std::format!("{AliasCollisionParser_OPAQUE_MACRO}")
+                == "AliasCollisionParser_OPAQUE_MACRO"
+                && std::external_format()
+                    == Self::STANDARD_FORMAT.to_string()
+        };
         let AliasCollisionParser_FORMAT_LOCAL = "local";
         let format_local_ok =
             format!("{AliasCollisionParser_FORMAT_LOCAL}") == "local";
@@ -177,6 +195,17 @@ start
         struct DefaultedConst<const N: usize = 3>;
         let _: DefaultedConst = DefaultedConst;
         let const_generic_default_ok = true;
+        struct SignedConst<const N: i8>;
+        struct CharacterConst<const C: char>;
+        let _: SignedConst<-1> = SignedConst;
+        let _: SignedConst<1i8> = SignedConst;
+        let _: CharacterConst<'x'> = CharacterConst;
+        let literal_const_arguments_ok = true;
+        struct InnerAttributedImpl;
+        impl InnerAttributedImpl {
+            #![allow(dead_code)]
+        }
+        let impl_inner_attribute_ok = true;
         fn safe(safe: i32) -> i32 {
             safe
         }
@@ -704,6 +733,7 @@ start
             && escaped_format_capture_ok
             && continued_format_capture_ok
             && cfg_disabled_format_ok
+            && shadowed_standard_path_ok
             && format_local_ok
             && c_strings_ok
             && underscore_assignment_ok
@@ -720,6 +750,8 @@ start
             && one_sided_range_patterns_ok
             && attributed_binder_ok
             && const_generic_default_ok
+            && literal_const_arguments_ok
+            && impl_inner_attribute_ok
             && safe_identifier_ok
             && unicode_escape_underscores_ok
             && multiple_match_inner_attrs_ok

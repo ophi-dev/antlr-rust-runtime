@@ -51,7 +51,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
-use super::action::{ActionReferenceKind, action_references};
+use super::action::{ActionReferenceKind, ActionReferenceParser, action_references};
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarKind, GrammarUnit,
     ModelIdAllocator, ModelNodeId, OptionDecl, Quantifier, Rule, RuleCall, RuleId, RuleKind,
@@ -69,6 +69,22 @@ pub(crate) fn eliminate_mutual_left_recursion(
     provenance: &mut ProvenanceIndex,
     preserved_rules: &BTreeSet<RuleId>,
 ) -> bool {
+    eliminate_mutual_left_recursion_with_action_reference_parser(
+        units,
+        ids,
+        provenance,
+        preserved_rules,
+        action_references,
+    )
+}
+
+pub(crate) fn eliminate_mutual_left_recursion_with_action_reference_parser(
+    units: &mut [GrammarUnit],
+    ids: &mut ModelIdAllocator,
+    provenance: &mut ProvenanceIndex,
+    preserved_rules: &BTreeSet<RuleId>,
+    action_reference_parser: ActionReferenceParser,
+) -> bool {
     let mut changed = false;
     for unit in units.iter_mut() {
         // Precedence rewriting is a parser-rule construct: a lexer rule cycle
@@ -76,7 +92,13 @@ pub(crate) fn eliminate_mutual_left_recursion(
         // become "unsupported embedded lexer action" much later, far from the
         // cause).
         if unit.kind == GrammarKind::Parser {
-            changed |= eliminate_in_unit(unit, ids, provenance, preserved_rules);
+            changed |= eliminate_in_unit(
+                unit,
+                ids,
+                provenance,
+                preserved_rules,
+                action_reference_parser,
+            );
         }
     }
     changed
@@ -105,6 +127,7 @@ fn eliminate_in_unit(
     ids: &mut ModelIdAllocator,
     provenance: &mut ProvenanceIndex,
     preserved_rules: &BTreeSet<RuleId>,
+    action_reference_parser: ActionReferenceParser,
 ) -> bool {
     let mut changed = false;
     // Re-derive the cycle set after each successful rewrite: splicing a
@@ -119,10 +142,15 @@ fn eliminate_in_unit(
             names: &names,
             nullable: &nullable,
         };
-        let Some(plan) = left_corner_cycles(unit, grammar)
-            .iter()
-            .find_map(|cycle| plan_cycle(unit, cycle, grammar, preserved_rules))
-        else {
+        let Some(plan) = left_corner_cycles(unit, grammar).iter().find_map(|cycle| {
+            plan_cycle(
+                unit,
+                cycle,
+                grammar,
+                preserved_rules,
+                action_reference_parser,
+            )
+        }) else {
             return changed;
         };
         apply_plan(unit, &plan, ids, provenance);
@@ -285,6 +313,7 @@ fn plan_cycle(
     cycle: &Cycle,
     grammar: Grammar<'_>,
     preserved_rules: &BTreeSet<RuleId>,
+    action_reference_parser: ActionReferenceParser,
 ) -> Option<CyclePlan> {
     let rules = rules_by_id(unit);
     if cycle.iter().any(|member| !rules.contains_key(member)) {
@@ -349,14 +378,18 @@ fn plan_cycle(
                     &planned[position].elements,
                     index,
                     &rules[&target].name,
+                    action_reference_parser,
                 ) {
                     return None;
                 }
                 split_optional(&planned[position], index)
             }
-            PlannedCorner::Satellite { index, target } => {
-                splice_satellite(&planned[position], index, rules[&target])?
-            }
+            PlannedCorner::Satellite { index, target } => splice_satellite(
+                &planned[position],
+                index,
+                rules[&target],
+                action_reference_parser,
+            )?,
             // The corner enters the cycle but cannot be substituted or split
             // (quantified, labelled, argument- or option-bearing): the cycle
             // is out of the tractable subclass.
@@ -459,16 +492,25 @@ fn planned_corner(
 /// Whether any action or predicate among `elements` (other than the corner at
 /// `skip` itself, and descending into nested blocks) references `rule_name` —
 /// e.g. `$s.text` after the `s` element has been spliced away.
-fn remaining_actions_reference(elements: &[Element], skip: usize, rule_name: &str) -> bool {
+fn remaining_actions_reference(
+    elements: &[Element],
+    skip: usize,
+    rule_name: &str,
+    action_reference_parser: ActionReferenceParser,
+) -> bool {
     elements.iter().enumerate().any(|(index, element)| {
         if index == skip {
             return false;
         }
-        element_actions_reference(element, rule_name)
+        element_actions_reference(element, rule_name, action_reference_parser)
     })
 }
 
-fn element_actions_reference(element: &Element, rule_name: &str) -> bool {
+fn element_actions_reference(
+    element: &Element,
+    rule_name: &str,
+    action_reference_parser: ActionReferenceParser,
+) -> bool {
     let mut bodies: Vec<&str> = Vec::new();
     match &element.kind {
         ElementKind::Action { body, .. } => bodies.push(body),
@@ -480,16 +522,15 @@ fn element_actions_reference(element: &Element, rule_name: &str) -> bool {
         }
         ElementKind::Block(block) => {
             return block.alternatives.iter().any(|alternative| {
-                alternative
-                    .elements
-                    .iter()
-                    .any(|nested| element_actions_reference(nested, rule_name))
+                alternative.elements.iter().any(|nested| {
+                    element_actions_reference(nested, rule_name, action_reference_parser)
+                })
             });
         }
         _ => {}
     }
     bodies.into_iter().any(|body| {
-        action_references(body)
+        action_reference_parser(body)
             .iter()
             .any(|reference| match reference.kind {
                 ActionReferenceKind::Attribute { name, .. } => name == rule_name,
@@ -535,10 +576,16 @@ fn splice_satellite(
     candidate: &PlannedAlternative,
     index: usize,
     satellite: &Rule,
+    action_reference_parser: ActionReferenceParser,
 ) -> Option<Vec<PlannedAlternative>> {
     // Deleting the corner element severs any `$satellite.attr` reference an
     // action in the surviving prefix/suffix makes by rule name.
-    if remaining_actions_reference(&candidate.elements, index, &satellite.name) {
+    if remaining_actions_reference(
+        &candidate.elements,
+        index,
+        &satellite.name,
+        action_reference_parser,
+    ) {
         return None;
     }
     // Requirements::BareCorner already established that `index` holds a bare
@@ -559,7 +606,7 @@ fn splice_satellite(
         // with another `ID` would capture the reference (and vice versa).
         // Decline when either side's actions name anything the other side
         // introduces.
-        if implicit_bindings_collide(prefix, suffix, &source.elements) {
+        if implicit_bindings_collide(prefix, suffix, &source.elements, action_reference_parser) {
             return None;
         }
         // The options of every alternative merged into this position apply to
@@ -624,17 +671,22 @@ fn collect_labels<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
 /// side names a token, rule or label that the other side introduces as an
 /// element. Only names actually referenced by an action matter — inert
 /// duplicate occurrences (`e : s s`) are fine.
-fn implicit_bindings_collide(prefix: &[Element], suffix: &[Element], spliced: &[Element]) -> bool {
+fn implicit_bindings_collide(
+    prefix: &[Element],
+    suffix: &[Element],
+    spliced: &[Element],
+    action_reference_parser: ActionReferenceParser,
+) -> bool {
     let mut caller_refs = BTreeSet::new();
-    action_reference_names(prefix, &mut caller_refs);
-    action_reference_names(suffix, &mut caller_refs);
+    action_reference_names(prefix, &mut caller_refs, action_reference_parser);
+    action_reference_names(suffix, &mut caller_refs, action_reference_parser);
     let mut satellite_intro = BTreeSet::new();
     bindable_names(spliced, &mut satellite_intro);
     if !caller_refs.is_disjoint(&satellite_intro) {
         return true;
     }
     let mut satellite_refs = BTreeSet::new();
-    action_reference_names(spliced, &mut satellite_refs);
+    action_reference_names(spliced, &mut satellite_refs, action_reference_parser);
     let mut caller_intro = BTreeSet::new();
     bindable_names(prefix, &mut caller_intro);
     bindable_names(suffix, &mut caller_intro);
@@ -643,7 +695,11 @@ fn implicit_bindings_collide(prefix: &[Element], suffix: &[Element], spliced: &[
 
 /// Every simple `$name` / `$name.attr` reference made by actions and
 /// predicates among `elements`, descending nested blocks.
-fn action_reference_names<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a str>) {
+fn action_reference_names<'a>(
+    elements: &'a [Element],
+    out: &mut BTreeSet<&'a str>,
+    action_reference_parser: ActionReferenceParser,
+) {
     for element in elements {
         let mut bodies: Vec<&str> = Vec::new();
         match &element.kind {
@@ -656,13 +712,13 @@ fn action_reference_names<'a>(elements: &'a [Element], out: &mut BTreeSet<&'a st
             }
             ElementKind::Block(nested) => {
                 for alternative in &nested.alternatives {
-                    action_reference_names(&alternative.elements, out);
+                    action_reference_names(&alternative.elements, out, action_reference_parser);
                 }
             }
             _ => {}
         }
         for body in bodies {
-            for reference in action_references(body) {
+            for reference in action_reference_parser(body) {
                 match reference.kind {
                     ActionReferenceKind::Attribute { name, .. }
                     | ActionReferenceKind::Qualified { name, .. } => {
@@ -1333,6 +1389,7 @@ fn record_clone(provenance: &mut ProvenanceIndex, fresh: ModelNodeId, original: 
 #[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
+    use crate::grammar::action::ActionReference;
     use crate::grammar::frontend::{SourceId, parse_source};
     use crate::grammar::left_recursion::rewrite_immediate_left_recursion;
     use crate::grammar::model::{GrammarId, Terminal};
@@ -1467,6 +1524,30 @@ mod tests {
         assert_eq!(
             before, after,
             "a declined cycle must leave the model untouched"
+        );
+    }
+
+    fn no_action_references(_body: &str) -> Vec<ActionReference<'_>> {
+        Vec::new()
+    }
+
+    #[test]
+    fn uses_the_injected_action_reference_parser_for_rebinding_checks() {
+        let text = "parser grammar P; \
+                    e : s { let _text = $s.text; } | ID ; \
+                    s : e '+' ID ;";
+        assert_declined(text);
+
+        let mut fixture = parse(text);
+        assert!(
+            eliminate_mutual_left_recursion_with_action_reference_parser(
+                std::slice::from_mut(&mut fixture.unit),
+                &mut fixture.ids,
+                &mut fixture.provenance,
+                &BTreeSet::new(),
+                no_action_references,
+            ),
+            "the injected parser should control reference-sensitive planning"
         );
     }
 

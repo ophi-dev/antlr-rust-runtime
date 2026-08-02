@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+use super::action::{ActionReferenceParser, action_references};
 use super::char_support::get_char_value_from_grammar_char_literal;
 use super::diagnostic::{CompilationError, Diagnostic};
 use super::frontend::{SourceFile, SourceId, SourceSpan};
@@ -106,6 +107,7 @@ pub(crate) struct TransformContext<'a> {
     pub(crate) id: TransformId,
     pub(crate) analysis: &'a TransformAnalysis,
     pub(crate) report_only: bool,
+    pub(crate) action_reference_parser: ActionReferenceParser,
 }
 
 #[derive(Clone, Debug)]
@@ -165,12 +167,27 @@ impl TransformRegistry {
         ids: &mut ModelIdAllocator,
         report_only: bool,
     ) -> Result<TransformReport, Diagnostic> {
+        self.run_with_action_reference_parser(grammar, ids, report_only, action_references)
+    }
+
+    pub(crate) fn run_with_action_reference_parser(
+        &self,
+        grammar: &mut TransformGrammar,
+        ids: &mut ModelIdAllocator,
+        report_only: bool,
+        action_reference_parser: ActionReferenceParser,
+    ) -> Result<TransformReport, Diagnostic> {
         if report_only {
             let mut projected_grammar = grammar.clone();
             let mut projected_ids = ids.clone();
-            return self.run_mutating(&mut projected_grammar, &mut projected_ids, true);
+            return self.run_mutating(
+                &mut projected_grammar,
+                &mut projected_ids,
+                true,
+                action_reference_parser,
+            );
         }
-        self.run_mutating(grammar, ids, false)
+        self.run_mutating(grammar, ids, false, action_reference_parser)
     }
 
     fn run_mutating(
@@ -178,6 +195,7 @@ impl TransformRegistry {
         grammar: &mut TransformGrammar,
         ids: &mut ModelIdAllocator,
         report_only: bool,
+        action_reference_parser: ActionReferenceParser,
     ) -> Result<TransformReport, Diagnostic> {
         let mut report = TransformReport::default();
         let mut analysis = TransformAnalysis::compute(&grammar.units);
@@ -189,6 +207,7 @@ impl TransformRegistry {
                     id,
                     analysis: &analysis,
                     report_only,
+                    action_reference_parser,
                 },
                 grammar,
                 ids,

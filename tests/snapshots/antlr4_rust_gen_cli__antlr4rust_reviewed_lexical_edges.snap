@@ -66,6 +66,12 @@ AliasCollisionParser_CONTINUED_FORMAT}", AliasCollisionParser_CONTINUED_FORMAT =
 let cfg_disabled_format_ok = {
 use __antlr4rust_token_aliases_2::{AliasCollisionParser_CFG_FORMAT};
 format!("{AliasCollisionParser_CFG_FORMAT}")
+let shadowed_standard_path_ok = {
+("{AliasCollisionParser_OPAQUE_MACRO}") => {
+"AliasCollisionParser_OPAQUE_MACRO"
+std::format!("{AliasCollisionParser_STANDARD_FORMAT}", AliasCollisionParser_STANDARD_FORMAT = super::__antlr4rust_token_aliases_2::AliasCollisionParser_STANDARD_FORMAT)
+std::format!("{AliasCollisionParser_OPAQUE_MACRO}")
+== "AliasCollisionParser_OPAQUE_MACRO"
 let AliasCollisionParser_FORMAT_LOCAL = "local";
 format!("{AliasCollisionParser_FORMAT_LOCAL}") == "local";
 let c_strings_ok =
@@ -82,6 +88,8 @@ let exponent_underscore_ok = 1e_1 == 10.0;
 let one_sided_range_patterns_ok = match 2 {
 let attributed_binder_ok = true;
 let const_generic_default_ok = true;
+let literal_const_arguments_ok = true;
+let impl_inner_attribute_ok = true;
 let safe_identifier_ok = safe(29) == 29;
 let unicode_escape_underscores_ok =
 let multiple_match_inner_attrs_ok = true;
@@ -216,6 +224,7 @@ let cfg_closure_ok =
 && escaped_format_capture_ok
 && continued_format_capture_ok
 && cfg_disabled_format_ok
+&& shadowed_standard_path_ok
 && c_strings_ok
 && underscore_assignment_ok
 && opaque_receiver_tokens_ok
@@ -228,6 +237,8 @@ let cfg_closure_ok =
 && one_sided_range_patterns_ok
 && attributed_binder_ok
 && const_generic_default_ok
+&& literal_const_arguments_ok
+&& impl_inner_attribute_ok
 && safe_identifier_ok
 && unicode_escape_underscores_ok
 && multiple_match_inner_attrs_ok

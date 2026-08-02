@@ -43,7 +43,8 @@ generic expression defaults, `safe` as a contextual identifier, underscored
 Unicode escapes, multiple match-body inner attributes, `pub(in self)`, empty
 turbofish argument lists, empty `where` clauses, explicit `unsafe` foreign
 statics, attributed variadic parameters, attributed shorthand struct fields,
-and full patterns after numeric tuple-field names.
+full patterns after numeric tuple-field names, unbraced literal const-generic
+arguments, and standalone inner attributes at the start of impl bodies.
 
 The recognizer is used only to classify embedded Rust syntax needed by
 compatibility alias lowering. It does not aim to reproduce every rustc

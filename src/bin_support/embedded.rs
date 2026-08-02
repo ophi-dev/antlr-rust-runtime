@@ -20,6 +20,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::ops::Range;
 
+use crate::grammar::action::{ActionReference, action_references as generic_action_references};
 use crate::grammar::frontend::SourceId;
 use crate::rust_names::rust_identifier_end;
 use crate::templates::{matching_action_brace, skip_ascii_whitespace};
@@ -2286,7 +2287,7 @@ fn lower_antlr4rust_surface(
     let mut opaque_macro_aliases = BTreeMap::<(usize, usize), BTreeSet<String>>::new();
     let mut opaque_non_expression_aliases = BTreeMap::<(usize, String), BTreeSet<String>>::new();
     let mut conditional_macro_alias_fallbacks =
-        BTreeMap::<(usize, String), BTreeSet<String>>::new();
+        BTreeMap::<(usize, String, String), BTreeSet<String>>::new();
     let mut uses_input = false;
     let mut uses_local_context = false;
     let mut used_token_aliases = local_bindings.use_target_aliases.clone();
@@ -2305,8 +2306,11 @@ fn lower_antlr4rust_surface(
                 syntax.conditional_macro_fallback(lexemes[capture.format_literal].start)
             {
                 used_token_aliases.extend(aliases.iter().cloned());
+                let mut alias_module_path = "super::"
+                    .repeat(syntax.inline_module_depth(lexemes[capture.format_literal].start));
+                alias_module_path.push_str(token_alias_module);
                 conditional_macro_alias_fallbacks
-                    .entry((insertion, active.to_owned()))
+                    .entry((insertion, active.to_owned(), alias_module_path))
                     .or_default()
                     .extend(aliases);
             }
@@ -2315,6 +2319,9 @@ fn lower_antlr4rust_surface(
         used_token_aliases.extend(aliases.iter().cloned());
         let trailing_comma = previous_significant(&lexemes, capture.close)
             .is_some_and(|previous| lexemes[previous].kind == RustLexemeKind::Punctuation(b','));
+        let mut alias_module_path =
+            "super::".repeat(syntax.inline_module_depth(lexemes[capture.format_literal].start));
+        alias_module_path.push_str(token_alias_module);
         let mut text = if trailing_comma {
             " ".to_owned()
         } else {
@@ -2323,7 +2330,7 @@ fn lower_antlr4rust_surface(
         text.push_str(
             &aliases
                 .iter()
-                .map(|alias| format!("{alias} = {token_alias_module}::{alias}"))
+                .map(|alias| format!("{alias} = {alias_module_path}::{alias}"))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
@@ -2333,11 +2340,11 @@ fn lower_antlr4rust_surface(
         });
     }
     replacements.extend(conditional_macro_alias_fallbacks.into_iter().map(
-        |((insertion, active), aliases)| RustReplacement {
+        |((insertion, active, alias_module_path), aliases)| RustReplacement {
             range: insertion..insertion,
             text: format!(
                 "#[cfg(not({active}))]\n#[allow(unused_imports)]\n\
-                 use {token_alias_module}::{{{}}};\n",
+                 use {alias_module_path}::{{{}}};\n",
                 aliases.into_iter().collect::<Vec<_>>().join(", ")
             ),
         },
@@ -4554,6 +4561,18 @@ fn macro_rules_definition_ranges(body: &str) -> Vec<Range<usize>> {
         }
     }
     ranges
+}
+
+pub(crate) fn action_references(body: &str) -> Vec<ActionReference<'_>> {
+    let macro_rules_ranges = macro_rules_definition_ranges(body);
+    generic_action_references(body)
+        .into_iter()
+        .filter(|reference| {
+            !macro_rules_ranges
+                .iter()
+                .any(|range| range.contains(&reference.name_offset))
+        })
+        .collect()
 }
 
 /// Finds the next `$` that is outside a string literal.
@@ -6901,6 +6920,34 @@ mod tests {
         };
         let body = "writeln!(self.output(), \"{}\", \"$notaref\");";
         assert_eq!(translate_body(body, &ctx).expect("translates"), body);
+    }
+
+    #[test]
+    fn macro_rules_metavariables_are_not_antlr_action_references() {
+        for body in [
+            "macro_rules! m { ($t:ty) => { fn f<'a>(v: &'a $t) {} } }\n$actual",
+            "macro_rules! r#match { ($i:ident) => { $i } }\n$actual",
+            "macro_rules! λ { ($i:ident) => { $i } }\n$actual",
+            "macro_rules! r#λ { ($i:ident) => { $i } }\n$actual",
+            "macro_rules /* keyword */ ! /* bang */ value /* name */ \
+             { ($i:ident) => { $i } }\n$actual",
+            r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
+$actual"#,
+            r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }
+$actual"#,
+            r"macro_rules! m { ($t:ty) => { let _ = '('; let _ = '\''; } }
+$actual",
+            r##"macro_rules! m { ($i:ident) => {{ let _ = r#""} $ignored"#; $i }} }
+$actual"##,
+            r##"macro_rules! m { ($i:ident) => {{ let _ = br#""} $ignored"#; $i }} }
+$actual"##,
+            r##"macro_rules! m { ($i:ident) => {{ let _ = cr#""} $ignored"#; $i }} }
+$actual"##,
+        ] {
+            let references = action_references(body);
+            assert_eq!(references.len(), 1, "{body}");
+            assert_eq!(references[0].expression, "$actual", "{body}");
+        }
     }
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.

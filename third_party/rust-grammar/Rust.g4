@@ -306,7 +306,7 @@ const_default:
 
 impl_block:
     //experimental: ?const parse only
-    'default'? 'unsafe'? 'impl' type_parameters? '?'? 'const'? impl_what where_clause? '{' impl_item* '}';
+    'default'? 'unsafe'? 'impl' type_parameters? '?'? 'const'? impl_what where_clause? '{' inner_attr* impl_item* '}';
 
 impl_what:
     '!' ty_sum 'for' ty_sum
@@ -583,6 +583,13 @@ type_argument:
     | BareIntLit
     | 'true'
     | 'false'
+    | '-' BareIntLit
+    | '-'? (FullIntLit | FloatLit)
+    | ByteLit
+    | ByteStringLit
+    | CharLit
+    | StringLit
+    | CStringLit
     ;
 
 // TODO(cnsun): get rid of this.

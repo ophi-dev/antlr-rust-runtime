@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::action::{ActionReferenceKind, action_references};
+#[cfg(test)]
+use super::action::action_references;
+use super::action::{ActionReferenceKind, ActionReferenceParser};
 use super::char_support::get_string_from_grammar_string_literal;
 use super::diagnostic::Diagnostic;
 use super::model::{
@@ -45,7 +47,7 @@ impl GrammarTransform for CollapsePrecedenceLadders {
             ..
         } = grammar;
         for unit in units {
-            let discovery = discover_ladders(unit, preserved_rules);
+            let discovery = discover_ladders(unit, preserved_rules, input.action_reference_parser);
             for declined in discovery.declined {
                 report
                     .candidates
@@ -133,7 +135,11 @@ struct LadderDiscovery {
     declined: Vec<DeclinedLadder>,
 }
 
-fn discover_ladders(unit: &GrammarUnit, preserved_rules: &BTreeSet<RuleId>) -> LadderDiscovery {
+fn discover_ladders(
+    unit: &GrammarUnit,
+    preserved_rules: &BTreeSet<RuleId>,
+    action_reference_parser: ActionReferenceParser,
+) -> LadderDiscovery {
     let rules_by_name = unit
         .rules
         .iter()
@@ -154,7 +160,7 @@ fn discover_ladders(unit: &GrammarUnit, preserved_rules: &BTreeSet<RuleId>) -> L
     }
 
     let incoming = incoming_callers(unit, &rules_by_name);
-    let mut observed = observed_rule_contexts(unit, &rules_by_name);
+    let mut observed = observed_rule_contexts(unit, &rules_by_name, action_reference_parser);
     observed.extend(preserved_rules);
     let parents = rung_parents(&rungs, &rules_by_name);
     let tops = rungs
@@ -820,6 +826,7 @@ fn incoming_callers(
 fn observed_rule_contexts(
     unit: &GrammarUnit,
     rules_by_name: &BTreeMap<String, RuleId>,
+    action_reference_parser: ActionReferenceParser,
 ) -> BTreeSet<RuleId> {
     let mut observed = BTreeSet::new();
     let mut has_opaque_target_code = false;
@@ -829,6 +836,7 @@ fn observed_rule_contexts(
             rules_by_name,
             &mut observed,
             &mut has_opaque_target_code,
+            action_reference_parser,
         );
     }
     for rule in &unit.rules {
@@ -843,6 +851,7 @@ fn observed_rule_contexts(
                 rules_by_name,
                 &mut observed,
                 &mut has_opaque_target_code,
+                action_reference_parser,
             );
         }
         for action in &rule.actions {
@@ -851,6 +860,7 @@ fn observed_rule_contexts(
                 rules_by_name,
                 &mut observed,
                 &mut has_opaque_target_code,
+                action_reference_parser,
             );
         }
         for handler in &rule.catches {
@@ -859,6 +869,7 @@ fn observed_rule_contexts(
                 rules_by_name,
                 &mut observed,
                 &mut has_opaque_target_code,
+                action_reference_parser,
             );
         }
         if let Some(action) = &rule.finally_action {
@@ -867,6 +878,7 @@ fn observed_rule_contexts(
                 rules_by_name,
                 &mut observed,
                 &mut has_opaque_target_code,
+                action_reference_parser,
             );
         }
         visit_elements(&rule.block, &mut |element| match &element.kind {
@@ -877,6 +889,7 @@ fn observed_rule_contexts(
                         rules_by_name,
                         &mut observed,
                         &mut has_opaque_target_code,
+                        action_reference_parser,
                     );
                 }
             }
@@ -886,6 +899,7 @@ fn observed_rule_contexts(
                     rules_by_name,
                     &mut observed,
                     &mut has_opaque_target_code,
+                    action_reference_parser,
                 );
             }
             ElementKind::Predicate { body, fail, .. } => {
@@ -894,6 +908,7 @@ fn observed_rule_contexts(
                     rules_by_name,
                     &mut observed,
                     &mut has_opaque_target_code,
+                    action_reference_parser,
                 );
                 if let Some(fail) = fail {
                     collect_target_code_rule_references(
@@ -901,6 +916,7 @@ fn observed_rule_contexts(
                         rules_by_name,
                         &mut observed,
                         &mut has_opaque_target_code,
+                        action_reference_parser,
                     );
                 }
             }
@@ -922,9 +938,10 @@ fn collect_target_code_rule_references(
     rules_by_name: &BTreeMap<String, RuleId>,
     observed: &mut BTreeSet<RuleId>,
     has_opaque_target_code: &mut bool,
+    action_reference_parser: ActionReferenceParser,
 ) {
     *has_opaque_target_code |= !body.trim().is_empty();
-    for reference in action_references(body) {
+    for reference in action_reference_parser(body) {
         let name = match reference.kind {
             ActionReferenceKind::Attribute { name, .. }
             | ActionReferenceKind::Qualified { name, .. } => Some(name),
@@ -2065,7 +2082,7 @@ low : INT ;
             .iter()
             .map(|rule| (rule.name.clone(), rule.id))
             .collect::<BTreeMap<_, _>>();
-        let observed = observed_rule_contexts(unit, &rules_by_name);
+        let observed = observed_rule_contexts(unit, &rules_by_name, action_references);
 
         assert!(observed.contains(&rules_by_name["actionRule"]));
         assert!(observed.contains(&rules_by_name["argumentRule"]));
@@ -2094,7 +2111,7 @@ low : INT ;
                 .iter()
                 .map(|rule| (rule.name.clone(), rule.id))
                 .collect::<BTreeMap<_, _>>();
-            let observed = observed_rule_contexts(unit, &rules_by_name);
+            let observed = observed_rule_contexts(unit, &rules_by_name, action_references);
 
             assert_eq!(
                 observed.len(),

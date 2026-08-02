@@ -20,7 +20,7 @@ mod generated {
 
 use generated::lexer::{IDENT, LIFETIME, RAW_IDENTIFIER, RustLexer};
 use generated::parser::{
-    RULE_ASSOCIATED_CONST_DECL, RULE_ASSOCIATED_STATIC_DECL, RULE_ATTR, RULE_BLOCK,
+    RULE_ANY_IDENT, RULE_ASSOCIATED_CONST_DECL, RULE_ASSOCIATED_STATIC_DECL, RULE_ATTR, RULE_BLOCK,
     RULE_BLOCK_WITH_INNER_ATTRS, RULE_CLOSURE_PARAM, RULE_CLOSURE_PARAMS, RULE_CLOSURE_TAIL,
     RULE_CONST_DECL, RULE_ENUM_DECL, RULE_ENUM_VARIANT_MAIN, RULE_EXPR, RULE_EXTERN_CRATE,
     RULE_FIELD, RULE_FIELD_NAME, RULE_FN_DECL, RULE_FN_HEAD, RULE_FOREIGN_FN_DECL,
@@ -112,13 +112,21 @@ enum AnalysisRoot {
 struct ScopedMacroBinding {
     name: String,
     scope: Range<usize>,
-    activation: MacroBindingActivation,
+    activation: BindingActivation,
+}
+
+#[derive(Clone, Debug)]
+enum BindingActivation {
+    Always,
+    Conditional { insertion: usize, predicate: String },
 }
 
 #[derive(Debug)]
-enum MacroBindingActivation {
-    Always,
-    Conditional { insertion: usize, predicate: String },
+struct ScopedStandardPathBinding {
+    name: String,
+    scope: Range<usize>,
+    module_depth: usize,
+    activation: BindingActivation,
 }
 
 #[derive(Debug)]
@@ -317,6 +325,8 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
     let mut syntax = RustSyntax::default();
     let macro_bindings =
         collect_scoped_macro_bindings(parsed.tree(), parsed.tokens(), body, body.len());
+    let standard_path_bindings =
+        collect_scoped_standard_path_bindings(parsed.tree(), parsed.tokens(), body, body.len());
 
     for node in parsed.tree().descendants() {
         let Some(rule) = node.as_rule() else {
@@ -441,6 +451,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                     parsed.tokens(),
                     body.len(),
                     &macro_bindings,
+                    &standard_path_bindings,
                     &mut syntax,
                 );
             }
@@ -450,6 +461,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                     parsed.tokens(),
                     body.len(),
                     &macro_bindings,
+                    &standard_path_bindings,
                     &mut syntax,
                 );
             }
@@ -651,6 +663,7 @@ fn collect_opaque_macro_identifiers(
     tokens: &TokenStore,
     body_len: usize,
     macro_bindings: &[ScopedMacroBinding],
+    standard_path_bindings: &[ScopedStandardPathBinding],
     syntax: &mut RustSyntax,
 ) {
     let Some(parent) = macro_tail.node().parent().and_then(Node::as_rule) else {
@@ -659,12 +672,25 @@ fn collect_opaque_macro_identifiers(
     let Some((macro_name, qualification)) = macro_invocation_name(parent, tokens) else {
         return;
     };
-    let shadow = if qualification == MacroQualification::Unqualified {
-        local_macro_shadow(&macro_name, parent, tokens, body_len, macro_bindings)
-    } else {
-        LocalMacroShadow::None
+    let shadow = match qualification {
+        MacroQualification::Unqualified => {
+            local_macro_shadow(&macro_name, parent, tokens, body_len, macro_bindings)
+        }
+        MacroQualification::Standard {
+            root,
+            absolute: false,
+        } => local_standard_path_shadow(
+            root.as_str(),
+            parent,
+            tokens,
+            body_len,
+            standard_path_bindings,
+        ),
+        MacroQualification::Standard { absolute: true, .. } | MacroQualification::Other => {
+            LocalMacroShadow::None
+        }
     };
-    if qualification == MacroQualification::Other
+    if matches!(qualification, MacroQualification::Other)
         || !macro_allows_value_alias_lowering(&macro_name)
         || !matches!(&shadow, LocalMacroShadow::None)
     {
@@ -733,17 +759,31 @@ fn collect_opaque_macro_invocation_identifiers(
     tokens: &TokenStore,
     body_len: usize,
     macro_bindings: &[ScopedMacroBinding],
+    standard_path_bindings: &[ScopedStandardPathBinding],
     syntax: &mut RustSyntax,
 ) {
     let Some((macro_name, qualification)) = macro_invocation_name(invocation, tokens) else {
         return;
     };
-    let shadow = if qualification == MacroQualification::Unqualified {
-        local_macro_shadow(&macro_name, invocation, tokens, body_len, macro_bindings)
-    } else {
-        LocalMacroShadow::None
+    let shadow = match qualification {
+        MacroQualification::Unqualified => {
+            local_macro_shadow(&macro_name, invocation, tokens, body_len, macro_bindings)
+        }
+        MacroQualification::Standard {
+            root,
+            absolute: false,
+        } => local_standard_path_shadow(
+            root.as_str(),
+            invocation,
+            tokens,
+            body_len,
+            standard_path_bindings,
+        ),
+        MacroQualification::Standard { absolute: true, .. } | MacroQualification::Other => {
+            LocalMacroShadow::None
+        }
     };
-    if qualification == MacroQualification::Other
+    if matches!(qualification, MacroQualification::Other)
         || !macro_allows_value_alias_lowering(&macro_name)
         || !matches!(&shadow, LocalMacroShadow::None)
     {
@@ -829,8 +869,34 @@ fn macro_fallback_kind(invocation: antlr4_runtime::RuleNodeView<'_>) -> OpaqueMa
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MacroQualification {
     Unqualified,
-    Standard,
+    Standard {
+        root: StandardPathRoot,
+        absolute: bool,
+    },
     Other,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StandardPathRoot {
+    Std,
+    Core,
+}
+
+impl StandardPathRoot {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "std" => Some(Self::Std),
+            "core" => Some(Self::Core),
+            _ => None,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Std => "std",
+            Self::Core => "core",
+        }
+    }
 }
 
 fn macro_invocation_name(
@@ -838,7 +904,7 @@ fn macro_invocation_name(
     tokens: &TokenStore,
 ) -> Option<(String, MacroQualification)> {
     let mut path = Vec::new();
-    let mut qualified = false;
+    let mut absolute = false;
     for terminal in invocation
         .node()
         .descendants()
@@ -847,8 +913,8 @@ fn macro_invocation_name(
         if terminal.text() == "!" {
             break;
         }
-        if matches!(terminal.text(), ":" | "::") {
-            qualified = true;
+        if path.is_empty() && terminal.text() == "::" {
+            absolute = true;
         }
         if matches!(
             tokens.token_type(terminal.token_id()),
@@ -864,10 +930,12 @@ fn macro_invocation_name(
         }
     }
     let name = path.pop()?;
-    let qualification = if !qualified {
+    let qualification = if path.is_empty() && !absolute {
         MacroQualification::Unqualified
-    } else if path.as_slice() == ["std"] || path.as_slice() == ["core"] {
-        MacroQualification::Standard
+    } else if let [root] = path.as_slice()
+        && let Some(root) = StandardPathRoot::from_name(root)
+    {
+        MacroQualification::Standard { root, absolute }
     } else {
         MacroQualification::Other
     };
@@ -887,15 +955,49 @@ fn local_macro_shadow(
     else {
         return LocalMacroShadow::None;
     };
+    binding_shadow(
+        bindings
+            .iter()
+            .filter(|binding| binding.name == name && binding.scope.contains(&start))
+            .map(|binding| &binding.activation),
+    )
+}
+
+fn local_standard_path_shadow(
+    name: &str,
+    invocation: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body_len: usize,
+    bindings: &[ScopedStandardPathBinding],
+) -> LocalMacroShadow {
+    let Some(start) = invocation
+        .start_id()
+        .and_then(|token| body_byte_start(tokens, token, body_len))
+    else {
+        return LocalMacroShadow::None;
+    };
+    let module_depth = enclosing_inline_module_depth(invocation);
+    binding_shadow(
+        bindings
+            .iter()
+            .filter(|binding| {
+                binding.name == name
+                    && binding.module_depth == module_depth
+                    && binding.scope.contains(&start)
+            })
+            .map(|binding| &binding.activation),
+    )
+}
+
+fn binding_shadow<'a>(
+    activations: impl Iterator<Item = &'a BindingActivation>,
+) -> LocalMacroShadow {
     let mut insertion = usize::MAX;
     let mut predicates = BTreeSet::new();
-    for binding in bindings
-        .iter()
-        .filter(|binding| binding.name == name && binding.scope.contains(&start))
-    {
-        match &binding.activation {
-            MacroBindingActivation::Always => return LocalMacroShadow::Always,
-            MacroBindingActivation::Conditional {
+    for activation in activations {
+        match activation {
+            BindingActivation::Always => return LocalMacroShadow::Always,
+            BindingActivation::Conditional {
                 insertion: binding_insertion,
                 predicate,
             } => {
@@ -946,31 +1048,23 @@ fn collect_scoped_macro_bindings(
                 bindings.push(ScopedMacroBinding {
                     name,
                     scope,
-                    activation: macro_binding_activation(rule, tokens, body, body_len),
+                    activation: binding_activation(rule, tokens, body, body_len),
                 });
             }
             RULE_USE_DECL => {
                 let scope = enclosing_block(rule)
                     .and_then(|block| body_byte_range(block, tokens, body_len))
                     .unwrap_or(0..body_len);
-                let activation = macro_binding_activation(rule, tokens, body, body_len);
+                let activation = binding_activation(rule, tokens, body, body_len);
                 bindings.extend(
-                    use_decl_binding_names(rule, tokens)
+                    use_decl_bindings(rule, tokens)
                         .into_iter()
+                        .map(|binding| binding.name)
                         .filter(|name| macro_allows_value_alias_lowering(name))
                         .map(|name| ScopedMacroBinding {
                             name,
                             scope: scope.clone(),
-                            activation: match &activation {
-                                MacroBindingActivation::Always => MacroBindingActivation::Always,
-                                MacroBindingActivation::Conditional {
-                                    insertion,
-                                    predicate,
-                                } => MacroBindingActivation::Conditional {
-                                    insertion: *insertion,
-                                    predicate: predicate.clone(),
-                                },
-                            },
+                            activation: activation.clone(),
                         }),
                 );
             }
@@ -980,24 +1074,67 @@ fn collect_scoped_macro_bindings(
     bindings
 }
 
-fn macro_binding_activation(
+fn collect_scoped_standard_path_bindings(
+    root: Node<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+) -> Vec<ScopedStandardPathBinding> {
+    let mut bindings = Vec::new();
+    for rule in root.descendants().filter_map(Node::as_rule) {
+        let introduced = match rule.rule_index() {
+            RULE_MOD_DECL | RULE_MOD_DECL_SHORT => identifier_name(rule, tokens)
+                .map(|name| ImportedPathBinding {
+                    name,
+                    external_standard: false,
+                })
+                .into_iter()
+                .collect::<Vec<_>>(),
+            RULE_USE_DECL => use_decl_bindings(rule, tokens),
+            RULE_EXTERN_CRATE => extern_crate_binding(rule, tokens).into_iter().collect(),
+            _ => continue,
+        };
+        let scope = enclosing_block(rule)
+            .and_then(|block| body_byte_range(block, tokens, body_len))
+            .unwrap_or(0..body_len);
+        let module_depth = enclosing_inline_module_depth(rule);
+        let activation = binding_activation(rule, tokens, body, body_len);
+        bindings.extend(
+            introduced
+                .into_iter()
+                .filter(|binding| {
+                    !binding.external_standard
+                        && StandardPathRoot::from_name(&binding.name).is_some()
+                })
+                .map(|binding| ScopedStandardPathBinding {
+                    name: binding.name,
+                    scope: scope.clone(),
+                    module_depth,
+                    activation: activation.clone(),
+                }),
+        );
+    }
+    bindings
+}
+
+fn binding_activation(
     declaration: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
     body: &str,
     body_len: usize,
-) -> MacroBindingActivation {
+) -> BindingActivation {
     let Some(item) = enclosing_item(declaration) else {
-        return MacroBindingActivation::Always;
+        return BindingActivation::Always;
     };
     let Some(range) = body_byte_range(item, tokens, body_len) else {
-        return MacroBindingActivation::Always;
+        return BindingActivation::Always;
     };
     let Some(predicate) =
         super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
     else {
-        return MacroBindingActivation::Always;
+        return BindingActivation::Always;
     };
-    MacroBindingActivation::Conditional {
+    BindingActivation::Conditional {
         insertion: range.start,
         predicate,
     }
@@ -1018,66 +1155,177 @@ fn enclosing_item(
     None
 }
 
-fn use_decl_binding_names(
-    declaration: antlr4_runtime::RuleNodeView<'_>,
-    tokens: &TokenStore,
-) -> Vec<String> {
-    let mut names = Vec::new();
-    if let Some(path) = declaration.child_rule(RULE_USE_PATH) {
-        collect_use_path_binding_names(path, tokens, &mut names);
-    }
-    names
+#[derive(Debug)]
+struct ImportedPathBinding {
+    name: String,
+    external_standard: bool,
 }
 
-fn collect_use_path_binding_names(
+fn use_decl_bindings(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+) -> Vec<ImportedPathBinding> {
+    let mut bindings = Vec::new();
+    if let Some(path) = declaration.child_rule(RULE_USE_PATH) {
+        collect_use_path_bindings(path, tokens, &[], false, &mut bindings);
+    }
+    bindings
+}
+
+fn collect_use_path_bindings(
     path: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
-    names: &mut Vec<String>,
+    prefix: &[String],
+    inherited_absolute: bool,
+    bindings: &mut Vec<ImportedPathBinding>,
 ) {
+    let starts_absolute = path
+        .children()
+        .next()
+        .and_then(Node::as_terminal)
+        .is_some_and(|terminal| terminal.text() == "::");
+    let absolute = starts_absolute || inherited_absolute;
+    let mut source = if starts_absolute {
+        Vec::new()
+    } else {
+        prefix.to_vec()
+    };
+    source.extend(
+        path.children()
+            .filter_map(Node::as_rule)
+            .filter(|child| child.rule_index() == RULE_ANY_IDENT)
+            .filter_map(|child| path_segment_name(child, tokens)),
+    );
+
     if let Some(list) = path.child_rule(RULE_USE_ITEM_LIST) {
-        collect_use_item_list_binding_names(list, tokens, names);
+        collect_use_item_list_bindings(list, tokens, &source, absolute, bindings);
         return;
     }
     if let Some(suffix) = path.child_rule(RULE_USE_SUFFIX) {
         if let Some(rename) = suffix.child_rule(RULE_RENAME) {
             if let Some(name) = identifier_name(rename, tokens) {
-                names.push(name);
+                push_imported_path_binding(name, &source, absolute, bindings);
             }
         } else if let Some(list) = suffix.child_rule(RULE_USE_ITEM_LIST) {
-            collect_use_item_list_binding_names(list, tokens, names);
+            collect_use_item_list_bindings(list, tokens, &source, absolute, bindings);
         }
         return;
     }
-    if let Some(name) = path
-        .children()
-        .filter_map(Node::as_rule)
-        .filter_map(|child| identifier_name(child, tokens))
-        .next_back()
-    {
-        names.push(name);
+    if let Some(name) = effective_unrenamed_binding(&source) {
+        push_imported_path_binding(name, &source, absolute, bindings);
     }
 }
 
-fn collect_use_item_list_binding_names(
+fn collect_use_item_list_bindings(
     list: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
-    names: &mut Vec<String>,
+    prefix: &[String],
+    absolute: bool,
+    bindings: &mut Vec<ImportedPathBinding>,
 ) {
     for item in list
         .children()
         .filter_map(Node::as_rule)
         .filter(|child| child.rule_index() == RULE_USE_ITEM)
     {
-        if let Some(rename) = item.child_rule(RULE_RENAME) {
-            if let Some(name) = identifier_name(rename, tokens) {
-                names.push(name);
+        let rename = item
+            .child_rule(RULE_RENAME)
+            .and_then(|rename| identifier_name(rename, tokens));
+        if let Some(path) = item.child_rule(RULE_USE_PATH) {
+            let mut nested = Vec::new();
+            collect_use_path_bindings(path, tokens, prefix, absolute, &mut nested);
+            if let Some(rename) = rename {
+                if let [binding] = nested.as_mut_slice() {
+                    binding.name = rename;
+                }
             }
-        } else if let Some(path) = item.child_rule(RULE_USE_PATH) {
-            collect_use_path_binding_names(path, tokens, names);
-        } else if let Some(name) = identifier_name(item, tokens) {
-            names.push(name);
+            bindings.extend(nested);
+            continue;
+        }
+        let Some(segment) = item
+            .children()
+            .filter_map(Node::as_rule)
+            .find(|child| child.rule_index() == RULE_ANY_IDENT)
+            .and_then(|child| path_segment_name(child, tokens))
+        else {
+            continue;
+        };
+        let mut source = prefix.to_vec();
+        source.push(segment);
+        if let Some(name) = rename.or_else(|| effective_unrenamed_binding(&source)) {
+            push_imported_path_binding(name, &source, absolute, bindings);
         }
     }
+}
+
+fn effective_unrenamed_binding(source: &[String]) -> Option<String> {
+    match source {
+        [.., parent, leaf] if leaf == "self" => Some(parent.clone()),
+        [.., leaf] => Some(leaf.clone()),
+        [] => None,
+    }
+}
+
+fn push_imported_path_binding(
+    name: String,
+    source: &[String],
+    absolute: bool,
+    bindings: &mut Vec<ImportedPathBinding>,
+) {
+    let normalized_len = source.len().saturating_sub(usize::from(
+        source.last().is_some_and(|segment| segment == "self"),
+    ));
+    let normalized_source = &source[..normalized_len];
+    let external_standard = absolute
+        && matches!(normalized_source, [root] if StandardPathRoot::from_name(root).is_some());
+    bindings.push(ImportedPathBinding {
+        name,
+        external_standard,
+    });
+}
+
+fn extern_crate_binding(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+) -> Option<ImportedPathBinding> {
+    let mut after_crate = false;
+    let source = declaration
+        .node()
+        .descendants()
+        .filter_map(Node::as_terminal)
+        .find_map(|terminal| {
+            if after_crate {
+                return Some(
+                    terminal
+                        .text()
+                        .strip_prefix("r#")
+                        .unwrap_or_else(|| terminal.text())
+                        .to_owned(),
+                );
+            }
+            after_crate = terminal.text() == "crate";
+            None
+        })?;
+    let name = match declaration.child_rule(RULE_RENAME) {
+        Some(rename) => identifier_name(rename, tokens)?,
+        None => source.clone(),
+    };
+    Some(ImportedPathBinding {
+        name,
+        external_standard: StandardPathRoot::from_name(&source).is_some(),
+    })
+}
+
+fn path_segment_name(
+    rule: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+) -> Option<String> {
+    identifier_name(rule, tokens).or_else(|| {
+        rule.node()
+            .descendants()
+            .find_map(Node::as_terminal)
+            .map(|terminal| terminal.text().to_owned())
+    })
 }
 
 fn identifier_name(rule: antlr4_runtime::RuleNodeView<'_>, tokens: &TokenStore) -> Option<String> {
@@ -1148,6 +1396,21 @@ fn enclosing_block(
         node = parent.parent();
     }
     None
+}
+
+fn enclosing_inline_module_depth(rule: antlr4_runtime::RuleNodeView<'_>) -> usize {
+    let mut depth = 0;
+    let mut node = rule.node().parent();
+    while let Some(parent) = node {
+        if parent
+            .as_rule()
+            .is_some_and(|parent| parent.rule_index() == RULE_MOD_DECL)
+        {
+            depth += 1;
+        }
+        node = parent.parent();
+    }
+    depth
 }
 
 fn collect_lifetime_identifier_start(
@@ -1690,6 +1953,61 @@ mod tests {
     }
 
     #[test]
+    fn distinguishes_absolute_and_shadowed_standard_macro_paths() {
+        let body = "mod std {\n\
+                        macro_rules! format { ($value:literal) => { $value }; }\n\
+                        pub(crate) use format;\n\
+                        fn inside() { let _ = std::format!(\"{InsideAlias}\"); }\n\
+                    }\n\
+                    let custom = std::format!(\"{ShadowedAlias}\");\n\
+                    let external = ::std::format!(\"{AbsoluteAlias}\");";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_opaque_macro_byte(occurrence(body, "InsideAlias", 0)));
+        assert!(syntax.is_opaque_macro_byte(occurrence(body, "ShadowedAlias", 0)));
+        assert!(!syntax.is_opaque_macro_byte(occurrence(body, "AbsoluteAlias", 0)));
+    }
+
+    #[test]
+    fn scopes_imported_and_extern_standard_path_shadows() {
+        let imported = "mod custom {\n\
+                            macro_rules! matches { ($($tokens:tt)*) => { true }; }\n\
+                            pub(crate) use matches;\n\
+                        }\n\
+                        {\n\
+                            use custom as core;\n\
+                            let local = core::matches!(value, ImportedAlias);\n\
+                        }\n\
+                        let external = core::matches!(value, ExternalAlias);";
+        let syntax = analyze(imported);
+        assert!(syntax.is_opaque_macro_byte(occurrence(imported, "ImportedAlias", 0)));
+        assert!(!syntax.is_opaque_macro_byte(occurrence(imported, "ExternalAlias", 0)));
+
+        let external_alias =
+            "extern crate self as std;\nlet value = std::matches!(input, ExternAlias);";
+        let syntax = analyze(external_alias);
+        assert!(syntax.is_opaque_macro_byte(occurrence(external_alias, "ExternAlias", 0)));
+    }
+
+    #[test]
+    fn records_cfg_gated_standard_path_shadowing() {
+        let body = "#[cfg(any())]\n\
+                    mod std {\n\
+                        macro_rules! format { ($value:literal) => { $value }; }\n\
+                        pub(crate) use format;\n\
+                    }\n\
+                    let rendered = std::format!(\"{Alias}\");";
+        let syntax = analyze(body);
+        let capture = occurrence(body, "Alias", 0);
+
+        assert!(syntax.is_opaque_macro_byte(capture));
+        assert_eq!(
+            syntax.conditional_macro_fallback(capture),
+            Some((0, "any()"))
+        );
+    }
+
+    #[test]
     fn records_cfg_gated_imported_macro_shadowing() {
         let body = "#[cfg(any())]\n\
                     use missing::format;\n\
@@ -1779,6 +2097,14 @@ mod tests {
             "let ranged = match 2 { ..=1 => false, 2.. => true };\nAlias == ranged;",
             "fn callback(_: for<#[cfg(all())] 'a> fn(&'a i32)) {}\nAlias == 1;",
             "struct Local<const N: usize = 3>;\nAlias == 1;",
+            "struct N<const N: i8>;\n\
+             let _: N<-1> = N;\n\
+             let _: N<1i8> = N;\n\
+             Alias == 1;",
+            "struct C<const C: char>;\nlet _: C<'x'> = C;\nAlias == 1;",
+            "struct Local;\n\
+             impl Local { #![allow(dead_code)] }\n\
+             Alias == 1;",
             "fn safe(safe: i32) -> i32 { safe }\nAlias == safe(1);",
             r#"let text = "\u{00_E6}"; Alias == text;"#,
             "let matched = match 1 {\n\

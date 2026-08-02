@@ -107,7 +107,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if optimize_precedence_ladders {
         transforms.push(CollapsePrecedenceLadders);
     }
-    let compilation = grammar::compiler::compile_with_transforms(
+    let action_reference_parser: grammar::action::ActionReferenceParser = if args.embedded_actions {
+        embedded::action_references
+    } else {
+        grammar::action::action_references
+    };
+    let compilation = grammar::compiler::compile_with_action_reference_parser(
         LoadOptions {
             roots: args.roots.clone(),
             library_directories: args.library_directories.clone(),
@@ -115,6 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &transforms,
         args.report_precedence_ladders,
         &entry_rules,
+        action_reference_parser,
     )
     .map_err(|error| render_compilation_error(&error, &args.roots))?;
     emit_compilation_warnings(&compilation)?;

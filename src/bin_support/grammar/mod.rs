@@ -1,4 +1,4 @@
-mod action;
+pub(crate) mod action;
 pub(crate) mod atn;
 mod char_support;
 pub(crate) mod compiler;

@@ -13,6 +13,8 @@ pub(crate) enum ActionReferenceKind<'a> {
     NonLocal { rule: &'a str, attribute: &'a str },
 }
 
+pub(crate) type ActionReferenceParser = for<'a> fn(&'a str) -> Vec<ActionReference<'a>>;
+
 pub(crate) fn action_references(body: &str) -> Vec<ActionReference<'_>> {
     let mut references = Vec::new();
     collect_references(body, 0, &mut references);
@@ -27,10 +29,6 @@ fn collect_references<'a>(
     let bytes = body.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
-        if let Some(end) = macro_rules_definition_end(body, index) {
-            index = end;
-            continue;
-        }
         match bytes[index] {
             b'/' if bytes.get(index + 1) == Some(&b'/') => {
                 index = body[index + 2..]
@@ -57,115 +55,6 @@ fn collect_references<'a>(
     }
 }
 
-fn macro_rules_definition_end(body: &str, start: usize) -> Option<usize> {
-    const PREFIX: &str = "macro_rules";
-    if !body[start..].starts_with(PREFIX)
-        || start
-            .checked_sub(1)
-            .and_then(|before| body.as_bytes().get(before))
-            .is_some_and(|byte| is_identifier_continue(*byte))
-        || body
-            .as_bytes()
-            .get(start + PREFIX.len())
-            .is_some_and(|byte| is_identifier_continue(*byte))
-    {
-        return None;
-    }
-    let bytes = body.as_bytes();
-    let mut cursor = skip_rust_trivia(body, start + PREFIX.len());
-    if bytes.get(cursor) != Some(&b'!') {
-        return None;
-    }
-    cursor = skip_rust_trivia(body, cursor + 1);
-    let name_start = if bytes.get(cursor..cursor + 2) == Some(b"r#") {
-        cursor + 2
-    } else {
-        cursor
-    };
-    cursor = skip_rust_trivia(
-        body,
-        crate::rust_names::rust_identifier_end(body, name_start)?,
-    );
-    let expected = match bytes.get(cursor)? {
-        b'(' => b')',
-        b'[' => b']',
-        b'{' => b'}',
-        _ => return None,
-    };
-    balanced_token_tree_end(body, cursor, expected)
-}
-
-fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usize> {
-    let bytes = body.as_bytes();
-    let mut stack = vec![expected];
-    let mut index = open + 1;
-    while index < bytes.len() {
-        if let Some(end) = raw_string_end(body, index) {
-            index = end;
-            continue;
-        }
-        match bytes[index] {
-            b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                index = body[index + 2..]
-                    .find('\n')
-                    .map_or(bytes.len(), |newline| index + 2 + newline + 1);
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = block_comment_end(body, index);
-            }
-            b'\'' => {
-                index = char_literal_end(body, index).unwrap_or(index + 1);
-            }
-            quote @ (b'"' | b'`') => {
-                index = quoted_end(body, index, quote);
-            }
-            b'(' => {
-                stack.push(b')');
-                index += 1;
-            }
-            b'[' => {
-                stack.push(b']');
-                index += 1;
-            }
-            b'{' => {
-                stack.push(b'}');
-                index += 1;
-            }
-            close @ (b')' | b']' | b'}') if stack.last() == Some(&close) => {
-                stack.pop();
-                index += 1;
-                if stack.is_empty() {
-                    return Some(index);
-                }
-            }
-            _ => index += next_char_len(body, index),
-        }
-    }
-    None
-}
-
-fn raw_string_end(body: &str, start: usize) -> Option<usize> {
-    let rest = &body[start..];
-    let prefix = ["br", "cr", "r"]
-        .into_iter()
-        .find(|prefix| rest.starts_with(prefix))?;
-    let mut quote = start + prefix.len();
-    while body.as_bytes().get(quote) == Some(&b'#') {
-        quote += 1;
-    }
-    if body.as_bytes().get(quote) != Some(&b'"') {
-        return None;
-    }
-    let hashes = quote - start - prefix.len();
-    let closing = format!("\"{}", "#".repeat(hashes));
-    let content = quote + 1;
-    Some(
-        body[content..]
-            .find(&closing)
-            .map_or(body.len(), |end| content + end + closing.len()),
-    )
-}
-
 fn block_comment_end(body: &str, open: usize) -> usize {
     let bytes = body.as_bytes();
     let mut depth = 1_usize;
@@ -184,36 +73,6 @@ fn block_comment_end(body: &str, open: usize) -> usize {
                 }
             }
             _ => index += 1,
-        }
-    }
-    bytes.len()
-}
-
-fn char_literal_end(body: &str, open: usize) -> Option<usize> {
-    let bytes = body.as_bytes();
-    let content = open + 1;
-    let end = match bytes.get(content)? {
-        b'\\' => match bytes.get(content + 1)? {
-            b'x' => content + 4,
-            b'u' if bytes.get(content + 2) == Some(&b'{') => {
-                let close = body[content + 3..].find('}')? + content + 3;
-                close + 1
-            }
-            _ => content + 1 + next_char_len(body, content + 1),
-        },
-        _ => content + next_char_len(body, content),
-    };
-    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
-}
-
-fn quoted_end(body: &str, open: usize, quote: u8) -> usize {
-    let bytes = body.as_bytes();
-    let mut index = open + 1;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\\' => index = (index + 2).min(bytes.len()),
-            byte if byte == quote => return index + 1,
-            _ => index += next_char_len(body, index),
         }
     }
     bytes.len()
@@ -356,22 +215,6 @@ fn skip_whitespace(bytes: &[u8], mut index: usize) -> usize {
     index
 }
 
-fn skip_rust_trivia(body: &str, mut index: usize) -> usize {
-    let bytes = body.as_bytes();
-    loop {
-        index = skip_whitespace(bytes, index);
-        if bytes.get(index..index + 2) == Some(b"//") {
-            index = body[index + 2..]
-                .find('\n')
-                .map_or(bytes.len(), |newline| index + 2 + newline + 1);
-        } else if bytes.get(index..index + 2) == Some(b"/*") {
-            index = block_comment_end(body, index);
-        } else {
-            return index;
-        }
-    }
-}
-
 fn next_char_len(text: &str, index: usize) -> usize {
     text[index..].chars().next().map_or(1, char::len_utf8)
 }
@@ -457,46 +300,15 @@ mod tests {
     }
 
     #[test]
-    fn macro_rules_metavariables_are_target_syntax() {
-        let body = "macro_rules! value { ($i:ident) => { $i } }\n$actual";
-        let references = action_references(body);
+    fn target_syntax_is_not_special_cased() {
+        let references = action_references("macro_rules! value { ($i:ident) => { $i } }\n$actual");
 
-        assert_eq!(references.len(), 1);
-        assert_eq!(references[0].expression, "$actual");
-    }
-
-    #[test]
-    fn macro_rules_bodies_skip_lifetimes_and_quoted_delimiters() {
-        for body in [
-            "macro_rules! m { ($t:ty) => { fn f<'a>(v: &'a $t) {} } }\n$actual",
-            "macro_rules! r#match { ($i:ident) => { $i } }\n$actual",
-            "macro_rules! λ { ($i:ident) => { $i } }\n$actual",
-            "macro_rules! r#λ { ($i:ident) => { $i } }\n$actual",
-            "macro_rules /* keyword */ ! /* bang */ value /* name */ \
-             { ($i:ident) => { $i } }\n$actual",
-            r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
-$actual"#,
-            r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }
-$actual"#,
-            r"macro_rules! m { ($t:ty) => { let _ = '('; let _ = '\''; } }
-$actual",
-            r##"macro_rules! m { ($i:ident) => {{ let _ = r#""} $ignored"#; $i }} }
-$actual"##,
-            r##"macro_rules! m { ($i:ident) => {{ let _ = br#""} $ignored"#; $i }} }
-$actual"##,
-            r##"macro_rules! m { ($i:ident) => {{ let _ = cr#""} $ignored"#; $i }} }
-$actual"##,
-        ] {
-            let references = action_references(body);
-            assert_eq!(references.len(), 1, "{body}");
-            assert_eq!(references[0].expression, "$actual", "{body}");
-        }
-    }
-
-    #[test]
-    fn unterminated_macro_rules_token_trees_are_not_treated_as_complete() {
-        let body = "macro_rules! value { ($i:ident) => { $i }";
-
-        assert_eq!(macro_rules_definition_end(body, 0), None);
+        assert_eq!(
+            references
+                .iter()
+                .map(|reference| reference.expression)
+                .collect::<Vec<_>>(),
+            ["$i", "$i", "$actual"]
+        );
     }
 }
