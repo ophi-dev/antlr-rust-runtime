@@ -3,15 +3,15 @@ source: src/bin/antlr4-rust-gen.rs
 expression: manifest
 ---
 {
-  "version": 1,
+  "version": 2,
   "fixedLookahead": 2,
   "grammars": [
     {
       "name": "T",
       "summary": {"total": 2, "ll1": 1, "fixed": 1, "adaptive": 0},
       "decisions": [
-        {"decision": 0, "rule": "s", "state": 7, "tier": "ll1"},
-        {"decision": 1, "rule": "a", "state": 20, "tier": "fixed", "lookahead": 2}
+        {"decision": 0, "rule": "s", "state": 7, "canDefer": false, "tier": "ll1"},
+        {"decision": 1, "rule": "a", "state": 20, "canDefer": true, "tier": "fixed", "lookahead": 2}
       ]
     }
   ]

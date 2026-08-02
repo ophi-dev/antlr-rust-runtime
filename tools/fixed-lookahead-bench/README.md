@@ -17,7 +17,8 @@ tools/fixed-lookahead-bench/run.sh --grammars-v4 DIR    # reuse an existing chec
 
 Work products land under `target/fixed-lookahead-bench/`; the generated
 `decisions.json` next to each parser lists every decision's tier
-(`ll1` / `fixed` / `adaptive` + reason).
+(`ll1` / `fixed` / `adaptive` + reason) and whether it `canDefer` to adaptive
+prediction.
 
 Reference numbers (Apple Silicon, 2026-07): Thrift +12% parse & fastest
 cold-start (0 adaptive decisions at `--fixed-lookahead 2`), EDN +5%, Rego

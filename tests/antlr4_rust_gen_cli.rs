@@ -1441,6 +1441,199 @@ fn adaptive_atn_routing_generated_path_compiles() {
 
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
+fn complete_ll1_recovery_matches_java_without_adaptive_fallback() {
+    let temp = temporary_directory("complete-ll1-recovery");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/ll1-no-fallback/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--require-generated-parser"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
+    assert!(!parser.contains("adaptive_predict_stream_info_sll_probe("));
+    assert!(!parser.contains("adaptive_predict_stream_info_with_context("));
+    let manifest =
+        fs::read_to_string(out.join("decisions.json")).expect("manifest should be emitted");
+    insta::assert_snapshot!("ll1_no_fallback_decisions_manifest", manifest);
+
+    assert_generated_project(
+        temp.path(),
+        &["t_lexer.rs", "t_parser.rs"],
+        r#"
+#[cfg(test)]
+mod complete_ll1_recovery_tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::t_lexer::TLexer;
+    use super::t_parser::{self, TParser};
+    use antlr4_runtime::{
+        AntlrError, CommonTokenStream, ErrorListener, InputStream, IntStream as _, Node,
+        NodeKind, Parser as _, Recognizer, SyntaxErrorEvent,
+    };
+
+    type ParserType = TParser<TLexer<InputStream>>;
+    type Entry = fn(&mut ParserType) -> Result<antlr4_runtime::ParseTree, AntlrError>;
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct Event {
+        offending: Option<String>,
+        line: usize,
+        column: usize,
+        span: Option<std::ops::Range<usize>>,
+        message: String,
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingListener {
+        events: Arc<Mutex<Vec<Event>>>,
+    }
+
+    impl<R> ErrorListener<R> for RecordingListener
+    where
+        R: Recognizer + ?Sized,
+    {
+        fn syntax_error(&mut self, _recognizer: &R, event: &SyntaxErrorEvent<'_>) {
+            self.events.lock().expect("events lock").push(Event {
+                offending: event
+                    .offending
+                    .and_then(|token| token.text().map(str::to_owned)),
+                line: event.line,
+                column: event.column,
+                span: event.span.clone(),
+                message: event.message.to_owned(),
+            });
+        }
+    }
+
+    #[derive(Debug)]
+    struct Outcome {
+        case: &'static str,
+        status: String,
+        syntax_errors: usize,
+        token_index: usize,
+        events: Vec<Event>,
+        tree: Option<String>,
+    }
+
+    fn lisp(node: Node<'_>, names: &[&str], out: &mut String) {
+        match node.kind() {
+            NodeKind::Rule => {
+                let rule = node.as_rule().expect("rule node");
+                out.push('(');
+                out.push_str(names.get(rule.rule_index()).copied().unwrap_or("?"));
+                for child in rule.children() {
+                    out.push(' ');
+                    lisp(child, names, out);
+                }
+                out.push(')');
+            }
+            NodeKind::Terminal => {
+                out.push_str(&node.as_terminal().expect("terminal node").text());
+            }
+            NodeKind::Error => {
+                out.push_str("<error:");
+                out.push_str(&node.as_error().expect("error node").text());
+                out.push('>');
+            }
+        }
+    }
+
+    fn parse(case: &'static str, input: &str, entry: Entry) -> Outcome {
+        let lexer = TLexer::new(InputStream::new(input));
+        let mut parser = TParser::new(CommonTokenStream::new(lexer));
+        parser.set_max_rule_depth(Some(usize::MAX));
+        parser.remove_error_listeners();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        parser.add_error_listener(RecordingListener {
+            events: Arc::clone(&events),
+        });
+
+        let result = entry(&mut parser);
+        let syntax_errors = parser.number_of_syntax_errors();
+        let token_index = parser.token_stream_mut().index();
+        let events = events.lock().expect("events lock").clone();
+        match result {
+            Ok(root) => {
+                let parsed = parser.into_parsed_file(root);
+                let mut tree = String::new();
+                lisp(parsed.tree(), t_parser::rule_names(), &mut tree);
+                Outcome {
+                    case,
+                    status: "ok".to_owned(),
+                    syntax_errors,
+                    token_index,
+                    events,
+                    tree: Some(tree),
+                }
+            }
+            Err(error) => Outcome {
+                case,
+                status: format!("{error:?}"),
+                syntax_errors,
+                token_index,
+                events,
+                tree: None,
+            },
+        }
+    }
+
+    #[test]
+    fn records_java_parity_recovery_cases() {
+        let outcomes = [
+            parse("required-valid", "aa", TParser::required),
+            parse("required-invalid-first", "c", TParser::required),
+            parse("required-single-deletion", "caa", TParser::required),
+            parse("required-multiple-unexpected", "ccaa", TParser::required),
+            parse("direct-optional-eof", "", TParser::direct_optional),
+            parse("direct-star-single-deletion", "ca", TParser::direct_star),
+            parse("direct-star-multiple-unexpected", "cca", TParser::direct_star),
+            parse(
+                "nested-optional-caller-exit",
+                "ca",
+                TParser::nested_optional_entry,
+            ),
+            parse("nested-star-eof", "", TParser::nested_star_entry),
+            parse(
+                "nested-star-after-iteration",
+                "aca",
+                TParser::nested_star_entry,
+            ),
+            parse(
+                "nested-plus-after-iteration",
+                "aca",
+                TParser::nested_plus_entry,
+            ),
+        ];
+        std::fs::write(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/ll1-recovery.txt"),
+            format!("{outcomes:#?}\n"),
+        )
+        .expect("recovery snapshot should be writable");
+    }
+}
+"#,
+    );
+
+    let recovery = fs::read_to_string(temp.path().join("compile-generated/ll1-recovery.txt"))
+        .expect("recovery snapshot should be emitted");
+    insta::assert_snapshot!("complete_ll1_recovery_java_parity", recovery);
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
 fn unrecovered_generated_entry_errors_notify_listeners_once() {
     let temp = temporary_directory("fatal-error-listener");
     let grammar = temp.path().join("Fatal.g4");

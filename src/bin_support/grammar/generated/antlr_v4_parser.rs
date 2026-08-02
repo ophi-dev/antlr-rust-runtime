@@ -18632,29 +18632,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 138) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(0, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(0, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    36..=39 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    -1 | 9 | 12 | 40 | 44..=46 | 52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 138, &__prediction);
                 match __prediction.alt {
@@ -18689,29 +18670,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 145) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(1, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(1, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    52 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    -1 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 145, &__prediction);
                 match __prediction.alt {
@@ -18869,29 +18831,11 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 159) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(2, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(2, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        41 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        42 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        43 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -18992,29 +18936,13 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 166) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(3, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(3, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        36 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        39 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        37 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        38 => antlr4_runtime::ParserAtnPrediction { alt: 4, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        71 => antlr4_runtime::ParserAtnPrediction { alt: 5, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -19126,29 +19054,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 174) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(4, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(4, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    59 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 174, &__prediction);
                 match __prediction.alt {
@@ -19310,29 +19219,12 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 194) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(6, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(6, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        11 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        33 => antlr4_runtime::ParserAtnPrediction { alt: 4, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -19356,29 +19248,10 @@ where
                             }
                         }
                         let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                        let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 188) {
-                            __prediction
-                        } else {
-                            let __prediction = {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                __simulator.adaptive_predict_stream_info_sll_probe(5, 0, self.base.input())
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            };
-                            if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                __simulator.adaptive_predict_stream_info_with_context(5, 0, self.base.input(), __prediction_context)
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            } else {
-                                __prediction
-                            }
+                        let __prediction = match self.base.la(1) {
+                            70 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            56 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         };
                         self.base.record_generated_prediction_diagnostic(atn(), 188, &__prediction);
                         match __prediction.alt {
@@ -19493,29 +19366,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 202) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(7, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(7, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    56 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 202, &__prediction);
                 match __prediction.alt {
@@ -19720,29 +19574,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 216) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(9, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(9, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                59 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 216, &__prediction);
             match __prediction.alt {
@@ -19827,29 +19662,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 222) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(10, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(10, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                59 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 222, &__prediction);
             match __prediction.alt {
@@ -19991,29 +19807,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 235) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(12, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(12, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                59 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 235, &__prediction);
             match __prediction.alt {
@@ -20213,29 +20010,11 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 249) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(14, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(14, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        41 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        42 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -20490,29 +20269,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 268) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(16, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(16, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    12 | 40 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    -1 | 52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 268, &__prediction);
                 match __prediction.alt {
@@ -20596,29 +20356,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 274) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(17, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(17, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    9 | 12 | 40 | 44..=46 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    -1 | 52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 274, &__prediction);
                 match __prediction.alt {
@@ -20813,29 +20554,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 282) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(19, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(19, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                40 | 44..=46 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                9 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 282, &__prediction);
             match __prediction.alt {
@@ -20863,29 +20585,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 286) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(20, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(20, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                35 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                36 | 47..=49 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 286, &__prediction);
             match __prediction.alt {
@@ -20910,29 +20613,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 289) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(21, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(21, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                47 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                36 | 48..=49 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 289, &__prediction);
             match __prediction.alt {
@@ -20957,29 +20641,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 292) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(22, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(22, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                49 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                36 | 48 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 292, &__prediction);
             match __prediction.alt {
@@ -21004,29 +20669,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 295) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(23, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(23, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                48 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                36 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 295, &__prediction);
             match __prediction.alt {
@@ -21053,29 +20699,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 300) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(24, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(24, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    36 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    53 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 300, &__prediction);
                 match __prediction.alt {
@@ -21175,29 +20802,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 311) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(25, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(25, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    50 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    -1 | 9 | 12 | 40 | 44..=46 | 51..=52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 311, &__prediction);
                 match __prediction.alt {
@@ -21225,29 +20833,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 315) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(26, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(26, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                51 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                -1 | 9 | 12 | 40 | 44..=46 | 52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 315, &__prediction);
             match __prediction.alt {
@@ -21460,29 +21049,10 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 326) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(27, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(27, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        36 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -21640,29 +21210,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 337) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(28, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(28, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    36 | 48 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 337, &__prediction);
                 match __prediction.alt {
@@ -21883,29 +21434,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 350) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(29, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(29, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    40 | 44..=46 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    9 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 350, &__prediction);
                 match __prediction.alt {
@@ -22110,29 +21642,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 361) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(30, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(30, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    67 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    56 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 361, &__prediction);
                 match __prediction.alt {
@@ -22222,29 +21735,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 367) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(31, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(31, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                72 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                56 | 67 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 367, &__prediction);
             match __prediction.alt {
@@ -22326,29 +21820,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 370) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(32, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(32, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                40 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                12 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 370, &__prediction);
             match __prediction.alt {
@@ -22374,29 +21849,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 374) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(33, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(33, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                36 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                53 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 374, &__prediction);
             match __prediction.alt {
@@ -22552,29 +22008,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 387) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(34, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(34, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    67 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    56 | 58 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 387, &__prediction);
                 match __prediction.alt {
@@ -22701,29 +22138,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 392) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(35, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(35, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        60 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        56 | 58 | 67 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 392, &__prediction);
                     match __prediction.alt {
@@ -22807,29 +22225,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 403) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(38, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(38, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                4 | 8..=9 | 11..=12 | 57 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                56 | 58 | 60 | 67 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 403, &__prediction);
             match __prediction.alt {
@@ -22851,29 +22250,10 @@ where
                             }
                         }
                         let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                        let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 400) {
-                            __prediction
-                        } else {
-                            let __prediction = {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                __simulator.adaptive_predict_stream_info_sll_probe(37, 0, self.base.input())
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            };
-                            if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                __simulator.adaptive_predict_stream_info_with_context(37, 0, self.base.input(), __prediction_context)
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            } else {
-                                __prediction
-                            }
+                        let __prediction = match self.base.la(1) {
+                            4 | 8..=9 | 11..=12 | 57 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            56 | 58 | 60 | 67 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         };
                         self.base.record_generated_prediction_diagnostic(atn(), 400, &__prediction);
                         match __prediction.alt {
@@ -22966,29 +22346,11 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 417) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(42, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(42, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        8..=9 | 11..=12 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        57 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -23010,29 +22372,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 407) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(39, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(39, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63..=64 | 66 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 407, &__prediction);
                     match __prediction.alt {
@@ -23064,29 +22407,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 411) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(40, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(40, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63..=64 | 66 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 411, &__prediction);
                     match __prediction.alt {
@@ -23118,29 +22442,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 415) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(41, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(41, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 415, &__prediction);
                     match __prediction.alt {
@@ -23295,29 +22600,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 429) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(43, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(43, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    56 | 58 | 67 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 429, &__prediction);
                 match __prediction.alt {
@@ -23524,29 +22810,10 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 442) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(45, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(45, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        52 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -23635,29 +22902,10 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 446) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(46, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(46, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        33 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -23748,29 +22996,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 453) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(47, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(47, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    67 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    58 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 453, &__prediction);
                 match __prediction.alt {
@@ -23855,29 +23084,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 465) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(50, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(50, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                4 | 9 | 11..=12 | 57 | 61 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                56 | 58 | 67 | 72 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 465, &__prediction);
             match __prediction.alt {
@@ -23892,29 +23102,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 457) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(48, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(48, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 9 | 11..=12 | 57 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 457, &__prediction);
                     match __prediction.alt {
@@ -23946,29 +23137,10 @@ where
                             }
                         }
                         let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                        let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 462) {
-                            __prediction
-                        } else {
-                            let __prediction = {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                __simulator.adaptive_predict_stream_info_sll_probe(49, 0, self.base.input())
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            };
-                            if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                __simulator.adaptive_predict_stream_info_with_context(49, 0, self.base.input(), __prediction_context)
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            } else {
-                                __prediction
-                            }
+                        let __prediction = match self.base.la(1) {
+                            4 | 9 | 11..=12 | 57 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            56 | 58 | 67 | 72 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         };
                         self.base.record_generated_prediction_diagnostic(atn(), 462, &__prediction);
                         match __prediction.alt {
@@ -24105,29 +23277,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 470) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(51, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(51, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63..=64 | 66 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 9 | 11..=12 | 56..=58 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 470, &__prediction);
                     match __prediction.alt {
@@ -24159,29 +23312,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 475) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(52, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(52, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63..=64 | 66 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 9 | 11..=12 | 56..=58 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 475, &__prediction);
                     match __prediction.alt {
@@ -24220,29 +23354,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 480) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(53, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(53, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 9 | 11..=12 | 56..=58 | 61 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 480, &__prediction);
                     match __prediction.alt {
@@ -24265,29 +23380,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 483) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(54, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(54, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 9 | 11..=12 | 56..=58 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 483, &__prediction);
                     match __prediction.alt {
@@ -24379,29 +23475,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 493) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(56, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(56, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    62 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 493, &__prediction);
                 match __prediction.alt {
@@ -24547,29 +23624,11 @@ where
                                 }
                             }
                             __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                            if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 504) {
-                                __prediction
-                            } else {
-                                let __prediction = {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    __simulator.adaptive_predict_stream_info_sll_probe(57, 0, self.base.input())
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                };
-                                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                    __simulator.adaptive_predict_stream_info_with_context(57, 0, self.base.input(), __prediction_context)
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                } else {
-                                    __prediction
-                                }
+                            match self.base.la(1) {
+                                4 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                33 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                11 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                             }
                         }
                     };
@@ -24674,29 +23733,10 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 512) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(59, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(59, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        9 | 11..=12 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        57 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -24787,29 +23827,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 516) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(60, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(60, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                63..=64 | 66 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                4 | 9 | 11..=12 | 56..=58 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 516, &__prediction);
             match __prediction.alt {
@@ -24953,29 +23974,11 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 532) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(64, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(64, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        64 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        66 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -24995,29 +23998,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 522) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(61, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(61, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 522, &__prediction);
                     match __prediction.alt {
@@ -25045,29 +24029,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 526) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(62, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(62, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 526, &__prediction);
                     match __prediction.alt {
@@ -25095,29 +24060,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 530) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(63, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(63, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        63 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 530, &__prediction);
                     match __prediction.alt {
@@ -25344,29 +24290,12 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 546) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(66, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(66, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        11..=12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        9 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        73 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        70 => antlr4_runtime::ParserAtnPrediction { alt: 4, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -25469,29 +24398,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 550) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(67, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(67, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                4 | 8..=9 | 11..=12 | 56..=58 | 60 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 550, &__prediction);
             match __prediction.alt {
@@ -25692,29 +24602,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 564) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(69, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(69, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    67 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    58 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 564, &__prediction);
                 match __prediction.alt {
@@ -25849,29 +24740,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 571) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(70, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(70, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 571, &__prediction);
                     match __prediction.alt {
@@ -25901,29 +24773,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 575) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(71, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(71, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 575, &__prediction);
                     match __prediction.alt {
@@ -26020,29 +24873,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 592) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(75, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(75, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                36 | 53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                4 | 9 | 11..=12 | 57..=58 | 61 | 67 | 70 | 73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
             };
             self.base.record_generated_prediction_diagnostic(atn(), 592, &__prediction);
             match __prediction.alt {
@@ -26057,29 +24891,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 583) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(73, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(73, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        36 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        53 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 583, &__prediction);
                     match __prediction.alt {
@@ -26106,29 +24921,10 @@ where
                             }
                         }
                         let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                        let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 588) {
-                            __prediction
-                        } else {
-                            let __prediction = {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                __simulator.adaptive_predict_stream_info_sll_probe(74, 0, self.base.input())
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            };
-                            if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                __simulator.adaptive_predict_stream_info_with_context(74, 0, self.base.input(), __prediction_context)
-                                    .map_err(|__error| match __error {
-                                        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                        _ => self.base.no_viable_alternative_error(__decision_start),
-                                    })?
-                            } else {
-                                __prediction
-                            }
+                        let __prediction = match self.base.la(1) {
+                            71 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            53 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                         };
                         self.base.record_generated_prediction_diagnostic(atn(), 588, &__prediction);
                         match __prediction.alt {
@@ -26229,29 +25025,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 599) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(76, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(76, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                35 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                4 | 9 | 11..=12 | 56..=58 | 61 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 599, &__prediction);
             match __prediction.alt {
@@ -26276,29 +25053,10 @@ where
                 }
             }
             let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 602) {
-                __prediction
-            } else {
-                let __prediction = {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    __simulator.adaptive_predict_stream_info_sll_probe(77, 0, self.base.input())
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                };
-                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                    __simulator.adaptive_predict_stream_info_with_context(77, 0, self.base.input(), __prediction_context)
-                        .map_err(|__error| match __error {
-                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                            _ => self.base.no_viable_alternative_error(__decision_start),
-                        })?
-                } else {
-                    __prediction
-                }
+            let __prediction = match self.base.la(1) {
+                61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                4 | 9 | 11..=12 | 56..=58 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
             };
             self.base.record_generated_prediction_diagnostic(atn(), 602, &__prediction);
             match __prediction.alt {
@@ -26445,29 +25203,10 @@ where
                         }
                     }
                     __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 616) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(80, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(80, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    match self.base.la(1) {
+                        12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        11 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
             };
@@ -26487,29 +25226,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 610) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(78, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(78, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 610, &__prediction);
                     match __prediction.alt {
@@ -26539,29 +25259,10 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 614) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(79, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(79, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
+                    let __prediction = match self.base.la(1) {
+                        61 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        4 | 8..=9 | 11..=12 | 56..=58 | 60 | 63..=64 | 66..=67 | 70 | 72..=73 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
                     self.base.record_generated_prediction_diagnostic(atn(), 614, &__prediction);
                     match __prediction.alt {
@@ -26653,29 +25354,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 624) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(81, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(81, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    55 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    62 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 624, &__prediction);
                 match __prediction.alt {
@@ -26821,29 +25503,11 @@ where
                                 }
                             }
                             __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                            if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 635) {
-                                __prediction
-                            } else {
-                                let __prediction = {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    __simulator.adaptive_predict_stream_info_sll_probe(82, 0, self.base.input())
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                };
-                                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                    __simulator.adaptive_predict_stream_info_with_context(82, 0, self.base.input(), __prediction_context)
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                } else {
-                                    __prediction
-                                }
+                            match self.base.la(1) {
+                                9 | 12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                11 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                33 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                             }
                         }
                     };
@@ -26999,29 +25663,10 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 646) {
-                    __prediction
-                } else {
-                    let __prediction = {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        __simulator.adaptive_predict_stream_info_sll_probe(84, 0, self.base.input())
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    };
-                    if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                        __simulator.adaptive_predict_stream_info_with_context(84, 0, self.base.input(), __prediction_context)
-                            .map_err(|__error| match __error {
-                                antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                _ => self.base.no_viable_alternative_error(__decision_start),
-                            })?
-                    } else {
-                        __prediction
-                    }
+                let __prediction = match self.base.la(1) {
+                    70 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    36 | 48 | 53 | 55 | 62 | 71 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
                 self.base.record_generated_prediction_diagnostic(atn(), 646, &__prediction);
                 match __prediction.alt {

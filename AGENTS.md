@@ -100,10 +100,12 @@ for opt-in-tier sweeps.
 
 Every `antlr4-rust-gen` run also writes a `decisions.json` manifest next to
 `semantics.json`, reporting each parser decision's tier (`ll1` / `fixed` /
-`adaptive` + reason). The opt-in `--fixed-lookahead <k>` flag compiles
-decisions provable within `k` tokens into static dispatch tables; hits commit
-bare only on within-rule (sync-no-op) lookahead and a miss falls through to
-the regular sync + adaptive body (see the README "Decision Tiers" section).
+`adaptive` + reason) and whether its emitted path `canDefer` to adaptive
+prediction. The opt-in `--fixed-lookahead <k>` flag compiles decisions
+provable within `k` tokens into static dispatch tables; hits commit bare only
+on within-rule (sync-no-op) lookahead. Complete LL(1) misses reuse their
+proven-total dispatch after sync, while fixed/adaptive misses retain the
+regular sync + adaptive body (see the README "Decision Tiers" section).
 
 ### The rendered (embedded-actions) pipeline
 
