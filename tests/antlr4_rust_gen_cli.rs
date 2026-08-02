@@ -302,6 +302,15 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
+    let revision_one = "__antlr4_rust_require_codegen_api!(1,";
+    let mut revision_one_parser = parser.clone();
+    let check_start = revision_one_parser
+        .find(&current)
+        .expect("parser check should contain the current API revision");
+    revision_one_parser.replace_range(check_start..check_start + current.len(), revision_one);
+    fs::write(&parser_path, revision_one_parser).expect("parser should be writable");
+    assert_generated_modules_compile(temp.path(), &modules);
+
     let unsupported = "__antlr4_rust_require_codegen_api!(999,";
     let mut incompatible_parser = parser;
     let check_start = incompatible_parser
@@ -322,10 +331,9 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .take(2)
         .collect::<Vec<_>>()
         .join("\n");
-    let supported_revision = antlr4_runtime::__ANTLR4_RUST_CODEGEN_API;
     assert!(
-        diagnostic.contains(&format!("supports revision {supported_revision}")),
-        "diagnostic should name runtime revision {supported_revision}: {diagnostic}"
+        diagnostic.contains("supports revisions 1 and 2"),
+        "diagnostic should name every supported revision: {diagnostic}"
     );
     insta::assert_snapshot!(
         "generated_codegen_api_mismatch_diagnostic",
@@ -4975,6 +4983,292 @@ mod recog_receiver_tests {
         temp.path(),
         &["recog_predicate_lexer.rs", "recog_predicate_parser.rs"],
         test_source,
+    );
+}
+
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+#[test]
+fn named_parser_actions_run_at_committed_positions_on_both_parser_paths() {
+    let temp = temporary_directory("named-parser-actions");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/parser-action-hooks");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        fixture.join("ActionTiming.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        fixture.join("patterns.toml").as_os_str(),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let manifest =
+        fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    insta::assert_snapshot!("named_parser_actions_semantics_manifest", manifest);
+
+    let parser =
+        fs::read_to_string(out.join("action_timing_parser.rs")).expect("parser should be emitted");
+    for expected in [
+        "pub trait ActionTimingParserHooks",
+        "fn enter<L>",
+        "fn enter_scope<L>",
+        "fn exit_scope<L>",
+        "fn tick<L>",
+        "fn seed<L>",
+        "fn reduce<L>",
+        "fn middle<L>",
+        "match (action.rule_index(), action.action_index())",
+        "parser_action_at_current_indexed",
+        "parser_action_hook_with_context",
+        "action_indices: &[(",
+    ] {
+        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
+    }
+
+    let test_source = r####"
+#[cfg(test)]
+mod named_action_tests {
+    use super::action_timing_lexer::ActionTimingLexer;
+    use super::action_timing_parser::{
+        ActionTimingParser, ActionTimingParserHooks, ActionTimingParserTypedHooks,
+    };
+    use antlr4_runtime::{
+        AntlrError, CommonTokenStream, InputStream, Parser as _, ParserSemCtx, TokenSource,
+    };
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[derive(Default)]
+    struct Hooks {
+        entered: usize,
+        events: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl ActionTimingParserHooks for Hooks {
+        fn enter<L>(
+            &mut self,
+            _ctx: &mut ParserSemCtx<'_, L>,
+            name: &str,
+            level: i64,
+            enabled: bool,
+        ) where
+            L: TokenSource,
+        {
+            self.entered += 1;
+            self.events
+                .borrow_mut()
+                .push(format!("enter:{name}:{level}:{enabled}"));
+        }
+
+        fn is_entered<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>) -> bool
+        where
+            L: TokenSource,
+        {
+            let result = self.entered > 0;
+            self.events.borrow_mut().push(format!("predicate:{result}"));
+            result
+        }
+
+        fn enter_scope<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push("scope+".to_owned());
+        }
+
+        fn exit_scope<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push("scope-".to_owned());
+        }
+
+        fn tick<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>, value: i64)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push(format!("tick:{value}"));
+        }
+
+        fn lose<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push("lose".to_owned());
+        }
+
+        fn seed<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push("seed".to_owned());
+        }
+
+        fn reduce<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push("reduce".to_owned());
+        }
+
+        fn exit<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>, name: &str)
+        where
+            L: TokenSource,
+        {
+            self.entered -= 1;
+            self.events.borrow_mut().push(format!("exit:{name}"));
+        }
+
+        fn middle<L>(&mut self, _ctx: &mut ParserSemCtx<'_, L>, name: &str)
+        where
+            L: TokenSource,
+        {
+            self.events.borrow_mut().push(name.to_owned());
+        }
+    }
+
+    type TestParser = ActionTimingParser<
+        ActionTimingLexer<InputStream>,
+        ActionTimingParserTypedHooks<Hooks>,
+    >;
+    type Entry = fn(&mut TestParser) -> Result<antlr4_runtime::ParseTree, AntlrError>;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct Outcome {
+        events: Vec<String>,
+        syntax_errors: usize,
+        text: String,
+    }
+
+    fn run(input: &str, entry: Entry) -> Outcome {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let lexer = ActionTimingLexer::new(InputStream::new(input));
+        let mut parser = ActionTimingParser::with_typed_hooks(
+            CommonTokenStream::new(lexer),
+            Hooks {
+                entered: 0,
+                events: Rc::clone(&events),
+            },
+        );
+        parser.remove_error_listeners();
+        let root = entry(&mut parser).expect("fixture input should parse");
+        let outcome = Outcome {
+            events: events.borrow().clone(),
+            syntax_errors: parser.number_of_syntax_errors(),
+            text: parser.node(root).text(),
+        };
+        outcome
+    }
+
+    #[test]
+    fn generated_and_interpreted_order_match() {
+        let input = "nest item more b x+y+z";
+        let generated = run(input, TestParser::generated);
+        let interpreted = run(input, TestParser::interpreted);
+
+        assert_eq!(generated, interpreted);
+        assert_eq!(
+            generated.events,
+            [
+                "enter:outer:1:true",
+                "predicate:true",
+                "scope+",
+                "scope+",
+                "scope-",
+                "scope-",
+                "tick:7",
+                "tick:7",
+                "seed",
+                "reduce",
+                "reduce",
+                "exit:outer",
+            ]
+        );
+        assert_eq!(generated.syntax_errors, 0);
+        assert_eq!(generated.text, "nestitemmorebx+y+z<EOF>");
+        assert!(
+            !generated.events.iter().any(|event| event == "lose"),
+            "the action in the losing alternative must not run"
+        );
+    }
+
+    #[test]
+    fn recovery_before_and_after_an_action_matches() {
+        for input in ["c a b c", "a b a c"] {
+            let generated = run(input, TestParser::recover_generated);
+            let interpreted = run(input, TestParser::recover_interpreted);
+
+            assert_eq!(generated, interpreted, "input {input:?}");
+            assert_eq!(generated.events, ["middle"], "input {input:?}");
+            assert_eq!(generated.syntax_errors, 1, "input {input:?}");
+        }
+    }
+}
+"####;
+
+    assert_generated_project(
+        temp.path(),
+        &["action_timing_lexer.rs", "action_timing_parser.rs"],
+        test_source,
+    );
+}
+
+#[test]
+fn parser_action_hook_signatures_reject_normalized_conflicts() {
+    let temp = temporary_directory("parser-action-signature-conflict");
+    let grammar = temp.path().join("Conflict.g4");
+    let patterns = temp.path().join("patterns.toml");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar Conflict;\n\
+         start: {this.Mark(\"x\");} {this.Mark(1);} A EOF;\n\
+         A: 'a';\n",
+    )
+    .expect("grammar should be writable");
+    fs::write(
+        &patterns,
+        "version = 1\n\
+         [[helper]]\n\
+         kind = \"parser-action\"\n\
+         name = \"Mark\"\n\
+         arguments = \"string\"\n\
+         returns = \"unit\"\n\
+         lower = \"hook\"\n\
+         [[helper]]\n\
+         kind = \"parser-action\"\n\
+         name = \"Mark\"\n\
+         arguments = \"integer\"\n\
+         returns = \"unit\"\n\
+         lower = \"hook\"\n",
+    )
+    .expect("semantic patterns should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--sem-patterns"),
+        patterns.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(!output.status.success(), "conflicting hooks should fail");
+    let stderr = utf8(&output.stderr);
+    assert!(
+        stderr.contains("typed semantic helper Mark has conflicting literal signatures"),
+        "{stderr}"
+    );
+    assert!(
+        !out.exists(),
+        "failed generation must not leave partial output"
     );
 }
 

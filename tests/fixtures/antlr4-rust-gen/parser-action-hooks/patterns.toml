@@ -1,0 +1,66 @@
+version = 1
+
+[[helper]]
+arguments = "string, integer, bool"
+kind      = "parser-action"
+lower     = "hook"
+name      = "Enter"
+receiver  = "recog"
+returns   = "unit"
+
+[[helper]]
+kind    = "parser-predicate"
+lower   = "hook"
+name    = "IsEntered"
+returns = "bool"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "EnterScope"
+returns = "unit"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "ExitScope"
+returns = "unit"
+
+[[helper]]
+arguments = "integer"
+kind      = "parser-action"
+lower     = "hook"
+name      = "Tick"
+returns   = "unit"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "Lose"
+returns = "unit"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "Seed"
+returns = "unit"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "Reduce"
+returns = "unit"
+
+[[helper]]
+arguments = "string"
+kind      = "parser-action"
+lower     = "hook"
+name      = "Exit"
+returns   = "unit"
+
+[[helper]]
+arguments = "string"
+kind      = "parser-action"
+lower     = "hook"
+name      = "Middle"
+returns   = "unit"

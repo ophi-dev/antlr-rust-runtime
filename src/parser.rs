@@ -75,6 +75,7 @@ type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 use crate::atn::AtnStateKind;
 use crate::atn::parser::{
     ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+    ParserAtnSimulatorError,
 };
 use crate::atn::parser_atn::{
     ParserAtn as Atn, ParserAtnState as AtnState, ParserIntervalSet, ParserTransition,
@@ -405,6 +406,7 @@ const FAST_RECOGNIZER_DEFERRED_FILL_AT: usize = 64;
 pub struct ParserAction {
     source_state: usize,
     rule_index: usize,
+    action_index: Option<usize>,
     start_index: usize,
     stop_index: Option<usize>,
     rule_init: bool,
@@ -422,6 +424,26 @@ impl ParserAction {
         Self {
             source_state,
             rule_index,
+            action_index: None,
+            start_index,
+            stop_index,
+            rule_init: false,
+            expected_state: None,
+        }
+    }
+
+    /// Creates an indexed action event for a recognized parser path.
+    pub const fn new_indexed(
+        source_state: usize,
+        rule_index: usize,
+        action_index: usize,
+        start_index: usize,
+        stop_index: Option<usize>,
+    ) -> Self {
+        Self {
+            source_state,
+            rule_index,
+            action_index: Some(action_index),
             start_index,
             stop_index,
             rule_init: false,
@@ -438,6 +460,7 @@ impl ParserAction {
         Self {
             source_state: usize::MAX,
             rule_index,
+            action_index: None,
             start_index,
             stop_index: None,
             rule_init: true,
@@ -453,6 +476,11 @@ impl ParserAction {
     /// Grammar rule index recorded by the serialized ATN action transition.
     pub const fn rule_index(&self) -> usize {
         self.rule_index
+    }
+
+    /// Stable source-order action index in the grammar.
+    pub const fn action_index(&self) -> Option<usize> {
+        self.action_index
     }
 
     /// Token-stream index where the active rule began.
@@ -533,9 +561,8 @@ where
         self.rule_name.as_deref()
     }
 
-    /// Predicate/action index inside the owning rule. Parser actions keyed only
-    /// by ATN source state report `usize::MAX` here; use [`Self::action`] for
-    /// the stable action event.
+    /// Predicate/action index inside the owning rule. Legacy parser actions
+    /// without source-index metadata report `usize::MAX`.
     #[must_use]
     pub const fn coordinate_index(&self) -> usize {
         self.coordinate_index
@@ -1192,6 +1219,12 @@ pub struct ParserSemantics {
 pub struct ParserRuntimeOptions<'a> {
     /// Rule indexes whose `@init` actions should be replayed.
     pub init_action_rules: &'a [usize],
+    /// Stable parser-action indexes keyed by authored ATN source state.
+    ///
+    /// A non-empty table selects committed interpreted execution: mapped
+    /// actions run at their grammar position instead of being replayed after
+    /// the complete rule has been recognized.
+    pub action_indices: &'a [(usize, usize)],
     /// Whether generated parse-tree contexts should retain alternative numbers.
     pub track_alt_numbers: bool,
     /// Whether generated typed contexts should retain private dispatch alternatives.
@@ -4201,6 +4234,7 @@ fn atn_has_predicate_transitions(atn: &Atn) -> bool {
 /// same runtime context.
 fn can_use_fast_predicate_recognizer(atn: &Atn, options: &ParserRuntimeOptions<'_>) -> bool {
     options.init_action_rules.is_empty()
+        && options.action_indices.is_empty()
         && !options.track_alt_numbers
         && options
             .predicates
@@ -4271,6 +4305,7 @@ struct EpsilonActionStep {
     source_state: usize,
     target: usize,
     action_rule_index: Option<usize>,
+    action_index: Option<usize>,
     left_recursive_boundary: Option<usize>,
     decision: Option<usize>,
     decision_start_index: Option<usize>,
@@ -4814,6 +4849,27 @@ where
     simulator: &'sim mut ParserAtnSimulator<'atn>,
     decision_by_state: Vec<Option<usize>>,
     steps: usize,
+}
+
+struct CommittedAtnParser<'atn, 'sim, 'options, S, H = NoSemanticHooks>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    parser: &'sim mut BaseParser<S, H>,
+    atn: &'atn Atn,
+    simulator: ParserAtnSimulator<'atn>,
+    options: ParserRuntimeOptions<'options>,
+    decision_by_state: Vec<Option<usize>>,
+    steps: usize,
+}
+
+struct CommittedDecisionContext<'a> {
+    rule_stop_state: usize,
+    precedence: i32,
+    local_int_arg: Option<(usize, i64)>,
+    context: &'a mut ParserRuleContext,
+    entered_loops: &'a mut BTreeSet<usize>,
 }
 
 /// Outcome of a generated token / set / not-set match that may recover.
@@ -7129,14 +7185,53 @@ where
         ParserAction::new(source_state, rule_index, start_index, stop_index)
     }
 
+    /// Builds an indexed generated parser-action event at the current input position.
+    pub fn parser_action_at_current_indexed(
+        &mut self,
+        source_state: usize,
+        rule_index: usize,
+        action_index: usize,
+        start_index: usize,
+        consumed_eof: bool,
+    ) -> ParserAction {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        ParserAction::new_indexed(
+            source_state,
+            rule_index,
+            action_index,
+            start_index,
+            stop_index,
+        )
+    }
+
     /// Offers a committed parser action event to the user semantic hook.
     ///
     /// Generated parsers call this for action source states that were present
     /// in the ATN but not translated into a built-in Rust action template.
     pub fn parser_action_hook(&mut self, action: ParserAction, tree: ParseTree) -> bool {
+        self.parser_action_hook_inner(action, None, Some(tree))
+    }
+
+    /// Offers an action to semantic hooks at its committed grammar position.
+    ///
+    /// The current rule context contains children completed before the action;
+    /// the full rule tree is not available until the rule returns.
+    pub fn parser_action_hook_with_context(
+        &mut self,
+        action: ParserAction,
+        context: &ParserRuleContext,
+    ) -> bool {
+        self.parser_action_hook_inner(action, Some(context), None)
+    }
+
+    fn parser_action_hook_inner(
+        &mut self,
+        action: ParserAction,
+        context: Option<&ParserRuleContext>,
+        tree: Option<ParseTree>,
+    ) -> bool {
         let rule_index = action.rule_index();
         let rule_name = self.rule_names().get(rule_index).cloned();
-        let context = None;
         let input = &mut self.input;
         let semantic_hooks = &mut self.semantic_hooks;
         let member_values = &self.int_members;
@@ -7144,10 +7239,10 @@ where
             input,
             tree_storage: &self.tree,
             rule_index,
-            coordinate_index: usize::MAX,
+            coordinate_index: action.action_index().unwrap_or(usize::MAX),
             rule_name,
             context,
-            tree: Some(tree),
+            tree,
             local_int_arg: None,
             member_values,
             action: Some(action),
@@ -7807,6 +7902,43 @@ where
         self.parse_atn_rule_with_runtime_options_and_precedence(atn, rule_index, 0, options)
     }
 
+    fn parse_atn_rule_committed_with_runtime_options(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
+        options: ParserRuntimeOptions<'_>,
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.unknown_predicate_policy = options.unknown_predicate_policy;
+        let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
+        self.clear_prediction_diagnostics();
+        self.reset_per_parse_caches();
+        self.reset_recognition_arena();
+
+        let mut decision_by_state = vec![None; atn.states().len()];
+        for (decision, state_number) in atn.decision_to_state().iter().enumerate() {
+            if let Some(slot) = decision_by_state.get_mut(state_number) {
+                *slot = Some(decision);
+            }
+        }
+        let result = CommittedAtnParser {
+            parser: self,
+            atn,
+            simulator: ParserAtnSimulator::new(atn),
+            options,
+            decision_by_state,
+            steps: 0,
+        }
+        .parse_rule(rule_index, precedence, None);
+
+        self.report_token_source_errors();
+        if let Some(error) = self.unknown_semantic_error() {
+            return Err(error);
+        }
+        self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
+        result.map(|tree| (tree, Vec::new()))
+    }
+
     /// Parses a generated rule with action replay, parser predicate support,
     /// and an initial left-recursive precedence threshold.
     pub fn parse_atn_rule_with_runtime_options_and_precedence(
@@ -7816,6 +7948,11 @@ where
         precedence: i32,
         options: ParserRuntimeOptions<'_>,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        if !options.action_indices.is_empty() {
+            return self.parse_atn_rule_committed_with_runtime_options(
+                atn, rule_index, precedence, options,
+            );
+        }
         let report_unrecovered_error = self.is_top_level_entry();
         let ParserRuntimeOptions {
             init_action_rules,
@@ -7827,6 +7964,7 @@ where
             member_actions,
             return_actions,
             unknown_predicate_policy,
+            ..
         } = options;
         let capture_alt_numbers = track_alt_numbers || track_context_alt_numbers;
         if init_action_rules.is_empty()
@@ -10288,9 +10426,13 @@ where
             let transition_data = transition.data();
             match &transition_data {
                 Transition::Epsilon { target } | Transition::Action { target, .. } => {
-                    let action_rule_index = match &transition_data {
-                        Transition::Action { rule_index, .. } => Some(*rule_index),
-                        _ => None,
+                    let (action_rule_index, action_index) = match &transition_data {
+                        Transition::Action {
+                            rule_index,
+                            action_index,
+                            ..
+                        } => (Some(*rule_index), *action_index),
+                        _ => (None, None),
                     };
                     outcomes.extend(self.recognize_epsilon_or_action_step(
                         atn,
@@ -10299,6 +10441,7 @@ where
                             source_state: state_number,
                             target: *target,
                             action_rule_index,
+                            action_index,
                             left_recursive_boundary: left_recursive_boundary(atn, state, *target),
                             decision,
                             decision_start_index: next_decision_start_index,
@@ -10759,11 +10902,25 @@ where
             expected,
         } = scratch;
         let action = step.action_rule_index.map(|rule_index| {
-            ParserAction::new(
-                step.source_state,
-                rule_index,
-                request.rule_start_index,
-                self.rule_stop_token_index(request.index, request.consumed_eof),
+            let stop_index = self.rule_stop_token_index(request.index, request.consumed_eof);
+            step.action_index.map_or_else(
+                || {
+                    ParserAction::new(
+                        step.source_state,
+                        rule_index,
+                        request.rule_start_index,
+                        stop_index,
+                    )
+                },
+                |action_index| {
+                    ParserAction::new_indexed(
+                        step.source_state,
+                        rule_index,
+                        action_index,
+                        request.rule_start_index,
+                        stop_index,
+                    )
+                },
             )
         });
         let next_member_values = if action.is_some() {
@@ -12302,6 +12459,690 @@ where
             .build_parse_trees
             .then(|| self.parser.terminal_tree(token));
         Ok((matched_eof, child))
+    }
+}
+
+impl<S, H> CommittedAtnParser<'_, '_, '_, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    fn parse_rule(
+        &mut self,
+        rule_index: usize,
+        precedence: i32,
+        inherited_local_int_arg: Option<(usize, i64)>,
+    ) -> Result<ParseTree, AntlrError> {
+        let start_state = self
+            .atn
+            .rule_to_start_state()
+            .get(rule_index)
+            .ok_or_else(|| {
+                AntlrError::Unsupported(format!("rule {rule_index} has no start state"))
+            })?;
+        let stop_state = self
+            .atn
+            .rule_to_stop_state()
+            .get(rule_index)
+            .filter(|state| *state != usize::MAX)
+            .ok_or_else(|| {
+                AntlrError::Unsupported(format!("rule {rule_index} has no stop state"))
+            })?;
+        let left_recursive = self
+            .atn
+            .state(start_state)
+            .is_some_and(AtnState::left_recursive_rule);
+        let mut context = if left_recursive {
+            self.parser.enter_recursion_rule(
+                invoking_state_number(start_state),
+                rule_index,
+                precedence,
+            )
+        } else {
+            self.parser
+                .enter_rule(invoking_state_number(start_state), rule_index)
+        };
+        let rule_start_index = self.parser.current_visible_index();
+        let local_int_arg =
+            usize::try_from(context.invoking_state())
+                .ok()
+                .and_then(|source_state| {
+                    rule_local_int_arg(
+                        self.options.rule_args,
+                        source_state,
+                        rule_index,
+                        inherited_local_int_arg,
+                    )
+                });
+        let mut consumed_eof = false;
+        let result = self.walk_rule(
+            rule_index,
+            start_state,
+            stop_state,
+            precedence,
+            rule_start_index,
+            local_int_arg,
+            left_recursive,
+            &mut context,
+            &mut consumed_eof,
+        );
+
+        match result {
+            Ok(()) => Ok(if left_recursive {
+                self.parser.finish_recursion_rule(context, consumed_eof)
+            } else {
+                self.parser.finish_rule(context, consumed_eof)
+            }),
+            Err(error) if self.parser.bail_on_error() => {
+                if left_recursive {
+                    self.parser.unroll_recursion_context();
+                } else {
+                    self.parser.exit_rule();
+                }
+                Err(error)
+            }
+            Err(error) => {
+                self.parser
+                    .recover_generated_rule(&mut context, self.atn, error);
+                Ok(if left_recursive {
+                    self.parser.finish_recursion_rule(context, consumed_eof)
+                } else {
+                    self.parser.finish_rule(context, consumed_eof)
+                })
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn walk_rule(
+        &mut self,
+        rule_index: usize,
+        mut state_number: usize,
+        stop_state: usize,
+        precedence: i32,
+        rule_start_index: usize,
+        local_int_arg: Option<(usize, i64)>,
+        left_recursive: bool,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let mut entered_loops = BTreeSet::new();
+        while state_number != stop_state {
+            self.steps += 1;
+            if self.steps > ADAPTIVE_DIRECT_STEP_LIMIT {
+                return Err(AntlrError::Unsupported(
+                    "committed parser ATN step limit exceeded".to_owned(),
+                ));
+            }
+            let state = self.atn.state(state_number).ok_or_else(|| {
+                AntlrError::Unsupported(format!("missing parser ATN state {state_number}"))
+            })?;
+            if state.is_rule_stop() {
+                return Err(AntlrError::Unsupported(format!(
+                    "rule {rule_index} reached unexpected stop state {state_number}"
+                )));
+            }
+            let transition_index = {
+                let mut decision_context = CommittedDecisionContext {
+                    rule_stop_state: stop_state,
+                    precedence,
+                    local_int_arg,
+                    context,
+                    entered_loops: &mut entered_loops,
+                };
+                self.transition_index(state, &mut decision_context)?
+            };
+            let transition = state.transitions().get(transition_index).ok_or_else(|| {
+                AntlrError::Unsupported(format!(
+                    "missing transition {transition_index} from parser ATN state {state_number}"
+                ))
+            })?;
+
+            let next_alt = next_alt_number(
+                state,
+                state.transitions().len(),
+                transition_index,
+                context.alt_number(),
+                self.options.track_alt_numbers,
+            );
+            if self.options.track_alt_numbers && context.alt_number() == 0 && next_alt != 0 {
+                context.set_alt_number(next_alt);
+            }
+            let next_context_alt = next_alt_number(
+                state,
+                state.transitions().len(),
+                transition_index,
+                context.context_alt_number(),
+                self.options.track_context_alt_numbers,
+            );
+            if self.options.track_context_alt_numbers
+                && context.context_alt_number() == 0
+                && next_context_alt != 0
+            {
+                context.set_context_alt_number(next_context_alt);
+            }
+
+            if left_recursive
+                && left_recursive_boundary(self.atn, state, transition.target()).is_some()
+            {
+                self.parser.push_new_recursion_context_with_previous(
+                    invoking_state_number(
+                        self.atn
+                            .rule_to_start_state()
+                            .get(rule_index)
+                            .unwrap_or(state_number),
+                    ),
+                    rule_index,
+                    context,
+                );
+            }
+            state_number = self.apply_transition(
+                state_number,
+                transition,
+                precedence,
+                rule_start_index,
+                local_int_arg,
+                context,
+                consumed_eof,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn transition_index(
+        &mut self,
+        state: AtnState<'_>,
+        decision_context: &mut CommittedDecisionContext<'_>,
+    ) -> Result<usize, AntlrError> {
+        let transition_count = state.transitions().len();
+        if transition_count == 1 {
+            return Ok(0);
+        }
+        let Some(decision) = self
+            .decision_by_state
+            .get(state.state_number())
+            .copied()
+            .flatten()
+        else {
+            return Err(AntlrError::Unsupported(format!(
+                "parser ATN state {} has {transition_count} transitions but is not a decision",
+                state.state_number()
+            )));
+        };
+
+        let has_visible_predicate = state.transitions().iter().any(|transition| {
+            self.transition_has_visible_predicate(
+                state.state_number(),
+                transition,
+                &mut BTreeSet::new(),
+            )
+        });
+        if !state.precedence_rule_decision() && !has_visible_predicate {
+            let loop_back = match state.kind() {
+                AtnStateKind::PlusLoopBack | AtnStateKind::StarLoopBack => true,
+                AtnStateKind::StarLoopEntry => decision_context
+                    .entered_loops
+                    .contains(&state.state_number()),
+                _ => false,
+            };
+            let children = self.parser.sync_decision(
+                self.atn,
+                state.state_number(),
+                !decision_context.context.has_matched_child(),
+                loop_back,
+            )?;
+            for child in children {
+                self.parser.add_parse_child(decision_context.context, child);
+            }
+        }
+
+        let decision_start = self.parser.input.index();
+        let prediction_precedence = if state.precedence_rule_decision() {
+            usize::try_from(decision_context.precedence.max(0)).unwrap_or_default()
+        } else {
+            0
+        };
+        let prediction_context = {
+            let return_states = self
+                .parser
+                .prediction_context_return_states(self.atn)
+                .collect::<Vec<_>>();
+            self.simulator
+                .intern_prediction_context(self.parser.rule_context_version(), return_states)
+        };
+        self.simulator.set_exact_ambig_detection(
+            self.parser.prediction_mode() == PredictionMode::LlExactAmbigDetection,
+        );
+        let prediction = match self.simulator.adaptive_predict_stream_info_with_context(
+            decision,
+            prediction_precedence,
+            &mut self.parser.input,
+            prediction_context,
+        ) {
+            Ok(prediction) => prediction,
+            Err(ParserAtnSimulatorError::NoViableAlt { index, .. })
+                if state.precedence_rule_decision() =>
+            {
+                let enter_alt = state.transitions().iter().position(|transition| {
+                    self.atn
+                        .state(transition.target())
+                        .is_some_and(|target| target.kind() != AtnStateKind::LoopEnd)
+                });
+                let exit_alt = state.transitions().iter().position(|transition| {
+                    self.atn
+                        .state(transition.target())
+                        .is_some_and(|target| target.kind() == AtnStateKind::LoopEnd)
+                });
+                let selected = if self.parser.left_recursive_loop_enter_matches(
+                    self.atn,
+                    state.state_number(),
+                    decision_context.precedence,
+                ) {
+                    enter_alt
+                } else {
+                    exit_alt
+                };
+                let Some(selected) = selected else {
+                    return Err(self
+                        .parser
+                        .no_viable_alternative_error_at(decision_start, index));
+                };
+                ParserAtnPrediction {
+                    alt: selected + 1,
+                    requires_full_context: true,
+                    has_semantic_context: true,
+                    diagnostic: None,
+                }
+            }
+            Err(ParserAtnSimulatorError::NoViableAlt { index, .. }) => {
+                return Err(self
+                    .parser
+                    .no_viable_alternative_error_at(decision_start, index));
+            }
+            Err(_) => {
+                return Err(self.parser.no_viable_alternative_error(decision_start));
+            }
+        };
+        let mut selected = prediction
+            .alt
+            .checked_sub(1)
+            .filter(|index| *index < transition_count)
+            .ok_or_else(|| self.parser.no_viable_alternative_error(decision_start))?;
+
+        if prediction.has_semantic_context {
+            let lookahead = self.parser.la(1);
+            let looksets = self.parser.cached_decision_lookahead(
+                self.atn,
+                state,
+                decision_context.rule_stop_state,
+            );
+            let selected_matches = self.semantic_candidate_matches(
+                state,
+                selected,
+                lookahead,
+                &looksets,
+                decision_context,
+            );
+            if !selected_matches {
+                selected = (0..transition_count)
+                    .find(|candidate| {
+                        self.semantic_candidate_matches(
+                            state,
+                            *candidate,
+                            lookahead,
+                            &looksets,
+                            decision_context,
+                        )
+                    })
+                    .ok_or_else(|| self.parser.no_viable_alternative_error(decision_start))?;
+            }
+        }
+        self.parser.record_generated_prediction_diagnostic(
+            self.atn,
+            state.state_number(),
+            &prediction,
+        );
+
+        if state.kind() == AtnStateKind::StarLoopEntry {
+            let enters = self
+                .atn
+                .state(
+                    state
+                        .transitions()
+                        .get(selected)
+                        .expect("selected transition is in bounds")
+                        .target(),
+                )
+                .is_some_and(|target| target.kind() != AtnStateKind::LoopEnd);
+            if enters {
+                decision_context.entered_loops.insert(state.state_number());
+            } else {
+                decision_context.entered_loops.remove(&state.state_number());
+            }
+        }
+        Ok(selected)
+    }
+
+    fn semantic_candidate_matches(
+        &mut self,
+        state: AtnState<'_>,
+        transition_index: usize,
+        lookahead: i32,
+        looksets: &DecisionLookahead,
+        decision_context: &CommittedDecisionContext<'_>,
+    ) -> bool {
+        let Some(lookset) = looksets.transitions.get(transition_index) else {
+            return false;
+        };
+        if !lookset.nullable && !lookset.symbols.contains(lookahead) {
+            return false;
+        }
+        let Some(transition) = state.transitions().get(transition_index) else {
+            return false;
+        };
+        self.leading_transition_matches(
+            state.state_number(),
+            transition,
+            decision_context.local_int_arg,
+            &*decision_context.context,
+            &mut BTreeSet::new(),
+        )
+    }
+
+    fn transition_has_visible_predicate(
+        &self,
+        source_state: usize,
+        transition: ParserTransition<'_>,
+        visited: &mut BTreeSet<usize>,
+    ) -> bool {
+        match transition.data() {
+            Transition::Predicate { .. } => true,
+            Transition::Epsilon { target } | Transition::Precedence { target, .. } => {
+                self.state_has_visible_predicate(target, visited)
+            }
+            Transition::Action { target, .. } => {
+                self.action_index(source_state).is_none()
+                    && self.state_has_visible_predicate(target, visited)
+            }
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. }
+            | Transition::Rule { .. } => false,
+        }
+    }
+
+    fn state_has_visible_predicate(
+        &self,
+        state_number: usize,
+        visited: &mut BTreeSet<usize>,
+    ) -> bool {
+        if !visited.insert(state_number) {
+            return false;
+        }
+        let result = self
+            .atn
+            .state(state_number)
+            .filter(|state| !state.is_rule_stop() && state.transitions().len() == 1)
+            .and_then(|state| {
+                state
+                    .transitions()
+                    .first()
+                    .map(|transition| (state, transition))
+            })
+            .is_some_and(|(state, transition)| {
+                self.transition_has_visible_predicate(state.state_number(), transition, visited)
+            });
+        visited.remove(&state_number);
+        result
+    }
+
+    fn leading_transition_matches(
+        &mut self,
+        source_state: usize,
+        transition: ParserTransition<'_>,
+        local_int_arg: Option<(usize, i64)>,
+        context: &ParserRuleContext,
+        visited: &mut BTreeSet<usize>,
+    ) -> bool {
+        let target = match transition.data() {
+            Transition::Predicate {
+                target,
+                rule_index,
+                pred_index,
+                ..
+            } => {
+                let member_values = self.parser.int_members.clone();
+                if !self.parser.parser_predicate_matches(PredicateEval {
+                    index: self.parser.input.index(),
+                    rule_index,
+                    pred_index,
+                    predicates: self.options.predicates,
+                    semantics: self.options.semantics,
+                    context: Some(context),
+                    local_int_arg,
+                    member_values: &member_values,
+                }) {
+                    return false;
+                }
+                target
+            }
+            Transition::Precedence { target, precedence } => {
+                if !self.parser.precpred(precedence) {
+                    return false;
+                }
+                target
+            }
+            Transition::Epsilon { target } => target,
+            Transition::Action { target, .. } => {
+                if self.action_index(source_state).is_some() {
+                    return true;
+                }
+                target
+            }
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. }
+            | Transition::Rule { .. } => return true,
+        };
+        if !visited.insert(target) {
+            return true;
+        }
+        let result = self
+            .atn
+            .state(target)
+            .filter(|state| !state.is_rule_stop() && state.transitions().len() == 1)
+            .and_then(|state| {
+                state
+                    .transitions()
+                    .first()
+                    .map(|transition| (state, transition))
+            })
+            .is_none_or(|(state, transition)| {
+                self.leading_transition_matches(
+                    state.state_number(),
+                    transition,
+                    local_int_arg,
+                    context,
+                    visited,
+                )
+            });
+        visited.remove(&target);
+        result
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_transition(
+        &mut self,
+        source_state: usize,
+        transition: ParserTransition<'_>,
+        precedence: i32,
+        rule_start_index: usize,
+        local_int_arg: Option<(usize, i64)>,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<usize, AntlrError> {
+        self.parser.set_state(invoking_state_number(source_state));
+        match transition.data() {
+            Transition::Epsilon { target } => Ok(target),
+            Transition::Atom { target, label } => {
+                let matched = self
+                    .parser
+                    .match_token_recovering(label, target, self.atn)?;
+                *consumed_eof |= matched.consumed_eof();
+                for child in matched.into_child_iter() {
+                    self.parser.add_parse_child(context, child);
+                }
+                Ok(target)
+            }
+            Transition::Range {
+                target,
+                start,
+                stop,
+            } => {
+                let matched =
+                    self.parser
+                        .match_set_recovering(&[(start, stop)], target, self.atn)?;
+                *consumed_eof |= matched.consumed_eof();
+                for child in matched.into_child_iter() {
+                    self.parser.add_parse_child(context, child);
+                }
+                Ok(target)
+            }
+            Transition::Set { target, set } => {
+                let matched = self
+                    .parser
+                    .match_token_set_recovering(set, target, self.atn)?;
+                *consumed_eof |= matched.consumed_eof();
+                for child in matched.into_child_iter() {
+                    self.parser.add_parse_child(context, child);
+                }
+                Ok(target)
+            }
+            Transition::NotSet { target, set } => {
+                let matched = self.parser.match_not_token_set_recovering(
+                    set,
+                    1,
+                    self.atn.max_token_type(),
+                    target,
+                    self.atn,
+                )?;
+                *consumed_eof |= matched.consumed_eof();
+                for child in matched.into_child_iter() {
+                    self.parser.add_parse_child(context, child);
+                }
+                Ok(target)
+            }
+            Transition::Wildcard { target } => {
+                let matched = self.parser.match_not_set_recovering(
+                    &[],
+                    1,
+                    self.atn.max_token_type(),
+                    target,
+                    self.atn,
+                )?;
+                *consumed_eof |= matched.consumed_eof();
+                for child in matched.into_child_iter() {
+                    self.parser.add_parse_child(context, child);
+                }
+                Ok(target)
+            }
+            Transition::Rule {
+                rule_index,
+                follow_state,
+                precedence: rule_precedence,
+                ..
+            } => {
+                let marker = self
+                    .parser
+                    .push_invoking_state(invoking_state_number(source_state));
+                let child = self.parse_rule(rule_index, rule_precedence, local_int_arg);
+                self.parser.discard_invoking_state(marker);
+                let child = child?;
+                self.parser.add_parse_child(context, child);
+                Ok(follow_state)
+            }
+            Transition::Predicate {
+                target,
+                rule_index,
+                pred_index,
+                ..
+            } => {
+                let member_values = self.parser.int_members.clone();
+                if self.parser.parser_predicate_matches(PredicateEval {
+                    index: self.parser.input.index(),
+                    rule_index,
+                    pred_index,
+                    predicates: self.options.predicates,
+                    semantics: self.options.semantics,
+                    context: Some(context),
+                    local_int_arg,
+                    member_values: &member_values,
+                }) {
+                    return Ok(target);
+                }
+                if let Some(message) = self
+                    .options
+                    .semantics
+                    .and_then(|semantics| {
+                        self.parser.parser_semantic_ir_predicate_failure_message(
+                            rule_index, pred_index, semantics,
+                        )
+                    })
+                    .or_else(|| {
+                        self.parser.parser_predicate_failure_message(
+                            rule_index,
+                            pred_index,
+                            self.options.predicates,
+                        )
+                    })
+                {
+                    return Err(self
+                        .parser
+                        .failed_predicate_option_error(rule_index, message));
+                }
+                Err(self.parser.failed_predicate_error("semantic predicate"))
+            }
+            Transition::Action {
+                target, rule_index, ..
+            } => {
+                if let Some(action_index) = self.action_index(source_state) {
+                    let action = self.parser.parser_action_at_current_indexed(
+                        source_state,
+                        rule_index,
+                        action_index,
+                        rule_start_index,
+                        *consumed_eof,
+                    );
+                    let _ = self.parser.parser_action_hook_with_context(action, context);
+                }
+                Ok(target)
+            }
+            Transition::Precedence {
+                target,
+                precedence: transition_precedence,
+            } => {
+                if self.parser.precpred(transition_precedence)
+                    && transition_precedence >= precedence
+                {
+                    Ok(target)
+                } else {
+                    Err(self
+                        .parser
+                        .failed_predicate_error(format!("precpred(_ctx, {transition_precedence})")))
+                }
+            }
+        }
+    }
+
+    fn action_index(&self, source_state: usize) -> Option<usize> {
+        self.options
+            .action_indices
+            .iter()
+            .find_map(|(state, index)| (*state == source_state).then_some(*index))
     }
 }
 
@@ -14983,6 +15824,125 @@ mod tests {
         ]))
         .deserialize_parser()
         .expect("artificial no-op action ATN should deserialize")
+    }
+
+    fn committed_action_then_predicate_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::Basic),
+            (2, AtnStateKind::Basic),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![4])
+            .expect("rule stop states");
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Action {
+                target: 1,
+                rule_index: 0,
+                action_index: None,
+                context_dependent: false,
+            },
+        )
+        .expect("action transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Predicate {
+                target: 2,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            },
+        )
+        .expect("predicate transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 3,
+                label: 1,
+            },
+        )
+        .expect("token transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("EOF transition");
+        finish_atn(atn)
+    }
+
+    fn losing_alternative_action_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::BlockStart),
+            (2, AtnStateKind::Basic),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::BlockEnd),
+            (5, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![5])
+            .expect("rule stop states");
+        atn.set_end_state(1, 4).expect("block end state");
+        atn.add_decision_state(1).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("entry transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("first alternative");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 2,
+            },
+        )
+        .expect("second alternative");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Action {
+                target: 3,
+                rule_index: 0,
+                action_index: None,
+                context_dependent: false,
+            },
+        )
+        .expect("losing action");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 1,
+            },
+        )
+        .expect("first alternative token");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("EOF transition");
+        finish_atn(atn)
     }
 
     fn two_alt_decision_atn() -> Atn {
@@ -17749,6 +18709,41 @@ mod tests {
     }
 
     #[derive(Debug, Default)]
+    struct StatefulActionHooks {
+        entered: bool,
+        events: Vec<String>,
+    }
+
+    impl SemanticHooks for StatefulActionHooks {
+        fn sempred<S>(
+            &mut self,
+            _ctx: &mut ParserSemCtx<'_, S>,
+            _rule_index: usize,
+            _pred_index: usize,
+        ) -> Option<bool>
+        where
+            S: TokenSource,
+        {
+            self.events.push(format!("predicate:{}", self.entered));
+            Some(self.entered)
+        }
+
+        fn action<S>(&mut self, _ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+        where
+            S: TokenSource,
+        {
+            self.events.push(format!(
+                "action:{}",
+                action
+                    .action_index()
+                    .map_or_else(|| "legacy".to_owned(), |index| index.to_string())
+            ));
+            self.entered = true;
+            true
+        }
+    }
+
+    #[derive(Debug, Default)]
     struct RejectingPredicateHooks {
         predicates: Vec<(usize, usize, usize, Option<String>)>,
     }
@@ -17852,6 +18847,60 @@ mod tests {
             vec![(1, 0, 0, Some("y".to_owned()))]
         );
         assert_eq!(parser.fast_predicate_cache.get(&(1, 0, 0)), Some(&false));
+    }
+
+    #[test]
+    fn committed_action_runs_before_later_predicate() {
+        let atn = committed_action_then_predicate_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("x"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            StatefulActionHooks::default(),
+        );
+
+        let (tree, deferred_actions) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(0, 7)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the predicate should observe the preceding committed action");
+
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
+        assert!(deferred_actions.is_empty());
+        assert_eq!(parser.semantic_hooks.events, ["action:7", "predicate:true"]);
+    }
+
+    #[test]
+    fn committed_walker_does_not_run_action_in_losing_alternative() {
+        let atn = losing_alternative_action_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(2).with_text("y"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            StatefulActionHooks::default(),
+        );
+
+        let (tree, deferred_actions) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(2, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the token-led second alternative should be selected");
+
+        assert_eq!(parser.node(tree).text(), "y");
+        assert!(deferred_actions.is_empty());
+        assert!(parser.semantic_hooks.events.is_empty());
     }
 
     #[test]

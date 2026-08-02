@@ -1,0 +1,36 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "error",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "ActionTimingLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "ActionTimingParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "body", "rule_index": 4, "index": 0, "atn_state": null, "line": 21, "column": 6, "body": "this.IsEntered()", "disposition": "hooked", "template": "Hook"},
+        {"kind": "parser-action", "rule": "body", "rule_index": 4, "index": 0, "atn_state": 34, "line": 20, "column": 6, "body": "recog.Enter(\"outer\", 1, true);", "disposition": "hooked", "template": "Hook(enter)"},
+        {"kind": "parser-action", "rule": "body", "rule_index": 4, "index": 1, "atn_state": 37, "line": 23, "column": 7, "body": "Tick(7);", "disposition": "hooked", "template": "Hook(tick)"},
+        {"kind": "parser-action", "rule": "body", "rule_index": 4, "index": 2, "atn_state": 43, "line": 24, "column": 8, "body": "Lose();", "disposition": "hooked", "template": "Hook(lose)"},
+        {"kind": "parser-action", "rule": "body", "rule_index": 4, "index": 3, "atn_state": 49, "line": 26, "column": 6, "body": "self.Exit(\"outer\");", "disposition": "hooked", "template": "Hook(exit)"},
+        {"kind": "parser-action", "rule": "nested", "rule_index": 5, "index": 4, "atn_state": 51, "line": 30, "column": 6, "body": "EnterScope();", "disposition": "hooked", "template": "Hook(enter_scope)"},
+        {"kind": "parser-action", "rule": "nested", "rule_index": 5, "index": 5, "atn_state": 53, "line": 30, "column": 28, "body": "ExitScope();", "disposition": "hooked", "template": "Hook(exit_scope)"},
+        {"kind": "parser-action", "rule": "child", "rule_index": 6, "index": 6, "atn_state": 55, "line": 34, "column": 6, "body": "EnterScope();", "disposition": "hooked", "template": "Hook(enter_scope)"},
+        {"kind": "parser-action", "rule": "child", "rule_index": 6, "index": 7, "atn_state": 57, "line": 34, "column": 25, "body": "ExitScope();", "disposition": "hooked", "template": "Hook(exit_scope)"},
+        {"kind": "parser-action", "rule": "expression", "rule_index": 7, "index": 8, "atn_state": 59, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
+        {"kind": "parser-action", "rule": "expression", "rule_index": 7, "index": 9, "atn_state": 61, "line": 39, "column": 9, "body": "Seed();", "disposition": "hooked", "template": "Hook(seed)"},
+        {"kind": "parser-action", "rule": "expression", "rule_index": 7, "index": 10, "atn_state": 66, "line": 38, "column": 25, "body": "Reduce();", "disposition": "hooked", "template": "Hook(reduce)"},
+        {"kind": "parser-action", "rule": "recoveryBody", "rule_index": 8, "index": 11, "atn_state": 73, "line": 43, "column": 8, "body": "Middle(\"middle\");", "disposition": "hooked", "template": "Hook(middle)"}
+      ]
+    }
+  ]
+}
