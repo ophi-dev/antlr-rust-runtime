@@ -68,6 +68,15 @@ let placeholder_lifetime: Option<&'_ i32> = None;
 let placeholder_lifetime_ok =
 placeholder_lifetime.is_none();
 let raw_reference_ok = !raw_reference.is_null();
+let nested_raw_reference_ok =
+let exponent_underscore_ok = 1e_1 == 10.0;
+let one_sided_range_patterns_ok = match 2 {
+let attributed_binder_ok = true;
+let const_generic_default_ok = true;
+let safe_identifier_ok = safe(29) == 29;
+let unicode_escape_underscores_ok =
+let multiple_match_inner_attrs_ok = true;
+let non_bmp_identifier_ok = 𞤀 == 47;
 let underscore_assignment_ok = underscore_assignment_value == 1;
 let opaque_receiver_tokens_ok =
 let opaque_attribute_receiver_tokens_ok = true;
@@ -149,6 +158,9 @@ let associated_type_bound_ok =
 __antlr4rust_token_aliases_2::AliasCollisionParser_ASSOCIATED_BOUND
 let tuple_field_ok = pair.0.1 == 2;
 let pub_self_ok = self_visible::value() == 5;
+let pub_in_self_ok = self_restricted::value() == 6;
+let empty_turbofish_ok =
+let empty_where_ok = empty_where_helper() == 8;
 __antlr4rust_token_aliases_2::AliasCollisionParser_CONST_EXPRESSION as usize
 AliasCollisionParser_PATTERN_CFG: i32,
 let match_pattern_cfg_ok = Some({
@@ -189,6 +201,15 @@ let cfg_closure_ok =
 && opaque_attribute_receiver_tokens_ok
 && placeholder_lifetime_ok
 && raw_reference_ok
+&& nested_raw_reference_ok
+&& exponent_underscore_ok
+&& one_sided_range_patterns_ok
+&& attributed_binder_ok
+&& const_generic_default_ok
+&& safe_identifier_ok
+&& unicode_escape_underscores_ok
+&& multiple_match_inner_attrs_ok
+&& non_bmp_identifier_ok
 && raw_macro_name_ok
 && raw_string_macro_ok
 && unicode_macro_name_ok
@@ -199,6 +220,9 @@ let cfg_closure_ok =
 && associated_type_bound_ok
 && tuple_field_ok
 && pub_self_ok
+&& pub_in_self_ok
+&& empty_turbofish_ok
+&& empty_where_ok
 && match_pattern_cfg_ok
 && pattern_cfg_ok
 && parent_module_alias_ok

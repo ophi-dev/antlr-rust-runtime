@@ -12,7 +12,7 @@ it removes:
 
 - the Java `@lexer::members` token-tracking override;
 - the predicate that distinguishes a decimal point from ranges and field
-  access; and
+  access, with trailing-dot floats recognized at parser level instead; and
 - the predicate that checks the previously emitted token for chained tuple
   indexing.
 
@@ -33,7 +33,15 @@ async closures accept the stable form without `move`, and stable inline
 raw C string literals use their C-specific byte escapes and reject embedded NUL
 and carriage-return characters. Edition 2024 `unsafe extern` blocks and their
 `safe` function/static qualifiers are accepted. Stable raw lifetime names are
-accepted as lifetime tokens.
+accepted as lifetime tokens. Identifier fragments use the generator's scalar
+`XID_Start` and `XID_Continue` Unicode properties instead of the source
+grammar's Java-oriented UTF-16 pairs.
+
+Additional local corrections accept recursive raw references, underscore-led
+exponents, one-sided range patterns, attributed higher-ranked lifetimes, const
+generic expression defaults, `safe` as a contextual identifier, underscored
+Unicode escapes, multiple match-body inner attributes, `pub(in self)`, empty
+turbofish argument lists, and empty `where` clauses.
 
 The recognizer is used only to classify embedded Rust syntax needed by
 compatibility alias lowering. It does not aim to reproduce every rustc

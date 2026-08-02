@@ -69,7 +69,7 @@ expression: manifest
       "name": "AliasCollisionParser",
       "coordinates": [
         {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 89, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; let _co...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-predicate", "rule": "crossBody", "rule_index": 1, "index": 1, "atn_state": null, "line": 754, "column": 6, "body": "AliasCollisionParser_CROSS == CROSS", "disposition": "translated", "template": "Embedded"}
+        {"kind": "parser-predicate", "rule": "crossBody", "rule_index": 1, "index": 1, "atn_state": null, "line": 819, "column": 6, "body": "AliasCollisionParser_CROSS == CROSS", "disposition": "translated", "template": "Embedded"}
       ]
     }
   ]

@@ -1770,6 +1770,37 @@ mod tests {
     }
 
     #[test]
+    fn parses_reviewed_modern_rust_forms() {
+        for body in [
+            "let source = 1;\n\
+             let value = unsafe { *&raw const source };\n\
+             Alias == value;",
+            "let value = 1e_10;\nAlias == value;",
+            "let ranged = match 2 { ..=1 => false, 2.. => true };\nAlias == ranged;",
+            "fn callback(_: for<#[cfg(all())] 'a> fn(&'a i32)) {}\nAlias == 1;",
+            "struct Local<const N: usize = 3>;\nAlias == 1;",
+            "fn safe(safe: i32) -> i32 { safe }\nAlias == safe(1);",
+            r#"let text = "\u{00_E6}"; Alias == text;"#,
+            "let matched = match 1 {\n\
+                 #![allow(unused)]\n\
+                 #![allow(dead_code)]\n\
+                 1 => true,\n\
+                 _ => false,\n\
+             };\n\
+             Alias == matched;",
+            "let 𞤀 = 1;\nAlias == 𞤀;",
+            "mod nested { pub(in self) fn helper() {} }\nAlias == 1;",
+            "fn helper() {}\nhelper::<>();\nAlias == 1;",
+            "fn helper() where {}\nAlias == 1;",
+        ] {
+            let syntax = super::analyze(body)
+                .unwrap_or_else(|error| panic!("Rust syntax fixture {body:?} failed: {error}"));
+            assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+            assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+        }
+    }
+
+    #[test]
     fn nested_module_macros_do_not_shadow_outer_invocations() {
         let body = "mod macros {\n\
                         macro_rules! matches { ($($tokens:tt)*) => { true }; }\n\

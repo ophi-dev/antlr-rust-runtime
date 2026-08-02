@@ -150,6 +150,40 @@ start
         let raw_reference_value = 43;
         let raw_reference = & raw const raw_reference_value;
         let raw_reference_ok = !raw_reference.is_null();
+        let nested_raw_reference_ok =
+            unsafe { *&raw const raw_reference_value }
+                == raw_reference_value;
+        let exponent_underscore_ok = 1e_1 == 10.0;
+        let one_sided_range_patterns_ok = match 2 {
+            ..=1 => false,
+            2.. => true,
+        };
+        fn attributed_binder(
+            _: for<#[cfg(all())] 'a> fn(&'a i32),
+        ) {}
+        let attributed_binder_ok = true;
+        struct DefaultedConst<const N: usize = 3>;
+        let _: DefaultedConst = DefaultedConst;
+        let const_generic_default_ok = true;
+        fn safe(safe: i32) -> i32 {
+            safe
+        }
+        let safe_identifier_ok = safe(29) == 29;
+        let unicode_escape_underscores_ok =
+            "\u{00_E6}" == "\u{00E6}";
+        #[cfg(any())]
+        fn multiple_match_inner_attrs() {
+            let _ = match 1 {
+                #![allow(unused)]
+                #![allow(dead_code)]
+                1 => true,
+                _ => false,
+            };
+        }
+        let multiple_match_inner_attrs_ok = true;
+        #[allow(non_snake_case, uncommon_codepoints)]
+        let 𞤀 = 47;
+        let non_bmp_identifier_ok = 𞤀 == 47;
         let mut underscore_assignment_value = 0;
         _ = {
             underscore_assignment_value = 1;
@@ -491,6 +525,25 @@ start
             }
         }
         let pub_self_ok = self_visible::value() == 5;
+        mod self_restricted {
+            pub(in self) fn helper() -> i32 {
+                6
+            }
+
+            pub fn value() -> i32 {
+                helper()
+            }
+        }
+        let pub_in_self_ok = self_restricted::value() == 6;
+        fn empty_turbofish_helper() -> i32 {
+            7
+        }
+        let empty_turbofish_ok =
+            empty_turbofish_helper::<>() == 7;
+        fn empty_where_helper() -> i32 where {
+            8
+        }
+        let empty_where_ok = empty_where_helper() == 8;
         let impl_const_generic_ok = ConstGenericMember::<19>::value() == 19;
         let _: ConstExpression<{
             AliasCollisionParser_CONST_EXPRESSION as usize
@@ -620,6 +673,15 @@ start
             && raw_lifetime_ok
             && placeholder_lifetime_ok
             && raw_reference_ok
+            && nested_raw_reference_ok
+            && exponent_underscore_ok
+            && one_sided_range_patterns_ok
+            && attributed_binder_ok
+            && const_generic_default_ok
+            && safe_identifier_ok
+            && unicode_escape_underscores_ok
+            && multiple_match_inner_attrs_ok
+            && non_bmp_identifier_ok
             && raw_macro_ok
             && raw_macro_name_ok
             && raw_string_macro_ok
@@ -645,6 +707,9 @@ start
             && associated_type_bound_ok
             && tuple_field_ok
             && pub_self_ok
+            && pub_in_self_ok
+            && empty_turbofish_ok
+            && empty_where_ok
             && impl_const_generic_ok
             && braced_parameter_ok
             && match_pattern_cfg_ok
