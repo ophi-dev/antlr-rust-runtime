@@ -41,7 +41,9 @@ Additional local corrections accept recursive raw references, underscore-led
 exponents, one-sided range patterns, attributed higher-ranked lifetimes, const
 generic expression defaults, `safe` as a contextual identifier, underscored
 Unicode escapes, multiple match-body inner attributes, `pub(in self)`, empty
-turbofish argument lists, and empty `where` clauses.
+turbofish argument lists, empty `where` clauses, explicit `unsafe` foreign
+statics, attributed variadic parameters, attributed shorthand struct fields,
+and full patterns after numeric tuple-field names.
 
 The recognizer is used only to classify embedded Rust syntax needed by
 compatibility alias lowering. It does not aim to reproduce every rustc

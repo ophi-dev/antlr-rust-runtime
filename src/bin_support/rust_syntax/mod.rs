@@ -1877,6 +1877,38 @@ mod tests {
     }
 
     #[test]
+    fn parses_unsafe_foreign_statics_and_attributed_variadics() {
+        let body = "unsafe extern \"C\" {\n\
+                        unsafe static VALUE: i32;\n\
+                        fn call(#[allow(unused)] ...);\n\
+                    }\n\
+                    type Variadic = unsafe extern \"C\" fn(#[allow(unused)] ...);\n\
+                    Alias == 1";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
+    fn parses_attributed_shorthand_fields_and_numeric_subpatterns() {
+        let body = "struct Local { field: i32 }\n\
+                    let field = 1;\n\
+                    let _ = Local { #[allow(unused)] field };\n\
+                    struct Tuple(Option<i32>, i32);\n\
+                    let _ = match Tuple(Some(2), 3) {\n\
+                        Tuple { 0: Some(value), 1: _ } => value,\n\
+                        _ => 0,\n\
+                    };\n\
+                    Alias == 1";
+        let syntax = analyze(body);
+
+        assert!(syntax.is_struct_field_shorthand(occurrence(body, "field", 2)));
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
     fn records_lifetime_and_loop_label_identifiers() {
         let body = "fn borrow<'Alias>(value: &'Alias i32) -> &'Alias i32 {\n\
                         'Alias: loop { break 'Alias value; }\n\

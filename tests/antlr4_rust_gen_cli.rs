@@ -3631,6 +3631,8 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_MATCHES_BINDING",
                 "AliasCollisionParser_PRECISE_CAPTURE",
                 "AliasCollisionParser_FORMAT_CAPTURE",
+                "AliasCollisionParser_ESCAPED_FORMAT",
+                "AliasCollisionParser_CONTINUED_FORMAT",
                 "AliasCollisionParser_FORMAT_LOCAL",
                 "AliasCollisionParser_QUALIFIED_MACRO",
                 "AliasCollisionParser_CONST_CHAIN",
@@ -3658,6 +3660,8 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_CFG_PARAMETER",
                 "AliasCollisionParser_RAW_STRING_MACRO",
                 "AliasCollisionParser_PATTERN_CFG",
+                "AliasCollisionParser_FOR_PATTERN_CFG",
+                "AliasCollisionParser_MATCHES_PATTERN_CFG",
                 "AliasCollisionParser_ASSOCIATED_BOUND",
                 "AliasCollisionParser_PARENT_MODULE",
                 "AliasCollisionParser_CFG_ITEM",
@@ -3691,6 +3695,12 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "nonleading_let_chain_ok",
                 "associated_type_bound_ok",
                 "match_pattern_cfg_ok",
+                "for_pattern_cfg_ok",
+                "matches_pattern_cfg_ok",
+                "escaped_format_capture_ok",
+                "continued_format_capture_ok",
+                "reviewed_foreign_syntax_ok",
+                "numeric_tuple_pattern_ok",
                 "pattern_cfg_ok",
                 "parent_module_alias_ok",
                 "tuple_field_ok",
@@ -3732,6 +3742,10 @@ fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
         "pub(in self) fn helper()",
         "empty_turbofish_helper::<>()",
         "fn empty_where_helper() -> i32 where {",
+        "unsafe static UNSAFE_FOREIGN: i32",
+        "fn attributed_variadic(#[allow(unused)] ...)",
+        "unsafe extern \"C\" fn(#[allow(unused)] ...)",
+        "TuplePattern { 0: Some(value), 1: _ }",
         "λ!(AliasCollisionParser_UNICODE_MACRO_NAME)",
         "& raw const raw_reference_value",
         "*&raw const raw_reference_value",
@@ -3757,6 +3771,21 @@ fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
             "pattern bindings and their reads must remain ordinary Rust bindings: {expected}"
         );
     }
+    let attributed_shorthand = source
+        .split_once("let attributed_shorthand = AliasFields {")
+        .expect("attributed shorthand initializer")
+        .1
+        .split_once("};")
+        .expect("end of attributed shorthand initializer")
+        .0;
+    assert!(
+        attributed_shorthand.contains("#[allow(unused)]")
+            && attributed_shorthand.contains(
+                "AliasCollisionParser_FIELD: \
+                 __antlr4rust_token_aliases_2::AliasCollisionParser_FIELD"
+            ),
+        "attributed shorthand fields must retain attributes while expanding alias values"
+    );
 }
 
 #[track_caller]

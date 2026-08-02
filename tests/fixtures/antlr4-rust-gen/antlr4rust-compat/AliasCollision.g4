@@ -112,6 +112,13 @@ start
         let standard_format_capture_ok =
             std::format!("{AliasCollisionParser_STANDARD_FORMAT}")
                 == Self::STANDARD_FORMAT.to_string();
+        let escaped_format_capture_ok =
+            format!("\u{7b}AliasCollisionParser_ESCAPED_FORMAT}")
+                == Self::ESCAPED_FORMAT.to_string();
+        let continued_format_capture_ok =
+            format!("\x7b\
+                AliasCollisionParser_CONTINUED_FORMAT}")
+                == Self::CONTINUED_FORMAT.to_string();
         let cfg_disabled_format_ok = {
             #[cfg(any())]
             use missing::format;
@@ -132,9 +139,14 @@ start
         unsafe extern "C" {
             safe fn safe_foreign();
             safe static SAFE_FOREIGN: i32;
+            unsafe static UNSAFE_FOREIGN: i32;
+            fn attributed_variadic(#[allow(unused)] ...);
         }
+        type AttributedVariadic =
+            unsafe extern "C" fn(#[allow(unused)] ...);
         let safe_foreign_alias_ok =
             AliasCollisionParser_SAFE_FOREIGN == Self::SAFE_FOREIGN;
+        let reviewed_foreign_syntax_ok = true;
         fn raw_lifetime<'r#type>(
             value: &'r#type i32,
         ) -> &'r#type i32 {
@@ -575,10 +587,37 @@ start
         let shorthand = AliasFields {
             AliasCollisionParser_FIELD,
         };
+        let attributed_shorthand = AliasFields {
+            #[allow(unused)]
+            AliasCollisionParser_FIELD,
+        };
+        struct TuplePattern(Option<i32>, i32);
+        let numeric_tuple_pattern_ok =
+            match TuplePattern(Some(53), 54) {
+                TuplePattern { 0: Some(value), 1: _ } => value == 53,
+                _ => false,
+            };
         struct CfgPattern {
             #[cfg(any())]
             AliasCollisionParser_PATTERN_CFG: i32,
         }
+        let mut for_pattern_cfg_ok = false;
+        for CfgPattern {
+            #[cfg(any())]
+            AliasCollisionParser_FOR_PATTERN_CFG,
+        } in [CfgPattern {}] {
+            for_pattern_cfg_ok =
+                AliasCollisionParser_FOR_PATTERN_CFG
+                    == Self::FOR_PATTERN_CFG;
+        }
+        let matches_pattern_cfg_ok = matches!(
+            CfgPattern {},
+            CfgPattern {
+                #[cfg(any())]
+                AliasCollisionParser_MATCHES_PATTERN_CFG,
+            } if AliasCollisionParser_MATCHES_PATTERN_CFG
+                == Self::MATCHES_PATTERN_CFG
+        );
         let cfg_pattern = CfgPattern {};
         let match_pattern_cfg_ok = Some(match cfg_pattern {
             CfgPattern {
@@ -662,6 +701,8 @@ start
             && associated_const_alias_ok
             && format_capture_ok
             && standard_format_capture_ok
+            && escaped_format_capture_ok
+            && continued_format_capture_ok
             && cfg_disabled_format_ok
             && format_local_ok
             && c_strings_ok
@@ -670,6 +711,7 @@ start
             && opaque_attribute_receiver_tokens_ok
             && unsafe_extern_alias_ok
             && safe_foreign_alias_ok
+            && reviewed_foreign_syntax_ok
             && raw_lifetime_ok
             && placeholder_lifetime_ok
             && raw_reference_ok
@@ -712,6 +754,9 @@ start
             && empty_where_ok
             && impl_const_generic_ok
             && braced_parameter_ok
+            && numeric_tuple_pattern_ok
+            && for_pattern_cfg_ok
+            && matches_pattern_cfg_ok
             && match_pattern_cfg_ok
             && pattern_cfg_ok
             && parent_module_alias_ok
@@ -728,6 +773,7 @@ start
             && self.field_type.len() == Self::FIELD_TYPE as usize
             && explicit.AliasCollisionParser_FIELD == FIELD
             && shorthand.AliasCollisionParser_FIELD == FIELD
+            && attributed_shorthand.AliasCollisionParser_FIELD == FIELD
             && apply(11, |value| value) == 11
             && AliasCollisionParser_DIRECT == DIRECT
             && self.member_alias_matches()
@@ -889,5 +935,9 @@ CFG_ITEM: 'cfg_item';
 CFG_CONST_GENERIC: 'cfg_const_generic';
 CFG_CLOSURE: 'cfg_closure';
 UNICODE_MACRO_NAME: 'unicode_macro_name';
+ESCAPED_FORMAT: 'escaped_format';
+CONTINUED_FORMAT: 'continued_format';
+FOR_PATTERN_CFG: 'for_pattern_cfg';
+MATCHES_PATTERN_CFG: 'matches_pattern_cfg';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

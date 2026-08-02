@@ -113,7 +113,7 @@ foreign_item:
     | attr* macro_invocation_semi;
 
 foreign_item_tail:
-    'safe'? 'static' 'mut'? ident ':' type ('=' expr)? ';' // experimental: added ('=' expr)? . Syntactically, a foreign static may have a body.
+    ('safe' | 'unsafe')? 'static' 'mut'? ident ':' type ('=' expr)? ';' // experimental: added ('=' expr)? . Syntactically, a foreign static may have a body.
     | 'type' ident type_parameters? colon_bound? where_clause? (':' type)? ('=' type)?';'
     | foreign_fn_decl;
 
@@ -163,7 +163,7 @@ fn_head:
     ('async' | 'const' | 'unsafe')*extern_abi? 'fn' ident type_parameters?; //experimental Ensures that all `fn` forms can have all the function qualifiers syntactically.
 
 param:
-    '...'
+    attr* '...'
     | attr* mut_or_const? ~(EOF)? pattern ':' (param_ty|'...')
     | attr*  '&'? lifetime? mut_or_const?  'self' (':' type)?; // experimental:`self` is syntactically accepted
 
@@ -191,7 +191,7 @@ method_param_list:
 // `(pat ':')? ty_sum`, but parsing this would be unreasonably complicated.
 // Instead, the `pat` is restricted to a few short, simple cases.
 trait_method_param:
-    '...'
+    attr* '...'
     | attr* ( ('(' (restricted_pat ',')* restricted_pat')' ) |  restricted_pat) ':' attr* ty_sum
     | attr* ty_sum;
 
@@ -684,7 +684,7 @@ pat_fields_left:
 
 pat_fields:
     '..'
-    | pat_fields_left ':' pat_fields_left ((',' pat_fields_left ':' pat_fields_left)|(',' '..'))*
+    | pat_fields_left ':' pattern (',' pat_fields_left ':' pattern)* (',' '..' | ','?)
     | pat_field (',' pat_field)* (',' '..' | ','?);
 
 pat_field:
@@ -871,7 +871,7 @@ struct_update_base:
     '..' expr;  // this is IMO a bug in the grammar. should be or_expr or something.
 
 field:
-    ident  // struct field shorthand (field and local variable have the same name)
+    expr_attrs* ident  // struct field shorthand (field and local variable have the same name)
     | expr_attrs* field_name ':' expr;
 
 field_name:

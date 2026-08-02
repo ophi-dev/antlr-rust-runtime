@@ -14,6 +14,7 @@
 //! references with labels (for `$label.attr` occurrence resolution), and
 //! `@members` bodies split into struct fields, impl items, and module items.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::io;
@@ -2866,6 +2867,26 @@ fn local_antlr4rust_alias_bindings(
                         .control_flow_body_block(body, lexemes, end + 1)
                         .and_then(|open| delimiters.block_contents(open))
                         .unwrap_or(end..end);
+                    if let Some(insertion) =
+                        block_cfg_fallback_insertion(lexemes, &scope, &delimiters)
+                    {
+                        for (name, binding) in &pattern_bindings {
+                            if let Some(active) =
+                                syntax.pattern_binding_cfg_predicate(lexemes[*binding].start)
+                            {
+                                bindings.record_local_cfg_alias_fallback(
+                                    std::iter::once(name),
+                                    CfgAliasFallbackSite {
+                                        block: scope.clone(),
+                                        block_insertion: insertion,
+                                        binding_insertion: insertion,
+                                        active: &active,
+                                        kind: CfgAliasBindingKind::Lexical,
+                                    },
+                                );
+                            }
+                        }
+                    }
                     bindings.record(pattern_bindings, scope);
                 }
             }
@@ -2949,8 +2970,11 @@ fn local_antlr4rust_alias_bindings(
         body,
         lexemes,
         token_aliases,
-        &delimiters,
-        syntax,
+        MatchAliasContext {
+            token_alias_module,
+            delimiters: &delimiters,
+            syntax,
+        },
         &mut bindings,
     )?;
     collect_function_alias_bindings(
@@ -3450,8 +3474,7 @@ fn collect_matches_macro_alias_bindings(
     body: &str,
     lexemes: &[RustLexeme],
     token_aliases: &BTreeSet<String>,
-    delimiters: &RustDelimiterMap,
-    syntax: &rust_syntax::RustSyntax,
+    context: MatchAliasContext<'_>,
     bindings: &mut AliasBindingScopes,
 ) -> io::Result<()> {
     const PATTERN_PREFIX: &str = "match () { ";
@@ -3475,10 +3498,10 @@ fn collect_matches_macro_alias_bindings(
         {
             continue;
         }
-        if syntax.is_opaque_macro_byte(lexemes[open].start) {
+        if context.syntax.is_opaque_macro_byte(lexemes[open].start) {
             continue;
         }
-        let Some(close) = delimiters.pairs[open] else {
+        let Some(close) = context.delimiters.pairs[open] else {
             continue;
         };
         let Some(comma) = find_top_level_lexeme(
@@ -3535,10 +3558,27 @@ fn collect_matches_macro_alias_bindings(
                     .flatten()
             })
             .collect::<Vec<_>>();
+        let mut expression_fallbacks = BTreeMap::<String, BTreeSet<String>>::new();
+        for (name, binding) in &pattern_bindings {
+            let synthetic_start =
+                PATTERN_PREFIX.len() + lexemes[*binding].start - pattern_byte_start;
+            if let Some(active) = pattern_syntax.pattern_binding_cfg_predicate(synthetic_start) {
+                expression_fallbacks
+                    .entry(active)
+                    .or_default()
+                    .insert(name.clone());
+            }
+        }
         let guard_scope = guard
             .and_then(|guard| next_significant(&lexemes[..close], guard))
             .map_or(close..close, |start| start..close);
         bindings.record(pattern_bindings, guard_scope);
+        let invocation_start = qualified_path_start(lexemes, position);
+        bindings.wrap_with_cfg_alias_fallbacks(
+            lexemes[invocation_start].start..lexemes[close].end,
+            expression_fallbacks,
+            context.token_alias_module,
+        );
     }
     Ok(())
 }
@@ -4048,6 +4088,24 @@ fn is_turbofish_open(lexemes: &[RustLexeme], position: usize) -> bool {
     })
 }
 
+fn qualified_path_start(lexemes: &[RustLexeme], position: usize) -> usize {
+    let mut start = position;
+    while let Some(second_colon) = previous_significant(lexemes, start)
+        && lexemes[second_colon].kind == RustLexemeKind::Punctuation(b':')
+        && let Some(first_colon) = previous_significant(lexemes, second_colon)
+        && lexemes[first_colon].kind == RustLexemeKind::Punctuation(b':')
+    {
+        let Some(segment) = previous_significant(lexemes, first_colon) else {
+            return first_colon;
+        };
+        if lexemes[segment].kind != RustLexemeKind::Identifier {
+            break;
+        }
+        start = segment;
+    }
+    start
+}
+
 fn opaque_macro_invocation_range(
     lexemes: &[RustLexeme],
     identifier: usize,
@@ -4240,7 +4298,7 @@ fn format_macro_capture_candidates(
         let Some(content) = rust_format_literal_content(body, lexemes[format_literal]) else {
             continue;
         };
-        let mut aliases = format_capture_aliases(content, token_aliases);
+        let mut aliases = format_capture_aliases(content.as_ref(), token_aliases);
         for argument in arguments.iter().skip(format_argument + 1) {
             let Some(name) = first_significant_in(lexemes, argument.clone()) else {
                 continue;
@@ -4322,10 +4380,11 @@ fn first_significant_in(lexemes: &[RustLexeme], mut range: Range<usize>) -> Opti
     range.find(|position| lexemes[*position].kind != RustLexemeKind::Trivia)
 }
 
-fn rust_format_literal_content(body: &str, literal: RustLexeme) -> Option<&str> {
+fn rust_format_literal_content(body: &str, literal: RustLexeme) -> Option<Cow<'_, str>> {
     let source = lexeme_text(body, literal);
     if source.starts_with('"') && source.ends_with('"') {
-        return source.get(1..source.len().checked_sub(1)?);
+        let content = source.get(1..source.len().checked_sub(1)?)?;
+        return decode_rust_string_content(content).map(Cow::Owned);
     }
     let hashes = source
         .strip_prefix('r')?
@@ -4334,7 +4393,76 @@ fn rust_format_literal_content(body: &str, literal: RustLexeme) -> Option<&str> 
         .count();
     let content_start = 2 + hashes;
     let content_end = source.len().checked_sub(1 + hashes)?;
-    source.get(content_start..content_end)
+    source.get(content_start..content_end).map(Cow::Borrowed)
+}
+
+fn decode_rust_string_content(content: &str) -> Option<String> {
+    let mut decoded = String::with_capacity(content.len());
+    let mut chars = content.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            decoded.push(ch);
+            continue;
+        }
+        match chars.next()? {
+            '0' => decoded.push('\0'),
+            'n' => decoded.push('\n'),
+            'r' => decoded.push('\r'),
+            't' => decoded.push('\t'),
+            '\'' => decoded.push('\''),
+            '"' => decoded.push('"'),
+            '\\' => decoded.push('\\'),
+            'x' => {
+                let high = chars.next()?.to_digit(16)?;
+                let low = chars.next()?.to_digit(16)?;
+                decoded.push(char::from_u32(high * 16 + low)?);
+            }
+            'u' => {
+                if chars.next()? != '{' {
+                    return None;
+                }
+                let mut value = 0_u32;
+                let mut digits = 0_usize;
+                let mut closed = false;
+                for escaped in chars.by_ref() {
+                    match escaped {
+                        '}' if digits > 0 => {
+                            closed = true;
+                            break;
+                        }
+                        '_' => {}
+                        _ => {
+                            let digit = escaped.to_digit(16)?;
+                            digits += 1;
+                            if digits > 6 {
+                                return None;
+                            }
+                            value = value.checked_mul(16)?.checked_add(digit)?;
+                        }
+                    }
+                }
+                if !closed {
+                    return None;
+                }
+                decoded.push(char::from_u32(value)?);
+            }
+            '\n' => {
+                while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
+                    chars.next();
+                }
+            }
+            '\r' => {
+                if chars.next()? != '\n' {
+                    return None;
+                }
+                while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
+                    chars.next();
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(decoded)
 }
 
 fn format_capture_aliases(
@@ -6998,6 +7126,8 @@ mod tests {
         let aliases = BTreeSet::from([
             "CompatParser_ASSERT".to_owned(),
             "CompatParser_CFG".to_owned(),
+            "CompatParser_ESCAPED_HEX".to_owned(),
+            "CompatParser_ESCAPED_UNICODE".to_owned(),
             "CompatParser_ID".to_owned(),
             "CompatParser_LOCAL".to_owned(),
             "CompatParser_SHADOWED".to_owned(),
@@ -7008,6 +7138,9 @@ mod tests {
                     let cfg_fallback = format!(\"{CompatParser_CFG}\");\n\
                     let token = format!(\"{CompatParser_ID}\");\n\
                     let standard = std::format!(\"{CompatParser_STD}\");\n\
+                    let escaped_unicode = format!(\"\\u{7b}CompatParser_ESCAPED_UNICODE}\");\n\
+                    let escaped_hex = format!(\"\\x7b\\\n\
+                        CompatParser_ESCAPED_HEX}\");\n\
                     assert_eq!(helper::<A, B>(), 1, \"{CompatParser_ASSERT}\");\n\
                     let CompatParser_LOCAL = 7;\n\
                     let local = format!(\"{CompatParser_LOCAL}\");\n\
@@ -7016,6 +7149,7 @@ mod tests {
                     }\n\
                     let shadowed = format!(\"{CompatParser_SHADOWED}\");\n\
                     token == \"1\" && standard == \"4\"\n\
+                        && escaped_unicode == \"2\" && escaped_hex == \"3\"\n\
                         && !cfg_fallback.is_empty()\n\
                         && local == \"7\" && shadowed == \"shadowed\"";
         let lowered =
@@ -7028,9 +7162,37 @@ mod tests {
             BTreeSet::from([
                 "CompatParser_ASSERT".to_owned(),
                 "CompatParser_CFG".to_owned(),
+                "CompatParser_ESCAPED_HEX".to_owned(),
+                "CompatParser_ESCAPED_UNICODE".to_owned(),
                 "CompatParser_ID".to_owned(),
                 "CompatParser_STD".to_owned(),
             ])
+        );
+    }
+
+    #[test]
+    fn decodes_ordinary_format_literal_escapes_and_preserves_raw_content() {
+        let ordinary = r###""line\nquote\"slash\\hex\x7bunicode\u{7_d}\
+                               tail""###;
+        let literal = RustLexeme {
+            kind: RustLexemeKind::Literal,
+            start: 0,
+            end: ordinary.len(),
+        };
+        assert_eq!(
+            rust_format_literal_content(ordinary, literal).as_deref(),
+            Some("line\nquote\"slash\\hex{unicode}tail")
+        );
+
+        let raw = r##"r#"\u{7b}Alias}"#"##;
+        let literal = RustLexeme {
+            kind: RustLexemeKind::Literal,
+            start: 0,
+            end: raw.len(),
+        };
+        assert_eq!(
+            rust_format_literal_content(raw, literal).as_deref(),
+            Some(r"\u{7b}Alias}")
         );
     }
 
@@ -7626,6 +7788,82 @@ mod tests {
         assert_eq!(lowered.token_aliases, aliases);
         insta::assert_snapshot!(
             "antlr4rust_cfg_gated_match_binding_fallback",
+            lowered.source
+        );
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn cfg_gated_for_bindings_use_body_fallbacks() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CfgParser_FOR".to_owned()]);
+        let body = "struct Fields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_FOR: i32,\n\
+                    }\n\
+                    let mut found = false;\n\
+                    for Fields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_FOR,\n\
+                    } in [Fields {}] {\n\
+                        found = CfgParser_FOR > 0;\n\
+                    }\n\
+                    found";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("cfg-gated for bindings should expose body-local alias fallbacks");
+
+        assert_eq!(lowered.token_aliases, aliases);
+        insta::assert_snapshot!("antlr4rust_cfg_gated_for_binding_fallback", lowered.source);
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn cfg_gated_matches_bindings_use_expression_fallbacks() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CfgParser_MATCHES".to_owned()]);
+        let body = "struct Fields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_MATCHES: i32,\n\
+                    }\n\
+                    let direct = matches!(\n\
+                        Fields {},\n\
+                        Fields {\n\
+                            #[cfg(any())]\n\
+                            CfgParser_MATCHES,\n\
+                        } if CfgParser_MATCHES > 0,\n\
+                    );\n\
+                    let standard = std::matches!(\n\
+                        Fields {},\n\
+                        Fields {\n\
+                            #[cfg(any())]\n\
+                            CfgParser_MATCHES,\n\
+                        } if CfgParser_MATCHES > 0,\n\
+                    );\n\
+                    direct && standard";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("cfg-gated matches bindings should expose expression alias fallbacks");
+
+        assert_eq!(lowered.token_aliases, aliases);
+        insta::assert_snapshot!(
+            "antlr4rust_cfg_gated_matches_binding_fallback",
             lowered.source
         );
     }
