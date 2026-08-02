@@ -5992,6 +5992,79 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
     }
 }
 
+/// Applies generated-rule rendering constraints to classifier report rows.
+///
+/// A LOOK(1)-disjoint decision nested in a left-recursive operator body is
+/// still classified `ll1`, but [`allow_semantic_context_in_decisions`] forces
+/// its emitted path through full-context adaptive prediction. Keep the tier as
+/// the tool verdict while reporting that the rendered path can defer.
+fn rendered_decision_report_rows(
+    rows: &[DecisionReportRow],
+    rules: &[Option<GeneratedParserRule>],
+) -> Vec<DecisionReportRow> {
+    let mut forced_adaptive = BTreeSet::new();
+    for rule in rules.iter().flatten() {
+        collect_render_forced_adaptive_decisions(&rule.steps, &mut forced_adaptive);
+    }
+    rows.iter()
+        .cloned()
+        .map(|mut row| {
+            if forced_adaptive.contains(&row.decision) {
+                row.fallback = DecisionFallbackCapability::CanDefer;
+            }
+            row
+        })
+        .collect()
+}
+
+fn collect_render_forced_adaptive_decisions(
+    steps: &[GeneratedParserStep],
+    decisions: &mut BTreeSet<usize>,
+) {
+    for step in steps {
+        match step {
+            GeneratedParserStep::Decision {
+                decision,
+                allow_semantic_context,
+                force_context,
+                alts,
+                ..
+            } => {
+                if *allow_semantic_context || *force_context {
+                    decisions.insert(*decision);
+                }
+                for alt in alts {
+                    collect_render_forced_adaptive_decisions(alt, decisions);
+                }
+            }
+            GeneratedParserStep::StarLoop {
+                decision,
+                allow_semantic_context,
+                force_context,
+                body,
+                ..
+            } => {
+                if *allow_semantic_context || *force_context {
+                    decisions.insert(*decision);
+                }
+                collect_render_forced_adaptive_decisions(body, decisions);
+            }
+            GeneratedParserStep::LeftRecursiveLoop { decision, body, .. } => {
+                decisions.insert(*decision);
+                collect_render_forced_adaptive_decisions(body, decisions);
+            }
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::CallRule { .. } => {}
+        }
+    }
+}
+
 fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
     steps.iter().any(|step| match step {
         GeneratedParserStep::Predicate { .. } => true,
@@ -13022,6 +13095,8 @@ fn render_parser_with_decision_report(
         (has_action_dispatch || has_predicate_dispatch || portable_local_data.has_semantics())
             && !options.embedded,
     )?;
+    let decision_report_rows =
+        rendered_decision_report_rows(&decision_classification.report_rows, &generated_rules);
     require_portable_local_rules_generated(
         &generated_rules,
         &portable_local_data.required_generated_rules,
@@ -13488,7 +13563,7 @@ where
 }}
 {generated_footer}"#
     );
-    Ok((module, decision_classification.report_rows))
+    Ok((module, decision_report_rows))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -20252,6 +20327,36 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
                 "{mode} recovery misses must reuse the proven-complete dispatch"
             );
         }
+    }
+
+    #[test]
+    fn decision_manifest_reports_render_forced_adaptive_fallback() {
+        let data = parser_fixture_data("decision-manifest-fallback/T.g4");
+        let (rendered, rows) =
+            render_parser_with_decision_report("T", &data, ParserRenderOptions::default())
+                .expect("parser renders");
+        let ll1 = rows
+            .iter()
+            .find(|row| row.decision == 0)
+            .expect("nested LL(1) decision");
+
+        assert_eq!(ll1.tier, DecisionTierReport::Ll1);
+        assert_eq!(
+            ll1.fallback,
+            DecisionFallbackCapability::CanDefer,
+            "render-forced full-context prediction must be visible in the manifest"
+        );
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
+
+        let manifest = render_decisions_manifest(
+            None,
+            &[DecisionReportGrammar {
+                name: "T".to_owned(),
+                rule_names: data.rule_names,
+                rows,
+            }],
+        );
+        insta::assert_snapshot!("render_forced_adaptive_decisions_manifest", manifest);
     }
 
     #[test]
