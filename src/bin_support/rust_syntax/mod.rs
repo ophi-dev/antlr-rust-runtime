@@ -25,7 +25,7 @@ use generated::parser::{
     RULE_CONST_DECL, RULE_ENUM_DECL, RULE_ENUM_VARIANT_MAIN, RULE_EXPR, RULE_EXTERN_CRATE,
     RULE_FIELD, RULE_FIELD_NAME, RULE_FN_DECL, RULE_FN_HEAD, RULE_FOREIGN_FN_DECL,
     RULE_FOREIGN_ITEM_TAIL, RULE_IDENT, RULE_IMPL_BLOCK, RULE_IMPL_ITEM_TAIL, RULE_INNER_ATTR,
-    RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION, RULE_MACRO_INVOCATION_SEMI,
+    RULE_ITEM, RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION, RULE_MACRO_INVOCATION_SEMI,
     RULE_MACRO_RULES_DEFINITION, RULE_MACRO_TAIL, RULE_METHOD_DECL, RULE_METHOD_PARAM_LIST,
     RULE_MOD_DECL, RULE_MOD_DECL_SHORT, RULE_PARAM, RULE_PARAM_LIST, RULE_PATTERN,
     RULE_PATTERN_NO_TOP_ALT, RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT, RULE_RENAME,
@@ -46,6 +46,7 @@ pub(crate) struct RustSyntax {
     opaque_macro_identifier_byte_starts: BTreeSet<usize>,
     opaque_macro_byte_ranges: Vec<Range<usize>>,
     opaque_expression_macro_byte_ranges: Vec<Range<usize>>,
+    conditional_macro_shadows: Vec<ConditionalMacroShadow>,
     struct_field_shorthand_byte_starts: BTreeSet<usize>,
     pattern_field_shorthand_byte_starts: BTreeSet<usize>,
     value_binding_byte_starts: BTreeSet<usize>,
@@ -69,6 +70,7 @@ pub(crate) struct ClosureBinding {
 #[derive(Debug)]
 pub(crate) struct FunctionBinding {
     pub(crate) parameter_ranges: Vec<Range<usize>>,
+    pub(crate) cfg_parameter_predicates: Vec<(Range<usize>, String)>,
     pub(crate) scope: Range<usize>,
 }
 
@@ -92,6 +94,30 @@ enum AnalysisRoot {
 struct ScopedMacroBinding {
     name: String,
     scope: Range<usize>,
+    activation: MacroBindingActivation,
+}
+
+#[derive(Debug)]
+enum MacroBindingActivation {
+    Always,
+    Conditional { insertion: usize, predicate: String },
+}
+
+#[derive(Debug)]
+struct ConditionalMacroShadow {
+    range: Range<usize>,
+    insertion: usize,
+    active_predicate: String,
+}
+
+#[derive(Debug)]
+enum LocalMacroShadow {
+    None,
+    Always,
+    Conditional {
+        insertion: usize,
+        active_predicate: String,
+    },
 }
 
 impl RustSyntaxDiagnosticCollector {
@@ -150,6 +176,13 @@ impl RustSyntax {
         self.opaque_expression_macro_byte_ranges
             .iter()
             .any(|range| range.contains(&byte_start))
+    }
+
+    pub(crate) fn conditional_macro_fallback(&self, byte_start: usize) -> Option<(usize, &str)> {
+        self.conditional_macro_shadows
+            .iter()
+            .find(|shadow| shadow.range.contains(&byte_start))
+            .map(|shadow| (shadow.insertion, shadow.active_predicate.as_str()))
     }
 
     pub(crate) fn is_struct_field_shorthand(&self, byte_start: usize) -> bool {
@@ -225,7 +258,8 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
     let root = root.map_err(|error| rust_syntax_error(&error.to_string()))?;
     let parsed = parser.into_parsed_file(root);
     let mut syntax = RustSyntax::default();
-    let macro_bindings = collect_scoped_macro_bindings(parsed.tree(), parsed.tokens(), body.len());
+    let macro_bindings =
+        collect_scoped_macro_bindings(parsed.tree(), parsed.tokens(), body, body.len());
 
     for node in parsed.tree().descendants() {
         let Some(rule) = node.as_rule() else {
@@ -287,7 +321,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                 );
             }
             RULE_FN_DECL | RULE_METHOD_DECL | RULE_TRAIT_METHOD_DECL | RULE_FOREIGN_FN_DECL => {
-                collect_function_binding(rule, parsed.tokens(), body.len(), &mut syntax);
+                collect_function_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
             }
             RULE_FIELD if rule.child_rule(RULE_FIELD_NAME).is_none() => {
                 collect_direct_identifier_start(
@@ -505,12 +539,29 @@ fn collect_opaque_macro_identifiers(
     let Some((macro_name, qualification)) = macro_invocation_name(parent, tokens) else {
         return;
     };
+    let shadow = if qualification == MacroQualification::Unqualified {
+        local_macro_shadow(&macro_name, parent, tokens, body_len, macro_bindings)
+    } else {
+        LocalMacroShadow::None
+    };
     if qualification == MacroQualification::Other
         || !macro_allows_value_alias_lowering(&macro_name)
-        || (qualification == MacroQualification::Unqualified
-            && local_macro_shadows(&macro_name, parent, tokens, body_len, macro_bindings))
+        || !matches!(&shadow, LocalMacroShadow::None)
     {
         if let Some(range) = body_byte_range(macro_tail, tokens, body_len) {
+            if let LocalMacroShadow::Conditional {
+                insertion,
+                active_predicate,
+            } = shadow
+            {
+                syntax
+                    .conditional_macro_shadows
+                    .push(ConditionalMacroShadow {
+                        range: range.clone(),
+                        insertion,
+                        active_predicate,
+                    });
+            }
             if macro_accepts_expression_fallback(parent) {
                 syntax
                     .opaque_expression_macro_byte_ranges
@@ -563,12 +614,29 @@ fn collect_opaque_macro_invocation_identifiers(
     let Some((macro_name, qualification)) = macro_invocation_name(invocation, tokens) else {
         return;
     };
+    let shadow = if qualification == MacroQualification::Unqualified {
+        local_macro_shadow(&macro_name, invocation, tokens, body_len, macro_bindings)
+    } else {
+        LocalMacroShadow::None
+    };
     if qualification == MacroQualification::Other
         || !macro_allows_value_alias_lowering(&macro_name)
-        || (qualification == MacroQualification::Unqualified
-            && local_macro_shadows(&macro_name, invocation, tokens, body_len, macro_bindings))
+        || !matches!(&shadow, LocalMacroShadow::None)
     {
         if let Some(range) = body_byte_range(invocation, tokens, body_len) {
+            if let LocalMacroShadow::Conditional {
+                insertion,
+                active_predicate,
+            } = shadow
+            {
+                syntax
+                    .conditional_macro_shadows
+                    .push(ConditionalMacroShadow {
+                        range: range.clone(),
+                        insertion,
+                        active_predicate,
+                    });
+            }
             if macro_accepts_expression_fallback(invocation) {
                 syntax
                     .opaque_expression_macro_byte_ranges
@@ -648,27 +716,59 @@ fn macro_invocation_name(
     Some((name, qualification))
 }
 
-fn local_macro_shadows(
+fn local_macro_shadow(
     name: &str,
     invocation: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
     body_len: usize,
     bindings: &[ScopedMacroBinding],
-) -> bool {
+) -> LocalMacroShadow {
     let Some(start) = invocation
         .start_id()
         .and_then(|token| body_byte_start(tokens, token, body_len))
     else {
-        return false;
+        return LocalMacroShadow::None;
     };
-    bindings
+    let mut insertion = usize::MAX;
+    let mut predicates = BTreeSet::new();
+    for binding in bindings
         .iter()
-        .any(|binding| binding.name == name && binding.scope.contains(&start))
+        .filter(|binding| binding.name == name && binding.scope.contains(&start))
+    {
+        match &binding.activation {
+            MacroBindingActivation::Always => return LocalMacroShadow::Always,
+            MacroBindingActivation::Conditional {
+                insertion: binding_insertion,
+                predicate,
+            } => {
+                insertion = insertion.min(*binding_insertion);
+                predicates.insert(predicate.clone());
+            }
+        }
+    }
+    match predicates.len() {
+        0 => LocalMacroShadow::None,
+        1 => LocalMacroShadow::Conditional {
+            insertion,
+            active_predicate: predicates
+                .into_iter()
+                .next()
+                .expect("checked one predicate"),
+        },
+        _ => LocalMacroShadow::Conditional {
+            insertion,
+            active_predicate: format!(
+                "any({})",
+                predicates.into_iter().collect::<Vec<_>>().join(", ")
+            ),
+        },
+    }
 }
 
 fn collect_scoped_macro_bindings(
     root: Node<'_>,
     tokens: &TokenStore,
+    body: &str,
     body_len: usize,
 ) -> Vec<ScopedMacroBinding> {
     let mut bindings = Vec::new();
@@ -685,12 +785,17 @@ fn collect_scoped_macro_bindings(
                     .and_then(|block| body_byte_range(block, tokens, body_len))
                     .unwrap_or(0..body_len);
                 scope.start = declaration.end.min(scope.end);
-                bindings.push(ScopedMacroBinding { name, scope });
+                bindings.push(ScopedMacroBinding {
+                    name,
+                    scope,
+                    activation: macro_binding_activation(rule, tokens, body, body_len),
+                });
             }
             RULE_USE_DECL => {
                 let scope = enclosing_block(rule)
                     .and_then(|block| body_byte_range(block, tokens, body_len))
                     .unwrap_or(0..body_len);
+                let activation = macro_binding_activation(rule, tokens, body, body_len);
                 bindings.extend(
                     use_decl_binding_names(rule, tokens)
                         .into_iter()
@@ -698,6 +803,16 @@ fn collect_scoped_macro_bindings(
                         .map(|name| ScopedMacroBinding {
                             name,
                             scope: scope.clone(),
+                            activation: match &activation {
+                                MacroBindingActivation::Always => MacroBindingActivation::Always,
+                                MacroBindingActivation::Conditional {
+                                    insertion,
+                                    predicate,
+                                } => MacroBindingActivation::Conditional {
+                                    insertion: *insertion,
+                                    predicate: predicate.clone(),
+                                },
+                            },
                         }),
                 );
             }
@@ -705,6 +820,44 @@ fn collect_scoped_macro_bindings(
         }
     }
     bindings
+}
+
+fn macro_binding_activation(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+) -> MacroBindingActivation {
+    let Some(item) = enclosing_item(declaration) else {
+        return MacroBindingActivation::Always;
+    };
+    let Some(range) = body_byte_range(item, tokens, body_len) else {
+        return MacroBindingActivation::Always;
+    };
+    let Some(predicate) =
+        super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
+    else {
+        return MacroBindingActivation::Always;
+    };
+    MacroBindingActivation::Conditional {
+        insertion: range.start,
+        predicate,
+    }
+}
+
+fn enclosing_item(
+    rule: antlr4_runtime::RuleNodeView<'_>,
+) -> Option<antlr4_runtime::RuleNodeView<'_>> {
+    let mut node = Some(rule.node());
+    while let Some(current) = node {
+        if let Some(current_rule) = current.as_rule()
+            && current_rule.rule_index() == RULE_ITEM
+        {
+            return Some(current_rule);
+        }
+        node = current.parent();
+    }
+    None
 }
 
 fn use_decl_binding_names(
@@ -921,6 +1074,7 @@ fn collect_closure_binding(
 fn collect_function_binding(
     function: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
+    body: &str,
     body_len: usize,
     syntax: &mut RustSyntax,
 ) {
@@ -935,10 +1089,10 @@ fn collect_function_binding(
     let Some(parameters) = parameters else {
         return;
     };
-    let Some(body) = function.child_rule(RULE_BLOCK_WITH_INNER_ATTRS) else {
+    let Some(body_rule) = function.child_rule(RULE_BLOCK_WITH_INNER_ATTRS) else {
         return;
     };
-    let Some(scope) = body_byte_range(body, tokens, body_len) else {
+    let Some(scope) = body_byte_range(body_rule, tokens, body_len) else {
         return;
     };
     let parameter_ranges = parameters
@@ -949,8 +1103,16 @@ fn collect_function_binding(
         .filter_map(|parameter| body_byte_range(parameter, tokens, body_len))
         .collect::<Vec<_>>();
     if !parameter_ranges.is_empty() {
+        let cfg_parameter_predicates = parameter_ranges
+            .iter()
+            .filter_map(|range| {
+                super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
+                    .map(|predicate| (range.clone(), predicate))
+            })
+            .collect();
         syntax.function_bindings.push(FunctionBinding {
             parameter_ranges,
+            cfg_parameter_predicates,
             scope,
         });
     }
@@ -1267,6 +1429,21 @@ mod tests {
     }
 
     #[test]
+    fn records_cfg_gated_imported_macro_shadowing() {
+        let body = "#[cfg(any())]\n\
+                    use missing::format;\n\
+                    let rendered = format!(\"{Alias}\");";
+        let syntax = analyze(body);
+        let capture = occurrence(body, "Alias", 0);
+
+        assert!(syntax.is_opaque_macro_byte(capture));
+        assert_eq!(
+            syntax.conditional_macro_fallback(capture),
+            Some((0, "any()"))
+        );
+    }
+
+    #[test]
     fn distinguishes_expression_macros_from_type_and_pattern_macros() {
         let body = "macro_rules! type_value { ($i:ident) => { i32 }; }\n\
                     macro_rules! pattern_value { ($i:ident) => { 1 }; }\n\
@@ -1416,7 +1593,7 @@ mod tests {
     #[test]
     fn records_function_parameters_against_the_parsed_body() {
         let body = "struct Array<const N: usize>;\n\
-                    fn value(Alias: i32) -> Array<{ 1 }> {\n\
+                    fn value(#[cfg(any())] Alias: i32) -> Array<{ 1 }> {\n\
                         let _ = Alias;\n\
                         Array\n\
                     }\n\
@@ -1438,6 +1615,14 @@ mod tests {
 
         assert!(binding.scope.contains(&body_read));
         assert!(!binding.scope.contains(&later_read));
+        assert_eq!(
+            binding
+                .cfg_parameter_predicates
+                .iter()
+                .find(|(range, _)| range.contains(&parameter))
+                .map(|(_, predicate)| predicate.as_str()),
+            Some("any()")
+        );
     }
 
     #[test]

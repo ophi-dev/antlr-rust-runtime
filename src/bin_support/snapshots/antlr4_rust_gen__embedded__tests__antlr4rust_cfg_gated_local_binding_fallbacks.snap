@@ -3,6 +3,9 @@ source: src/bin_support/embedded.rs
 expression: lowered.source
 ---
 {
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_DUPLICATE = __antlr4rust_token_aliases::CfgParser_DUPLICATE;
 #[cfg(not(all()))]
 #[allow(unused_imports)]
 use __antlr4rust_token_aliases::{CfgParser_ACTIVE_USE};
@@ -16,25 +19,41 @@ use __antlr4rust_token_aliases::{CfgParser_INACTIVE_USE};
 use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_INACTIVE_USE;
 let inactive_use = CfgParser_INACTIVE_USE;
 #[cfg(not(all()))]
-#[allow(unused_imports)]
-use __antlr4rust_token_aliases::{CfgParser_ACTIVE_LET};
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_ACTIVE_LET = __antlr4rust_token_aliases::CfgParser_ACTIVE_LET;
 #[cfg(all())]
 let CfgParser_ACTIVE_LET = 7;
 let active_let = CfgParser_ACTIVE_LET;
 #[cfg(not(any()))]
-#[allow(unused_imports)]
-use __antlr4rust_token_aliases::{CfgParser_INACTIVE_LET};
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_INACTIVE_LET = __antlr4rust_token_aliases::CfgParser_INACTIVE_LET;
 #[cfg(any())]
 let CfgParser_INACTIVE_LET = 8;
 let inactive_let = CfgParser_INACTIVE_LET;
-#[cfg(not(any()))]
-#[allow(unused_imports)]
-use __antlr4rust_token_aliases::{CfgParser_DUPLICATE};
 #[cfg(any())]
 let CfgParser_DUPLICATE = 9;
 #[cfg(any())]
 use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_DUPLICATE;
 let duplicate = CfgParser_DUPLICATE;
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_STAGED = __antlr4rust_token_aliases::CfgParser_STAGED;
+#[cfg(any())]
+let CfgParser_STAGED = 9;
+let staged_before = CfgParser_STAGED;
+#[cfg(all())]
+let CfgParser_STAGED = 10;
+let staged_after = CfgParser_STAGED;
+fn cfg_parameter(
+#[cfg(any())] CfgParser_PARAMETER: i32,
+) -> i32 {
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_PARAMETER = __antlr4rust_token_aliases::CfgParser_PARAMETER;
+CfgParser_PARAMETER
+}
+let parameter = cfg_parameter();
 active_use == 0 && inactive_use > 0
 && active_let == 7 && inactive_let > 0 && duplicate > 0
+&& staged_before > 0 && staged_after == 10 && parameter > 0
 }

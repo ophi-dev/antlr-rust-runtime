@@ -3652,11 +3652,20 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_IMPORTED_MACRO",
                 "AliasCollisionParser_TYPE_MACRO",
                 "AliasCollisionParser_PATTERN_MACRO",
+                "AliasCollisionParser_CFG_FORMAT",
+                "AliasCollisionParser_RAW_MACRO_NAME",
+                "AliasCollisionParser_STAGED_CFG",
+                "AliasCollisionParser_CFG_PARAMETER",
                 "standard_qualified_macro_ok",
                 "c_strings_ok",
                 "placeholder_lifetime",
                 "if_let_constant_ok",
                 "while_let_constant_ok",
+                "cfg_disabled_format_ok",
+                "raw_macro_name_ok",
+                "staged_cfg_before",
+                "staged_cfg_after",
+                "cfg_parameter_ok",
             ]
             .iter()
             .any(|needle| line.contains(needle))

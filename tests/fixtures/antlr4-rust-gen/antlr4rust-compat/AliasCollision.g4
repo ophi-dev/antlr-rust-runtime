@@ -112,6 +112,12 @@ start
         let standard_format_capture_ok =
             std::format!("{AliasCollisionParser_STANDARD_FORMAT}")
                 == Self::STANDARD_FORMAT.to_string();
+        let cfg_disabled_format_ok = {
+            #[cfg(any())]
+            use missing::format;
+            format!("{AliasCollisionParser_CFG_FORMAT}")
+                == Self::CFG_FORMAT.to_string()
+        };
         let AliasCollisionParser_FORMAT_LOCAL = "local";
         let format_local_ok =
             format!("{AliasCollisionParser_FORMAT_LOCAL}") == "local";
@@ -143,6 +149,13 @@ start
             placeholder_lifetime.is_none();
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
+        macro_rules! r#match {
+            ($i:ident) => {
+                stringify!($i) == "AliasCollisionParser_RAW_MACRO_NAME"
+            };
+        }
+        let raw_macro_name_ok =
+            r#match!(AliasCollisionParser_RAW_MACRO_NAME);
         macro_rules! alias_value {
             ($i:ident) => {
                 $i
@@ -297,6 +310,13 @@ start
         let duplicate_cfg_ok =
             AliasCollisionParser_DUPLICATE_CFG
                 == Self::DUPLICATE_CFG;
+        #[cfg(any())]
+        let AliasCollisionParser_STAGED_CFG = 76;
+        let staged_cfg_before =
+            AliasCollisionParser_STAGED_CFG == Self::STAGED_CFG;
+        #[cfg(all())]
+        let AliasCollisionParser_STAGED_CFG = 77;
+        let staged_cfg_after = AliasCollisionParser_STAGED_CFG == 77;
         let leading_match_binding_ok = match Some(8) {
             | Some(AliasCollisionParser_ARM @ _) => AliasCollisionParser_ARM == 8,
             None => false,
@@ -413,6 +433,13 @@ start
         ) -> i32 {
             function(AliasCollisionParser_PARAM)
         }
+        fn cfg_parameter(
+            #[cfg(any())] AliasCollisionParser_CFG_PARAMETER: i32,
+        ) -> i32 {
+            AliasCollisionParser_CFG_PARAMETER
+        }
+        let cfg_parameter_ok =
+            cfg_parameter() == Self::CFG_PARAMETER;
         before_scope == SCOPE
             && after_scope == SCOPE
             && if_binding_ok
@@ -425,6 +452,8 @@ start
             && active_cfg_let_ok
             && inactive_cfg_let_ok
             && duplicate_cfg_ok
+            && staged_cfg_before
+            && staged_cfg_after
             && leading_match_binding_ok
             && block_match_binding_ok
             && not_equal_alias_ok
@@ -443,6 +472,7 @@ start
             && associated_const_alias_ok
             && format_capture_ok
             && standard_format_capture_ok
+            && cfg_disabled_format_ok
             && format_local_ok
             && c_strings_ok
             && unsafe_extern_alias_ok
@@ -450,6 +480,7 @@ start
             && raw_lifetime_ok
             && placeholder_lifetime_ok
             && raw_macro_ok
+            && raw_macro_name_ok
             && opaque_macro_alias_ok
             && shadowed_macro_ok
             && qualified_macro_ok
@@ -467,6 +498,7 @@ start
             && const_generic_ok
             && impl_const_generic_ok
             && braced_parameter_ok
+            && cfg_parameter_ok
             && enum_variant_ok
             && named_struct.marker == 14
             && local_type.marker == 15
@@ -548,6 +580,10 @@ start
         | IMPORTED_MACRO
         | TYPE_MACRO
         | PATTERN_MACRO
+        | CFG_FORMAT
+        | RAW_MACRO_NAME
+        | STAGED_CFG
+        | CFG_PARAMETER
     ) EOF
     ;
 
@@ -613,5 +649,9 @@ DUPLICATE_CFG: 'duplicate_cfg';
 IMPORTED_MACRO: 'imported_macro';
 TYPE_MACRO: 'type_macro';
 PATTERN_MACRO: 'pattern_macro';
+CFG_FORMAT: 'cfg_format';
+RAW_MACRO_NAME: 'raw_macro_name';
+STAGED_CFG: 'staged_cfg';
+CFG_PARAMETER: 'cfg_parameter';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

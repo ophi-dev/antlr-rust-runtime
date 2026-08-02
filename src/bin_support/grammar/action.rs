@@ -77,13 +77,18 @@ fn macro_rules_definition_end(body: &str, start: usize) -> Option<usize> {
         return None;
     }
     cursor = skip_whitespace(bytes, cursor + 1);
+    let name_start = if bytes.get(cursor..cursor + 2) == Some(b"r#") {
+        cursor + 2
+    } else {
+        cursor
+    };
     if !bytes
-        .get(cursor)
+        .get(name_start)
         .is_some_and(|byte| is_identifier_start(*byte))
     {
         return None;
     }
-    cursor = skip_whitespace(bytes, identifier_end(bytes, cursor));
+    cursor = skip_whitespace(bytes, identifier_end(bytes, name_start));
     let expected = match bytes.get(cursor)? {
         b'(' => b')',
         b'[' => b']',
@@ -425,6 +430,7 @@ mod tests {
     fn macro_rules_bodies_skip_lifetimes_and_quoted_delimiters() {
         for body in [
             "macro_rules! m { ($t:ty) => { fn f<'a>(v: &'a $t) {} } }\n$actual",
+            "macro_rules! r#match { ($i:ident) => { $i } }\n$actual",
             r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
 $actual"#,
             r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }
