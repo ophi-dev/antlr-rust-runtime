@@ -874,6 +874,7 @@ visibility:
 // Here the `(` is part of the type `(i32)`.
 visibility_restriction:
     '(' 'crate' ')'
+    | '(' 'self' ')'
     | '(' 'super' ')'
     | '(' 'in' simple_path ')';
 
@@ -1727,6 +1728,7 @@ post_expr_tail:
     | '[' expr ']'
     | '.' ident (('::' type_arguments)? '(' expr_list? ')')?
     | '.' BareIntLit
+    | TupleIndex
     | '(' expr_list? ')';
 
 pre_expr:
@@ -2181,6 +2183,11 @@ LineComment:
 
 BlockComment:
     '/*' (~[*/] | '/'* BlockComment | '/'+ (~[*/]) | '*'+ ~[*/])* '*'+ '/' -> skip;
+
+// Combining the leading dot with a tuple index prevents `pair.0.1` from
+// becoming a single `FloatLit` token while preserving ordinary decimal floats.
+TupleIndex:
+    '.' DEC_DIGITS;
 
 Shebang:
     '#!/' ~[\r\n]* -> skip;

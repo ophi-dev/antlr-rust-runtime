@@ -82,13 +82,10 @@ fn macro_rules_definition_end(body: &str, start: usize) -> Option<usize> {
     } else {
         cursor
     };
-    if !bytes
-        .get(name_start)
-        .is_some_and(|byte| is_identifier_start(*byte))
-    {
-        return None;
-    }
-    cursor = skip_whitespace(bytes, identifier_end(bytes, name_start));
+    cursor = skip_whitespace(
+        bytes,
+        crate::rust_names::rust_identifier_end(body, name_start)?,
+    );
     let expected = match bytes.get(cursor)? {
         b'(' => b')',
         b'[' => b']',
@@ -457,6 +454,8 @@ mod tests {
         for body in [
             "macro_rules! m { ($t:ty) => { fn f<'a>(v: &'a $t) {} } }\n$actual",
             "macro_rules! r#match { ($i:ident) => { $i } }\n$actual",
+            "macro_rules! λ { ($i:ident) => { $i } }\n$actual",
+            "macro_rules! r#λ { ($i:ident) => { $i } }\n$actual",
             r#"macro_rules! m { ($t:ty) => {{ let _ = "{ $t"; /* } $t */ }} }
 $actual"#,
             r#"macro_rules! m { ($t:ty) => {{ /* outer /* inner */ } $ignored */ let _: $t; }} }

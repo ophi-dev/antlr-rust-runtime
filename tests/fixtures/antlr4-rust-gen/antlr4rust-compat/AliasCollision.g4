@@ -164,6 +164,13 @@ start
         }
         let raw_string_macro_ok =
             raw_string_match!(AliasCollisionParser_RAW_STRING_MACRO);
+        macro_rules! λ {
+            ($i:ident) => {
+                stringify!($i) == "AliasCollisionParser_UNICODE_MACRO_NAME"
+            };
+        }
+        let unicode_macro_name_ok =
+            λ!(AliasCollisionParser_UNICODE_MACRO_NAME);
         macro_rules! alias_value {
             ($i:ident) => {
                 $i
@@ -212,20 +219,24 @@ start
                 AliasCollisionParser_CUSTOM_MATCHES => fallback
             );
         macro_rules! alias_type {
-            (AliasCollisionParser_TYPE_MACRO) => {
-                i32
+            ($i:ident) => {
+                [u8; $i as usize]
             };
         }
         let opaque_type_value:
-            alias_type!(AliasCollisionParser_TYPE_MACRO) = 2;
-        let opaque_type_macro_ok = opaque_type_value == 2;
+            alias_type!(AliasCollisionParser_TYPE_MACRO) =
+                [0; Self::TYPE_MACRO as usize];
+        let opaque_type_macro_ok =
+            opaque_type_value.len() == Self::TYPE_MACRO as usize;
         macro_rules! alias_pattern {
-            (AliasCollisionParser_PATTERN_MACRO) => {
-                2
+            ($i:ident) => {
+                $i
             };
         }
         let opaque_pattern_macro_ok =
-            if let alias_pattern!(AliasCollisionParser_PATTERN_MACRO) = 2 {
+            if let alias_pattern!(AliasCollisionParser_PATTERN_MACRO) =
+                Self::PATTERN_MACRO
+            {
                 true
             } else {
                 false
@@ -416,6 +427,18 @@ start
         let associated_type_bound_ok =
             AliasCollisionParser_ASSOCIATED_BOUND
                 == Self::ASSOCIATED_BOUND;
+        let pair = ((1, 2), 3);
+        let tuple_field_ok = pair.0.1 == 2;
+        mod self_visible {
+            pub(self) fn helper() -> i32 {
+                5
+            }
+
+            pub fn value() -> i32 {
+                helper()
+            }
+        }
+        let pub_self_ok = self_visible::value() == 5;
         let impl_const_generic_ok = ConstGenericMember::<19>::value() == 19;
         let _: ConstExpression<{
             AliasCollisionParser_CONST_EXPRESSION as usize
@@ -477,6 +500,22 @@ start
         }
         let cfg_parameter_ok =
             cfg_parameter() == Self::CFG_PARAMETER;
+        #[cfg(any())]
+        const AliasCollisionParser_CFG_ITEM: i32 = 1;
+        let cfg_item_ok =
+            AliasCollisionParser_CFG_ITEM == Self::CFG_ITEM;
+        fn cfg_const_generic<
+            #[cfg(any())] const AliasCollisionParser_CFG_CONST_GENERIC: usize,
+        >() -> i32 {
+            AliasCollisionParser_CFG_CONST_GENERIC
+        }
+        let cfg_const_generic_ok =
+            cfg_const_generic() == Self::CFG_CONST_GENERIC;
+        let cfg_closure =
+            |#[cfg(any())] AliasCollisionParser_CFG_CLOSURE: i32|
+                AliasCollisionParser_CFG_CLOSURE;
+        let cfg_closure_ok =
+            cfg_closure() == Self::CFG_CLOSURE;
         before_scope == SCOPE
             && after_scope == SCOPE
             && if_binding_ok
@@ -520,6 +559,7 @@ start
             && raw_macro_ok
             && raw_macro_name_ok
             && raw_string_macro_ok
+            && unicode_macro_name_ok
             && opaque_macro_alias_ok
             && shadowed_macro_ok
             && qualified_macro_ok
@@ -536,11 +576,16 @@ start
             && nested_closure_binding_ok
             && const_generic_ok
             && associated_type_bound_ok
+            && tuple_field_ok
+            && pub_self_ok
             && impl_const_generic_ok
             && braced_parameter_ok
             && pattern_cfg_ok
             && parent_module_alias_ok
             && cfg_parameter_ok
+            && cfg_item_ok
+            && cfg_const_generic_ok
+            && cfg_closure_ok
             && enum_variant_ok
             && named_struct.marker == 14
             && local_type.marker == 15
@@ -630,6 +675,10 @@ start
         | PATTERN_CFG
         | ASSOCIATED_BOUND
         | PARENT_MODULE
+        | CFG_ITEM
+        | CFG_CONST_GENERIC
+        | CFG_CLOSURE
+        | UNICODE_MACRO_NAME
     ) EOF
     ;
 
@@ -703,5 +752,9 @@ RAW_STRING_MACRO: 'raw_string_macro';
 PATTERN_CFG: 'pattern_cfg';
 ASSOCIATED_BOUND: 'associated_bound';
 PARENT_MODULE: 'parent_module';
+CFG_ITEM: 'cfg_item';
+CFG_CONST_GENERIC: 'cfg_const_generic';
+CFG_CLOSURE: 'cfg_closure';
+UNICODE_MACRO_NAME: 'unicode_macro_name';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

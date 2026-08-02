@@ -52,20 +52,35 @@ pub(crate) struct RustSyntax {
     conditional_pattern_binding_ranges: Vec<ConditionalPatternBinding>,
     inline_module_ranges: Vec<Range<usize>>,
     value_binding_byte_starts: BTreeSet<usize>,
+    conditional_value_bindings: Vec<ConditionalValueBinding>,
     scoped_value_bindings: Vec<ScopedValueBinding>,
     function_bindings: Vec<FunctionBinding>,
     closure_bindings: Vec<ClosureBinding>,
 }
 
 #[derive(Debug)]
+pub(crate) struct ConditionalBindingFallback {
+    pub(crate) insertion: usize,
+    pub(crate) active_predicate: String,
+}
+
+#[derive(Debug)]
+struct ConditionalValueBinding {
+    declaration_start: usize,
+    fallback: ConditionalBindingFallback,
+}
+
+#[derive(Debug)]
 pub(crate) struct ScopedValueBinding {
     pub(crate) declaration_start: usize,
     pub(crate) scope: Range<usize>,
+    pub(crate) cfg_fallback: Option<ConditionalBindingFallback>,
 }
 
 #[derive(Debug)]
 pub(crate) struct ClosureBinding {
     pub(crate) parameter_ranges: Vec<Range<usize>>,
+    pub(crate) cfg_parameter_predicates: Vec<(Range<usize>, String)>,
     pub(crate) scope: Range<usize>,
 }
 
@@ -224,6 +239,16 @@ impl RustSyntax {
         self.value_binding_byte_starts.iter().copied()
     }
 
+    pub(crate) fn value_binding_cfg_fallback(
+        &self,
+        declaration_start: usize,
+    ) -> Option<&ConditionalBindingFallback> {
+        self.conditional_value_bindings
+            .iter()
+            .find(|binding| binding.declaration_start == declaration_start)
+            .map(|binding| &binding.fallback)
+    }
+
     pub(crate) fn scoped_value_bindings(&self) -> &[ScopedValueBinding] {
         &self.scoped_value_bindings
     }
@@ -309,7 +334,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                         &mut syntax.type_identifier_byte_starts,
                     );
                 }
-                collect_const_generic_binding(rule, parsed.tokens(), body.len(), &mut syntax);
+                collect_const_generic_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
             }
             RULE_TYPE_DECL | RULE_ENUM_DECL | RULE_UNION_DECL | RULE_TRAIT_DECL
             | RULE_TRAIT_ALIAS | RULE_MOD_DECL_SHORT | RULE_EXTERN_CRATE | RULE_MACRO_DECL => {
@@ -339,12 +364,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                     &mut syntax.type_identifier_byte_starts,
                 );
                 if parsed_struct_has_value_constructor(rule) {
-                    collect_direct_identifier_start(
-                        rule,
-                        parsed.tokens(),
-                        body.len(),
-                        &mut syntax.value_binding_byte_starts,
-                    );
+                    collect_value_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
                 }
             }
             RULE_ENUM_VARIANT_MAIN => {
@@ -374,21 +394,20 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                     &mut syntax.declaration_identifier_byte_starts,
                 );
                 if fn_head_introduces_unqualified_value(rule, analysis_root) {
+                    collect_value_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
+                }
+            }
+            RULE_STATIC_DECL | RULE_CONST_DECL => {
+                if item_introduces_unqualified_value(rule) {
+                    collect_value_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
+                } else {
                     collect_direct_identifier_start(
                         rule,
                         parsed.tokens(),
                         body.len(),
-                        &mut syntax.value_binding_byte_starts,
+                        &mut syntax.declaration_identifier_byte_starts,
                     );
                 }
-            }
-            RULE_STATIC_DECL | RULE_CONST_DECL => {
-                let starts = if item_introduces_unqualified_value(rule) {
-                    &mut syntax.value_binding_byte_starts
-                } else {
-                    &mut syntax.declaration_identifier_byte_starts
-                };
-                collect_direct_identifier_start(rule, parsed.tokens(), body.len(), starts);
             }
             RULE_ASSOCIATED_STATIC_DECL | RULE_ASSOCIATED_CONST_DECL => {
                 collect_direct_identifier_start(
@@ -399,7 +418,7 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                 );
             }
             RULE_PRIM_EXPR_NO_STRUCT => {
-                collect_closure_binding(rule, parsed.tokens(), body.len(), &mut syntax);
+                collect_closure_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
             }
             RULE_ATTR | RULE_INNER_ATTR | RULE_MACRO_RULES_DEFINITION => {
                 collect_identifier_starts(
@@ -506,9 +525,47 @@ fn rust_syntax_error(message: &str) -> io::Error {
     )
 }
 
+fn collect_value_binding(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+    syntax: &mut RustSyntax,
+) {
+    let Some(declaration_start) = direct_identifier_byte_start(declaration, tokens, body_len)
+    else {
+        return;
+    };
+    syntax.value_binding_byte_starts.insert(declaration_start);
+    let Some(item) = enclosing_item(declaration) else {
+        return;
+    };
+    let Some(item_range) = body_byte_range(item, tokens, body_len) else {
+        return;
+    };
+    let Some(declaration_range) = body_byte_range(declaration, tokens, body_len) else {
+        return;
+    };
+    let Some(active_predicate) = super::cfg_all_predicate(&super::member_cfg_predicates(
+        &body[item_range.start..declaration_range.start],
+    )) else {
+        return;
+    };
+    syntax
+        .conditional_value_bindings
+        .push(ConditionalValueBinding {
+            declaration_start,
+            fallback: ConditionalBindingFallback {
+                insertion: item_range.start,
+                active_predicate,
+            },
+        });
+}
+
 fn collect_const_generic_binding(
     parameter: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
+    body: &str,
     body_len: usize,
     syntax: &mut RustSyntax,
 ) {
@@ -529,9 +586,24 @@ fn collect_const_generic_binding(
         return;
     };
     scope.start = declaration_start;
+    let cfg_fallback = body_byte_range(parameter, tokens, body_len)
+        .and_then(|range| {
+            super::cfg_all_predicate(&super::member_cfg_predicates(
+                &body[range.start..declaration_start],
+            ))
+        })
+        .and_then(|active_predicate| {
+            let item = enclosing_item(parameter)?;
+            let insertion = body_byte_range(item, tokens, body_len)?.start;
+            Some(ConditionalBindingFallback {
+                insertion,
+                active_predicate,
+            })
+        });
     syntax.scoped_value_bindings.push(ScopedValueBinding {
         declaration_start,
         scope,
+        cfg_fallback,
     });
 }
 
@@ -1096,6 +1168,7 @@ fn collect_pattern_field_roles(
 fn collect_closure_binding(
     expression: antlr4_runtime::RuleNodeView<'_>,
     tokens: &TokenStore,
+    body: &str,
     body_len: usize,
     syntax: &mut RustSyntax,
 ) {
@@ -1105,7 +1178,13 @@ fn collect_closure_binding(
     let Some(tail) = expression.child_rule(RULE_CLOSURE_TAIL) else {
         return;
     };
-    let Some(scope) = body_byte_range(tail, tokens, body_len) else {
+    let Some(body_rule) = tail
+        .child_rule(RULE_BLOCK)
+        .or_else(|| tail.child_rule(RULE_EXPR))
+    else {
+        return;
+    };
+    let Some(scope) = body_byte_range(body_rule, tokens, body_len) else {
         return;
     };
     let parameter_ranges = parameters
@@ -1114,15 +1193,21 @@ fn collect_closure_binding(
         .filter_map(Node::as_rule)
         .filter(|rule| rule.rule_index() == RULE_CLOSURE_PARAM)
         .filter_map(|parameter| {
-            let pattern = parameter.child_rule(RULE_PATTERN_NO_TOP_ALT)?;
-            let mut range = body_byte_range(pattern, tokens, body_len)?;
-            range.end = body_byte_range(parameter, tokens, body_len)?.end;
-            Some(range)
+            parameter.child_rule(RULE_PATTERN_NO_TOP_ALT)?;
+            body_byte_range(parameter, tokens, body_len)
         })
         .collect::<Vec<_>>();
     if !parameter_ranges.is_empty() {
+        let cfg_parameter_predicates = parameter_ranges
+            .iter()
+            .filter_map(|range| {
+                super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
+                    .map(|predicate| (range.clone(), predicate))
+            })
+            .collect();
         syntax.closure_bindings.push(ClosureBinding {
             parameter_ranges,
+            cfg_parameter_predicates,
             scope,
         });
     }
@@ -1361,15 +1446,27 @@ mod tests {
     }
 
     #[test]
-    fn rejects_recovered_parse_errors() {
+    fn rejects_genuinely_invalid_recovered_parse_errors() {
         let error = super::analyze(
-            "let _index = pair.0.1;\n\
+            "let _broken = (;\n\
              let _: Option<Alias> = None;",
         )
         .expect_err("recovered Rust parses must not disable alias protections");
 
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
         insta::assert_snapshot!("recovered_rust_parse_error", error);
+    }
+
+    #[test]
+    fn parses_chained_tuple_fields_and_pub_self_visibility() {
+        let body = "mod nested { pub(self) fn helper() {} }\n\
+                    let pair = ((0, 1), 2);\n\
+                    let _index = pair.0.1;\n\
+                    Alias == 1;";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
     }
 
     #[test]
@@ -1424,7 +1521,7 @@ mod tests {
 
     #[test]
     fn records_nested_closure_parameters_and_bodies() {
-        let body = "let closure = |_outer| |Alias: i32| Alias;";
+        let body = "let closure = |_outer| |#[cfg(any())] Alias: i32| Alias;";
         let syntax = analyze(body);
         let bindings = syntax.closure_bindings();
 
@@ -1441,6 +1538,14 @@ mod tests {
             })
             .expect("inner closure binding");
         assert!(inner.scope.contains(&alias_read));
+        assert_eq!(
+            inner
+                .cfg_parameter_predicates
+                .iter()
+                .find(|(range, _)| range.contains(&alias_parameter))
+                .map(|(_, predicate)| predicate.as_str()),
+            Some("any()")
+        );
     }
 
     #[test]
@@ -1647,7 +1752,7 @@ mod tests {
 
     #[test]
     fn records_const_generic_scope() {
-        let body = "fn value<const Alias: usize>() -> usize { Alias }\nAlias == 7;";
+        let body = "fn value<#[cfg(any())] const Alias: usize>() -> usize { Alias }\nAlias == 7;";
         let syntax = analyze(body);
         let declaration = occurrence(body, "Alias", 0);
         let function_read = occurrence(body, "Alias", 1);
@@ -1660,6 +1765,25 @@ mod tests {
 
         assert!(binding.scope.contains(&function_read));
         assert!(!binding.scope.contains(&later_read));
+        let fallback = binding
+            .cfg_fallback
+            .as_ref()
+            .expect("cfg-gated const generic fallback");
+        assert_eq!(fallback.insertion, 0);
+        assert_eq!(fallback.active_predicate, "any()");
+    }
+
+    #[test]
+    fn records_cfg_gated_block_value_items() {
+        let body = "#[cfg(any())]\nconst Alias: i32 = 1;\nAlias == 7;";
+        let syntax = analyze(body);
+        let declaration = occurrence(body, "Alias", 0);
+        let fallback = syntax
+            .value_binding_cfg_fallback(declaration)
+            .expect("cfg-gated value item fallback");
+
+        assert_eq!(fallback.insertion, 0);
+        assert_eq!(fallback.active_predicate, "any()");
     }
 
     #[test]

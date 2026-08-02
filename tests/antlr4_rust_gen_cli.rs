@@ -3660,6 +3660,10 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_PATTERN_CFG",
                 "AliasCollisionParser_ASSOCIATED_BOUND",
                 "AliasCollisionParser_PARENT_MODULE",
+                "AliasCollisionParser_CFG_ITEM",
+                "AliasCollisionParser_CFG_CONST_GENERIC",
+                "AliasCollisionParser_CFG_CLOSURE",
+                "AliasCollisionParser_UNICODE_MACRO_NAME",
                 "standard_qualified_macro_ok",
                 "c_strings_ok",
                 "placeholder_lifetime",
@@ -3675,6 +3679,12 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "associated_type_bound_ok",
                 "pattern_cfg_ok",
                 "parent_module_alias_ok",
+                "tuple_field_ok",
+                "pub_self_ok",
+                "cfg_item_ok",
+                "cfg_const_generic_ok",
+                "cfg_closure_ok",
+                "unicode_macro_name_ok",
             ]
             .iter()
             .any(|needle| line.contains(needle))
@@ -3697,6 +3707,9 @@ fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
         "while let __antlr4rust_token_aliases_2::AliasCollisionParser_MODULE = MODULE",
         "alias_type!(AliasCollisionParser_TYPE_MACRO)",
         "alias_pattern!(AliasCollisionParser_PATTERN_MACRO)",
+        "pair.0.1",
+        "pub(self) fn helper()",
+        "λ!(AliasCollisionParser_UNICODE_MACRO_NAME)",
     ] {
         assert!(
             source.contains(expected),
@@ -4259,7 +4272,7 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
         (
             "UnclassifiableRust",
             r#"{
-                let _index = pair.0.1;
+                let _broken = (;
                 let _: Option<UnclassifiableRustParser_A> = None;
                 true
             }"#,

@@ -1,3 +1,28 @@
+use icu_properties::{CodePointSetData, CodePointSetDataBorrowed, props};
+
+/// Returns the byte end of a Rust identifier beginning at `start`.
+#[allow(dead_code)] // This shared module is also compiled by the conformance harness.
+pub(crate) fn rust_identifier_end(value: &str, start: usize) -> Option<usize> {
+    static XID_START: CodePointSetDataBorrowed<'static> =
+        CodePointSetData::new::<props::XidStart>();
+    static XID_CONTINUE: CodePointSetDataBorrowed<'static> =
+        CodePointSetData::new::<props::XidContinue>();
+
+    let mut chars = value.get(start..)?.char_indices();
+    let (_, first) = chars.next()?;
+    if first != '_' && !XID_START.contains(first) {
+        return None;
+    }
+    let mut end = start + first.len_utf8();
+    for (relative, ch) in chars {
+        if !XID_CONTINUE.contains(ch) {
+            break;
+        }
+        end = start + relative + ch.len_utf8();
+    }
+    Some(end)
+}
+
 /// Converts a grammar type name into a snake-case module file name.
 pub(crate) fn module_name(name: &str) -> String {
     split_identifier_words(name).join("_")
