@@ -11,7 +11,8 @@ and multi-recognizer issue `#276`
 
 ## 1. Decision summary
 
-Refactor the generator in three deliberately separate stages:
+Refactor and package the generator in three deliberately separate structural
+stages, with behavior-changing optimization work tracked separately:
 
 1. Split `src/bin/antlr4-rust-gen.rs` into real Rust modules under
    `src/bin_support/codegen/`, while it remains part of the current package.
@@ -38,10 +39,11 @@ integrated grammar, ATN, parser IR, routing, and structured render-model stages.
 Each representation gets a stage-specific pass contract; there is no universal
 "optimizer" trait and no optimization of generated Rust text.
 
-The recommended order is stage A source decomposition, stage R generated-source
-compaction/runtime support, then stage B workspace conversion. R0 and the
-disposable R0.5 ABI spike can run in parallel with A7-A11 after A6 establishes
-the surface boundary; issue #276 must not block the rest of the source split.
+The recommended order is stage A source decomposition, separately reviewed
+optimization/runtime behavior changes, then stage B workspace conversion. R0
+and the disposable R0.5 ABI spike can run in parallel with A7-A11 after A6
+establishes the surface boundary; issue #276 must not block the rest of the
+source split. After A11, O0 and R1-R2 are independent behavior-changing tracks.
 Prefer landing the supported runtime ABI and generated binding change after A11.
 The workspace must not be combined with either earlier stage. It gives the
 compiler its correct dependency and release boundary, but it neither solves
@@ -512,10 +514,11 @@ The exact representation can differ, but these properties are required:
   `driver.rs`.
 - Existing dedicated flags may map into `OptimizationConfig` during migration,
   but the pipeline must not gain one driver boolean and `if` block per pass.
-- Report-only mode runs a transformed shadow artifact through downstream
-  semantic, ATN, decision, IR, and render-model analysis so projected cost
-  effects are real. It emits only requested audit artifacts, never recognizer
-  modules.
+- After the explicit O0 reporting transition, report-only mode runs a
+  transformed shadow artifact through downstream semantic, ATN, decision, IR,
+  and render-model analysis so projected cost effects are real. Stage A only
+  establishes the non-committing API and preserves the current report command's
+  early return, diagnostics, exit status, output, and generation work.
 - Passes never write files. Deterministic transformed `.g4` and source-map
   artifacts, when requested, flow through `GeneratedArtifacts` and cannot
   overwrite an authored input path.
@@ -569,12 +572,13 @@ model/text. The shared report model must not grow fields such as `rungs`,
 the existing deterministic manual JSON policy can use a small internal
 report-value/writer abstraction.
 
-Assemble `optimizations.json` only after downstream plans and in-memory
-artifacts are available. Keep `decisions.json` as the detailed inventory of all
-parser decisions, but link its rows to optimization pass IDs where applicable.
-Wall-clock timings, RSS, and benchmark samples are nondeterministic and belong
-in an optional trace or published benchmark result, not the deterministic
-manifest.
+After O0, assemble `optimizations.json` only after downstream plans and
+in-memory artifacts are available. During stage A, its compatibility writer
+continues at the current early-return point with byte-identical content. Keep
+`decisions.json` as the detailed inventory of all parser decisions, but link its
+rows to optimization pass IDs where applicable. Wall-clock timings, RSS, and
+benchmark samples are nondeterministic and belong in an optional trace or
+published benchmark result, not the deterministic manifest.
 
 ## 5. Proposed source tree
 
@@ -1441,8 +1445,9 @@ This module should be independently changeable by parser-performance work.
 5. Remove all analysis and pass selection from render functions.
 6. Finalize `CompilationReport` only after downstream models and artifacts
    exist.
-7. Route report-only transformed shadows through the same downstream analyses
-   without committing recognizer artifacts.
+7. Expose the non-committing downstream-analysis entry point needed by O0, but
+   leave the current report-only early return, diagnostics, exit status,
+   manifest bytes, and generation work unchanged.
 8. Preserve rendered fragment order and existing manifest bytes exactly.
 
 This is the milestone that makes later parser-IR, decision, routing, and
@@ -1455,6 +1460,26 @@ render-layout optimization work independently reviewable.
 3. Narrow `pub(crate)` items to `pub(super)` or private.
 4. Add a dependency-boundary note to `codegen/mod.rs`.
 5. Run the complete validation matrix.
+
+### O0. Deepen report-only optimization evidence
+
+This is an intentional command-behavior and performance change in its own PR
+after A11, not part of the mechanical stage-A extraction:
+
+1. Record current report-only manifest bytes, stdout/stderr, exit status, wall
+   time, and peak RSS for successful and failing representative grammars.
+2. Route the transformed shadow through semantic, ATN, decision, IR, routing,
+   and render-model analysis without committing recognizer artifacts.
+3. Keep unrelated generation policies non-enforcing in report-only mode.
+   Invalid transformed candidates become deterministic declined/error evidence;
+   any new top-level diagnostic or failure requires an explicit documented
+   contract decision and fixture.
+4. Add projected downstream metrics to the report compatibility model and
+   deliberately accept the resulting `optimizations.json` snapshot changes.
+5. Rebaseline report-only timing and memory separately; normal generation
+   remains subject to the existing performance-equivalence gate.
+6. Verify apply/report-only agreement for downstream metrics and run the full
+   optimization contract suite.
 
 ### 8.1 Landing and parallel-work strategy
 
@@ -1703,20 +1728,21 @@ new package selectors instead of leaving stale instructions.
 The release job must:
 
 1. verify both package versions equal the release tag;
-2. fully test the workspace and dry-run `antlr-rust-runtime`;
-3. build and inspect the codegen package archive with
-   `cargo package -p antlr-rust-codegen --no-verify`;
+2. fully test the workspace and build codegen against the exact local runtime;
+3. package, inspect, and dry-run `antlr-rust-runtime`;
 4. publish `antlr-rust-runtime`;
-5. wait until that exact version is visible to Cargo/crates.io;
-6. run the full registry-backed codegen dry run;
+5. wait until that exact version is resolvable from Cargo/crates.io;
+6. package and inspect `antlr-rust-codegen`, then run its full registry-backed
+   dry run;
 7. publish `antlr-rust-codegen`;
 8. be safely rerunnable when the runtime is already published.
 
-The delayed codegen dry run is necessary with an exact dependency: Cargo
-verifies the packaged manifest against the registry after removing its local
-`path`, so the new runtime version must be visible first. CI and the pre-publish
-workspace build still verify the codegen crate against the exact local runtime
-before either publication.
+Both codegen packaging and its dry run must wait for the runtime. Cargo
+normalizes the codegen manifest by removing the runtime dependency's local
+`path` and resolves the exact registry version while preparing the archive;
+`--no-verify` skips building archive contents but does not bypass dependency
+resolution. CI and the pre-publish workspace build still verify the codegen
+crate against the exact local runtime before either publication.
 
 Use one release tag and one changelog. Independent release trains would conflict
 with the project's recommended matching-version workflow and add no current
@@ -1750,7 +1776,20 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 Run the behavioral-equivalence generation comparison on every stage A PR
 against the active global-revision baseline before and after R2.
 
-Run these after A3, A5, A6, R2, A7, A10, A11, and after the workspace move:
+The fresh-checkout instructions in `AGENTS.md` initially sparse-check out only
+the Kotlin grammar. Before running the complete parity matrix below, expand that
+same pinned checkout:
+
+```bash
+git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set \
+  kotlin/kotlin javascript/javascript javascript/typescript
+```
+
+A full checkout at the documented pinned commit is also valid. Do not present
+all three parity commands as one reproducible gate while only the Kotlin path is
+materialized.
+
+Run these after A3, A5, A6, R2, A7, A10, A11, O0, and after the workspace move:
 
 ```bash
 cargo llvm-cov --locked --all-features --workspace --lcov --output-path lcov.info
@@ -1773,6 +1812,10 @@ Performance-sensitive parser/lexer phases should also run the existing parity
 and parse benchmarks before and after their extraction. Module movement should
 not alter generated code, so any measurable generated-parser or generation-time
 change in a stage-A-only PR is a regression to investigate, not expected noise.
+
+O0 has a separate report-only baseline. Its review must show old and new
+manifest bytes, diagnostics, exit status, wall time, and peak RSS, and must
+confirm that normal generation remains unchanged.
 
 R0 records the section 7.5 controlled and external-validity baselines. R0.5
 records the disposable ABI alternatives and symbol evidence, passes public-API
@@ -1799,7 +1842,7 @@ linked-size, and runtime results as separate gates.
 | Parser analysis is accidentally recomputed by rendering | staged artifacts own analysis results; renderers accept only render models |
 | `ParserRenderModel` recouples surface/runtime work to IR and routing | build `ParserSurfaceModel` independently and give surface renderers only surface data plus support bindings |
 | An optimization rewrites generated Rust text | permit render optimization only over a validated structured render model |
-| Report-only mode reports only source-level estimates | run transformed shadows through downstream ATN, decision, IR, routing, and artifact analysis |
+| Deep report-only projection silently changes extraction behavior or cost | keep the early return byte-for-byte in stage A; make O0 an explicit behavior/performance transition with diagnostics, exit-status, manifest, timing, and RSS baselines |
 | Error ordering changes when inventories are unified | keep duplicate passes during moves; deduplicate only in a later focused PR |
 | Generic codegen gains fixture/language special cases | enforce metadata/ATN modeling and keep mappings in pattern files/tests |
 | Generated source shrinks but every recognizer still has machine-code copies | measure linked sections/symbols; use non-generic runtime operations for code intended to be shared |
@@ -1854,8 +1897,8 @@ Stage A is complete when:
   covered by cached-versus-clean recomputation tests;
 - `CompilationReport` is finalized after downstream analysis and artifact
   construction, and its shared envelope has no pass-specific fields;
-- report-only mode exercises downstream stages without committing recognizer
-  artifacts;
+- the pipeline exposes a non-committing downstream-analysis entry point while
+  the existing report-only command retains its early return and behavior;
 - optimization tests cover determinism, idempotence, composition, invalidation,
   differential behavior, and benchmark evidence;
 - unit tests are colocated and the CLI integration suite is split by concern;
@@ -1864,6 +1907,17 @@ Stage A is complete when:
 - all CI, conformance, and parity gates pass;
 - no stage-A change increments `__ANTLR4_RUST_CODEGEN_API`; stage R owns any
   intervening revision change.
+
+O0 is complete when:
+
+- report-only mode analyzes transformed shadows through downstream stages
+  without writing recognizer artifacts;
+- unrelated generation policies remain non-enforcing unless an explicitly
+  reviewed contract change says otherwise;
+- manifest, diagnostic, exit-status, timing, and RSS changes are recorded
+  against the pre-O0 baseline;
+- apply and report-only projections agree on deterministic downstream metrics;
+- normal generation still passes the stage-A equivalence and performance gates.
 
 Stage R is complete when:
 
@@ -1948,3 +2002,6 @@ runtime effects.
 | Issue #276 could block the main conflict-reduction campaign | Run R0-R0.5 beside A7-A11 and prefer landing incompatible R1-R2 after A11 |
 | `rust_output.rs` could become an ABI-policy bucket | Keep it syntax-only and put support revision/path lowering in `surface::support_abi` |
 | A workspace does not itself deduplicate generated mechanics | Keep support in the runtime, codegen lowering private, and reject a third support crate |
+| Deep report-only analysis is not behavior-preserving under the current early-return contract | Keep A10 byte-preserving and move downstream projection plus diagnostics/timing rebaselining to O0 |
+| Codegen packaging cannot resolve an unpublished exact runtime version | Publish and await the runtime before packaging or dry-running codegen; verify the local pair in the workspace first |
+| The documented Kotlin-only sparse checkout cannot run JavaScript/TypeScript parity | Expand the pinned checkout to all three grammar paths before the complete validation matrix |
