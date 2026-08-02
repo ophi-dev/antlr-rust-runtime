@@ -12664,10 +12664,10 @@ where
             if left_recursive
                 && left_recursive_boundary(self.atn, state, transition.target()).is_some()
             {
-                self.parser.parse_listener_exit_rule(rule_index);
                 if let Some(error) = self.parser.rule_depth_cap_violation() {
                     return Err(error);
                 }
+                self.parser.parse_listener_exit_rule(rule_index);
                 self.parser.push_new_recursion_context_with_previous(
                     invoking_state_number(
                         self.atn
@@ -19879,6 +19879,41 @@ mod tests {
         assert_eq!(parser.node(tree).text(), "a+b+c");
         assert!(deferred_actions.is_empty());
         assert_eq!(parser.semantic_hooks.events, ["action:11", "action:11"]);
+    }
+
+    #[test]
+    fn committed_left_recursive_depth_cap_keeps_listener_events_balanced() {
+        let atn = committed_action_left_recursive_atn();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("a"),
+            TestToken::new(3).with_text("+"),
+            TestToken::new(1).with_text("b"),
+            TestToken::eof("parser-test", 3, 1, 3),
+        ]);
+        parser.set_max_rule_depth(Some(1));
+        parser.add_parse_listener(RecordingParseListener {
+            events: Arc::clone(&events),
+        });
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(6, 11)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("the left-recursive expansion should exceed the depth cap");
+
+        insta::assert_debug_snapshot!(
+            "committed_left_recursive_depth_cap_keeps_listener_events_balanced",
+            (
+                error.to_string(),
+                events.lock().expect("parse-listener event lock").as_slice(),
+            )
+        );
     }
 
     #[test]
