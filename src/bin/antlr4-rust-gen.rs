@@ -16462,7 +16462,14 @@ fn disambiguate_parser_typed_hook_names(mappings: &mut [TypedHookMapping]) {
         .filter(|mapping| mapping.kind == ParserTypedHookKind::Action)
         .map(|mapping| mapping.method_name.clone())
         .collect::<BTreeSet<_>>();
+    let mut allocated = BTreeMap::<(ParserTypedHookKind, String), String>::new();
+    let mut used = BTreeSet::from([TYPED_HOOK_ACTION_METHOD.to_owned()]);
     for mapping in mappings {
+        let helper = (mapping.kind, mapping.call.name.clone());
+        if let Some(method_name) = allocated.get(&helper) {
+            mapping.method_name.clone_from(method_name);
+            continue;
+        }
         if mapping.method_name == TYPED_HOOK_ACTION_METHOD
             || (predicate_names.contains(&mapping.method_name)
                 && action_names.contains(&mapping.method_name))
@@ -16472,6 +16479,25 @@ fn disambiguate_parser_typed_hook_names(mappings: &mut [TypedHookMapping]) {
                 ParserTypedHookKind::Action => "_action",
             });
         }
+        let method_name = unique_typed_hook_method_name(&mapping.method_name, &used);
+        used.insert(method_name.clone());
+        allocated.insert(helper, method_name.clone());
+        mapping.method_name = method_name;
+    }
+}
+
+fn unique_typed_hook_method_name(base: &str, used: &BTreeSet<String>) -> String {
+    if !used.contains(base) {
+        return base.to_owned();
+    }
+    let stem = base.strip_prefix("r#").unwrap_or(base);
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{stem}_{suffix}");
+        if !used.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
     }
 }
 
@@ -22473,6 +22499,59 @@ dispose = "hook"
         disambiguate_parser_typed_hook_names(&mut mappings);
         assert_eq!(mappings[0].method_name, "custom_action_pred");
         assert_eq!(mappings[1].method_name, "is_type_name");
+    }
+
+    #[test]
+    fn typed_hook_action_method_names_remain_unique_after_suffixing() {
+        let mut mappings = [
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 0,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 1,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 2,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+        ];
+
+        disambiguate_parser_typed_hook_names(&mut mappings);
+
+        insta::assert_debug_snapshot!(
+            "typed_hook_action_method_names_remain_unique_after_suffixing",
+            mappings
+                .iter()
+                .map(|mapping| (
+                    mapping.coordinate_index,
+                    mapping.kind,
+                    mapping.method_name.as_str(),
+                ))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

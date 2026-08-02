@@ -1218,7 +1218,8 @@ pub struct ParserSemantics {
 /// Optional generated-runtime metadata for metadata-driven parser execution.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserRuntimeOptions<'a> {
-    /// Rule indexes whose `@init` actions should be replayed.
+    /// Rule indexes whose `@init` actions should run at rule entry or be
+    /// returned for legacy replay when no semantic hook handles them.
     pub init_action_rules: &'a [usize],
     /// Stable parser-action indexes keyed by authored ATN source state.
     ///
@@ -7210,7 +7211,7 @@ where
     /// Generated parsers call this for action source states that were present
     /// in the ATN but not translated into a built-in Rust action template.
     pub fn parser_action_hook(&mut self, action: ParserAction, tree: ParseTree) -> bool {
-        self.parser_action_hook_inner(action, None, Some(tree))
+        self.parser_action_hook_inner(action, None, Some(tree), true)
     }
 
     /// Offers an action to semantic hooks at its committed grammar position.
@@ -7222,7 +7223,20 @@ where
         action: ParserAction,
         context: &ParserRuleContext,
     ) -> bool {
-        self.parser_action_hook_inner(action, Some(context), None)
+        self.parser_action_hook_inner(action, Some(context), None, true)
+    }
+
+    /// Offers a rule-init action at rule entry while preserving legacy replay.
+    ///
+    /// A declined init is returned to the generated caller, so it is not an
+    /// unhandled action yet and must not trip the fail-loud policy here.
+    fn parser_rule_init_hook_with_context(
+        &mut self,
+        action: ParserAction,
+        context: &ParserRuleContext,
+    ) -> bool {
+        debug_assert!(action.is_rule_init());
+        self.parser_action_hook_inner(action, Some(context), None, false)
     }
 
     fn parser_action_hook_inner(
@@ -7230,6 +7244,7 @@ where
         action: ParserAction,
         context: Option<&ParserRuleContext>,
         tree: Option<ParseTree>,
+        record_unhandled: bool,
     ) -> bool {
         let rule_index = action.rule_index();
         let rule_name = self.rule_names().get(rule_index).cloned();
@@ -7254,7 +7269,10 @@ where
         // committed action is silently dropped — record it so the parse entry
         // can fail loud under the fail-loud boundary, mirroring unknown
         // predicates. `assume-*` policies opt out of the fail-loud recording.
-        if !handled && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error) {
+        if record_unhandled
+            && !handled
+            && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error)
+        {
             let coordinate = (rule_index, action.source_state());
             if !self.unhandled_action_hits.contains(&coordinate) {
                 self.unhandled_action_hits.push(coordinate);
@@ -12539,11 +12557,17 @@ where
                     )
                 });
         if self.options.init_action_rules.contains(&rule_index) {
-            self.deferred_actions.push(ParserAction::new_rule_init(
+            let action = ParserAction::new_rule_init(
                 rule_index,
                 rule_start_index,
                 init_expected_state.or(Some(start_state)),
-            ));
+            );
+            if !self
+                .parser
+                .parser_rule_init_hook_with_context(action, &context)
+            {
+                self.deferred_actions.push(action);
+            }
         }
         let mut consumed_eof = false;
         let result = self.walk_rule(
@@ -19222,6 +19246,46 @@ mod tests {
     }
 
     #[derive(Debug, Default)]
+    struct InitOrderingHooks {
+        initialized: bool,
+        events: Vec<String>,
+    }
+
+    impl SemanticHooks for InitOrderingHooks {
+        fn sempred<S>(
+            &mut self,
+            _ctx: &mut ParserSemCtx<'_, S>,
+            _rule_index: usize,
+            _pred_index: usize,
+        ) -> Option<bool>
+        where
+            S: TokenSource,
+        {
+            self.events.push(format!("predicate:{}", self.initialized));
+            Some(self.initialized)
+        }
+
+        fn action<S>(&mut self, _ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+        where
+            S: TokenSource,
+        {
+            if action.is_rule_init() {
+                self.initialized = true;
+                self.events.push("init".to_owned());
+            } else {
+                self.events.push(format!(
+                    "action:{}:initialized={}",
+                    action
+                        .action_index()
+                        .map_or_else(|| "legacy".to_owned(), |index| index.to_string()),
+                    self.initialized
+                ));
+            }
+            true
+        }
+    }
+
+    #[derive(Debug, Default)]
     struct ForcedSecondAlternativeHooks {
         decisions: Vec<(usize, usize, usize)>,
     }
@@ -19978,14 +20042,14 @@ mod tests {
     }
 
     #[test]
-    fn committed_walker_returns_rule_init_actions() {
+    fn committed_walker_runs_handled_rule_init_before_indexed_action() {
         let atn = committed_action_then_predicate_atn();
         let mut parser = mini_parser_with_hooks(
             vec![
                 TestToken::new(1).with_text("x"),
                 TestToken::eof("parser-test", 1, 1, 1),
             ],
-            StatefulActionHooks::default(),
+            InitOrderingHooks::default(),
         );
 
         let (_, deferred_actions) = parser
@@ -19998,7 +20062,35 @@ mod tests {
                     ..ParserRuntimeOptions::default()
                 },
             )
-            .expect("the committed rule should preserve its init action");
+            .expect("the named action should observe rule-init state");
+
+        assert!(deferred_actions.is_empty());
+        assert_eq!(
+            parser.semantic_hooks.events,
+            ["init", "action:7:initialized=true", "predicate:true",]
+        );
+    }
+
+    #[test]
+    fn committed_walker_defers_unhandled_rule_init_for_legacy_replay() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let (_, deferred_actions) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    init_action_rules: &[0],
+                    action_indices: &[(usize::MAX, 0)],
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a declined init should remain available for legacy replay");
 
         assert_eq!(
             deferred_actions,
