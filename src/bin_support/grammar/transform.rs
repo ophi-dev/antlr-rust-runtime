@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+use super::action::{ActionReferenceParser, action_references};
 use super::char_support::get_char_value_from_grammar_char_literal;
 use super::diagnostic::{CompilationError, Diagnostic};
-use super::frontend::{SourceId, SourceSpan};
+use super::frontend::{SourceFile, SourceId, SourceSpan};
 use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
@@ -106,6 +107,7 @@ pub(crate) struct TransformContext<'a> {
     pub(crate) id: TransformId,
     pub(crate) analysis: &'a TransformAnalysis,
     pub(crate) report_only: bool,
+    pub(crate) action_reference_parser: ActionReferenceParser,
 }
 
 #[derive(Clone, Debug)]
@@ -165,12 +167,27 @@ impl TransformRegistry {
         ids: &mut ModelIdAllocator,
         report_only: bool,
     ) -> Result<TransformReport, Diagnostic> {
+        self.run_with_action_reference_parser(grammar, ids, report_only, action_references)
+    }
+
+    pub(crate) fn run_with_action_reference_parser(
+        &self,
+        grammar: &mut TransformGrammar,
+        ids: &mut ModelIdAllocator,
+        report_only: bool,
+        action_reference_parser: ActionReferenceParser,
+    ) -> Result<TransformReport, Diagnostic> {
         if report_only {
             let mut projected_grammar = grammar.clone();
             let mut projected_ids = ids.clone();
-            return self.run_mutating(&mut projected_grammar, &mut projected_ids, true);
+            return self.run_mutating(
+                &mut projected_grammar,
+                &mut projected_ids,
+                true,
+                action_reference_parser,
+            );
         }
-        self.run_mutating(grammar, ids, false)
+        self.run_mutating(grammar, ids, false, action_reference_parser)
     }
 
     fn run_mutating(
@@ -178,6 +195,7 @@ impl TransformRegistry {
         grammar: &mut TransformGrammar,
         ids: &mut ModelIdAllocator,
         report_only: bool,
+        action_reference_parser: ActionReferenceParser,
     ) -> Result<TransformReport, Diagnostic> {
         let mut report = TransformReport::default();
         let mut analysis = TransformAnalysis::compute(&grammar.units);
@@ -189,6 +207,7 @@ impl TransformRegistry {
                     id,
                     analysis: &analysis,
                     report_only,
+                    action_reference_parser,
                 },
                 grammar,
                 ids,
@@ -1323,24 +1342,13 @@ fn split_combined(
         .flat_map(|mode| mode.rules.iter())
         .copied()
         .collect::<BTreeSet<_>>();
-    let mut lexer_rules = Vec::new();
-    let mut parser_rules = Vec::new();
-    for rule in std::mem::take(&mut combined.rules) {
-        match (rule.kind, modal_rules.contains(&rule.id)) {
-            (_, true) => parser_rules.push(rule),
-            (RuleKind::Lexer, false) => lexer_rules.push(rule),
-            (RuleKind::Parser, false) => parser_rules.push(rule),
-        }
-    }
+    let (parser_rules, mut lexer_rules) =
+        partition_combined_rules(std::mem::take(&mut combined.rules), &modal_rules);
     combined.rules = parser_rules;
 
-    let literals = parser_literals(&combined.rules);
-    let aliases = literal_aliases(&lexer_rules);
+    let literals = implicit_literal_order(&combined.rules, &lexer_rules);
     let mut implicit_rules = Vec::new();
     for literal in literals {
-        if aliases.contains(&literal) {
-            continue;
-        }
         let (original, source) = find_literal_element(&combined.rules, &literal)
             .expect("collected parser literal has an owning element");
         implicit_rules.push(implicit_literal_rule(
@@ -1462,6 +1470,41 @@ fn parser_literals(rules: &[Rule]) -> Vec<String> {
         visit(&rule.block, &mut seen, &mut literals);
     }
     literals
+}
+
+pub(crate) fn source_implicit_token_literals(file: &SourceFile) -> Option<Vec<String>> {
+    let mut ids = ModelIdAllocator::after_loaded_grammars(1);
+    let mut provenance = ProvenanceIndex::default();
+    let unit = parse_grammar_unit(file, GrammarId::new(0), &mut ids, &mut provenance);
+    if unit.kind != GrammarKind::Combined {
+        return None;
+    }
+
+    let modal_rules = unit
+        .modes
+        .iter()
+        .flat_map(|mode| mode.rules.iter())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let (parser_rules, lexer_rules) = partition_combined_rules(unit.rules, &modal_rules);
+    Some(implicit_literal_order(&parser_rules, &lexer_rules))
+}
+
+fn partition_combined_rules(
+    rules: Vec<Rule>,
+    modal_rules: &BTreeSet<RuleId>,
+) -> (Vec<Rule>, Vec<Rule>) {
+    rules
+        .into_iter()
+        .partition(|rule| modal_rules.contains(&rule.id) || rule.kind == RuleKind::Parser)
+}
+
+fn implicit_literal_order(parser_rules: &[Rule], lexer_rules: &[Rule]) -> Vec<String> {
+    let aliases = literal_aliases(lexer_rules);
+    parser_literals(parser_rules)
+        .into_iter()
+        .filter(|literal| !aliases.contains(literal))
+        .collect()
 }
 
 fn literal_aliases(rules: &[Rule]) -> BTreeSet<String> {

@@ -1,0 +1,9 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: conditional_field_attributes
+---
+#[cfg(any())]
+conditional_field: i32,
+---
+#[cfg(any())]
+conditional_field: __antlr4rust_token_aliases_2::AliasCollisionParser_FIELD_INIT,

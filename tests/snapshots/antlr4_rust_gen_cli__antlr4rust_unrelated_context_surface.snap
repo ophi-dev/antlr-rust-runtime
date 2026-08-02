@@ -1,0 +1,16 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: "unrelated_context.lines().filter(|line|\nline.trim_start().starts_with(\"pub fn \")).map(str::trim).collect::<Vec<_>>().join(\"\\n\")"
+---
+pub fn rule_node(&self) -> RuleNodeView<'a> {
+pub fn child_count(&self) -> usize {
+pub fn direct_terminals(
+pub fn start(&self) -> __GeneratedTokenView {
+pub fn text(&self) -> String {
+pub fn text_rule_child(&self) -> Result<TextContext<'a>, MissingChildError> {
+pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+pub fn identifier_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+pub fn rule_node(&self) -> RuleNodeView<'a> {
+pub fn text_rule_child(&self) -> TextContext<'a, ValidatedTreeContext> {
+pub fn eof_token(&self) -> TerminalNode<'a> {
+pub fn identifier_token(&self) -> TerminalNode<'a> {

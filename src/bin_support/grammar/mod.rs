@@ -1,4 +1,4 @@
-mod action;
+pub(crate) mod action;
 pub(crate) mod atn;
 mod char_support;
 pub(crate) mod compiler;
@@ -25,6 +25,8 @@ pub(crate) mod transform;
 mod transform_analysis;
 mod unicode;
 mod unicode_escape;
+
+pub(crate) use syntax::parse_loader_unit;
 
 #[cfg(test)]
 pub(crate) use semantics::{

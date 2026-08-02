@@ -1,0 +1,5 @@
+---
+source: src/bin_support/rust_syntax/mod.rs
+expression: error
+---
+cannot classify embedded Rust syntax: at 1:15: no viable alternative at input 'let_broken=(;'

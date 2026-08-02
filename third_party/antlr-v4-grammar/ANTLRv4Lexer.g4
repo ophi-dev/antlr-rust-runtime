@@ -129,6 +129,7 @@ fragment NESTED_ACTION
     '{' (
         NESTED_ACTION          // embedded {} block
         | STRING_LITERAL       // single quoted string
+        | ApostropheIdentifier // target syntax such as labels or lifetimes
         | DoubleQuoteLiteral   // double quoted string
         | TripleQuoteLiteral   // string literal with triple quotes
         | BacktickQuoteLiteral // backtick quoted string
@@ -143,6 +144,10 @@ fragment NESTED_ACTION
             | '{'
         ) // Some other single character that is not handled above
     )*? '}'
+    ;
+
+fragment ApostropheIdentifier
+    : '\'' ('_' | ('r#')? NameStartChar NameChar*)
     ;
 
 // -------------------------

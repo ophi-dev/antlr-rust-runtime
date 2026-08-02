@@ -1,0 +1,97 @@
+---
+source: src/bin_support/embedded.rs
+expression: lowered.source
+---
+{
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_DUPLICATE = __antlr4rust_token_aliases::CfgParser_DUPLICATE;
+#[cfg(not(all()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_ACTIVE_USE};
+#[cfg(all())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_ACTIVE_USE;
+let active_use = CfgParser_ACTIVE_USE;
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_INACTIVE_USE};
+#[cfg(any())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_INACTIVE_USE;
+let inactive_use = CfgParser_INACTIVE_USE;
+#[cfg(not(all()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_ACTIVE_LET = __antlr4rust_token_aliases::CfgParser_ACTIVE_LET;
+#[cfg(all())]
+let CfgParser_ACTIVE_LET = 7;
+let active_let = CfgParser_ACTIVE_LET;
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_INACTIVE_LET = __antlr4rust_token_aliases::CfgParser_INACTIVE_LET;
+#[cfg(any())]
+let CfgParser_INACTIVE_LET = 8;
+let inactive_let = CfgParser_INACTIVE_LET;
+#[cfg(any())]
+let CfgParser_DUPLICATE = 9;
+#[cfg(any())]
+use antlr4_runtime::DEFAULT_CHANNEL as CfgParser_DUPLICATE;
+let duplicate = CfgParser_DUPLICATE;
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_STAGED = __antlr4rust_token_aliases::CfgParser_STAGED;
+#[cfg(any())]
+let CfgParser_STAGED = 9;
+let staged_before = CfgParser_STAGED;
+#[cfg(all())]
+let CfgParser_STAGED = 10;
+let staged_after = CfgParser_STAGED;
+fn cfg_parameter(
+#[cfg(any())] CfgParser_PARAMETER: i32,
+) -> i32 {
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_PARAMETER = __antlr4rust_token_aliases::CfgParser_PARAMETER;
+CfgParser_PARAMETER
+}
+let parameter = cfg_parameter();
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_ITEM};
+#[cfg(any())]
+const CfgParser_ITEM: i32 = 11;
+let item = CfgParser_ITEM;
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CfgParser_CONST_GENERIC};
+fn cfg_const_generic<
+#[cfg(any())] const CfgParser_CONST_GENERIC: usize,
+>() -> i32 {
+CfgParser_CONST_GENERIC
+}
+let const_generic = cfg_const_generic();
+let cfg_closure = |
+#[cfg(any())] CfgParser_CLOSURE: i32,
+| {
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_CLOSURE = __antlr4rust_token_aliases::CfgParser_CLOSURE;
+CfgParser_CLOSURE
+};
+let closure = cfg_closure();
+struct CfgFields {
+#[cfg(any())]
+CfgParser_PATTERN: i32,
+}
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_PATTERN = __antlr4rust_token_aliases::CfgParser_PATTERN;
+let CfgFields {
+#[cfg(any())]
+CfgParser_PATTERN,
+} = CfgFields {};
+let pattern = CfgParser_PATTERN;
+active_use == 0 && inactive_use > 0
+&& active_let == 7 && inactive_let > 0 && duplicate > 0
+&& staged_before > 0 && staged_after == 10 && parameter > 0
+&& item > 0 && const_generic > 0 && closure > 0
+&& pattern > 0
+}

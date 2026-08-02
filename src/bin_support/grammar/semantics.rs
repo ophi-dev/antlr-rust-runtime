@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use super::action::{ActionReference, ActionReferenceKind, action_references};
+use super::action::{
+    ActionReference, ActionReferenceKind, ActionReferenceParser, action_references,
+};
 use super::char_support::decode_string_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::frontend::{SourceId, SourceSpan};
@@ -14,7 +16,7 @@ use super::model::{
     SemanticBindings, SemanticGrammar, SetElement, Terminal, TerminalBinding, TokenDeclaration,
     TokenSymbol, TokenSymbolId, Vocabulary,
 };
-use super::mutual_recursion::eliminate_mutual_left_recursion;
+use super::mutual_recursion::eliminate_mutual_left_recursion_with_action_reference_parser;
 use super::provenance::ProvenanceIndex;
 use super::rule_reachability::{EntryRuleConfig, analyze as analyze_rule_reachability};
 use super::source::SourceSet;
@@ -81,8 +83,17 @@ pub(crate) fn analyze(
 
 pub(crate) fn analyze_with_entry_rules(
     sources: &SourceSet,
+    integrated: IntegratedGrammarSet,
+    entry_rules: &EntryRuleConfig,
+) -> Result<SemanticGrammarSet, CompilationError> {
+    analyze_with_action_reference_parser(sources, integrated, entry_rules, action_references)
+}
+
+pub(crate) fn analyze_with_action_reference_parser(
+    sources: &SourceSet,
     mut integrated: IntegratedGrammarSet,
     entry_rules: &EntryRuleConfig,
+    action_reference_parser: ActionReferenceParser,
 ) -> Result<SemanticGrammarSet, CompilationError> {
     let mut diagnostics = std::mem::take(&mut integrated.diagnostics);
     let deferred_diagnostics = channel_placement_diagnostics(&integrated.grammar.units);
@@ -113,11 +124,12 @@ pub(crate) fn analyze_with_entry_rules(
     // recursion before the direct-recursion rewrite runs (issue #151). This is
     // a no-op on grammars with no reducible left-corner cycle; anything it
     // declines is reported later by the ATN-level G4A005 detector.
-    eliminate_mutual_left_recursion(
+    eliminate_mutual_left_recursion_with_action_reference_parser(
         &mut integrated.grammar.units,
         &mut integrated.ids,
         &mut integrated.grammar.provenance,
         &preserved_entry_rules,
+        action_reference_parser,
     );
     diagnostics.extend(rewrite_immediate_left_recursion(
         &mut integrated.grammar.units,
@@ -157,6 +169,7 @@ pub(crate) fn analyze_with_entry_rules(
                 symbol_unit: &symbol_units[&unit_id],
                 shares_tokens_with_implicit_lexer,
                 entry_rules,
+                action_reference_parser,
             },
             unit,
             imported,
@@ -916,6 +929,7 @@ struct UnitAnalysisContext<'a> {
     symbol_unit: &'a GrammarUnit,
     shares_tokens_with_implicit_lexer: bool,
     entry_rules: &'a EntryRuleConfig,
+    action_reference_parser: ActionReferenceParser,
 }
 
 fn analyze_unit(
@@ -930,6 +944,7 @@ fn analyze_unit(
         symbol_unit,
         shares_tokens_with_implicit_lexer,
         entry_rules,
+        action_reference_parser,
     } = context;
     let imported_names = vocabulary.by_name.keys().cloned().collect::<BTreeSet<_>>();
     let mut token_diagnostics = Vec::new();
@@ -981,14 +996,15 @@ fn analyze_unit(
     let (channel_names, channel_numbers) =
         assign_channels(&unit, &vocabulary, &mut channel_diagnostics);
     let mut binding_diagnostics = Vec::new();
-    let collection = BindingCollector::new(
-        &unit,
-        &vocabulary,
-        &rules_by_name,
-        &channel_numbers,
-        &mode_numbers,
-        &mut binding_diagnostics,
-    )
+    let collection = BindingCollector::new(BindingCollectorContext {
+        unit: &unit,
+        vocabulary: &vocabulary,
+        rules_by_name: &rules_by_name,
+        channel_numbers: &channel_numbers,
+        mode_numbers: &mode_numbers,
+        diagnostics: &mut binding_diagnostics,
+        action_reference_parser,
+    })
     .collect();
     diagnostics.extend(symbol_diagnostics);
     diagnostics.extend(token_diagnostics);
@@ -1909,17 +1925,30 @@ struct BindingCollector<'a> {
     call_graph: BTreeMap<RuleId, Vec<RuleId>>,
     action_numbers: BTreeMap<ActionId, usize>,
     predicate_numbers: BTreeMap<super::model::PredicateId, usize>,
+    action_reference_parser: ActionReferenceParser,
+}
+
+struct BindingCollectorContext<'a> {
+    unit: &'a GrammarUnit,
+    vocabulary: &'a Vocabulary,
+    rules_by_name: &'a BTreeMap<&'a str, RuleId>,
+    channel_numbers: &'a BTreeMap<String, i32>,
+    mode_numbers: &'a BTreeMap<String, usize>,
+    diagnostics: &'a mut Vec<Diagnostic>,
+    action_reference_parser: ActionReferenceParser,
 }
 
 impl<'a> BindingCollector<'a> {
-    fn new(
-        unit: &'a GrammarUnit,
-        vocabulary: &'a Vocabulary,
-        rules_by_name: &'a BTreeMap<&'a str, RuleId>,
-        channel_numbers: &'a BTreeMap<String, i32>,
-        mode_numbers: &'a BTreeMap<String, usize>,
-        diagnostics: &'a mut Vec<Diagnostic>,
-    ) -> Self {
+    fn new(context: BindingCollectorContext<'a>) -> Self {
+        let BindingCollectorContext {
+            unit,
+            vocabulary,
+            rules_by_name,
+            channel_numbers,
+            mode_numbers,
+            diagnostics,
+            action_reference_parser,
+        } = context;
         Self {
             unit,
             vocabulary,
@@ -1931,6 +1960,7 @@ impl<'a> BindingCollector<'a> {
             call_graph: BTreeMap::new(),
             action_numbers: BTreeMap::new(),
             predicate_numbers: BTreeMap::new(),
+            action_reference_parser,
         }
     }
 
@@ -2064,7 +2094,10 @@ impl<'a> BindingCollector<'a> {
                         alternative: alternative.id,
                         element: element.id,
                         index,
-                        context_dependent: action_is_context_dependent(body),
+                        context_dependent: action_is_context_dependent(
+                            body,
+                            self.action_reference_parser,
+                        ),
                     },
                 );
                 self.validate_action(
@@ -2093,7 +2126,10 @@ impl<'a> BindingCollector<'a> {
                         element: element.id,
                         index,
                         precedence: *precedence,
-                        context_dependent: action_is_context_dependent(body),
+                        context_dependent: action_is_context_dependent(
+                            body,
+                            self.action_reference_parser,
+                        ),
                     },
                 );
                 self.validate_action(
@@ -2139,7 +2175,7 @@ impl<'a> BindingCollector<'a> {
     }
 
     fn validate_action(&mut self, scope: ActionScope<'_>, body: &str, body_span: &SourceSpan) {
-        for reference in action_references(body) {
+        for reference in (self.action_reference_parser)(body) {
             let diagnostic =
                 match reference.kind {
                     ActionReferenceKind::Attribute { name, assignment } => self
@@ -3102,8 +3138,8 @@ fn incompatible_command<'a>(seen: &'a [String], command: &str) -> Option<&'a str
     })
 }
 
-fn action_is_context_dependent(body: &str) -> bool {
-    !action_references(body).is_empty()
+fn action_is_context_dependent(body: &str, action_reference_parser: ActionReferenceParser) -> bool {
+    !action_reference_parser(body).is_empty()
 }
 
 fn predefined_attribute(name: &str) -> bool {

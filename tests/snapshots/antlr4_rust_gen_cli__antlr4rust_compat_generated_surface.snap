@@ -1,0 +1,99 @@
+---
+source: tests/antlr4_rust_gen_cli.rs
+expression: "format!(\"=== C ===\\n{}\\n=== Java ===\\n{}\\n=== Alias only ===\\n{}\\n=== Alias collision ===\\n{}\",\nexcerpt(&c_parser), excerpt(&java_parser), excerpt(&alias_parser),\nexcerpt(&alias_collision_parser))"
+---
+=== C ===
+struct __Antlr4RustInput<'a, L: TokenSource>(&'a CommonTokenStream<L>);
+impl<'a, L: TokenSource> __Antlr4RustInput<'a, L> {
+fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView<'a>> {
+token.map(__Antlr4RustTokenView)
+struct __Antlr4RustTokenView<'a>(antlr4_runtime::TokenView<'a>);
+impl<'a> __Antlr4RustTokenView<'a> {
+pub(super) const CCompatParser_ASSIGN: i32 = 1;
+pub(super) const CCompatParser_IDENTIFIER: i32 = 2;
+let __first = __Antlr4RustInput(self.base.token_stream()).lt(1);
+let __eof = __Antlr4RustInput(self.base.token_stream()).lt(5)
+__first_type == Some(__antlr4rust_token_aliases::CCompatParser_IDENTIFIER)
+&& __Antlr4RustInput(self.base.token_stream()).la(0) == antlr4_runtime::INVALID_TOKEN_TYPE
+&& __Antlr4RustInput(self.base.token_stream()).la(-1) == antlr4_runtime::INVALID_TOKEN_TYPE
+&& __Antlr4RustInput(self.base.token_stream()).la(1) == __antlr4rust_token_aliases::CCompatParser_IDENTIFIER
+&& __Antlr4RustInput(self.base.token_stream()).la(2) == __antlr4rust_token_aliases::CCompatParser_ASSIGN
+&& __Antlr4RustInput(self.base.token_stream()).lt(0).is_none()
+let (__last_type, __last_text) = __Antlr4RustInput(self.base.token_stream()).lt(-__bk)
+let __first_text = __Antlr4RustInput(self.base.token_stream()).lt(-__bk)
+__last_type == __antlr4rust_token_aliases::CCompatParser_IDENTIFIER
+&& __Antlr4RustInput(self.base.token_stream()).lt(-3).is_none()
+let __text = __Antlr4RustInput(self.base.token_stream()).lt(-__ek)
+=== Java ===
+struct __Antlr4RustInput<'a, L: TokenSource>(&'a CommonTokenStream<L>);
+impl<'a, L: TokenSource> __Antlr4RustInput<'a, L> {
+fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView<'a>> {
+token.map(__Antlr4RustTokenView)
+struct __Antlr4RustTokenView<'a>(antlr4_runtime::TokenView<'a>);
+impl<'a> __Antlr4RustTokenView<'a> {
+pub(super) const JavaCompatParser_ASSIGN: i32 = 1;
+pub(super) const JavaCompatParser_IDENTIFIER: i32 = 11;
+pub(super) const JavaCompatParser_MODULE: i32 = 4;
+pub fn recordComponent_all(&self) -> Vec<__Antlr4RustContext<RecordComponentContext<'a>>> {
+pub fn ELLIPSIS(&self) -> Option<TerminalNode<'a>> {
+pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
+pub fn IDENTIFIER(&self, index: usize) -> Option<TerminalNode<'a>> {
+pub fn IDENTIFIER_all(&self) -> Vec<TerminalNode<'a>> {
+pub fn context_rule_node(&self) -> RuleNodeView<'a> {
+pub fn context_child_count(&self) -> usize {
+pub fn context_start(&self) -> __GeneratedTokenView {
+pub fn context_text(&self) -> String {
+pub fn context_rule_node(&self) -> RuleNodeView<'a> {
+pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
+pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
+pub fn r#type(&self) -> Result<TypeContext<'a>, MissingChildError> {
+pub fn self_(&self) -> Result<SelfContext<'a>, MissingChildError> {
+pub fn r#type(&self) -> TypeContext<'a, ValidatedTreeContext> {
+pub fn self_(&self) -> SelfContext<'a, ValidatedTreeContext> {
+pub fn r#type(&self) -> Option<__Antlr4RustContext<TypeContext<'a>>> {
+pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>> {
+pub fn self__token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+pub fn self__token(&self) -> TerminalNode<'a> {
+__Antlr4RustInput(self.base.token_stream()).la(1),
+__antlr4rust_token_aliases::JavaCompatParser_IDENTIFIER | __antlr4rust_token_aliases::JavaCompatParser_MODULE
+) || __Antlr4RustInput(self.base.token_stream()).la(2) != __antlr4rust_token_aliases::JavaCompatParser_ASSIGN
+__Antlr4RustInput(self.base.token_stream()).la(1) == antlr4_runtime::TOKEN_EOF
+&& __Antlr4RustInput(self.base.token_stream()).la(2) == antlr4_runtime::TOKEN_EOF
+__active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let rcs = ctx.recordComponent_all();
+__active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let rcs = ctx.recordComponent_all();
+__active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let rcs = ctx.recordComponent_all();
+__active_context_view_with_attrs::<RecordComponentListContext<'_, __ActiveParserContext>>(
+let rcs = ctx.recordComponent_all();
+__active_context_view_with_attrs::<RepeatedTokensContext<'_, __ActiveParserContext>>(
+__active_context_view_with_attrs::<CommonAccessorCollisionsContext<'_, __ActiveParserContext>>(
+__active_context_view_with_attrs::<LiveAttributesContext<'_, __ActiveParserContext>>(
+__active_context_view_with_attrs::<SameBodyAttributesContext<'_, __ActiveParserContext>>(
+__active_context_view_with_attrs::<KeywordAccessorContext<'_, __ActiveParserContext>>(
+pub fn r#type(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+pub fn self_(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+=== Alias only ===
+pub(super) const AliasOnlyParser_ID: i32 = 2;
+pub(super) const AliasOnlyParser_T__0: i32 = 1;
+__antlr4rust_token_aliases::AliasOnlyParser_ID == ID && __antlr4rust_token_aliases::AliasOnlyParser_T__0 == T__0
+=== Alias collision ===
+struct AliasCollisionParser_ID;
+struct r#__Antlr4RustInput;
+struct __Antlr4RustTokenView;
+use antlr4_runtime::TOKEN_EOF as AliasCollisionParser_EOF;
+struct __Antlr4RustInput_2<'a, L: TokenSource>(&'a CommonTokenStream<L>);
+impl<'a, L: TokenSource> __Antlr4RustInput_2<'a, L> {
+fn lt(&self, offset: isize) -> Option<__Antlr4RustTokenView_2<'a>> {
+token.map(__Antlr4RustTokenView_2)
+struct __Antlr4RustTokenView_2<'a>(antlr4_runtime::TokenView<'a>);
+impl<'a> __Antlr4RustTokenView_2<'a> {
+pub(crate) const AliasCollisionParser_EOF: i32 = antlr4_runtime::TOKEN_EOF;
+pub(super) use super::AliasCollisionParser_EOF;
+pub(super) use super::AliasCollisionParser_ID;
+let _user_symbol = __antlr4rust_token_aliases_2::AliasCollisionParser_ID;
+let _user_import = __antlr4rust_token_aliases_2::AliasCollisionParser_EOF;
+let input_facade_ok = __Antlr4RustInput_2(self.base.token_stream()).la(1) > 0
+&& __Antlr4RustInput_2(self.base.token_stream())
+&& __active_context_view_with_attrs::<StartContext<'_, __ActiveParserContext>>(

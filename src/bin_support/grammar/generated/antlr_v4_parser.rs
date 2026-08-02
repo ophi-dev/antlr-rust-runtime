@@ -755,6 +755,7 @@ fn __labeled_token_children_matching<'a>(
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -768,7 +769,24 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     storage: &'a antlr4_runtime::ParseTreeStorage,
     tokens: &'a antlr4_runtime::TokenStore,
 ) -> Option<T> {
-    T::__from_active(context, invocation_states, storage, tokens)
+    T::__from_active(context, None, invocation_states, storage, tokens)
+}
+
+#[allow(dead_code)]
+fn __active_context_view_with_attrs<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a antlr4_runtime::ParserRuleContext,
+    live_attrs: &dyn std::any::Any,
+    invocation_states: Vec<isize>,
+    storage: &'a antlr4_runtime::ParseTreeStorage,
+    tokens: &'a antlr4_runtime::TokenStore,
+) -> Option<T> {
+    T::__from_active(
+        context,
+        Some(live_attrs),
+        invocation_states,
+        storage,
+        tokens,
+    )
 }
 
 #[allow(dead_code)]
@@ -990,6 +1008,7 @@ impl<'a> GrammarSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for GrammarSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -1250,6 +1269,7 @@ impl<'a> GrammarDeclContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for GrammarDeclContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -1494,6 +1514,7 @@ impl<'a> GrammarTypeContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for GrammarTypeContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -1728,6 +1749,7 @@ impl<'a> PrequelConstructContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for PrequelConstructContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -1980,6 +2002,7 @@ impl<'a> OptionsSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for OptionsSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -2220,6 +2243,7 @@ impl<'a> OptionContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for OptionContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -2464,6 +2488,7 @@ impl<'a> OptionValueContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for OptionValueContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -2710,6 +2735,7 @@ impl<'a> DelegateGrammarsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -2950,6 +2976,7 @@ impl<'a> DelegateGrammarContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -3170,6 +3197,7 @@ impl<'a> TokensSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for TokensSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -3406,6 +3434,7 @@ impl<'a> ChannelsSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ChannelsSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -3642,6 +3671,7 @@ impl<'a> IdListContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for IdListContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -3858,6 +3888,7 @@ impl<'a> ActionContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ActionContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -4122,6 +4153,7 @@ impl<'a> ActionScopeNameContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ActionScopeNameContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -4354,6 +4386,7 @@ impl<'a> ActionBlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ActionBlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -4568,6 +4601,7 @@ impl<'a> ArgActionBlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ArgActionBlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -4800,6 +4834,7 @@ impl<'a> ModeSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ModeSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -5049,6 +5084,7 @@ impl<'a> RulesContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RulesContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -5259,6 +5295,7 @@ impl<'a> RuleSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -5481,6 +5518,7 @@ impl<'a> ParserRuleSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ParserRuleSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -5807,6 +5845,7 @@ impl<'a> ExceptionGroupContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ExceptionGroupContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -6027,6 +6066,7 @@ impl<'a> ExceptionHandlerContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ExceptionHandlerContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -6271,6 +6311,7 @@ impl<'a> FinallyClauseContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for FinallyClauseContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -6500,6 +6541,7 @@ impl<'a> RulePrequelContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RulePrequelContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -6722,6 +6764,7 @@ impl<'a> RuleReturnsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleReturnsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -6951,6 +6994,7 @@ impl<'a> ThrowsSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ThrowsSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -7179,6 +7223,7 @@ impl<'a> LocalsSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LocalsSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -7408,6 +7453,7 @@ impl<'a> RuleActionContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleActionContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -7652,6 +7698,7 @@ impl<'a> RuleModifiersContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleModifiersContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -7862,6 +7909,7 @@ impl<'a> RuleModifierContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleModifierContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -8104,6 +8152,7 @@ impl<'a> RuleBlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleBlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -8321,6 +8370,7 @@ impl<'a> RuleAltListContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RuleAltListContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -8537,6 +8587,7 @@ impl<'a> LabeledAltContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LabeledAltContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -8774,6 +8825,7 @@ impl<'a> LexerRuleSpecContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerRuleSpecContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -9047,6 +9099,7 @@ impl<'a> LexerRuleBlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerRuleBlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -9264,6 +9317,7 @@ impl<'a> LexerAltListContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerAltListContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -9480,6 +9534,7 @@ impl<'a> LexerAltContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerAltContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -9702,6 +9757,7 @@ impl<'a> LexerElementsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerElementsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -9912,6 +9968,7 @@ impl<'a> LexerElementContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerElementContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -10164,6 +10221,7 @@ impl<'a> LexerBlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerBlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -10405,6 +10463,7 @@ impl<'a> LexerCommandsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -10633,6 +10692,7 @@ impl<'a> LexerCommandContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -10880,6 +10940,7 @@ impl<'a> LexerCommandNameContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandNameContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -11102,6 +11163,7 @@ impl<'a> LexerCommandExprContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandExprContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -11324,6 +11386,7 @@ impl<'a> AltListContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for AltListContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -11540,6 +11603,7 @@ impl<'a> AlternativeContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for AlternativeContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -11760,6 +11824,7 @@ impl<'a> ElementContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ElementContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -12032,6 +12097,7 @@ impl<'a> PredicateOptionsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for PredicateOptionsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -12272,6 +12338,7 @@ impl<'a> PredicateOptionContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for PredicateOptionContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -12534,6 +12601,7 @@ impl<'a> LabeledElementContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LabeledElementContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -12791,6 +12859,7 @@ impl<'a> EbnfContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for EbnfContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -13018,6 +13087,7 @@ impl<'a> BlockSuffixContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for BlockSuffixContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -13235,6 +13305,7 @@ impl<'a> EbnfSuffixContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for EbnfSuffixContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -13463,6 +13534,7 @@ impl<'a> LexerAtomContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for LexerAtomContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -13725,6 +13797,7 @@ impl<'a> AtomContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for AtomContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -13967,6 +14040,7 @@ impl<'a> WildcardContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for WildcardContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -14191,6 +14265,7 @@ impl<'a> NotSetContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for NotSetContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -14425,6 +14500,7 @@ impl<'a> BlockSetContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for BlockSetContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -14665,6 +14741,7 @@ impl<'a> SetElementContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for SetElementContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -14917,6 +14994,7 @@ impl<'a> BlockContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for BlockContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -15186,6 +15264,7 @@ impl<'a> RulerefContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for RulerefContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -15420,6 +15499,7 @@ impl<'a> CharacterRangeContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for CharacterRangeContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -15640,6 +15720,7 @@ impl<'a> TerminalDefContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for TerminalDefContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -15872,6 +15953,7 @@ impl<'a> ElementOptionsContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ElementOptionsContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -16112,6 +16194,7 @@ impl<'a> ElementOptionContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for ElementOptionContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -16364,6 +16447,7 @@ impl<'a> IdentifierContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for IdentifierContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
@@ -16586,6 +16670,7 @@ impl<'a> QualifiedIdentifierContext<'a> {
 impl<'a> __FromActiveRuleContext<'a> for QualifiedIdentifierContext<'a, __ActiveParserContext> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        live_attrs: Option<&dyn std::any::Any>,
         invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,

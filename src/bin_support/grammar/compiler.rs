@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 
+use super::action::{ActionReferenceParser, action_references};
 use super::atn::{CompiledLexer, CompiledParser, compile_lexer, compile_parser};
 use super::diagnostic::{CompilationError, Diagnostic};
 use super::loader::{LoadOptions, LoadedSources, load_recovering};
 use super::model::{GrammarId, GrammarKind};
 use super::rule_reachability::EntryRuleConfig;
-use super::semantics::{SemanticGrammarSet, analyze_with_entry_rules};
+use super::semantics::SemanticGrammarSet;
 use super::source::SourceSet;
 use super::transform::{RootOutputs, TransformRegistry, TransformReport, integrate_loaded};
 
@@ -63,6 +64,22 @@ pub(crate) fn compile_with_transforms(
     report_only: bool,
     entry_rules: &EntryRuleConfig,
 ) -> Result<Compilation, CompilationError> {
+    compile_with_action_reference_parser(
+        options,
+        transforms,
+        report_only,
+        entry_rules,
+        action_references,
+    )
+}
+
+pub(crate) fn compile_with_action_reference_parser(
+    options: LoadOptions,
+    transforms: &TransformRegistry,
+    report_only: bool,
+    entry_rules: &EntryRuleConfig,
+    action_reference_parser: ActionReferenceParser,
+) -> Result<Compilation, CompilationError> {
     let loaded = load_recovering(options);
     let root_order = loaded.grammars.roots.clone();
     let mut integrated =
@@ -101,18 +118,33 @@ pub(crate) fn compile_with_transforms(
         None
     } else {
         Some(
-            analyze_with_entry_rules(&loaded.sources, integrated.clone(), entry_rules)
-                .map_err(|error| error.with_sources(&loaded.sources))?
-                .diagnostics,
+            super::semantics::analyze_with_action_reference_parser(
+                &loaded.sources,
+                integrated.clone(),
+                entry_rules,
+                action_reference_parser,
+            )
+            .map_err(|error| error.with_sources(&loaded.sources))?
+            .diagnostics,
         )
     };
     let transform_report = transforms
-        .run(&mut integrated.grammar, &mut integrated.ids, report_only)
+        .run_with_action_reference_parser(
+            &mut integrated.grammar,
+            &mut integrated.ids,
+            report_only,
+            action_reference_parser,
+        )
         .map_err(|diagnostic| {
             CompilationError::new(vec![diagnostic]).with_sources(&loaded.sources)
         })?;
-    let mut semantics = analyze_with_entry_rules(&loaded.sources, integrated, entry_rules)
-        .map_err(|error| error.with_sources(&loaded.sources))?;
+    let mut semantics = super::semantics::analyze_with_action_reference_parser(
+        &loaded.sources,
+        integrated,
+        entry_rules,
+        action_reference_parser,
+    )
+    .map_err(|error| error.with_sources(&loaded.sources))?;
     if let Some(authored_diagnostics) = authored_diagnostics {
         semantics.diagnostics = merge_diagnostics(
             authored_diagnostics,

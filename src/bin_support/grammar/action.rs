@@ -13,6 +13,8 @@ pub(crate) enum ActionReferenceKind<'a> {
     NonLocal { rule: &'a str, attribute: &'a str },
 }
 
+pub(crate) type ActionReferenceParser = for<'a> fn(&'a str) -> Vec<ActionReference<'a>>;
+
 pub(crate) fn action_references(body: &str) -> Vec<ActionReference<'_>> {
     let mut references = Vec::new();
     collect_references(body, 0, &mut references);
@@ -34,9 +36,7 @@ fn collect_references<'a>(
                     .map_or(bytes.len(), |newline| index + 2 + newline + 1);
             }
             b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = body[index + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |close| index + 2 + close + 2);
+                index = block_comment_end(body, index);
             }
             b'\\' => {
                 index += 1;
@@ -53,6 +53,29 @@ fn collect_references<'a>(
             _ => index += next_char_len(body, index),
         }
     }
+}
+
+fn block_comment_end(body: &str, open: usize) -> usize {
+    let bytes = body.as_bytes();
+    let mut depth = 1_usize;
+    let mut index = open + 2;
+    while index + 1 < bytes.len() {
+        match &bytes[index..index + 2] {
+            b"/*" => {
+                depth += 1;
+                index += 2;
+            }
+            b"*/" => {
+                depth -= 1;
+                index += 2;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    bytes.len()
 }
 
 fn parse_reference<'a>(
@@ -274,5 +297,18 @@ mod tests {
         let references = action_references("\\$x /* $y */ // $z\n$ok");
         assert_eq!(references.len(), 1);
         assert_eq!(references[0].expression, "$ok");
+    }
+
+    #[test]
+    fn target_syntax_is_not_special_cased() {
+        let references = action_references("macro_rules! value { ($i:ident) => { $i } }\n$actual");
+
+        assert_eq!(
+            references
+                .iter()
+                .map(|reference| reference.expression)
+                .collect::<Vec<_>>(),
+            ["$i", "$i", "$actual"]
+        );
     }
 }

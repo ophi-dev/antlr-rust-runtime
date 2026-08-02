@@ -1,3 +1,28 @@
+use icu_properties::{CodePointSetData, CodePointSetDataBorrowed, props};
+
+/// Returns the byte end of a Rust identifier beginning at `start`.
+#[allow(dead_code)] // This shared module is also compiled by the conformance harness.
+pub(crate) fn rust_identifier_end(value: &str, start: usize) -> Option<usize> {
+    static XID_START: CodePointSetDataBorrowed<'static> =
+        CodePointSetData::new::<props::XidStart>();
+    static XID_CONTINUE: CodePointSetDataBorrowed<'static> =
+        CodePointSetData::new::<props::XidContinue>();
+
+    let mut chars = value.get(start..)?.char_indices();
+    let (_, first) = chars.next()?;
+    if first != '_' && !XID_START.contains(first) {
+        return None;
+    }
+    let mut end = start + first.len_utf8();
+    for (relative, ch) in chars {
+        if !XID_CONTINUE.contains(ch) {
+            break;
+        }
+        end = start + relative + ch.len_utf8();
+    }
+    Some(end)
+}
+
 /// Converts a grammar type name into a snake-case module file name.
 pub(crate) fn module_name(name: &str) -> String {
     split_identifier_words(name).join("_")
@@ -27,12 +52,7 @@ pub(crate) fn rust_function_name(name: &str) -> String {
     } else {
         words.join("_")
     };
-    let ident = sanitize_identifier(&ident);
-    if is_rust_keyword(&ident) {
-        format!("r#{ident}")
-    } else {
-        ident
-    }
+    rust_identifier(&ident)
 }
 
 /// Escapes a Rust string literal using explicit ASCII escape forms.
@@ -91,6 +111,19 @@ pub(crate) fn sanitize_identifier(value: &str) -> String {
         }
     }
     if out.is_empty() { "_".to_owned() } else { out }
+}
+
+/// Produces a legal Rust identifier, using raw syntax only for keywords that
+/// permit it. Path keywords cannot be raw identifiers, so suffix those names.
+pub(crate) fn rust_identifier(value: &str) -> String {
+    let identifier = sanitize_identifier(value);
+    if matches!(identifier.as_str(), "crate" | "self" | "Self" | "super") {
+        format!("{identifier}_")
+    } else if is_rust_keyword(&identifier) {
+        format!("r#{identifier}")
+    } else {
+        identifier
+    }
 }
 
 /// Returns true for Rust reserved and contextual keywords that cannot be used
