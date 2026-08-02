@@ -1565,6 +1565,22 @@ mod tests {
     }
 
     #[test]
+    fn records_cfg_gated_match_pattern_bindings() {
+        let body = "match value {\n\
+                        Fields {\n\
+                            #[cfg(any())] Alias,\n\
+                        } if Alias == 1 => true,\n\
+                        _ => false,\n\
+                    }";
+        let syntax = analyze(body);
+
+        assert_eq!(
+            syntax.pattern_binding_cfg_predicate(occurrence(body, "Alias", 0)),
+            Some("any()".to_owned())
+        );
+    }
+
+    #[test]
     fn records_nested_closure_parameters_and_bodies() {
         let body = "let closure = |_outer| |#[cfg(any())] Alias: i32| Alias;";
         let syntax = analyze(body);
@@ -1623,6 +1639,26 @@ mod tests {
         assert!(syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 0)));
         assert!(syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 1)));
         assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 2)));
+    }
+
+    #[test]
+    fn preserves_opaque_compatibility_receivers() {
+        let body = "let names = (stringify!(recog), take_ident!(_localctx));\n\
+                    #[cfg_attr(any(), cfg(recog, _localctx))]\n\
+                    let marker = true;\n\
+                    recog.input.la(1) == 1 && _localctx.is_some() && marker";
+        let syntax = analyze(body);
+
+        for (name, opaque_occurrences) in [("recog", 2), ("_localctx", 2)] {
+            for occurrence_index in 0..opaque_occurrences {
+                assert!(syntax.is_opaque_macro_identifier(occurrence(
+                    body,
+                    name,
+                    occurrence_index
+                )));
+            }
+            assert!(!syntax.is_opaque_macro_identifier(occurrence(body, name, opaque_occurrences)));
+        }
     }
 
     #[test]
@@ -1716,6 +1752,17 @@ mod tests {
                     let compact = &raw const value;\n\
                     let spaced = & raw const value;\n\
                     Alias == 1 && compact == spaced";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
+    fn parses_underscore_assignment_expressions() {
+        let body = "let mut observed = 0;\n\
+                    _ = { observed = 1; compute() };\n\
+                    Alias == 1 && observed == 1";
         let syntax = analyze(body);
 
         assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));

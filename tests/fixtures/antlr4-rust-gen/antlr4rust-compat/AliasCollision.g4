@@ -150,6 +150,22 @@ start
         let raw_reference_value = 43;
         let raw_reference = & raw const raw_reference_value;
         let raw_reference_ok = !raw_reference.is_null();
+        let mut underscore_assignment_value = 0;
+        _ = {
+            underscore_assignment_value = 1;
+            99
+        };
+        let underscore_assignment_ok = underscore_assignment_value == 1;
+        macro_rules! receiver_name {
+            ($i:ident) => {
+                stringify!($i)
+            };
+        }
+        let opaque_receiver_tokens_ok =
+            stringify!(recog) == "recog"
+                && receiver_name!(_localctx) == "_localctx";
+        #[cfg_attr(any(), allow(recog, _localctx))]
+        let opaque_attribute_receiver_tokens_ok = true;
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
         macro_rules! r#match {
@@ -510,6 +526,14 @@ start
             #[cfg(any())]
             AliasCollisionParser_PATTERN_CFG: i32,
         }
+        let cfg_pattern = CfgPattern {};
+        let match_pattern_cfg_ok = Some(match cfg_pattern {
+            CfgPattern {
+                #[cfg(any())]
+                AliasCollisionParser_PATTERN_CFG,
+            } if AliasCollisionParser_PATTERN_CFG == Self::PATTERN_CFG => true,
+            _ => false,
+        }) == Some(true);
         let CfgPattern {
             #[cfg(any())]
             AliasCollisionParser_PATTERN_CFG,
@@ -588,6 +612,9 @@ start
             && cfg_disabled_format_ok
             && format_local_ok
             && c_strings_ok
+            && underscore_assignment_ok
+            && opaque_receiver_tokens_ok
+            && opaque_attribute_receiver_tokens_ok
             && unsafe_extern_alias_ok
             && safe_foreign_alias_ok
             && raw_lifetime_ok
@@ -620,6 +647,7 @@ start
             && pub_self_ok
             && impl_const_generic_ok
             && braced_parameter_ok
+            && match_pattern_cfg_ok
             && pattern_cfg_ok
             && parent_module_alias_ok
             && cfg_parameter_ok

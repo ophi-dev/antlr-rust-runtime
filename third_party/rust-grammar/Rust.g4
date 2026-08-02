@@ -1797,6 +1797,7 @@ range_expr:
 
 assign_expr:
     range_expr
+    | '_' '=' assign_expr
     | range_expr ('=' | '*=' | '/=' | '%=' | '+=' | '-='
                       | '<<=' | '>>=' | '&=' | '^=' | '|=' ) assign_expr;
 
@@ -1871,6 +1872,7 @@ range_expr_no_struct:
 
 assign_expr_no_struct:
     range_expr_no_struct
+    | '_' '=' assign_expr_no_struct
     | range_expr_no_struct ('=' | '*=' | '/=' | '%=' | '+=' | '-='
                                 | '<<=' | '>' '>' '=' | '&=' | '^=' | '|=' |'>='|'<=') assign_expr_no_struct;
 

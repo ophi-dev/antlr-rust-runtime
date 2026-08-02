@@ -2262,7 +2262,12 @@ fn lower_antlr4rust_surface(
             && token_aliases.contains(rust_identifier_name(lexeme_text(body, *lexeme)))
     });
     let needs_alias_analysis = has_token_alias_identifier || !format_captures.is_empty();
-    let syntax = if needs_alias_analysis {
+    let has_compatibility_receiver = lexemes.iter().any(|lexeme| {
+        lexeme.kind == RustLexemeKind::Identifier
+            && matches!(lexeme_text(body, *lexeme), "recog" | "_localctx")
+    });
+    let needs_syntax_analysis = needs_alias_analysis || has_compatibility_receiver;
+    let syntax = if needs_syntax_analysis {
         if source_kind == Antlr4RustSourceKind::MemberItem {
             rust_syntax::analyze_member_item(body)?
         } else {
@@ -2413,6 +2418,7 @@ fn lower_antlr4rust_surface(
         // owning grammar coordinate instead of surfacing from rustc later.
         match source_identifier {
             _ if source_kind == Antlr4RustSourceKind::MemberItem => {}
+            _ if syntax.is_opaque_macro_identifier(lexeme.start) => {}
             "recog" if is_standalone_identifier(&lexemes, position) => {
                 replacements.push(recog_input_replacement(
                     body,
@@ -2654,6 +2660,37 @@ impl AliasBindingScopes {
                         ),
                     }),
             );
+    }
+
+    fn wrap_with_cfg_alias_fallbacks(
+        &mut self,
+        range: Range<usize>,
+        fallbacks: BTreeMap<String, BTreeSet<String>>,
+        token_alias_module: &str,
+    ) {
+        if fallbacks.is_empty() {
+            return;
+        }
+        let mut opening = "{\n".to_owned();
+        for (active, aliases) in fallbacks {
+            for alias in aliases {
+                self.use_target_aliases.insert(alias.clone());
+                let _ = writeln!(
+                    opening,
+                    "#[cfg(not({active}))]\n\
+                     #[allow(non_snake_case, unused_variables)]\n\
+                     let {alias} = {token_alias_module}::{alias};"
+                );
+            }
+        }
+        self.use_target_replacements.push(RustReplacement {
+            range: range.start..range.start,
+            text: opening,
+        });
+        self.use_target_replacements.push(RustReplacement {
+            range: range.end..range.end,
+            text: "\n}".to_owned(),
+        });
     }
 }
 
@@ -2901,8 +2938,11 @@ fn local_antlr4rust_alias_bindings(
         body,
         lexemes,
         token_aliases,
-        &delimiters,
-        syntax,
+        MatchAliasContext {
+            token_alias_module,
+            delimiters: &delimiters,
+            syntax,
+        },
         &mut bindings,
     );
     collect_matches_macro_alias_bindings(
@@ -3289,15 +3329,22 @@ fn alias_binding(
         .then(|| (identifier.to_owned(), position))
 }
 
+#[derive(Clone, Copy)]
+struct MatchAliasContext<'a> {
+    token_alias_module: &'a str,
+    delimiters: &'a RustDelimiterMap,
+    syntax: &'a rust_syntax::RustSyntax,
+}
+
 fn collect_match_alias_bindings(
     body: &str,
     lexemes: &[RustLexeme],
     token_aliases: &BTreeSet<String>,
-    delimiters: &RustDelimiterMap,
-    syntax: &rust_syntax::RustSyntax,
+    context: MatchAliasContext<'_>,
     bindings: &mut AliasBindingScopes,
 ) {
-    let closure_parameters = syntax
+    let closure_parameters = context
+        .syntax
         .closure_bindings()
         .iter()
         .filter_map(|closure| {
@@ -3321,12 +3368,16 @@ fn collect_match_alias_bindings(
         {
             continue;
         }
-        let Some(open) = delimiters.control_flow_body_block(body, lexemes, position + 1) else {
+        let Some(open) = context
+            .delimiters
+            .control_flow_body_block(body, lexemes, position + 1)
+        else {
             continue;
         };
-        let Some(close) = delimiters.pairs[open] else {
+        let Some(close) = context.delimiters.pairs[open] else {
             continue;
         };
+        let mut expression_fallbacks = BTreeMap::<String, BTreeSet<String>>::new();
         let mut arm_start = open + 1;
         while arm_start < close {
             arm_start = (arm_start..close)
@@ -3338,7 +3389,8 @@ fn collect_match_alias_bindings(
             if arm_start >= close {
                 break;
             }
-            let Some(arrow) = find_match_arm_fat_arrow(lexemes, arm_start, close, delimiters)
+            let Some(arrow) =
+                find_match_arm_fat_arrow(lexemes, arm_start, close, context.delimiters)
             else {
                 break;
             };
@@ -3355,22 +3407,42 @@ fn collect_match_alias_bindings(
                 arm_start,
                 pattern_end,
                 token_aliases,
-                syntax,
+                context.syntax,
             );
+            for (name, binding) in &pattern_bindings {
+                if let Some(active) = context
+                    .syntax
+                    .pattern_binding_cfg_predicate(lexemes[*binding].start)
+                {
+                    expression_fallbacks
+                        .entry(active)
+                        .or_default()
+                        .insert(name.clone());
+                }
+            }
             let Some(body_start) = next_significant(lexemes, arrow) else {
                 break;
             };
             let body_end = if lexemes[body_start].kind == RustLexemeKind::Punctuation(b'{') {
-                delimiters.pairs[body_start].unwrap_or_else(|| {
-                    delimiters.expression_end(lexemes, body_start, &closure_parameters)
+                context.delimiters.pairs[body_start].unwrap_or_else(|| {
+                    context
+                        .delimiters
+                        .expression_end(lexemes, body_start, &closure_parameters)
                 })
             } else {
-                delimiters.expression_end(lexemes, body_start, &closure_parameters)
+                context
+                    .delimiters
+                    .expression_end(lexemes, body_start, &closure_parameters)
             }
             .min(close);
             bindings.record(pattern_bindings, arm_start..body_end);
             arm_start = body_end.saturating_add(1);
         }
+        bindings.wrap_with_cfg_alias_fallbacks(
+            lexemes[position].start..lexemes[close].end,
+            expression_fallbacks,
+            context.token_alias_module,
+        );
     }
 }
 
@@ -3591,27 +3663,11 @@ fn collect_closure_alias_bindings(
                     .find(|position| lexemes[*position].kind != RustLexemeKind::Trivia),
             )
         {
-            let mut opening = "{\n".to_owned();
-            for (active, aliases) in expression_fallbacks {
-                for alias in aliases {
-                    bindings.use_target_aliases.insert(alias.clone());
-                    let _ = writeln!(
-                        opening,
-                        "#[cfg(not({active}))]\n\
-                         #[allow(non_snake_case, unused_variables)]\n\
-                         let {alias} = {}::{alias};",
-                        context.token_alias_module
-                    );
-                }
-            }
-            bindings.use_target_replacements.push(RustReplacement {
-                range: lexemes[first].start..lexemes[first].start,
-                text: opening,
-            });
-            bindings.use_target_replacements.push(RustReplacement {
-                range: lexemes[last].end..lexemes[last].end,
-                text: "\n}".to_owned(),
-            });
+            bindings.wrap_with_cfg_alias_fallbacks(
+                lexemes[first].start..lexemes[last].end,
+                expression_fallbacks,
+                context.token_alias_module,
+            );
         }
         bindings.record(closure_bindings, scope);
     }
@@ -6801,6 +6857,40 @@ mod tests {
 
     #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
     #[test]
+    fn preserves_opaque_compatibility_receivers() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let lowered = translate_parser_body(
+            "macro_rules! identifier_name {\n\
+                 ($i:ident) => { stringify!($i) };\n\
+             }\n\
+             let receiver = stringify!(recog);\n\
+             let context = identifier_name!(_localctx);\n\
+             #[cfg_attr(any(), allow(recog, _localctx))]\n\
+             let attribute = true;\n\
+             receiver == \"recog\" && context == \"_localctx\" && attribute",
+            &ctx,
+            "SContext",
+            &BTreeSet::new(),
+            ParserBodyKind::Predicate,
+        )
+        .expect("opaque compatibility receiver tokens should remain target syntax");
+
+        assert!(!lowered.uses_input);
+        assert!(!lowered.uses_local_context);
+        assert!(lowered.token_aliases.is_empty());
+        insta::assert_snapshot!("antlr4rust_opaque_compatibility_receivers", lowered.source);
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
     fn preserves_opaque_type_and_pattern_macro_positions() {
         let m = model(vec![rule("s")]);
         let toks = tokens(&[]);
@@ -7499,6 +7589,43 @@ mod tests {
         assert_eq!(lowered.token_aliases, aliases);
         insta::assert_snapshot!(
             "antlr4rust_cfg_gated_local_binding_fallbacks",
+            lowered.source
+        );
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn cfg_gated_match_bindings_use_expression_fallbacks() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CfgParser_MATCH".to_owned()]);
+        let body = "struct Fields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_MATCH: i32,\n\
+                    }\n\
+                    let fields = Fields {};\n\
+                    let matched = Some(match fields {\n\
+                        Fields {\n\
+                            #[cfg(any())]\n\
+                            CfgParser_MATCH,\n\
+                        } if CfgParser_MATCH > 0 => true,\n\
+                        _ => false,\n\
+                    });\n\
+                    matched == Some(true)";
+        let lowered =
+            translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
+                .expect("cfg-gated match bindings should expose inactive alias fallbacks");
+
+        assert_eq!(lowered.token_aliases, aliases);
+        insta::assert_snapshot!(
+            "antlr4rust_cfg_gated_match_binding_fallback",
             lowered.source
         );
     }

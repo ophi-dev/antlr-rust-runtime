@@ -68,6 +68,9 @@ let placeholder_lifetime: Option<&'_ i32> = None;
 let placeholder_lifetime_ok =
 placeholder_lifetime.is_none();
 let raw_reference_ok = !raw_reference.is_null();
+let underscore_assignment_ok = underscore_assignment_value == 1;
+let opaque_receiver_tokens_ok =
+let opaque_attribute_receiver_tokens_ok = true;
 stringify!($i) == "AliasCollisionParser_RAW_MACRO_NAME"
 let raw_macro_name_ok =
 pub(super) use super::__antlr4rust_token_aliases_2::{AliasCollisionParser_RAW_MACRO_NAME};
@@ -148,6 +151,10 @@ let tuple_field_ok = pair.0.1 == 2;
 let pub_self_ok = self_visible::value() == 5;
 __antlr4rust_token_aliases_2::AliasCollisionParser_CONST_EXPRESSION as usize
 AliasCollisionParser_PATTERN_CFG: i32,
+let match_pattern_cfg_ok = Some({
+let AliasCollisionParser_PATTERN_CFG = __antlr4rust_token_aliases_2::AliasCollisionParser_PATTERN_CFG;
+AliasCollisionParser_PATTERN_CFG,
+} if AliasCollisionParser_PATTERN_CFG == Self::PATTERN_CFG => true,
 let AliasCollisionParser_PATTERN_CFG = __antlr4rust_token_aliases_2::AliasCollisionParser_PATTERN_CFG;
 AliasCollisionParser_PATTERN_CFG,
 let pattern_cfg_ok =
@@ -177,6 +184,9 @@ let cfg_closure_ok =
 && nonleading_let_chain_ok
 && cfg_disabled_format_ok
 && c_strings_ok
+&& underscore_assignment_ok
+&& opaque_receiver_tokens_ok
+&& opaque_attribute_receiver_tokens_ok
 && placeholder_lifetime_ok
 && raw_reference_ok
 && raw_macro_name_ok
@@ -189,6 +199,7 @@ let cfg_closure_ok =
 && associated_type_bound_ok
 && tuple_field_ok
 && pub_self_ok
+&& match_pattern_cfg_ok
 && pattern_cfg_ok
 && parent_module_alias_ok
 && cfg_parameter_ok
