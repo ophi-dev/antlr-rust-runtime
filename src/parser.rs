@@ -75,7 +75,7 @@ type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 use crate::atn::AtnStateKind;
 use crate::atn::parser::{
     ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
-    ParserAtnSimulatorError,
+    ParserAtnSimulatorError, ParserSemanticCandidate,
 };
 use crate::atn::parser_atn::{
     ParserAtn as Atn, ParserAtnState as AtnState, ParserIntervalSet, ParserTransition,
@@ -4864,7 +4864,6 @@ where
     decision_by_state: Vec<Option<usize>>,
     action_index_by_state: FxHashMap<usize, usize>,
     deferred_actions: Vec<ParserAction>,
-    steps: usize,
 }
 
 struct CommittedDecisionContext<'a> {
@@ -7928,16 +7927,17 @@ where
         for &(state, index) in options.action_indices {
             action_index_by_state.entry(state).or_insert(index);
         }
+        let mut simulator = ParserAtnSimulator::new(atn);
+        simulator.set_track_prediction_rule_calls(!options.rule_args.is_empty());
         let (result, deferred_actions) = {
             let mut committed = CommittedAtnParser {
                 parser: self,
                 atn,
-                simulator: ParserAtnSimulator::new(atn),
+                simulator,
                 options,
                 decision_by_state,
                 action_index_by_state,
                 deferred_actions: Vec::new(),
-                steps: 0,
             };
             let result = committed.parse_rule(rule_index, precedence, None, None);
             (result, committed.deferred_actions)
@@ -12600,12 +12600,19 @@ where
         consumed_eof: &mut bool,
     ) -> Result<(), AntlrError> {
         let mut entered_loops = BTreeSet::new();
+        let mut visited_coordinates = FxHashSet::default();
+        let mut guarded_input_index = self.parser.input.index();
         while state_number != stop_state {
-            self.steps += 1;
-            if self.steps > ADAPTIVE_DIRECT_STEP_LIMIT {
-                return Err(AntlrError::Unsupported(
-                    "committed parser ATN step limit exceeded".to_owned(),
-                ));
+            let input_index = self.parser.input.index();
+            if input_index != guarded_input_index {
+                visited_coordinates.clear();
+                guarded_input_index = input_index;
+            }
+            if !visited_coordinates.insert((state_number, input_index)) {
+                return Err(AntlrError::Unsupported(format!(
+                    "committed parser encountered a non-consuming ATN cycle at state \
+                         {state_number}"
+                )));
             }
             let state = self.atn.state(state_number).ok_or_else(|| {
                 AntlrError::Unsupported(format!("missing parser ATN state {state_number}"))
@@ -12777,7 +12784,7 @@ where
             }
             prediction => prediction,
         };
-        let prediction = match prediction {
+        let mut prediction = match prediction {
             Ok(prediction) => prediction,
             Err(ParserAtnSimulatorError::NoViableAlt { index, .. })
                 if state.precedence_rule_decision() =>
@@ -12835,24 +12842,58 @@ where
 
         let semantic_candidates = self.simulator.prediction_semantic_candidates().to_vec();
         if !semantic_candidates.is_empty() {
-            let selected_matches =
-                self.semantic_candidate_matches(selected, decision_context, &semantic_candidates);
+            let predicted_alt = prediction.alt;
+            let mut semantic_results = BTreeMap::new();
+            let selected_alt = selected + 1;
+            let selected_matches = self.semantic_alternative_matches(
+                selected_alt,
+                decision_context,
+                &semantic_candidates,
+            );
+            semantic_results.insert(selected_alt, selected_matches);
             if !selected_matches {
-                selected = semantic_candidates
+                let alternatives = semantic_candidates
                     .iter()
-                    .map(|(alt, _)| alt.saturating_sub(1))
-                    .filter(|candidate| *candidate < transition_count)
-                    .collect::<BTreeSet<_>>()
+                    .map(|candidate| candidate.alt)
+                    .filter(|alternative| *alternative != 0 && *alternative <= transition_count)
+                    .collect::<BTreeSet<_>>();
+                selected = alternatives
                     .into_iter()
-                    .find(|candidate| {
-                        self.semantic_candidate_matches(
-                            *candidate,
+                    .find(|alternative| {
+                        let matches = self.semantic_alternative_matches(
+                            *alternative,
                             decision_context,
                             &semantic_candidates,
-                        )
+                        );
+                        semantic_results.insert(*alternative, matches);
+                        matches
                     })
+                    .and_then(|alternative| alternative.checked_sub(1))
                     .ok_or_else(|| self.parser.no_viable_alternative_error(decision_start))?;
             }
+            if let Some(diagnostic) = prediction.diagnostic.as_ref() {
+                for alternative in diagnostic.conflicting_alts.clone() {
+                    if semantic_results.contains_key(&alternative)
+                        || !semantic_candidates
+                            .iter()
+                            .any(|candidate| candidate.alt == alternative)
+                    {
+                        continue;
+                    }
+                    let matches = self.semantic_alternative_matches(
+                        alternative,
+                        decision_context,
+                        &semantic_candidates,
+                    );
+                    semantic_results.insert(alternative, matches);
+                }
+            }
+            Self::filter_prediction_diagnostic(
+                &mut prediction,
+                predicted_alt,
+                selected + 1,
+                &semantic_results,
+            );
         }
         self.parser.record_generated_prediction_diagnostic(
             self.atn,
@@ -12864,28 +12905,46 @@ where
         Ok(selected)
     }
 
-    fn semantic_candidate_matches(
+    fn semantic_alternative_matches(
         &mut self,
-        transition_index: usize,
+        alternative: usize,
         decision_context: &CommittedDecisionContext<'_>,
-        candidates: &[(usize, SemanticContext)],
+        candidates: &[ParserSemanticCandidate],
     ) -> bool {
-        let alternative = transition_index + 1;
-        for (_, context) in candidates
+        candidates
             .iter()
-            .filter(|(candidate, _)| *candidate == alternative)
-        {
-            if self.semantic_context_matches(context, decision_context) {
-                return true;
+            .filter(|candidate| candidate.alt == alternative)
+            .any(|candidate| {
+                self.semantic_context_matches(&candidate.context, decision_context, candidate)
+            })
+    }
+
+    fn filter_prediction_diagnostic(
+        prediction: &mut ParserAtnPrediction,
+        predicted_alt: usize,
+        selected_alt: usize,
+        semantic_results: &BTreeMap<usize, bool>,
+    ) {
+        prediction.alt = selected_alt;
+        if selected_alt != predicted_alt {
+            prediction.diagnostic = None;
+            return;
+        }
+        if let Some(diagnostic) = prediction.diagnostic.as_mut() {
+            diagnostic
+                .conflicting_alts
+                .retain(|alternative| semantic_results.get(alternative).copied().unwrap_or(true));
+            if diagnostic.conflicting_alts.len() < 2 {
+                prediction.diagnostic = None;
             }
         }
-        false
     }
 
     fn semantic_context_matches(
         &mut self,
         semantic_context: &SemanticContext,
         decision_context: &CommittedDecisionContext<'_>,
+        candidate: &ParserSemanticCandidate,
     ) -> bool {
         match semantic_context {
             SemanticContext::None => true,
@@ -12894,24 +12953,48 @@ where
                 pred_index,
                 ..
             } => {
-                let member_values = self.parser.int_members.clone();
-                self.parser.parser_predicate_matches(PredicateEval {
-                    index: self.parser.input.index(),
-                    rule_index: *rule_index,
-                    pred_index: *pred_index,
-                    predicates: self.options.predicates,
-                    semantics: self.options.semantics,
-                    context: Some(&*decision_context.context),
-                    local_int_arg: decision_context.local_int_arg,
-                    member_values: &member_values,
-                })
+                let mut matched_provenance = false;
+                for predicate_call in candidate
+                    .predicate_calls
+                    .iter()
+                    .filter(|call| call.rule_index == *rule_index && call.pred_index == *pred_index)
+                {
+                    matched_provenance = true;
+                    let mut local_int_arg = decision_context.local_int_arg;
+                    for rule_call in &predicate_call.rule_calls {
+                        local_int_arg = rule_local_int_arg(
+                            self.options.rule_args,
+                            rule_call.source_state,
+                            rule_call.rule_index,
+                            local_int_arg,
+                        );
+                    }
+                    if !self.semantic_predicate_matches(
+                        *rule_index,
+                        *pred_index,
+                        decision_context,
+                        local_int_arg,
+                    ) {
+                        return false;
+                    }
+                }
+                if matched_provenance {
+                    true
+                } else {
+                    self.semantic_predicate_matches(
+                        *rule_index,
+                        *pred_index,
+                        decision_context,
+                        decision_context.local_int_arg,
+                    )
+                }
             }
             SemanticContext::Precedence { precedence } => {
                 *precedence >= decision_context.precedence
             }
             SemanticContext::And(children) => {
                 for child in children {
-                    if !self.semantic_context_matches(child, decision_context) {
+                    if !self.semantic_context_matches(child, decision_context, candidate) {
                         return false;
                     }
                 }
@@ -12919,13 +13002,33 @@ where
             }
             SemanticContext::Or(children) => {
                 for child in children {
-                    if self.semantic_context_matches(child, decision_context) {
+                    if self.semantic_context_matches(child, decision_context, candidate) {
                         return true;
                     }
                 }
                 false
             }
         }
+    }
+
+    fn semantic_predicate_matches(
+        &mut self,
+        rule_index: usize,
+        pred_index: usize,
+        decision_context: &CommittedDecisionContext<'_>,
+        local_int_arg: Option<(usize, i64)>,
+    ) -> bool {
+        let member_values = self.parser.int_members.clone();
+        self.parser.parser_predicate_matches(PredicateEval {
+            index: self.parser.input.index(),
+            rule_index,
+            pred_index,
+            predicates: self.options.predicates,
+            semantics: self.options.semantics,
+            context: Some(&*decision_context.context),
+            local_int_arg,
+            member_values: &member_values,
+        })
     }
 
     fn update_loop_selection(
@@ -13038,12 +13141,23 @@ where
                 let marker = self
                     .parser
                     .push_invoking_state(invoking_state_number(source_state));
-                let child = self.parse_rule(
-                    rule_index,
-                    rule_precedence,
-                    local_int_arg,
-                    Some(follow_state),
-                );
+                let child = if self.parser.generated_rule_stack_check_due() {
+                    grow_generated_rule_stack(|| {
+                        self.parse_rule(
+                            rule_index,
+                            rule_precedence,
+                            local_int_arg,
+                            Some(follow_state),
+                        )
+                    })
+                } else {
+                    self.parse_rule(
+                        rule_index,
+                        rule_precedence,
+                        local_int_arg,
+                        Some(follow_state),
+                    )
+                };
                 self.parser.discard_invoking_state(marker);
                 let child = child?;
                 self.parser.add_parse_child(context, child);
@@ -15781,6 +15895,29 @@ mod tests {
             .expect("self-cycle transition");
         atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
             .expect("exit transition");
+        finish_atn(atn)
+    }
+
+    fn committed_non_consuming_cycle_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::Basic),
+            (2, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![2])
+            .expect("rule stop states");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("cycle entry");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("self-cycle transition");
         finish_atn(atn)
     }
 
@@ -19361,6 +19498,49 @@ mod tests {
     }
 
     #[test]
+    fn committed_walker_filters_diagnostics_after_semantic_selection() {
+        let atn = predicate_gated_same_lookahead_atn([0, 1]);
+        let predicates = [
+            (0, 0, ParserPredicate::False),
+            (0, 1, ParserPredicate::True),
+        ];
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.set_prediction_mode(PredictionMode::LlExactAmbigDetection);
+        parser.set_report_diagnostic_errors(true);
+        parser.remove_error_listeners();
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    track_alt_numbers: true,
+                    predicates: &predicates,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the true predicate should make the second alternative unique");
+
+        let root = parser.node(tree).as_rule().expect("entry result is a rule");
+        assert_eq!(root.alt_number(), 2);
+        assert!(
+            diagnostics
+                .lock()
+                .expect("recorded diagnostics lock")
+                .is_empty(),
+            "predicate filtering made the decision unambiguous"
+        );
+    }
+
+    #[test]
     fn committed_walker_falls_back_only_to_simulator_viable_alternatives() {
         let atn = semantic_fallback_viability_atn();
         let predicates = [
@@ -19420,6 +19600,41 @@ mod tests {
         assert_eq!(root.text(), "a<EOF>");
         assert_eq!(root.child_rules(1).count(), 0);
         assert!(deferred_actions.is_empty());
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn committed_walker_uses_callee_argument_for_prediction_predicates() {
+        let atn = rule_call_predicate_decision_atn();
+        let predicates = [(1, 0, ParserPredicate::LocalIntEquals { value: 1 })];
+        let rule_args = [ParserRuleArg {
+            source_state: 2,
+            rule_index: 1,
+            value: 2,
+            inherit_local: false,
+        }];
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("a"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    track_alt_numbers: true,
+                    predicates: &predicates,
+                    rule_args: &rule_args,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the direct alternative should survive the false callee predicate");
+
+        let root = parser.node(tree).as_rule().expect("entry result is a rule");
+        assert_eq!(root.alt_number(), 2);
+        assert_eq!(root.child_rules(1).count(), 0);
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
@@ -19560,6 +19775,79 @@ mod tests {
         assert_eq!(parser.node(tree).text(), "ab<EOF>");
         assert!(deferred_actions.is_empty());
         assert_eq!(parser.semantic_hooks.events, ["action:3", "action:3"]);
+    }
+
+    #[test]
+    fn committed_walker_has_no_total_step_cap() {
+        const TOKEN_COUNT: usize = RECOGNITION_DEPTH_LIMIT + 1;
+        let atn = committed_action_star_loop_atn();
+        let mut parser = mini_parser(repeated_x_tokens(TOKEN_COUNT));
+        parser.set_build_parse_trees(false);
+
+        parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("valid committed loops must not have a total-work cap");
+
+        assert_eq!(parser.input.index(), TOKEN_COUNT);
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn committed_walker_rejects_non_consuming_cycles() {
+        let atn = committed_non_consuming_cycle_atn();
+        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 0, 1, 0)]);
+        parser.set_bail_on_error(true);
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("a non-consuming cycle must not spin forever");
+
+        assert!(
+            error.to_string().contains("non-consuming ATN cycle"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn deeply_nested_committed_rule_calls_grow_the_stack() {
+        const DEPTH: usize = 4_096;
+        const STACK_SIZE: usize = 256 * 1024;
+        let atn = nested_rule_chain_atn(DEPTH);
+        std::thread::Builder::new()
+            .name("nested-committed-rules".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                let mut parser = mini_parser(vec![TestToken::new(1).with_text("x")]);
+                parser.set_build_parse_trees(false);
+                parser
+                    .parse_atn_rule_with_runtime_options(
+                        &atn,
+                        0,
+                        ParserRuntimeOptions {
+                            action_indices: &[(usize::MAX, 0)],
+                            ..ParserRuntimeOptions::default()
+                        },
+                    )
+                    .expect("nested committed rules should grow the native stack");
+                assert_eq!(parser.input.index(), 1);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("nested committed rules should not overflow their stack");
     }
 
     #[test]

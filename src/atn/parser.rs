@@ -10,14 +10,16 @@ use crate::dfa::{
 use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
-    PredictionContextStats, PredictionFxHasher, PredictionWorkspace, SemanticContext,
-    all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
-    has_sll_conflict_terminating_prediction, single_viable_alt,
+    PredictionContextStats, PredictionFxHasher, PredictionPredicateCall,
+    PredictionSemanticProvenance, PredictionWorkspace, SemanticContext, all_subsets_conflict,
+    all_subsets_equal, conflicting_alt_subsets, has_sll_conflict_terminating_prediction,
+    single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
+use std::sync::Arc;
 
 type FxHashSet<T> = HashSet<T, BuildHasherDefault<PredictionFxHasher>>;
 
@@ -67,7 +69,12 @@ pub struct ParserAtnSimulator<'a> {
     /// The simulator defers predicate evaluation to the parser because hooks
     /// need live parser state. Keeping the surviving alternative/context pairs
     /// lets the committed parser evaluate only simulator-viable paths.
-    prediction_semantic_candidates: Vec<(usize, SemanticContext)>,
+    prediction_semantic_candidates: Vec<ParserSemanticCandidate>,
+    /// Whether ATN configs retain rule-call paths for parameterized predicates.
+    ///
+    /// This is enabled only by the committed parser when generated rule
+    /// argument metadata exists, keeping ordinary prediction configs compact.
+    track_prediction_rule_calls: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -222,6 +229,13 @@ pub enum ParserAtnPredictionDiagnosticKind {
     ContextSensitivity,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ParserSemanticCandidate {
+    pub(crate) alt: usize,
+    pub(crate) context: SemanticContext,
+    pub(crate) predicate_calls: Vec<PredictionPredicateCall>,
+}
+
 #[derive(Clone, Copy)]
 struct PredictionCheck {
     decision: usize,
@@ -273,7 +287,7 @@ struct FullContextPrediction {
     prediction: ParserAtnPrediction,
     stop_index: usize,
     resolution: FullContextResolution,
-    semantic_candidates: Vec<(usize, SemanticContext)>,
+    semantic_candidates: Vec<ParserSemanticCandidate>,
 }
 
 /// How the full-context loop settled, mirroring the two exits of Java's
@@ -305,14 +319,18 @@ fn full_context_prediction(
     }
 }
 
-fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<(usize, SemanticContext)> {
+fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<ParserSemanticCandidate> {
     if !configs.has_semantic_context() {
         return Vec::new();
     }
     let mut candidates = configs
         .configs()
         .iter()
-        .map(|config| (config.alt, config.semantic_context.clone()))
+        .map(|config| ParserSemanticCandidate {
+            alt: config.alt,
+            context: config.semantic_context.clone(),
+            predicate_calls: config.prediction_predicate_calls().to_vec(),
+        })
         .collect::<Vec<_>>();
     candidates.sort();
     candidates.dedup();
@@ -325,6 +343,7 @@ struct ClosureConfigKey {
     alt: usize,
     context: ContextId,
     semantic_context: SemanticContext,
+    semantic_provenance: Option<Arc<PredictionSemanticProvenance>>,
     precedence_filter_suppressed: bool,
 }
 
@@ -335,6 +354,7 @@ impl From<&AtnConfig> for ClosureConfigKey {
             alt: config.alt,
             context: config.context,
             semantic_context: config.semantic_context.clone(),
+            semantic_provenance: config.semantic_provenance.clone(),
             precedence_filter_suppressed: config.precedence_filter_suppressed,
         }
     }
@@ -579,6 +599,7 @@ impl<'a> ParserAtnSimulator<'a> {
             full_context_memo_len: 0,
             full_context_memo_gate: None,
             prediction_semantic_candidates: Vec::new(),
+            track_prediction_rule_calls: false,
         }
     }
 
@@ -720,6 +741,7 @@ impl<'a> ParserAtnSimulator<'a> {
             full_context_memo_len: 0,
             full_context_memo_gate: None,
             prediction_semantic_candidates: Vec::new(),
+            track_prediction_rule_calls: false,
         }
     }
 
@@ -727,8 +749,12 @@ impl<'a> ParserAtnSimulator<'a> {
         &self.store.decision_to_dfa
     }
 
-    pub(crate) fn prediction_semantic_candidates(&self) -> &[(usize, SemanticContext)] {
+    pub(crate) fn prediction_semantic_candidates(&self) -> &[ParserSemanticCandidate] {
         &self.prediction_semantic_candidates
+    }
+
+    pub(crate) const fn set_track_prediction_rule_calls(&mut self, track: bool) {
+        self.track_prediction_rule_calls = track;
     }
 
     /// Returns adaptive-call and closure-work counters for stable decisions.
@@ -1292,7 +1318,7 @@ impl<'a> ParserAtnSimulator<'a> {
         prediction.has_semantic_context = self
             .prediction_semantic_candidates
             .iter()
-            .any(|(alt, context)| *alt == prediction.alt && !context.is_none());
+            .any(|candidate| candidate.alt == prediction.alt && !candidate.context.is_none());
         if conflicting_alts.len() > 1 {
             prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
                 kind,
@@ -2053,7 +2079,10 @@ impl<'a> ParserAtnSimulator<'a> {
                 .contexts
                 .parent(config.context, index)
                 .unwrap_or(EMPTY_CONTEXT);
-            let next = config.moved_to(return_state, parent, &self.store.contexts);
+            let mut next = config.moved_to(return_state, parent, &self.store.contexts);
+            if self.track_prediction_rule_calls {
+                next.exit_prediction_rule();
+            }
             stack.push((next, collect_predicates));
         }
         handled_all_paths
@@ -2103,6 +2132,20 @@ impl<'a> ParserAtnSimulator<'a> {
         };
         let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
         target.semantic_context = semantic_context;
+        if self.track_prediction_rule_calls {
+            match transition_kind {
+                ParserTransitionKind::Rule => {
+                    target.enter_prediction_rule(config.state, transition.arg0() as usize);
+                }
+                ParserTransitionKind::Predicate if collect_predicates => {
+                    target.record_prediction_predicate(
+                        transition.arg0() as usize,
+                        transition.arg1() as usize,
+                    );
+                }
+                _ => {}
+            }
+        }
         Some(target)
     }
 

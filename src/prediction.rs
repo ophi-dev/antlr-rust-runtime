@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::mem::size_of;
+use std::sync::Arc;
 
 pub const EMPTY_RETURN_STATE: usize = usize::MAX;
 const COMPACT_EMPTY_RETURN_STATE: u32 = u32::MAX;
@@ -849,11 +850,31 @@ fn combine_semantic_context(
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionRuleCall {
+    pub(crate) source_state: usize,
+    pub(crate) rule_index: usize,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionPredicateCall {
+    pub(crate) rule_index: usize,
+    pub(crate) pred_index: usize,
+    pub(crate) rule_calls: Vec<PredictionRuleCall>,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionSemanticProvenance {
+    active_rule_calls: Vec<PredictionRuleCall>,
+    predicate_calls: Vec<PredictionPredicateCall>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct AtnConfig {
     pub(crate) state: usize,
     pub(crate) alt: usize,
     pub(crate) context: ContextId,
     pub(crate) semantic_context: SemanticContext,
+    pub(crate) semantic_provenance: Option<Arc<PredictionSemanticProvenance>>,
     pub(crate) reaches_into_outer_context: usize,
     pub(crate) precedence_filter_suppressed: bool,
     #[cfg(debug_assertions)]
@@ -868,6 +889,7 @@ impl AtnConfig {
             alt,
             context,
             semantic_context: SemanticContext::None,
+            semantic_provenance: None,
             reaches_into_outer_context: 0,
             precedence_filter_suppressed: false,
             #[cfg(debug_assertions)]
@@ -894,9 +916,53 @@ impl AtnConfig {
     pub(crate) fn moved_to(&self, state: usize, context: ContextId, arena: &ContextArena) -> Self {
         let mut moved = Self::new(state, self.alt, context, arena);
         moved.semantic_context = self.semantic_context.clone();
+        moved
+            .semantic_provenance
+            .clone_from(&self.semantic_provenance);
         moved.reaches_into_outer_context = self.reaches_into_outer_context;
         moved.precedence_filter_suppressed = self.precedence_filter_suppressed;
         moved
+    }
+
+    pub(crate) fn enter_prediction_rule(&mut self, source_state: usize, rule_index: usize) {
+        let provenance = self
+            .semantic_provenance
+            .get_or_insert_with(|| Arc::new(PredictionSemanticProvenance::default()));
+        Arc::make_mut(provenance)
+            .active_rule_calls
+            .push(PredictionRuleCall {
+                source_state,
+                rule_index,
+            });
+    }
+
+    pub(crate) fn exit_prediction_rule(&mut self) {
+        let Some(provenance) = self.semantic_provenance.as_mut() else {
+            return;
+        };
+        let provenance = Arc::make_mut(provenance);
+        provenance.active_rule_calls.pop();
+        if provenance.active_rule_calls.is_empty() && provenance.predicate_calls.is_empty() {
+            self.semantic_provenance = None;
+        }
+    }
+
+    pub(crate) fn record_prediction_predicate(&mut self, rule_index: usize, pred_index: usize) {
+        let provenance = self
+            .semantic_provenance
+            .get_or_insert_with(|| Arc::new(PredictionSemanticProvenance::default()));
+        let provenance = Arc::make_mut(provenance);
+        provenance.predicate_calls.push(PredictionPredicateCall {
+            rule_index,
+            pred_index,
+            rule_calls: provenance.active_rule_calls.clone(),
+        });
+    }
+
+    pub(crate) fn prediction_predicate_calls(&self) -> &[PredictionPredicateCall] {
+        self.semantic_provenance
+            .as_deref()
+            .map_or(&[], |provenance| provenance.predicate_calls.as_slice())
     }
 
     pub(crate) fn assert_store(&self, arena: &ContextArena) {
@@ -1114,6 +1180,7 @@ struct AtnConfigKey {
     state: usize,
     alt: usize,
     semantic_context: SemanticContext,
+    semantic_provenance: Option<Arc<PredictionSemanticProvenance>>,
 }
 
 impl From<&AtnConfig> for AtnConfigKey {
@@ -1122,6 +1189,7 @@ impl From<&AtnConfig> for AtnConfigKey {
             state: config.state,
             alt: config.alt,
             semantic_context: config.semantic_context.clone(),
+            semantic_provenance: config.semantic_provenance.clone(),
         }
     }
 }
