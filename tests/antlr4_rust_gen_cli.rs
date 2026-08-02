@@ -5222,6 +5222,7 @@ mod named_action_tests {
     );
 }
 
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn parser_action_hook_signatures_reject_normalized_conflicts() {
     let temp = temporary_directory("parser-action-signature-conflict");
@@ -5263,8 +5264,12 @@ fn parser_action_hook_signatures_reject_normalized_conflicts() {
     assert!(!output.status.success(), "conflicting hooks should fail");
     let stderr = utf8(&output.stderr);
     assert!(
-        stderr.contains("typed semantic helper Mark has conflicting literal signatures"),
-        "{stderr}"
+        !stderr.contains(&temp.path().display().to_string()),
+        "diagnostic must not expose temporary paths: {stderr}"
+    );
+    insta::assert_snapshot!(
+        "parser_action_hook_signature_conflict_diagnostic",
+        normalize_current_package_version(stderr)
     );
     assert!(
         !out.exists(),
