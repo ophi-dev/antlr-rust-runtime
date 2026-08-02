@@ -53,7 +53,20 @@ let CfgParser_PARAMETER = __antlr4rust_token_aliases::CfgParser_PARAMETER;
 CfgParser_PARAMETER
 }
 let parameter = cfg_parameter();
+struct CfgFields {
+#[cfg(any())]
+CfgParser_PATTERN: i32,
+}
+#[cfg(not(any()))]
+#[allow(non_snake_case, unused_variables)]
+let CfgParser_PATTERN = __antlr4rust_token_aliases::CfgParser_PATTERN;
+let CfgFields {
+#[cfg(any())]
+CfgParser_PATTERN,
+} = CfgFields {};
+let pattern = CfgParser_PATTERN;
 active_use == 0 && inactive_use > 0
 && active_let == 7 && inactive_let > 0 && duplicate > 0
 && staged_before > 0 && staged_after == 10 && parameter > 0
+&& pattern > 0
 }

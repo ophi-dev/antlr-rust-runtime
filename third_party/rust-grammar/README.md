@@ -17,8 +17,10 @@ it removes:
   indexing.
 
 It also adds an action-free `let_chain` production so recovery does not discard
-the remainder of an embedded body after modern multi-`let` conditions, and a
-`let ... else` statement alternative so those bindings parse without recovery.
+the remainder of an embedded body after modern chained conditions, including
+chains whose first operand is not `let`, and a `let ... else` statement
+alternative so those bindings parse without recovery. Associated-type bounds
+in generic arguments are accepted without target-specific actions.
 Closure parameters use Rust's `PatternNoTopAlt` split so a following closure's
 opening pipe cannot be consumed as part of the preceding parameter pattern,
 async closures accept the stable form without `move`, and stable inline

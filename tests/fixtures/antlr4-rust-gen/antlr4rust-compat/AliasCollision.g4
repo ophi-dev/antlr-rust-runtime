@@ -156,6 +156,14 @@ start
         }
         let raw_macro_name_ok =
             r#match!(AliasCollisionParser_RAW_MACRO_NAME);
+        macro_rules! raw_string_match {
+            ($i:ident) => {{
+                let _ = r#""""#;
+                stringify!($i) == "AliasCollisionParser_RAW_STRING_MACRO"
+            }};
+        }
+        let raw_string_macro_ok =
+            raw_string_match!(AliasCollisionParser_RAW_STRING_MACRO);
         macro_rules! alias_value {
             ($i:ident) => {
                 $i
@@ -360,6 +368,12 @@ start
         } else {
             false
         };
+        let nonleading_let_chain_ok =
+            if true && let Some(value) = Some(12) {
+                value == 12
+            } else {
+                false
+            };
         let const_block_binding_ok =
             if let Some(AliasCollisionParser_CONST_CHAIN @ _) =
                 const { Some(24) }
@@ -396,6 +410,12 @@ start
             AliasCollisionParser_PRECISE_CAPTURE
         }
         let _precise_capture = precise_capture::<u8>();
+        fn accepts_associated_type_bound(
+            _: impl Iterator<Item: Copy>,
+        ) {}
+        let associated_type_bound_ok =
+            AliasCollisionParser_ASSOCIATED_BOUND
+                == Self::ASSOCIATED_BOUND;
         let impl_const_generic_ok = ConstGenericMember::<19>::value() == 19;
         let _: ConstExpression<{
             AliasCollisionParser_CONST_EXPRESSION as usize
@@ -427,6 +447,23 @@ start
         let shorthand = AliasFields {
             AliasCollisionParser_FIELD,
         };
+        struct CfgPattern {
+            #[cfg(any())]
+            AliasCollisionParser_PATTERN_CFG: i32,
+        }
+        let CfgPattern {
+            #[cfg(any())]
+            AliasCollisionParser_PATTERN_CFG,
+        } = CfgPattern {};
+        let pattern_cfg_ok =
+            AliasCollisionParser_PATTERN_CFG == Self::PATTERN_CFG;
+        mod relative_alias {
+            pub fn value() -> i32 {
+                super::AliasCollisionParser_PARENT_MODULE
+            }
+        }
+        let parent_module_alias_ok =
+            relative_alias::value() == Self::PARENT_MODULE;
         fn apply<F: Fn(i32) -> i32>(
             AliasCollisionParser_PARAM: i32,
             function: F,
@@ -463,6 +500,7 @@ start
             && while_let_constant_ok
             && match_head_alias_ok
             && let_chain_binding_ok
+            && nonleading_let_chain_ok
             && const_block_binding_ok
             && cfg_attr_alias_ok
             && action_cfg_alias_ok
@@ -481,6 +519,7 @@ start
             && placeholder_lifetime_ok
             && raw_macro_ok
             && raw_macro_name_ok
+            && raw_string_macro_ok
             && opaque_macro_alias_ok
             && shadowed_macro_ok
             && qualified_macro_ok
@@ -496,8 +535,11 @@ start
             && matches_binding_ok
             && nested_closure_binding_ok
             && const_generic_ok
+            && associated_type_bound_ok
             && impl_const_generic_ok
             && braced_parameter_ok
+            && pattern_cfg_ok
+            && parent_module_alias_ok
             && cfg_parameter_ok
             && enum_variant_ok
             && named_struct.marker == 14
@@ -584,6 +626,10 @@ start
         | RAW_MACRO_NAME
         | STAGED_CFG
         | CFG_PARAMETER
+        | RAW_STRING_MACRO
+        | PATTERN_CFG
+        | ASSOCIATED_BOUND
+        | PARENT_MODULE
     ) EOF
     ;
 
@@ -653,5 +699,9 @@ CFG_FORMAT: 'cfg_format';
 RAW_MACRO_NAME: 'raw_macro_name';
 STAGED_CFG: 'staged_cfg';
 CFG_PARAMETER: 'cfg_parameter';
+RAW_STRING_MACRO: 'raw_string_macro';
+PATTERN_CFG: 'pattern_cfg';
+ASSOCIATED_BOUND: 'associated_bound';
+PARENT_MODULE: 'parent_module';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

@@ -49,6 +49,8 @@ pub(crate) struct RustSyntax {
     conditional_macro_shadows: Vec<ConditionalMacroShadow>,
     struct_field_shorthand_byte_starts: BTreeSet<usize>,
     pattern_field_shorthand_byte_starts: BTreeSet<usize>,
+    conditional_pattern_binding_ranges: Vec<ConditionalPatternBinding>,
+    inline_module_ranges: Vec<Range<usize>>,
     value_binding_byte_starts: BTreeSet<usize>,
     scoped_value_bindings: Vec<ScopedValueBinding>,
     function_bindings: Vec<FunctionBinding>,
@@ -107,6 +109,12 @@ enum MacroBindingActivation {
 struct ConditionalMacroShadow {
     range: Range<usize>,
     insertion: usize,
+    active_predicate: String,
+}
+
+#[derive(Debug)]
+struct ConditionalPatternBinding {
+    range: Range<usize>,
     active_predicate: String,
 }
 
@@ -193,6 +201,23 @@ impl RustSyntax {
     pub(crate) fn is_pattern_field_shorthand(&self, byte_start: usize) -> bool {
         self.pattern_field_shorthand_byte_starts
             .contains(&byte_start)
+    }
+
+    pub(crate) fn pattern_binding_cfg_predicate(&self, byte_start: usize) -> Option<String> {
+        let predicates = self
+            .conditional_pattern_binding_ranges
+            .iter()
+            .filter(|binding| binding.range.contains(&byte_start))
+            .map(|binding| binding.active_predicate.clone())
+            .collect::<Vec<_>>();
+        super::cfg_all_predicate(&predicates)
+    }
+
+    pub(crate) fn inline_module_depth(&self, byte_start: usize) -> usize {
+        self.inline_module_ranges
+            .iter()
+            .filter(|range| range.contains(&byte_start))
+            .count()
     }
 
     pub(crate) fn value_binding_byte_starts(&self) -> impl Iterator<Item = usize> + '_ {
@@ -287,14 +312,24 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                 collect_const_generic_binding(rule, parsed.tokens(), body.len(), &mut syntax);
             }
             RULE_TYPE_DECL | RULE_ENUM_DECL | RULE_UNION_DECL | RULE_TRAIT_DECL
-            | RULE_TRAIT_ALIAS | RULE_MOD_DECL | RULE_MOD_DECL_SHORT | RULE_EXTERN_CRATE
-            | RULE_MACRO_DECL => {
+            | RULE_TRAIT_ALIAS | RULE_MOD_DECL_SHORT | RULE_EXTERN_CRATE | RULE_MACRO_DECL => {
                 collect_direct_identifier_start(
                     rule,
                     parsed.tokens(),
                     body.len(),
                     &mut syntax.type_identifier_byte_starts,
                 );
+            }
+            RULE_MOD_DECL => {
+                collect_direct_identifier_start(
+                    rule,
+                    parsed.tokens(),
+                    body.len(),
+                    &mut syntax.type_identifier_byte_starts,
+                );
+                if let Some(range) = body_byte_range(rule, parsed.tokens(), body.len()) {
+                    syntax.inline_module_ranges.push(range);
+                }
             }
             RULE_STRUCT_DECL => {
                 collect_direct_identifier_start(
@@ -398,7 +433,13 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
             _ => {}
         }
     }
-    collect_pattern_field_shorthands(parsed.tree(), parsed.tokens(), body.len(), &mut syntax);
+    collect_pattern_field_roles(
+        parsed.tree(),
+        parsed.tokens(),
+        body,
+        body.len(),
+        &mut syntax,
+    );
     Ok(syntax)
 }
 
@@ -1013,9 +1054,10 @@ fn collect_lifetime_identifier_start(
     }
 }
 
-fn collect_pattern_field_shorthands(
+fn collect_pattern_field_roles(
     root: Node<'_>,
     tokens: &TokenStore,
+    body: &str,
     body_len: usize,
     syntax: &mut RustSyntax,
 ) {
@@ -1023,9 +1065,10 @@ fn collect_pattern_field_shorthands(
         let Some(rule) = node.as_rule() else {
             continue;
         };
-        if rule.rule_index() == generated::parser::RULE_PAT_FIELD
-            && rule.child_rule(RULE_PATTERN).is_none()
-        {
+        if rule.rule_index() != generated::parser::RULE_PAT_FIELD {
+            continue;
+        }
+        if rule.child_rule(RULE_PATTERN).is_none() {
             collect_direct_identifier_start(
                 rule,
                 tokens,
@@ -1033,6 +1076,20 @@ fn collect_pattern_field_shorthands(
                 &mut syntax.pattern_field_shorthand_byte_starts,
             );
         }
+        let Some(range) = body_byte_range(rule, tokens, body_len) else {
+            continue;
+        };
+        let Some(active_predicate) =
+            super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
+        else {
+            continue;
+        };
+        syntax
+            .conditional_pattern_binding_ranges
+            .push(ConditionalPatternBinding {
+                range,
+                active_predicate,
+            });
     }
 }
 
@@ -1348,6 +1405,24 @@ mod tests {
     }
 
     #[test]
+    fn records_cfg_gated_pattern_field_bindings() {
+        let body = "let Fields {\n\
+                        #[cfg(any())] Alias,\n\
+                        #[cfg(feature = \"other\")] field: Other,\n\
+                    } = value;";
+        let syntax = analyze(body);
+
+        assert_eq!(
+            syntax.pattern_binding_cfg_predicate(occurrence(body, "Alias", 0)),
+            Some("any()".to_owned())
+        );
+        assert_eq!(
+            syntax.pattern_binding_cfg_predicate(occurrence(body, "Other", 0)),
+            Some("feature = \"other\"".to_owned())
+        );
+    }
+
+    #[test]
     fn records_nested_closure_parameters_and_bodies() {
         let body = "let closure = |_outer| |Alias: i32| Alias;";
         let syntax = analyze(body);
@@ -1477,6 +1552,21 @@ mod tests {
     }
 
     #[test]
+    fn tracks_inline_module_nesting_depth() {
+        let body = "let root = self::Alias;\n\
+                    mod outer {\n\
+                        fn outer() { let _ = super::Alias; let _ = self::Alias; }\n\
+                        mod inner { fn inner() { let _ = super::super::Alias; } }\n\
+                    }";
+        let syntax = analyze(body);
+
+        assert_eq!(syntax.inline_module_depth(occurrence(body, "Alias", 0)), 0);
+        assert_eq!(syntax.inline_module_depth(occurrence(body, "Alias", 1)), 1);
+        assert_eq!(syntax.inline_module_depth(occurrence(body, "Alias", 2)), 1);
+        assert_eq!(syntax.inline_module_depth(occurrence(body, "Alias", 3)), 2);
+    }
+
+    #[test]
     fn preserves_custom_qualified_macros_and_lowers_standard_paths() {
         let body = "let custom = my_macros::assert!(Alias);\n\
                     let std_macro = std::assert!(Alias == 1);\n\
@@ -1497,6 +1587,18 @@ mod tests {
     #[test]
     fn parses_edition_2024_unsafe_extern_blocks() {
         let body = "unsafe extern \"C\" { fn foreign(); }\nAlias == 1";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
+    fn parses_associated_type_bounds_and_nonleading_let_chains() {
+        let body = "fn consume(_: impl Iterator<Item: Copy>) {}\n\
+                    if ready && let Some(value) = input { let _ = value; }\n\
+                    while ready && let Some(value) = input { let _ = value; }\n\
+                    Alias == 1";
         let syntax = analyze(body);
 
         assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));

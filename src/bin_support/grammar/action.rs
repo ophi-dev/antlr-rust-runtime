@@ -103,6 +103,10 @@ fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usiz
     let mut stack = vec![expected];
     let mut index = open + 1;
     while index < bytes.len() {
+        if let Some(end) = raw_string_end(body, index) {
+            index = end;
+            continue;
+        }
         match bytes[index] {
             b'/' if bytes.get(index + 1) == Some(&b'/') => {
                 index = body[index + 2..]
@@ -141,6 +145,28 @@ fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usiz
         }
     }
     None
+}
+
+fn raw_string_end(body: &str, start: usize) -> Option<usize> {
+    let rest = &body[start..];
+    let prefix = ["br", "cr", "r"]
+        .into_iter()
+        .find(|prefix| rest.starts_with(prefix))?;
+    let mut quote = start + prefix.len();
+    while body.as_bytes().get(quote) == Some(&b'#') {
+        quote += 1;
+    }
+    if body.as_bytes().get(quote) != Some(&b'"') {
+        return None;
+    }
+    let hashes = quote - start - prefix.len();
+    let closing = format!("\"{}", "#".repeat(hashes));
+    let content = quote + 1;
+    Some(
+        body[content..]
+            .find(&closing)
+            .map_or(body.len(), |end| content + end + closing.len()),
+    )
 }
 
 fn block_comment_end(body: &str, open: usize) -> usize {
@@ -437,6 +463,12 @@ $actual"#,
 $actual"#,
             r"macro_rules! m { ($t:ty) => { let _ = '('; let _ = '\''; } }
 $actual",
+            r##"macro_rules! m { ($i:ident) => {{ let _ = r#""} $ignored"#; $i }} }
+$actual"##,
+            r##"macro_rules! m { ($i:ident) => {{ let _ = br#""} $ignored"#; $i }} }
+$actual"##,
+            r##"macro_rules! m { ($i:ident) => {{ let _ = cr#""} $ignored"#; $i }} }
+$actual"##,
         ] {
             let references = action_references(body);
             assert_eq!(references.len(), 1, "{body}");

@@ -2342,6 +2342,11 @@ fn lower_antlr4rust_surface(
         }
         let source_identifier = lexeme_text(body, *lexeme);
         let alias_identifier = rust_identifier_name(source_identifier);
+        let unqualified_alias = is_unqualified_identifier(&lexemes, position);
+        let generated_module_alias = relative_alias_module_path(body, &lexemes, position)
+            .is_some_and(|path| {
+                path.targets_generated_module(syntax.inline_module_depth(lexeme.start))
+            });
         if source_kind == Antlr4RustSourceKind::Body
             && token_aliases.contains(alias_identifier)
             && syntax.is_opaque_macro_identifier(lexeme.start)
@@ -2369,7 +2374,7 @@ fn lower_antlr4rust_surface(
                 .any(|replacement| {
                     replacement.range.start == lexeme.start && replacement.range.end == lexeme.end
                 })
-            && is_unqualified_identifier(&lexemes, position)
+            && (unqualified_alias || generated_module_alias)
             && !is_token_alias_path_or_field(body, &lexemes, position, &delimiters)
         {
             used_token_aliases.insert(alias_identifier.to_owned());
@@ -2703,25 +2708,42 @@ fn local_antlr4rust_alias_bindings(
                             !is_bare_pattern_identifier(lexemes, start, end, *binding)
                         });
                     }
-                    if let Some((attributes_start, active)) =
-                        local_cfg_attributes(body, lexemes, position, &delimiters)
-                    {
+                    let outer_cfg = local_cfg_attributes(body, lexemes, position, &delimiters);
+                    let fallback_insertion = outer_cfg
+                        .as_ref()
+                        .map_or(lexeme.start, |(attributes_start, _)| *attributes_start);
+                    let mut cfg_fallbacks = BTreeMap::<String, Vec<&String>>::new();
+                    for (name, binding) in &pattern_bindings {
+                        let mut active_predicates = Vec::new();
+                        if let Some((_, active)) = &outer_cfg {
+                            active_predicates.push(active.clone());
+                        }
+                        if let Some(active) =
+                            syntax.pattern_binding_cfg_predicate(lexemes[*binding].start)
+                        {
+                            active_predicates.push(active);
+                        }
+                        if let Some(active) = cfg_all_predicate(&active_predicates) {
+                            cfg_fallbacks.entry(active).or_default().push(name);
+                        }
+                    }
+                    if !cfg_fallbacks.is_empty() {
                         let block = delimiters.enclosing_block(position);
-                        bindings.record_local_cfg_alias_fallback(
-                            pattern_bindings.iter().map(|(name, _)| name),
-                            CfgAliasFallbackSite {
-                                block: block.clone(),
-                                block_insertion: block_cfg_fallback_insertion(
-                                    lexemes,
-                                    &block,
-                                    &delimiters,
-                                )
-                                .unwrap_or(attributes_start),
-                                binding_insertion: attributes_start,
-                                active: &active,
-                                kind: CfgAliasBindingKind::Lexical,
-                            },
-                        );
+                        let block_insertion =
+                            block_cfg_fallback_insertion(lexemes, &block, &delimiters)
+                                .unwrap_or(fallback_insertion);
+                        for (active, aliases) in cfg_fallbacks {
+                            bindings.record_local_cfg_alias_fallback(
+                                aliases,
+                                CfgAliasFallbackSite {
+                                    block: block.clone(),
+                                    block_insertion,
+                                    binding_insertion: fallback_insertion,
+                                    active: &active,
+                                    kind: CfgAliasBindingKind::Lexical,
+                                },
+                            );
+                        }
                     }
                     let scope = if conditional_let {
                         conditional_let_scope(body, lexemes, end, &delimiters).unwrap_or(end..end)
@@ -3901,6 +3923,65 @@ fn is_unqualified_identifier(lexemes: &[RustLexeme], position: usize) -> bool {
                 || next_significant(lexemes, next)
                     .is_none_or(|after| lexemes[after].kind != RustLexemeKind::Punctuation(b':'))
         })
+}
+
+#[derive(Clone, Copy)]
+enum RelativeAliasModulePath {
+    SelfModule,
+    Super(usize),
+}
+
+impl RelativeAliasModulePath {
+    const fn targets_generated_module(self, inline_module_depth: usize) -> bool {
+        match self {
+            Self::SelfModule => inline_module_depth == 0,
+            Self::Super(levels) => levels == inline_module_depth && levels > 0,
+        }
+    }
+}
+
+fn relative_alias_module_path(
+    body: &str,
+    lexemes: &[RustLexeme],
+    position: usize,
+) -> Option<RelativeAliasModulePath> {
+    if next_significant(lexemes, position).is_some_and(|next| {
+        lexemes[next].kind == RustLexemeKind::Punctuation(b':')
+            && next_significant(lexemes, next)
+                .is_some_and(|after| lexemes[after].kind == RustLexemeKind::Punctuation(b':'))
+    }) {
+        return None;
+    }
+    let mut segment = previous_path_segment(lexemes, position)?;
+    match lexeme_text(body, lexemes[segment]) {
+        "self" if previous_path_segment(lexemes, segment).is_none() => {
+            Some(RelativeAliasModulePath::SelfModule)
+        }
+        "super" => {
+            let mut levels = 1;
+            while let Some(previous) = previous_path_segment(lexemes, segment) {
+                if lexeme_text(body, lexemes[previous]) != "super" {
+                    return None;
+                }
+                levels += 1;
+                segment = previous;
+            }
+            Some(RelativeAliasModulePath::Super(levels))
+        }
+        _ => None,
+    }
+}
+
+fn previous_path_segment(lexemes: &[RustLexeme], position: usize) -> Option<usize> {
+    let second_colon = previous_significant(lexemes, position)?;
+    let first_colon = previous_significant(lexemes, second_colon)?;
+    if lexemes[second_colon].kind != RustLexemeKind::Punctuation(b':')
+        || lexemes[first_colon].kind != RustLexemeKind::Punctuation(b':')
+    {
+        return None;
+    }
+    previous_significant(lexemes, first_colon)
+        .filter(|segment| lexemes[*segment].kind == RustLexemeKind::Identifier)
 }
 
 fn next_significant(lexemes: &[RustLexeme], position: usize) -> Option<usize> {
@@ -6991,6 +7072,71 @@ mod tests {
     }
 
     #[test]
+    fn lowers_relative_paths_that_resolve_to_generated_aliases() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let token_aliases = BTreeSet::from([
+            "CompatParser_DEEP".to_owned(),
+            "CompatParser_ID".to_owned(),
+            "CompatParser_LOCAL".to_owned(),
+            "CompatParser_ROOT".to_owned(),
+            "CompatParser_USER".to_owned(),
+        ]);
+        let body = "let root = self::CompatParser_ROOT;\n\
+                    mod nested {\n\
+                        pub fn value() -> i32 { super::CompatParser_ID }\n\
+                        pub const CompatParser_LOCAL: i32 = 7;\n\
+                        pub fn local() -> i32 { self::CompatParser_LOCAL }\n\
+                        mod deeper {\n\
+                            pub fn value() -> i32 { super::super::CompatParser_DEEP }\n\
+                        }\n\
+                    }\n\
+                    let user = module::CompatParser_USER;\n\
+                    root + nested::value() + user > 0";
+        let lowered = translate_parser_body(
+            body,
+            &ctx,
+            "SContext",
+            &token_aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect("relative generated-module aliases should lower");
+
+        assert!(
+            lowered
+                .source
+                .contains("self::__antlr4rust_token_aliases::CompatParser_ROOT")
+        );
+        assert!(
+            lowered
+                .source
+                .contains("super::__antlr4rust_token_aliases::CompatParser_ID")
+        );
+        assert!(
+            lowered
+                .source
+                .contains("super::super::__antlr4rust_token_aliases::CompatParser_DEEP")
+        );
+        assert!(lowered.source.contains("self::CompatParser_LOCAL"));
+        assert!(lowered.source.contains("module::CompatParser_USER"));
+        assert_eq!(
+            lowered.token_aliases,
+            BTreeSet::from([
+                "CompatParser_DEEP".to_owned(),
+                "CompatParser_ID".to_owned(),
+                "CompatParser_ROOT".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
     fn preserves_struct_literal_fields_when_lowering_alias_values() {
         let m = model(vec![rule("s")]);
         let toks = tokens(&[]);
@@ -7128,6 +7274,7 @@ mod tests {
             "CfgParser_INACTIVE_LET".to_owned(),
             "CfgParser_INACTIVE_USE".to_owned(),
             "CfgParser_PARAMETER".to_owned(),
+            "CfgParser_PATTERN".to_owned(),
             "CfgParser_STAGED".to_owned(),
         ]);
         let body = "#[cfg(all())]\n\
@@ -7159,9 +7306,19 @@ mod tests {
                         CfgParser_PARAMETER\n\
                     }\n\
                     let parameter = cfg_parameter();\n\
+                    struct CfgFields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_PATTERN: i32,\n\
+                    }\n\
+                    let CfgFields {\n\
+                        #[cfg(any())]\n\
+                        CfgParser_PATTERN,\n\
+                    } = CfgFields {};\n\
+                    let pattern = CfgParser_PATTERN;\n\
                     active_use == 0 && inactive_use > 0\n\
                         && active_let == 7 && inactive_let > 0 && duplicate > 0\n\
-                        && staged_before > 0 && staged_after == 10 && parameter > 0";
+                        && staged_before > 0 && staged_after == 10 && parameter > 0\n\
+                        && pattern > 0";
         let lowered =
             translate_parser_body(body, &ctx, "SContext", &aliases, ParserBodyKind::Predicate)
                 .expect("cfg-gated bindings should retain active values and inactive fallbacks");

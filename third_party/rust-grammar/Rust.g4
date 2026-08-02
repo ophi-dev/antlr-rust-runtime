@@ -1419,6 +1419,7 @@ type_arguments:
 
 type_argument:
     ident '=' ty_sum
+    | ident ':' type_param_bounds
     | ty_sum
     | BareIntLit
     | 'true'
@@ -1599,8 +1600,18 @@ while_cond_or_pat:
     | 'while' 'let' pattern '=' expr;
 
 let_chain:
+    let_chain_let ('&&' let_chain_operand)+
+    | cmp_expr_no_struct ('&&' cmp_expr_no_struct)* '&&' let_chain_let
+      ('&&' let_chain_operand)*
+    ;
+
+let_chain_operand:
+    let_chain_let
+    | cmp_expr_no_struct
+    ;
+
+let_chain_let:
     'let' pattern '=' cmp_expr_no_struct
-    ('&&' ('let' pattern '=' cmp_expr_no_struct | cmp_expr_no_struct))+
     ;
 
 loop_label:
