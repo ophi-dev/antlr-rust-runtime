@@ -91,6 +91,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
+        timeout-minutes: 120
         env:
           CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1"
         with:
@@ -122,9 +123,8 @@ jobs:
             /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
             UPSTREAM REFERENCE: This crate ports ANTLR (antlr/antlr4). A read-only
-            checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`
-            (Java runtime: `runtime/Java/src/org/antlr/v4/runtime/`; generator:
-            `tool/`). For changes to ported logic (ATN/prediction, lexer/parser
+            checkout of tag v4.13.2 — the version it targets — is at `antlr-upstream/`. 
+            For changes to ported logic (ATN/prediction, lexer/parser
             simulation, serialized-ATN decoding, generated-code shape), compare
             against it and cite the upstream file:line. Flag unintended divergence
             from ANTLR semantics; treat documented deviations as intentional.
@@ -135,6 +135,8 @@ jobs:
             results are in hand, immediately validate the candidate findings and post
             the consolidated review via update_claude_comment before finishing. The
             task is not complete until the consolidated review has been posted.
+
+            You have up to 60 mins to post final review.
 
       # Always preserve the raw Claude execution JSON (the action logs it to
       # ${{ runner.temp }}/claude-execution-output.json) so any run can be diagnosed
