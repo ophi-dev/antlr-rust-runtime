@@ -44,7 +44,8 @@ Unicode escapes, multiple match-body inner attributes, `pub(in self)`, empty
 turbofish argument lists, empty `where` clauses, explicit `unsafe` foreign
 statics, attributed variadic parameters, attributed shorthand struct fields,
 full patterns after numeric tuple-field names, unbraced literal const-generic
-arguments, and standalone inner attributes at the start of impl bodies.
+arguments, standalone inner attributes at the start of impl bodies, and the
+atomic `>=` token in no-struct comparison expressions.
 
 The recognizer is used only to classify embedded Rust syntax needed by
 compatibility alias lowering. It does not aim to reproduce every rustc

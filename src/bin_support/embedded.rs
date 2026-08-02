@@ -681,6 +681,7 @@ struct UseTreeAnalysis {
     bindings: BTreeSet<String>,
     binding_ranges: Vec<(String, Range<usize>)>,
     targets: Vec<UseTreeTarget>,
+    contains_glob: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -725,6 +726,7 @@ impl UseTreeBindingParser<'_> {
     fn parse_tree(&mut self, prefix: &[UsePathComponent], global: bool) -> io::Result<()> {
         let global = (prefix.is_empty() && self.consume_path_separator()) || global;
         if self.consume_punctuation(b'*') {
+            self.analysis.contains_glob = true;
             return Ok(());
         }
         if self.consume_punctuation(b'{') {
@@ -2558,6 +2560,16 @@ impl AliasBindingScopes {
         }
     }
 
+    fn record_potential(
+        &mut self,
+        bindings: impl IntoIterator<Item = String>,
+        scope: Range<usize>,
+    ) {
+        for name in bindings {
+            self.scopes.entry(name).or_default().push(scope.clone());
+        }
+    }
+
     fn record_local_cfg_alias_fallback<'a>(
         &mut self,
         aliases: impl IntoIterator<Item = &'a String>,
@@ -2924,11 +2936,16 @@ fn local_antlr4rust_alias_bindings(
                             })?
                         })
                         .collect::<Vec<_>>();
+                    let shadowed_aliases = if analysis.contains_glob {
+                        token_aliases.clone()
+                    } else {
+                        use_bindings.iter().map(|(name, _)| name.clone()).collect()
+                    };
                     if let Some((attributes_start, active)) =
                         local_cfg_attributes(body, lexemes, position, &delimiters)
                     {
                         bindings.record_local_cfg_alias_fallback(
-                            use_bindings.iter().map(|(name, _)| name),
+                            shadowed_aliases.iter(),
                             CfgAliasFallbackSite {
                                 block: scope.clone(),
                                 block_insertion: block_cfg_fallback_insertion(
@@ -2942,6 +2959,9 @@ fn local_antlr4rust_alias_bindings(
                                 kind: CfgAliasBindingKind::Item,
                             },
                         );
+                    }
+                    if analysis.contains_glob {
+                        bindings.record_potential(shadowed_aliases, scope.clone());
                     }
                     bindings.record(use_bindings, scope);
                     for target in analysis.targets.into_iter().filter(|target| {
@@ -7027,6 +7047,91 @@ $actual"##,
         insta::assert_snapshot!(
             "antlr4rust_arbitrary_macro_identifier_lowering",
             lowered.source
+        );
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn preserves_declarations_and_potential_glob_bindings() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from([
+            "CompatParser_ASSOCIATED".to_owned(),
+            "CompatParser_FOREIGN".to_owned(),
+            "CompatParser_GLOB".to_owned(),
+        ]);
+        let lowered = translate_parser_body(
+            "trait Local { type CompatParser_ASSOCIATED; }\n\
+             struct Value;\n\
+             impl Local for Value { type CompatParser_ASSOCIATED = u8; }\n\
+             unsafe extern \"C\" { static CompatParser_FOREIGN: i32; }\n\
+             mod local { pub const CompatParser_GLOB: i32 = 99; }\n\
+             use local::*;\n\
+             let values = (unsafe { CompatParser_FOREIGN }, CompatParser_GLOB);",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Action,
+        )
+        .expect("declarations and glob bindings should remain ordinary Rust");
+
+        assert!(lowered.token_aliases.is_empty());
+        insta::assert_snapshot!("antlr4rust_declaration_and_glob_shadowing", lowered.source);
+    }
+
+    #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+    #[test]
+    fn preserves_macro_use_shadows_and_cfg_glob_fallbacks() {
+        let m = model(vec![rule("s")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+        let aliases = BTreeSet::from(["CompatParser_ID".to_owned()]);
+        let macro_use = translate_parser_body(
+            "#[macro_use]\n\
+             mod custom {\n\
+                 macro_rules! format {\n\
+                     (\"{CompatParser_ID}\") => { \"custom\" };\n\
+                 }\n\
+             }\n\
+             let rendered = format!(\"{CompatParser_ID}\");",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Action,
+        )
+        .expect("macro-use imports should shadow standard macro lowering");
+        let cfg_glob = translate_parser_body(
+            "#[cfg(any())]\n\
+             use missing::*;\n\
+             CompatParser_ID == 1",
+            &ctx,
+            "SContext",
+            &aliases,
+            ParserBodyKind::Predicate,
+        )
+        .expect("cfg-gated glob imports should retain an alias fallback");
+
+        assert!(macro_use.token_aliases.is_empty());
+        assert_eq!(cfg_glob.token_aliases, aliases);
+        insta::assert_snapshot!(
+            "antlr4rust_macro_use_and_cfg_glob_shadowing",
+            format!(
+                "=== macro use ===\n{}\n=== cfg glob ===\n{}",
+                macro_use.source, cfg_glob.source
+            )
         );
     }
 

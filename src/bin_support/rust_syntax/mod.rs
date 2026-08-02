@@ -23,7 +23,7 @@ use generated::parser::{
     RULE_ANY_IDENT, RULE_ASSOCIATED_CONST_DECL, RULE_ASSOCIATED_STATIC_DECL, RULE_ATTR, RULE_BLOCK,
     RULE_BLOCK_WITH_INNER_ATTRS, RULE_CLOSURE_PARAM, RULE_CLOSURE_PARAMS, RULE_CLOSURE_TAIL,
     RULE_CONST_DECL, RULE_ENUM_DECL, RULE_ENUM_VARIANT_MAIN, RULE_EXPR, RULE_EXTERN_CRATE,
-    RULE_FIELD, RULE_FIELD_NAME, RULE_FN_DECL, RULE_FN_HEAD, RULE_FOREIGN_FN_DECL,
+    RULE_EXTERN_MOD, RULE_FIELD, RULE_FIELD_NAME, RULE_FN_DECL, RULE_FN_HEAD, RULE_FOREIGN_FN_DECL,
     RULE_FOREIGN_ITEM, RULE_FOREIGN_ITEM_TAIL, RULE_IDENT, RULE_IMPL_BLOCK, RULE_IMPL_ITEM_TAIL,
     RULE_INNER_ATTR, RULE_ITEM, RULE_LIFETIME, RULE_MACRO_DECL, RULE_MACRO_INVOCATION,
     RULE_MACRO_INVOCATION_SEMI, RULE_MACRO_RULES_DEFINITION, RULE_MACRO_TAIL, RULE_METHOD_DECL,
@@ -434,6 +434,17 @@ fn analyze_with_root(body: &str, analysis_root: AnalysisRoot) -> io::Result<Rust
                     &mut syntax.declaration_identifier_byte_starts,
                 );
             }
+            RULE_TRAIT_ITEM | RULE_IMPL_ITEM_TAIL => {
+                collect_direct_identifier_start(
+                    rule,
+                    parsed.tokens(),
+                    body.len(),
+                    &mut syntax.declaration_identifier_byte_starts,
+                );
+            }
+            RULE_FOREIGN_ITEM_TAIL => {
+                collect_foreign_item_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
+            }
             RULE_PRIM_EXPR_NO_STRUCT => {
                 collect_closure_binding(rule, parsed.tokens(), body, body.len(), &mut syntax);
             }
@@ -579,6 +590,83 @@ fn collect_value_binding(
                 active_predicate,
             },
         });
+}
+
+fn collect_foreign_item_binding(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+    syntax: &mut RustSyntax,
+) {
+    let Some(declaration_start) = direct_identifier_byte_start(declaration, tokens, body_len)
+    else {
+        return;
+    };
+    if !has_direct_terminal(declaration, "static") {
+        syntax
+            .declaration_identifier_byte_starts
+            .insert(declaration_start);
+        return;
+    }
+    let scope = enclosing_block(declaration)
+        .and_then(|block| body_byte_range(block, tokens, body_len))
+        .unwrap_or(0..body_len);
+    let cfg_fallback = foreign_item_cfg_fallback(declaration, tokens, body, body_len).map(
+        |(insertion, active_predicate)| ConditionalBindingFallback {
+            insertion,
+            active_predicate,
+        },
+    );
+    syntax.scoped_value_bindings.push(ScopedValueBinding {
+        declaration_start,
+        scope,
+        cfg_fallback,
+    });
+}
+
+fn foreign_item_cfg_fallback(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+) -> Option<(usize, String)> {
+    let foreign_item = enclosing_rule(declaration, RULE_FOREIGN_ITEM)?;
+    let mut predicates =
+        cfg_predicates_before_child(foreign_item, declaration, tokens, body, body_len);
+    let extern_mod = enclosing_rule(declaration, RULE_EXTERN_MOD)?;
+    let item = enclosing_item(extern_mod)?;
+    predicates.extend(cfg_predicates_before_child(
+        item, extern_mod, tokens, body, body_len,
+    ));
+    let active_predicate = super::cfg_all_predicate(&predicates)?;
+    let insertion = body_byte_range(item, tokens, body_len)?.start;
+    Some((insertion, active_predicate))
+}
+
+fn cfg_predicates_before_child(
+    owner: antlr4_runtime::RuleNodeView<'_>,
+    child: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+) -> Vec<String> {
+    let Some(owner_range) = body_byte_range(owner, tokens, body_len) else {
+        return Vec::new();
+    };
+    let Some(child_range) = body_byte_range(child, tokens, body_len) else {
+        return Vec::new();
+    };
+    if owner_range.start > child_range.start {
+        return Vec::new();
+    }
+    super::member_cfg_predicates(&body[owner_range.start..child_range.start])
+}
+
+fn has_direct_terminal(rule: antlr4_runtime::RuleNodeView<'_>, expected: &str) -> bool {
+    rule.children()
+        .filter_map(Node::as_terminal)
+        .any(|terminal| terminal.text() == expected)
 }
 
 fn collect_const_generic_binding(
@@ -1045,11 +1133,15 @@ fn collect_scoped_macro_bindings(
                     .and_then(|block| body_byte_range(block, tokens, body_len))
                     .unwrap_or(0..body_len);
                 scope.start = declaration.end.min(scope.end);
+                let activation = binding_activation(rule, tokens, body, body_len);
                 bindings.push(ScopedMacroBinding {
-                    name,
+                    name: name.clone(),
                     scope,
-                    activation: binding_activation(rule, tokens, body, body_len),
+                    activation: activation.clone(),
                 });
+                bindings.extend(collect_macro_use_bindings(
+                    rule, &name, activation, tokens, body, body_len,
+                ));
             }
             RULE_USE_DECL => {
                 let scope = enclosing_block(rule)
@@ -1072,6 +1164,86 @@ fn collect_scoped_macro_bindings(
         }
     }
     bindings
+}
+
+fn collect_macro_use_bindings(
+    definition: antlr4_runtime::RuleNodeView<'_>,
+    name: &str,
+    mut activation: BindingActivation,
+    tokens: &TokenStore,
+    body: &str,
+    body_len: usize,
+) -> Vec<ScopedMacroBinding> {
+    let mut bindings = Vec::new();
+    let mut node = definition.node().parent();
+    while let Some(parent) = node {
+        let parent_rule = parent.as_rule();
+        if parent_rule.is_some_and(|rule| {
+            matches!(rule.rule_index(), RULE_BLOCK | RULE_BLOCK_WITH_INNER_ATTRS)
+        }) {
+            return bindings;
+        }
+        if let Some(module) = parent_rule.filter(|rule| rule.rule_index() == RULE_MOD_DECL) {
+            if !item_has_direct_attribute(module, tokens, "macro_use") {
+                return bindings;
+            }
+            activation = combine_binding_activations(
+                activation,
+                binding_activation(module, tokens, body, body_len),
+            );
+            let Some(declaration) = body_byte_range(module, tokens, body_len) else {
+                return bindings;
+            };
+            let mut scope = enclosing_block(module)
+                .and_then(|block| body_byte_range(block, tokens, body_len))
+                .unwrap_or(0..body_len);
+            scope.start = declaration.end.min(scope.end);
+            bindings.push(ScopedMacroBinding {
+                name: name.to_owned(),
+                scope,
+                activation: activation.clone(),
+            });
+        }
+        node = parent.parent();
+    }
+    bindings
+}
+
+fn item_has_direct_attribute(
+    declaration: antlr4_runtime::RuleNodeView<'_>,
+    tokens: &TokenStore,
+    expected: &str,
+) -> bool {
+    enclosing_item(declaration).is_some_and(|item| {
+        item.children()
+            .filter_map(Node::as_rule)
+            .filter(|rule| rule.rule_index() == RULE_ATTR)
+            .any(|attribute| identifier_name(attribute, tokens).as_deref() == Some(expected))
+    })
+}
+
+fn combine_binding_activations(
+    left: BindingActivation,
+    right: BindingActivation,
+) -> BindingActivation {
+    match (left, right) {
+        (BindingActivation::Always, activation) | (activation, BindingActivation::Always) => {
+            activation
+        }
+        (
+            BindingActivation::Conditional {
+                insertion: left_insertion,
+                predicate: left_predicate,
+            },
+            BindingActivation::Conditional {
+                insertion: right_insertion,
+                predicate: right_predicate,
+            },
+        ) => BindingActivation::Conditional {
+            insertion: left_insertion.min(right_insertion),
+            predicate: format!("all({left_predicate}, {right_predicate})"),
+        },
+    }
 }
 
 fn collect_scoped_standard_path_bindings(
@@ -1129,9 +1301,15 @@ fn binding_activation(
     let Some(range) = body_byte_range(item, tokens, body_len) else {
         return BindingActivation::Always;
     };
-    let Some(predicate) =
-        super::cfg_all_predicate(&super::member_cfg_predicates(&body[range.clone()]))
-    else {
+    let Some(declaration_range) = body_byte_range(declaration, tokens, body_len) else {
+        return BindingActivation::Always;
+    };
+    if range.start > declaration_range.start {
+        return BindingActivation::Always;
+    }
+    let Some(predicate) = super::cfg_all_predicate(&super::member_cfg_predicates(
+        &body[range.start..declaration_range.start],
+    )) else {
         return BindingActivation::Always;
     };
     BindingActivation::Conditional {
@@ -1151,6 +1329,22 @@ fn enclosing_item(
             return Some(current_rule);
         }
         node = current.parent();
+    }
+    None
+}
+
+fn enclosing_rule(
+    rule: antlr4_runtime::RuleNodeView<'_>,
+    rule_index: usize,
+) -> Option<antlr4_runtime::RuleNodeView<'_>> {
+    let mut node = rule.node().parent();
+    while let Some(parent) = node {
+        if let Some(parent_rule) = parent.as_rule()
+            && parent_rule.rule_index() == rule_index
+        {
+            return Some(parent_rule);
+        }
+        node = parent.parent();
     }
     None
 }
@@ -2023,6 +2217,31 @@ mod tests {
     }
 
     #[test]
+    fn imports_macro_use_definitions_into_the_parent_scope() {
+        let body = "#[macro_use]\n\
+                    mod custom {\n\
+                        macro_rules! format { ($value:literal) => { $value }; }\n\
+                    }\n\
+                    let rendered = format!(\"{Alias}\");";
+        let syntax = analyze(body);
+        assert!(syntax.is_opaque_macro_byte(occurrence(body, "Alias", 0)));
+
+        let conditional = "#[cfg(any())]\n\
+                           #[macro_use]\n\
+                           mod custom {\n\
+                               macro_rules! format { ($value:literal) => { $value }; }\n\
+                           }\n\
+                           let rendered = format!(\"{Alias}\");";
+        let syntax = analyze(conditional);
+        let capture = occurrence(conditional, "Alias", 0);
+        assert!(syntax.is_opaque_macro_byte(capture));
+        assert_eq!(
+            syntax.conditional_macro_fallback(capture),
+            Some((0, "any()"))
+        );
+    }
+
+    #[test]
     fn distinguishes_expression_macros_from_type_and_pattern_macros() {
         let body = "macro_rules! type_value { ($i:ident) => { i32 }; }\n\
                     macro_rules! pattern_value { ($i:ident) => { 1 }; }\n\
@@ -2105,6 +2324,10 @@ mod tests {
             "struct Local;\n\
              impl Local { #![allow(dead_code)] }\n\
              Alias == 1;",
+            "let left = 2;\n\
+             let right = 1;\n\
+             let ordered = match left >= right { true => true, false => false };\n\
+             Alias == ordered;",
             "fn safe(safe: i32) -> i32 { safe }\nAlias == safe(1);",
             r#"let text = "\u{00_E6}"; Alias == text;"#,
             "let matched = match 1 {\n\
@@ -2189,6 +2412,37 @@ mod tests {
 
         assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
         assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
+    fn classifies_associated_types_and_foreign_static_bindings() {
+        let body = "trait Local { type Alias; }\n\
+                    struct Value;\n\
+                    impl Local for Value { type Alias = u8; }\n\
+                    unsafe extern \"C\" {\n\
+                        #[cfg(any())]\n\
+                        static Alias: i32;\n\
+                    }\n\
+                    let _ = unsafe { Alias };";
+        let syntax = analyze(body);
+        assert!(syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+        assert!(syntax.is_declaration_identifier(occurrence(body, "Alias", 1)));
+
+        let declaration = occurrence(body, "Alias", 2);
+        let read = occurrence(body, "Alias", 3);
+        let binding = syntax
+            .scoped_value_bindings()
+            .iter()
+            .find(|binding| binding.declaration_start == declaration)
+            .expect("foreign static binding");
+        assert!(binding.scope.contains(&read));
+        assert_eq!(
+            binding
+                .cfg_fallback
+                .as_ref()
+                .map(|fallback| fallback.active_predicate.as_str()),
+            Some("any()")
+        );
     }
 
     #[test]

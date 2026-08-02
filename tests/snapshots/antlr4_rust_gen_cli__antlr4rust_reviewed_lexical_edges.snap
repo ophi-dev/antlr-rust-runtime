@@ -20,16 +20,17 @@ pub(super) const AliasCollisionParser_CFG_ITEM: i32 = 67;
 pub(super) const AliasCollisionParser_CFG_PARAMETER: i32 = 62;
 pub(super) const AliasCollisionParser_CONST_BLOCK: i32 = 33;
 pub(super) const AliasCollisionParser_CONST_EXPRESSION: i32 = 28;
-pub(super) const AliasCollisionParser_CONTINUED_FORMAT: i32 = 72;
+pub(super) const AliasCollisionParser_CONTINUED_FORMAT: i32 = 77;
 pub(super) const AliasCollisionParser_CUSTOM_MATCHES: i32 = 49;
 pub(super) const AliasCollisionParser_DUPLICATE_CFG: i32 = 55;
-pub(super) const AliasCollisionParser_ESCAPED_FORMAT: i32 = 71;
+pub(super) const AliasCollisionParser_ESCAPED_FORMAT: i32 = 76;
 pub(super) const AliasCollisionParser_FORMAT_CAPTURE: i32 = 37;
-pub(super) const AliasCollisionParser_FOR_PATTERN_CFG: i32 = 73;
+pub(super) const AliasCollisionParser_FOR_PATTERN_CFG: i32 = 78;
+pub(super) const AliasCollisionParser_GE_NO_STRUCT: i32 = 75;
 pub(super) const AliasCollisionParser_IMPORTED_MACRO: i32 = 56;
 pub(super) const AliasCollisionParser_INACTIVE_CFG_LET: i32 = 54;
 pub(super) const AliasCollisionParser_INACTIVE_CFG_USE: i32 = 52;
-pub(super) const AliasCollisionParser_MATCHES_PATTERN_CFG: i32 = 74;
+pub(super) const AliasCollisionParser_MATCHES_PATTERN_CFG: i32 = 79;
 pub(super) const AliasCollisionParser_METHOD_NAME: i32 = 27;
 pub(super) const AliasCollisionParser_OPAQUE_MACRO: i32 = 48;
 pub(super) const AliasCollisionParser_PARENT_MODULE: i32 = 66;
@@ -78,6 +79,9 @@ let c_strings_ok =
 __antlr4rust_token_aliases_2::AliasCollisionParser_UNSAFE_EXTERN == Self::UNSAFE_EXTERN;
 __antlr4rust_token_aliases_2::AliasCollisionParser_SAFE_FOREIGN == Self::SAFE_FOREIGN;
 let reviewed_foreign_syntax_ok = true;
+static AliasCollisionParser_FOREIGN_STATIC: i32;
+let foreign_static_binding_ok =
+unsafe { AliasCollisionParser_FOREIGN_STATIC } == 59;
 let _alias = __antlr4rust_token_aliases_2::AliasCollisionParser_RAW_LIFETIME;
 let placeholder_lifetime: Option<&'_ i32> = None;
 let placeholder_lifetime_ok =
@@ -173,6 +177,10 @@ if AliasCollisionParser_MATCHES_BINDING
 __antlr4rust_token_aliases_2::AliasCollisionParser_PRECISE_CAPTURE
 let associated_type_bound_ok =
 __antlr4rust_token_aliases_2::AliasCollisionParser_ASSOCIATED_BOUND
+type AliasCollisionParser_ASSOCIATED_TYPE;
+type AliasCollisionParser_ASSOCIATED_TYPE = u8;
+let associated_type_declaration_ok =
+AliasCollisionParser_ASSOCIATED_TYPE
 let tuple_field_ok = pair.0.1 == 2;
 let pub_self_ok = self_visible::value() == 5;
 let pub_in_self_ok = self_restricted::value() == 6;
@@ -216,6 +224,14 @@ let cfg_const_generic_ok =
 let AliasCollisionParser_CFG_CLOSURE = __antlr4rust_token_aliases_2::AliasCollisionParser_CFG_CLOSURE;
 AliasCollisionParser_CFG_CLOSURE
 let cfg_closure_ok =
+let glob_import_binding_ok = {
+pub const AliasCollisionParser_GLOB_IMPORT: i32 = 61;
+AliasCollisionParser_GLOB_IMPORT == 61 };
+("{AliasCollisionParser_MACRO_USE}") => {
+let macro_use_shadow_ok =
+format!("{AliasCollisionParser_MACRO_USE}") == "macro-use";
+let ge_no_struct_ok = match
+Self::GE_NO_STRUCT >= __antlr4rust_token_aliases_2::AliasCollisionParser_GE_NO_STRUCT
 && staged_cfg_before
 && staged_cfg_after
 && if_let_constant_ok
@@ -230,6 +246,7 @@ let cfg_closure_ok =
 && opaque_receiver_tokens_ok
 && opaque_attribute_receiver_tokens_ok
 && reviewed_foreign_syntax_ok
+&& foreign_static_binding_ok
 && placeholder_lifetime_ok
 && raw_reference_ok
 && nested_raw_reference_ok
@@ -251,6 +268,7 @@ let cfg_closure_ok =
 && impl_item_macro_ok
 && standard_qualified_macro_ok
 && associated_type_bound_ok
+&& associated_type_declaration_ok
 && tuple_field_ok
 && pub_self_ok
 && pub_in_self_ok
@@ -266,6 +284,9 @@ let cfg_closure_ok =
 && cfg_item_ok
 && cfg_const_generic_ok
 && cfg_closure_ok
+&& glob_import_binding_ok
+&& macro_use_shadow_ok
+&& ge_no_struct_ok
 && self.AliasCollisionParser_METHOD_NAME()
 fn AliasCollisionParser_METHOD_NAME(&self) -> bool {
 __antlr4rust_token_aliases_2::AliasCollisionParser_METHOD_NAME == Self::METHOD_NAME

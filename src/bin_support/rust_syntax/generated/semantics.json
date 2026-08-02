@@ -35,8 +35,8 @@
         {"kind": "parser-action", "rule": "bit_and_expr_no_struct", "rule_index": 188, "index": null, "atn_state": 3273, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
         {"kind": "parser-action", "rule": "bit_xor_expr_no_struct", "rule_index": 189, "index": null, "atn_state": 3284, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
         {"kind": "parser-action", "rule": "bit_or_expr_no_struct", "rule_index": 190, "index": null, "atn_state": 3295, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
-        {"kind": "parser-action", "rule": "and_expr_no_struct", "rule_index": 192, "index": null, "atn_state": 3335, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
-        {"kind": "parser-action", "rule": "or_expr_no_struct", "rule_index": 193, "index": null, "atn_state": 3346, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null}
+        {"kind": "parser-action", "rule": "and_expr_no_struct", "rule_index": 192, "index": null, "atn_state": 3327, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null},
+        {"kind": "parser-action", "rule": "or_expr_no_struct", "rule_index": 193, "index": null, "atn_state": 3338, "line": null, "column": null, "body": null, "disposition": "synthetic", "template": null}
       ]
     }
   ]

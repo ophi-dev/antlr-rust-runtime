@@ -1023,7 +1023,7 @@ bit_or_expr_no_struct:
 
 cmp_expr_no_struct:
     bit_or_expr_no_struct
-    | ('&' 'raw')? mut_or_const? bit_or_expr_no_struct ('==' | '!=' | '<' | '<=' | '>' | '>' '=') ('&' 'raw')? mut_or_const? bit_or_expr_no_struct;
+    | ('&' 'raw')? mut_or_const? bit_or_expr_no_struct ('==' | '!=' | '<' | '<=' | '>' | '>=') ('&' 'raw')? mut_or_const? bit_or_expr_no_struct;
 
 and_expr_no_struct:
     cmp_expr_no_struct

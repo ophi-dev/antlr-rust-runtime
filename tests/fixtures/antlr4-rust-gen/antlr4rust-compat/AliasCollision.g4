@@ -165,6 +165,14 @@ start
         let safe_foreign_alias_ok =
             AliasCollisionParser_SAFE_FOREIGN == Self::SAFE_FOREIGN;
         let reviewed_foreign_syntax_ok = true;
+        #[unsafe(export_name = "antlr4rust_alias_collision_foreign_static")]
+        static FOREIGN_STATIC_VALUE: i32 = 59;
+        unsafe extern "C" {
+            #[link_name = "antlr4rust_alias_collision_foreign_static"]
+            static AliasCollisionParser_FOREIGN_STATIC: i32;
+        }
+        let foreign_static_binding_ok =
+            unsafe { AliasCollisionParser_FOREIGN_STATIC } == 59;
         fn raw_lifetime<'r#type>(
             value: &'r#type i32,
         ) -> &'r#type i32 {
@@ -554,6 +562,18 @@ start
         let associated_type_bound_ok =
             AliasCollisionParser_ASSOCIATED_BOUND
                 == Self::ASSOCIATED_BOUND;
+        trait AssociatedTypeCollision {
+            type AliasCollisionParser_ASSOCIATED_TYPE;
+        }
+        struct AssociatedTypeValue;
+        impl AssociatedTypeCollision for AssociatedTypeValue {
+            type AliasCollisionParser_ASSOCIATED_TYPE = u8;
+        }
+        let associated_type_declaration_ok =
+            std::mem::size_of::<
+                <AssociatedTypeValue as AssociatedTypeCollision>::
+                    AliasCollisionParser_ASSOCIATED_TYPE
+            >() == 1;
         let pair = ((1, 2), 3);
         let tuple_field_ok = pair.0.1 == 2;
         mod self_visible {
@@ -697,6 +717,28 @@ start
                 AliasCollisionParser_CFG_CLOSURE;
         let cfg_closure_ok =
             cfg_closure() == Self::CFG_CLOSURE;
+        let glob_import_binding_ok = {
+            mod glob_values {
+                pub const AliasCollisionParser_GLOB_IMPORT: i32 = 61;
+            }
+            use glob_values::*;
+            AliasCollisionParser_GLOB_IMPORT == 61 };
+        #[macro_use]
+        mod legacy_macros {
+            macro_rules! format {
+                ("{AliasCollisionParser_MACRO_USE}") => {
+                    "macro-use"
+                };
+            }
+        }
+        let macro_use_shadow_ok =
+            format!("{AliasCollisionParser_MACRO_USE}") == "macro-use";
+        let ge_no_struct_ok = match
+            Self::GE_NO_STRUCT >= AliasCollisionParser_GE_NO_STRUCT
+        {
+            true => true,
+            false => false,
+        };
         before_scope == SCOPE
             && after_scope == SCOPE
             && if_binding_ok
@@ -742,6 +784,7 @@ start
             && unsafe_extern_alias_ok
             && safe_foreign_alias_ok
             && reviewed_foreign_syntax_ok
+            && foreign_static_binding_ok
             && raw_lifetime_ok
             && placeholder_lifetime_ok
             && raw_reference_ok
@@ -779,6 +822,7 @@ start
             && nested_closure_binding_ok
             && const_generic_ok
             && associated_type_bound_ok
+            && associated_type_declaration_ok
             && tuple_field_ok
             && pub_self_ok
             && pub_in_self_ok
@@ -796,6 +840,9 @@ start
             && cfg_item_ok
             && cfg_const_generic_ok
             && cfg_closure_ok
+            && glob_import_binding_ok
+            && macro_use_shadow_ok
+            && ge_no_struct_ok
             && enum_variant_ok
             && named_struct.marker == 14
             && local_type.marker == 15
@@ -890,6 +937,11 @@ start
         | CFG_CONST_GENERIC
         | CFG_CLOSURE
         | UNICODE_MACRO_NAME
+        | ASSOCIATED_TYPE
+        | FOREIGN_STATIC
+        | GLOB_IMPORT
+        | MACRO_USE
+        | GE_NO_STRUCT
     ) EOF
     ;
 
@@ -967,6 +1019,11 @@ CFG_ITEM: 'cfg_item';
 CFG_CONST_GENERIC: 'cfg_const_generic';
 CFG_CLOSURE: 'cfg_closure';
 UNICODE_MACRO_NAME: 'unicode_macro_name';
+ASSOCIATED_TYPE: 'associated_type';
+FOREIGN_STATIC: 'foreign_static';
+GLOB_IMPORT: 'glob_import';
+MACRO_USE: 'macro_use';
+GE_NO_STRUCT: 'ge_no_struct';
 ESCAPED_FORMAT: 'escaped_format';
 CONTINUED_FORMAT: 'continued_format';
 FOR_PATTERN_CFG: 'for_pattern_cfg';
