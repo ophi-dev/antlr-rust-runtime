@@ -956,7 +956,7 @@ foreign_item:
     | attr* macro_invocation_semi;
 
 foreign_item_tail:
-    'static' 'mut'? ident ':' type ('=' expr)? ';' // experimental: added ('=' expr)? . Syntactically, a foreign static may have a body.
+    'safe'? 'static' 'mut'? ident ':' type ('=' expr)? ';' // experimental: added ('=' expr)? . Syntactically, a foreign static may have a body.
     | 'type' ident type_parameters? colon_bound? where_clause? (':' type)? ('=' type)?';'
     | foreign_fn_decl;
 
@@ -987,7 +987,7 @@ trait_method_decl:
     fn_head '(' trait_method_param_list? ')' rtype? where_clause? (block_with_inner_attrs | ';');
 
 foreign_fn_decl:
-    fn_head '(' variadic_param_list? ')' rtype? where_clause? ( block_with_inner_attrs | ';');  //experimental for supporting `fn` forms having or lacking a body are syntactically valid.
+    'safe'? fn_head '(' variadic_param_list? ')' rtype? where_clause? ( block_with_inner_attrs | ';');  //experimental for supporting `fn` forms having or lacking a body are syntactically valid.
 
 //macro declaration here is not documented,
 macro_decl:
@@ -1993,7 +1993,7 @@ lifetime
     ;
 
 Lifetime:
-    [']IDENT;
+    [']('r#')? IDENT;
 
 Ident:
     IDENT;
@@ -2035,9 +2035,34 @@ StringLit:
     '"' STRING_ELEMENT* '"'
     | 'r' RAW_STRING_BODY;
 
+fragment C_STRING_CHAR:
+    ~["\\\r\u0000\ud800-\udfff]
+    | [\ud800-\udbff][\udc00-\udfff];
+
+fragment C_BYTE_ESCAPE:
+    '\\' [nrt'"\\]
+    | '\\x' ('0' [1-9a-fA-F] | [1-9a-fA-F] [0-9a-fA-F]);
+
+fragment C_UNICODE_ESCAPE:
+    '\\u{' [0-9a-fA-F]* [1-9a-fA-F] [0-9a-fA-F]* '}';
+
+fragment C_STRING_ELEMENT:
+    C_STRING_CHAR
+    | C_BYTE_ESCAPE
+    | C_UNICODE_ESCAPE
+    | '\\' '\r'? '\n' [ \t]*;
+
+fragment C_RAW_CHAR:
+    ~[\r\u0000\ud800-\udfff]
+    | [\ud800-\udbff][\udc00-\udfff];
+
+fragment C_RAW_STRING_BODY:
+    '"' C_RAW_CHAR*? '"'
+    | '#' C_RAW_STRING_BODY '#';
+
 CStringLit:
-    'c"' STRING_ELEMENT* '"'
-    | 'cr' RAW_STRING_BODY;
+    'c"' C_STRING_ELEMENT* '"'
+    | 'cr' C_RAW_STRING_BODY;
 
 fragment BYTE:
     ' '               // any ASCII character from 32 (space) to 126 (`~`),

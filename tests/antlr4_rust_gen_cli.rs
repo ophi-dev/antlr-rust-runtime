@@ -3638,6 +3638,16 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
                 "AliasCollisionParser_VALUE_IMPORT",
                 "AliasCollisionParser_UNSAFE_EXTERN",
                 "AliasCollisionParser_TURBOFISH",
+                "AliasCollisionParser_STANDARD_FORMAT",
+                "AliasCollisionParser_SAFE_FOREIGN",
+                "AliasCollisionParser_RAW_LIFETIME",
+                "AliasCollisionParser_OPAQUE_MACRO",
+                "AliasCollisionParser_CUSTOM_MATCHES",
+                "AliasCollisionParser_CLOSURE_MATCH",
+                "AliasCollisionParser_ACTIVE_CFG_USE",
+                "AliasCollisionParser_INACTIVE_CFG_USE",
+                "AliasCollisionParser_ACTIVE_CFG_LET",
+                "AliasCollisionParser_INACTIVE_CFG_LET",
                 "standard_qualified_macro_ok",
                 "c_strings_ok",
             ]
@@ -3651,11 +3661,19 @@ fn antlr4rust_reviewed_lexical_edges(source: &str) -> String {
 
 #[track_caller]
 fn assert_antlr4rust_reviewed_rust_syntax(source: &str) {
-    assert!(
-        !source.contains("const AliasCollisionParser_MATCHES_BINDING: i32")
-            && !source.contains("const AliasCollisionParser_TURBOFISH: i32"),
-        "pattern bindings and their reads must remain ordinary Rust bindings"
-    );
+    for expected in [
+        "AliasCollisionParser_MATCHES_BINDING @ Some(_)",
+        "if AliasCollisionParser_MATCHES_BINDING",
+        "Some(AliasCollisionParser_TURBOFISH @ _)",
+        "Ok::<i32, ()>(AliasCollisionParser_TURBOFISH)",
+        "AliasCollisionParser_CLOSURE_MATCH @ _",
+        "|x, y| AliasCollisionParser_CLOSURE_MATCH",
+    ] {
+        assert!(
+            source.contains(expected),
+            "pattern bindings and their reads must remain ordinary Rust bindings: {expected}"
+        );
+    }
 }
 
 #[track_caller]
@@ -3669,7 +3687,8 @@ fn assert_antlr4rust_import_namespace_fallbacks(source: &str) {
         "a value import must override a namespace-safe compatibility fallback"
     );
     assert!(
-        source.contains("#[cfg(any())]\n    pub(super) use super::AliasCollisionParser_CFG;")
+        source.contains("#[cfg(any())]")
+            && source.contains("pub(super) use super::AliasCollisionParser_CFG;")
             && source.contains("pub(crate) const AliasCollisionParser_CFG: i32"),
         "a cfg-disabled member import must retain a compatibility fallback"
     );
@@ -3849,12 +3868,11 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "IF",
         "FOR",
         "PARAM",
-        "MACRO_IDENT",
         "BRACED_PARAM",
         "FORMAT_LOCAL",
-        "QUALIFIED_MACRO",
         "CONST_CHAIN",
         "TURBOFISH",
+        "CLOSURE_MATCH",
     ]
     .into_iter()
     .filter(|name| alias_collision_parser.contains(&format!("const AliasCollisionParser_{name}:")))

@@ -12,7 +12,9 @@ The source changes are:
   `src/bin_support/grammar/lexer_adaptor.rs`;
 - acceptance of a bare `RULE_REF` in `lexerAtom`, matching Java ANTLR's
   `ANTLRParser.g`, so the semantic pipeline can issue
-  `PARSER_RULE_REF_IN_LEXER_RULE`.
+  `PARSER_RULE_REF_IN_LEXER_RULE`;
+- acceptance of apostrophe-prefixed target identifiers inside action blocks,
+  while complete single-quoted literals continue to win by longest match.
 
 The checked-in frontend is a direct self-hosting fixed point. Regenerate and
 verify it without Java or Node.js:

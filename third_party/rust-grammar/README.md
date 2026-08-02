@@ -23,8 +23,10 @@ Closure parameters use Rust's `PatternNoTopAlt` split so a following closure's
 opening pipe cannot be consumed as part of the preceding parameter pattern,
 async closures accept the stable form without `move`, and stable inline
 `const { ... }` blocks are accepted as block expressions. Stable normal and
-raw C string literals are accepted as literals, and Edition 2024
-`unsafe extern` blocks are accepted as foreign modules.
+raw C string literals use their C-specific byte escapes and reject embedded NUL
+and carriage-return characters. Edition 2024 `unsafe extern` blocks and their
+`safe` function/static qualifiers are accepted. Stable raw lifetime names are
+accepted as lifetime tokens.
 
 The recognizer is used only to classify embedded Rust syntax needed by
 compatibility alias lowering. Exact float tokenization is not required for

@@ -693,7 +693,7 @@ fn enclosing_block(
         if parent_rule.is_some_and(|parent| {
             matches!(
                 parent.rule_index(),
-                RULE_BLOCK | RULE_BLOCK_WITH_INNER_ATTRS
+                RULE_BLOCK | RULE_BLOCK_WITH_INNER_ATTRS | RULE_MOD_DECL
             )
         }) {
             return parent_rule;
@@ -1118,6 +1118,17 @@ mod tests {
     }
 
     #[test]
+    fn nested_module_macros_do_not_shadow_outer_invocations() {
+        let body = "mod macros {\n\
+                        macro_rules! matches { ($($tokens:tt)*) => { true }; }\n\
+                    }\n\
+                    let _ = matches!(value, Alias);";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_opaque_macro_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
     fn preserves_custom_qualified_macros_and_lowers_standard_paths() {
         let body = "let custom = my_macros::assert!(Alias);\n\
                     let std_macro = std::assert!(Alias == 1);\n\
@@ -1138,6 +1149,17 @@ mod tests {
     #[test]
     fn parses_edition_2024_unsafe_extern_blocks() {
         let body = "unsafe extern \"C\" { fn foreign(); }\nAlias == 1";
+        let syntax = analyze(body);
+
+        assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
+        assert!(!syntax.is_declaration_identifier(occurrence(body, "Alias", 0)));
+    }
+
+    #[test]
+    fn parses_raw_lifetimes_and_safe_foreign_items() {
+        let body = "fn borrow<'r#type>(value: &'r#type i32) -> &'r#type i32 { value }\n\
+                    unsafe extern \"C\" { safe fn foreign(); safe static VALUE: i32; }\n\
+                    Alias == 1";
         let syntax = analyze(body);
 
         assert!(!syntax.is_type_identifier(occurrence(body, "Alias", 0)));
@@ -1296,13 +1318,34 @@ mod tests {
     #[test]
     fn parses_c_string_literals() {
         let body = r##"let normal = c"value";
+                       let escaped = c"\xE6";
+                       let unicode = c"\u{00E6}";
                        let raw = cr#"raw value"#;
-                       normal.to_bytes() == raw.to_bytes() && Alias == 1;"##;
+                       normal.to_bytes() == raw.to_bytes()
+                           && escaped.to_bytes() == unicode.to_bytes()
+                           && Alias == 1;"##;
         let syntax = analyze(body);
         let alias = occurrence(body, "Alias", 0);
 
         assert!(!syntax.is_type_identifier(alias));
         assert!(!syntax.is_declaration_identifier(alias));
+    }
+
+    #[test]
+    fn rejects_nul_and_carriage_return_in_c_string_literals() {
+        for body in [
+            r#"let _ = c"\0";"#,
+            r#"let _ = c"\x00";"#,
+            r#"let _ = c"\u{0}";"#,
+            "let _ = c\"raw\0value\";",
+            "let _ = cr\"raw\0value\";",
+            "let _ = cr\"raw\rvalue\";",
+        ] {
+            assert!(
+                super::analyze(body).is_err(),
+                "invalid C string parsed without an error: {body:?}"
+            );
+        }
     }
 
     #[test]

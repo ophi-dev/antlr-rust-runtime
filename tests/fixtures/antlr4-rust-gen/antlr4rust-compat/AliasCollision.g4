@@ -109,17 +109,44 @@ start
         let format_capture_ok =
             format!("{AliasCollisionParser_FORMAT_CAPTURE}")
                 == Self::FORMAT_CAPTURE.to_string();
+        let standard_format_capture_ok =
+            std::format!("{AliasCollisionParser_STANDARD_FORMAT}")
+                == Self::STANDARD_FORMAT.to_string();
         let AliasCollisionParser_FORMAT_LOCAL = "local";
         let format_local_ok =
             format!("{AliasCollisionParser_FORMAT_LOCAL}") == "local";
         let c_strings_ok =
             c"value".to_bytes() == b"value"
-                && cr#"raw value"#.to_bytes() == b"raw value";
+                && cr#"raw value"#.to_bytes() == b"raw value"
+                && c"\xE6".to_bytes() == b"\xE6";
         unsafe extern "C" {}
         let unsafe_extern_alias_ok =
             AliasCollisionParser_UNSAFE_EXTERN == Self::UNSAFE_EXTERN;
+        unsafe extern "C" {
+            safe fn safe_foreign();
+            safe static SAFE_FOREIGN: i32;
+        }
+        let safe_foreign_alias_ok =
+            AliasCollisionParser_SAFE_FOREIGN == Self::SAFE_FOREIGN;
+        fn raw_lifetime<'r#type>(
+            value: &'r#type i32,
+        ) -> &'r#type i32 {
+            let _alias = AliasCollisionParser_RAW_LIFETIME;
+            value
+        }
+        let raw_lifetime_value = 37;
+        let raw_lifetime_ok =
+            *raw_lifetime(&raw_lifetime_value) == raw_lifetime_value;
         let raw_macro_ok =
             stringify!(AliasCollisionParser_MACRO) == "AliasCollisionParser_MACRO";
+        macro_rules! alias_value {
+            ($i:ident) => {
+                $i
+            };
+        }
+        let opaque_macro_alias_ok =
+            alias_value!(AliasCollisionParser_OPAQUE_MACRO)
+                == Self::OPAQUE_MACRO;
         macro_rules! assert {
             (AliasCollisionParser_SHADOWED_MACRO) => {
                 true
@@ -132,12 +159,23 @@ start
                     true
                 };
             }
+            macro_rules! matches {
+                ($($tokens:tt)*) => {
+                    true
+                };
+            }
             pub(crate) use assert;
+            pub(crate) use matches;
         }
         let qualified_macro_ok =
             my_macros::assert!(AliasCollisionParser_QUALIFIED_MACRO);
         let standard_qualified_macro_ok =
             std::matches!(Self::MODULE, AliasCollisionParser_MODULE);
+        let custom_matches_macro_ok =
+            my_macros::matches!(
+                Self::MODULE,
+                AliasCollisionParser_CUSTOM_MATCHES => fallback
+            );
         #[allow(unexpected_cfgs)]
         #[cfg(AliasCollisionParser_ATTRIBUTE)]
         let _attribute_token_tree = ();
@@ -192,6 +230,32 @@ start
                 Ok::<i32, ()>(AliasCollisionParser_TURBOFISH).unwrap() == 16,
             None => false,
         };
+        let closure_match_binding_ok = match 1 {
+            AliasCollisionParser_CLOSURE_MATCH @ _ =>
+                (move |x, y| AliasCollisionParser_CLOSURE_MATCH + x + y)(2, 3)
+                    == 6,
+        };
+        #[cfg(all())]
+        use antlr4_runtime::DEFAULT_CHANNEL
+            as AliasCollisionParser_ACTIVE_CFG_USE;
+        let active_cfg_use_ok =
+            AliasCollisionParser_ACTIVE_CFG_USE
+                == antlr4_runtime::DEFAULT_CHANNEL;
+        #[cfg(any())]
+        use antlr4_runtime::DEFAULT_CHANNEL
+            as AliasCollisionParser_INACTIVE_CFG_USE;
+        let inactive_cfg_use_ok =
+            AliasCollisionParser_INACTIVE_CFG_USE
+                == Self::INACTIVE_CFG_USE;
+        #[cfg(all())]
+        let AliasCollisionParser_ACTIVE_CFG_LET = 73;
+        let active_cfg_let_ok =
+            AliasCollisionParser_ACTIVE_CFG_LET == 73;
+        #[cfg(any())]
+        let AliasCollisionParser_INACTIVE_CFG_LET = 74;
+        let inactive_cfg_let_ok =
+            AliasCollisionParser_INACTIVE_CFG_LET
+                == Self::INACTIVE_CFG_LET;
         let leading_match_binding_ok = match Some(8) {
             | Some(AliasCollisionParser_ARM @ _) => AliasCollisionParser_ARM == 8,
             None => false,
@@ -303,6 +367,11 @@ start
             && for_binding_ok
             && match_binding_ok
             && turbofish_match_binding_ok
+            && closure_match_binding_ok
+            && active_cfg_use_ok
+            && inactive_cfg_use_ok
+            && active_cfg_let_ok
+            && inactive_cfg_let_ok
             && leading_match_binding_ok
             && block_match_binding_ok
             && not_equal_alias_ok
@@ -318,13 +387,18 @@ start
             && inline_const_alias_ok
             && associated_const_alias_ok
             && format_capture_ok
+            && standard_format_capture_ok
             && format_local_ok
             && c_strings_ok
             && unsafe_extern_alias_ok
+            && safe_foreign_alias_ok
+            && raw_lifetime_ok
             && raw_macro_ok
+            && opaque_macro_alias_ok
             && shadowed_macro_ok
             && qualified_macro_ok
             && standard_qualified_macro_ok
+            && custom_matches_macro_ok
             && macro_ident_ok
             && unicode_identifiers_ok
             && input_facade_ok
@@ -401,6 +475,16 @@ start
         | VALUE_IMPORT
         | UNSAFE_EXTERN
         | TURBOFISH
+        | STANDARD_FORMAT
+        | SAFE_FOREIGN
+        | RAW_LIFETIME
+        | OPAQUE_MACRO
+        | CUSTOM_MATCHES
+        | CLOSURE_MATCH
+        | ACTIVE_CFG_USE
+        | INACTIVE_CFG_USE
+        | ACTIVE_CFG_LET
+        | INACTIVE_CFG_LET
     ) EOF
     ;
 
@@ -452,5 +536,15 @@ TYPE_ONLY: 'type_only';
 VALUE_IMPORT: 'value_import';
 UNSAFE_EXTERN: 'unsafe_extern';
 TURBOFISH: 'turbofish';
+STANDARD_FORMAT: 'standard_format';
+SAFE_FOREIGN: 'safe_foreign';
+RAW_LIFETIME: 'raw_lifetime';
+OPAQUE_MACRO: 'opaque_macro';
+CUSTOM_MATCHES: 'custom_matches';
+CLOSURE_MATCH: 'closure_match';
+ACTIVE_CFG_USE: 'active_cfg_use';
+INACTIVE_CFG_USE: 'inactive_cfg_use';
+ACTIVE_CFG_LET: 'active_cfg_let';
+INACTIVE_CFG_LET: 'inactive_cfg_let';
 ID: [a-z]+;
 WS: [ \t\r\n]+ -> skip;

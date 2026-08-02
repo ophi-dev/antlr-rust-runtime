@@ -27,6 +27,10 @@ fn collect_references<'a>(
     let bytes = body.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
+        if let Some(end) = macro_rules_definition_end(body, index) {
+            index = end;
+            continue;
+        }
         match bytes[index] {
             b'/' if bytes.get(index + 1) == Some(&b'/') => {
                 index = body[index + 2..]
@@ -53,6 +57,100 @@ fn collect_references<'a>(
             _ => index += next_char_len(body, index),
         }
     }
+}
+
+fn macro_rules_definition_end(body: &str, start: usize) -> Option<usize> {
+    const PREFIX: &str = "macro_rules";
+    if !body[start..].starts_with(PREFIX)
+        || start
+            .checked_sub(1)
+            .and_then(|before| body.as_bytes().get(before))
+            .is_some_and(|byte| is_identifier_continue(*byte))
+        || body
+            .as_bytes()
+            .get(start + PREFIX.len())
+            .is_some_and(|byte| is_identifier_continue(*byte))
+    {
+        return None;
+    }
+    let bytes = body.as_bytes();
+    let mut cursor = skip_whitespace(bytes, start + PREFIX.len());
+    if bytes.get(cursor) != Some(&b'!') {
+        return None;
+    }
+    cursor = skip_whitespace(bytes, cursor + 1);
+    if !bytes
+        .get(cursor)
+        .is_some_and(|byte| is_identifier_start(*byte))
+    {
+        return None;
+    }
+    cursor = skip_whitespace(bytes, identifier_end(bytes, cursor));
+    let expected = match bytes.get(cursor)? {
+        b'(' => b')',
+        b'[' => b']',
+        b'{' => b'}',
+        _ => return None,
+    };
+    balanced_token_tree_end(body, cursor, expected)
+}
+
+fn balanced_token_tree_end(body: &str, open: usize, expected: u8) -> Option<usize> {
+    let bytes = body.as_bytes();
+    let mut stack = vec![expected];
+    let mut index = open + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                index = body[index + 2..]
+                    .find('\n')
+                    .map_or(bytes.len(), |newline| index + 2 + newline + 1);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index = body[index + 2..]
+                    .find("*/")
+                    .map_or(bytes.len(), |close| index + 2 + close + 2);
+            }
+            quote @ (b'"' | b'\'' | b'`') => {
+                index = quoted_end(body, index, quote);
+            }
+            b'(' => {
+                stack.push(b')');
+                index += 1;
+            }
+            b'[' => {
+                stack.push(b']');
+                index += 1;
+            }
+            b'{' => {
+                stack.push(b'}');
+                index += 1;
+            }
+            close @ (b')' | b']' | b'}') if stack.last() == Some(&close) => {
+                stack.pop();
+                index += 1;
+                if stack.is_empty() {
+                    return Some(index);
+                }
+            }
+            _ => index += next_char_len(body, index),
+        }
+    }
+    None
+}
+
+fn quoted_end(body: &str, open: usize, quote: u8) -> usize {
+    let bytes = body.as_bytes();
+    let mut index = open + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index = (index + 2).min(bytes.len()),
+            byte if byte == quote => return index + 1,
+            b'\n' | b'\r' if quote == b'\'' => return open + 1,
+            _ => index += next_char_len(body, index),
+        }
+    }
+    bytes.len()
 }
 
 fn parse_reference<'a>(
@@ -274,5 +372,14 @@ mod tests {
         let references = action_references("\\$x /* $y */ // $z\n$ok");
         assert_eq!(references.len(), 1);
         assert_eq!(references[0].expression, "$ok");
+    }
+
+    #[test]
+    fn macro_rules_metavariables_are_target_syntax() {
+        let body = "macro_rules! value { ($i:ident) => { $i } }\n$actual";
+        let references = action_references(body);
+
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0].expression, "$actual");
     }
 }
