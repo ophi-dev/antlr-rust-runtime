@@ -1766,14 +1766,15 @@ struct DecisionReportGrammar {
 /// its classifier tier — `ll1` (Java compiles a token switch), `fixed`
 /// (`--fixed-lookahead` proved disjointness at `lookahead` tokens and a
 /// static dispatch table was emitted), or `adaptive` with the reason the
-/// decision keeps `adaptivePredict`. Deterministic: rows are in decision
+/// decision keeps `adaptivePredict`. Each row also reports whether its emitted
+/// path can defer to adaptive prediction. Deterministic: rows are in decision
 /// order, and the classifier itself is pure.
 fn render_decisions_manifest(
     fixed_lookahead: Option<usize>,
     grammars: &[DecisionReportGrammar],
 ) -> String {
     let mut out = String::new();
-    out.push_str("{\n  \"version\": 1,\n");
+    out.push_str("{\n  \"version\": 2,\n");
     // `null` when the flag is unset: flag-off and `--fixed-lookahead 1`
     // emit different parsers (only the latter compiles static LL(1)
     // dispatch), so the manifest must not conflate them.
@@ -1836,6 +1837,15 @@ fn write_decision_report_row(out: &mut String, row: &DecisionReportRow, rule_nam
         json_optional_string(rule_name.map(String::as_str))
     );
     let _ = write!(out, ", \"state\": {}", row.state);
+    let _ = write!(
+        out,
+        ", \"canDefer\": {}",
+        if row.fallback.can_defer() {
+            "true"
+        } else {
+            "false"
+        }
+    );
     match row.tier {
         DecisionTierReport::Ll1 => {
             let _ = write!(out, ", \"tier\": \"ll1\"");
@@ -4234,6 +4244,18 @@ struct GeneratedDecisionFastPath {
     arms: Vec<GeneratedDecisionFastArm>,
 }
 
+/// Complete tool LOOK(1) dispatch for one LL(1) decision.
+///
+/// `default_alt` is the sole alternative that can reach the owning rule's
+/// stop state without consuming input. ANTLR's generated optional/loop code
+/// selects that alternative when synchronization observes EPSILON and the
+/// current token is outside every explicit LOOK arm.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CompleteLl1Dispatch {
+    fast_path: GeneratedDecisionFastPath,
+    default_alt: Option<usize>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct GeneratedDecisionFastArm {
     alt: usize,
@@ -4282,8 +4304,8 @@ struct EmbeddedStepRender<'a> {
     force_adaptive: bool,
     /// Tool-classified non-LL(1) decisions ([`tool_decision_analysis`]).
     adaptive_decisions: &'a BTreeSet<usize>,
-    /// Tool LOOK(1) dispatch intervals for LL(1)-disjoint decisions.
-    ll1_decision_arms: &'a BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+    /// Complete tool LOOK(1) dispatches for LL(1)-disjoint decisions.
+    complete_ll1_dispatches: &'a BTreeMap<usize, CompleteLl1Dispatch>,
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     rule_has_attrs: &'a [bool],
     init_entry: &'a BTreeMap<usize, String>,
@@ -4292,7 +4314,7 @@ struct EmbeddedStepRender<'a> {
     rule_arg0: &'a [Option<String>],
 }
 
-impl EmbeddedStepRender<'_> {
+impl<'a> EmbeddedStepRender<'a> {
     /// Java routes this decision through `adaptivePredict` — only there are
     /// DFA states learned and full-context diagnostics emitted — so the
     /// generated code must skip its LL(1)/fast-path shortcuts for it.
@@ -4304,18 +4326,8 @@ impl EmbeddedStepRender<'_> {
     /// included — Java's switch compilation. Legit input never reaches the
     /// simulator through this, so no DFA state is ever learned for the
     /// decision (matching the dump).
-    fn tool_ll1_fast_path(&self, decision: usize) -> Option<GeneratedDecisionFastPath> {
-        let arms = self.ll1_decision_arms.get(&decision)?;
-        Some(GeneratedDecisionFastPath {
-            arms: arms
-                .iter()
-                .enumerate()
-                .map(|(index, intervals)| GeneratedDecisionFastArm {
-                    alt: index + 1,
-                    intervals: intervals.clone(),
-                })
-                .collect(),
-        })
+    fn tool_ll1_dispatch(&self, decision: usize) -> Option<&'a CompleteLl1Dispatch> {
+        self.complete_ll1_dispatches.get(&decision)
     }
 }
 
@@ -4330,17 +4342,25 @@ struct PortableLocalStepRender<'a> {
 /// Mode-independent decision routing produced by [`classify_decisions`].
 ///
 /// Embedded mode reads its Java-parity LL(1) tables through
-/// [`EmbeddedStepRender`]; these fields carry the opt-in
-/// `--fixed-lookahead` routing: complete LL(1) switch tables for plain
-/// mode, and fixed-LL(k) dispatch tables for both modes. Both stay `None`
-/// with the flag unset so default rendering is untouched.
+/// [`EmbeddedStepRender`]. `complete_ll1_dispatches` carries the same
+/// classifier result into plain-mode recovery misses; the other fields carry
+/// opt-in `--fixed-lookahead` routing: restricted LL(1) switch tables for
+/// plain mode and fixed-LL(k) dispatch tables for both modes.
 #[derive(Clone, Copy, Default)]
 struct DecisionRoutingRender<'a> {
+    /// Complete tool LOOK(1) dispatches used by plain-mode recovery misses.
+    /// Embedded mode carries the same data through [`EmbeddedStepRender`].
+    complete_ll1_dispatches: Option<&'a BTreeMap<usize, CompleteLl1Dispatch>>,
     ll1_dispatch_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
     fixed_lookahead_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
 }
 
 impl<'a> DecisionRoutingRender<'a> {
+    fn complete_ll1_dispatch(self, decision: usize) -> Option<&'a CompleteLl1Dispatch> {
+        self.complete_ll1_dispatches
+            .and_then(|dispatches| dispatches.get(&decision))
+    }
+
     /// Static dispatch table for a decision: the fixed-LL(k) trie when the
     /// probe proved one, else the depth-1 table from the tool's complete
     /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
@@ -4372,6 +4392,31 @@ struct GeneratedStepRenderContext<'a> {
     atn_preferred_rule_calls: &'a [bool],
     adaptive_atn_preferred_rule_slots: &'a [Option<usize>],
     adaptive_atn_probe_rule_slots: &'a [Vec<usize>],
+}
+
+struct ResolvedDecisionDispatch<'a> {
+    complete_ll1_dispatch: Option<&'a CompleteLl1Dispatch>,
+    fast_path: Option<&'a GeneratedDecisionFastPath>,
+}
+
+fn resolve_decision_dispatch<'a>(
+    render_context: GeneratedStepRenderContext<'a>,
+    decision: usize,
+    fallback_fast_path: Option<&'a GeneratedDecisionFastPath>,
+) -> ResolvedDecisionDispatch<'a> {
+    let tool_dispatch = render_context
+        .embedded
+        .and_then(|embedded| embedded.tool_ll1_dispatch(decision));
+    ResolvedDecisionDispatch {
+        complete_ll1_dispatch: tool_dispatch.or_else(|| {
+            render_context
+                .decision_routing
+                .complete_ll1_dispatch(decision)
+        }),
+        fast_path: tool_dispatch
+            .map(|dispatch| &dispatch.fast_path)
+            .or(fallback_fast_path),
+    }
 }
 
 struct GeneratedParserCompileContext<'a> {
@@ -5972,6 +6017,79 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
     }
 }
 
+/// Applies generated-rule rendering constraints to classifier report rows.
+///
+/// A LOOK(1)-disjoint decision nested in a left-recursive operator body is
+/// still classified `ll1`, but [`allow_semantic_context_in_decisions`] forces
+/// its emitted path through full-context adaptive prediction. Keep the tier as
+/// the tool verdict while reporting that the rendered path can defer.
+fn rendered_decision_report_rows(
+    rows: &[DecisionReportRow],
+    rules: &[Option<GeneratedParserRule>],
+) -> Vec<DecisionReportRow> {
+    let mut forced_adaptive = BTreeSet::new();
+    for rule in rules.iter().flatten() {
+        collect_render_forced_adaptive_decisions(&rule.steps, &mut forced_adaptive);
+    }
+    rows.iter()
+        .cloned()
+        .map(|mut row| {
+            if forced_adaptive.contains(&row.decision) {
+                row.fallback = DecisionFallbackCapability::CanDefer;
+            }
+            row
+        })
+        .collect()
+}
+
+fn collect_render_forced_adaptive_decisions(
+    steps: &[GeneratedParserStep],
+    decisions: &mut BTreeSet<usize>,
+) {
+    for step in steps {
+        match step {
+            GeneratedParserStep::Decision {
+                decision,
+                allow_semantic_context,
+                force_context,
+                alts,
+                ..
+            } => {
+                if *allow_semantic_context || *force_context {
+                    decisions.insert(*decision);
+                }
+                for alt in alts {
+                    collect_render_forced_adaptive_decisions(alt, decisions);
+                }
+            }
+            GeneratedParserStep::StarLoop {
+                decision,
+                allow_semantic_context,
+                force_context,
+                body,
+                ..
+            } => {
+                if *allow_semantic_context || *force_context {
+                    decisions.insert(*decision);
+                }
+                collect_render_forced_adaptive_decisions(body, decisions);
+            }
+            GeneratedParserStep::LeftRecursiveLoop { decision, body, .. } => {
+                decisions.insert(*decision);
+                collect_render_forced_adaptive_decisions(body, decisions);
+            }
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::CallRule { .. } => {}
+        }
+    }
+}
+
 fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
     steps.iter().any(|step| match step {
         GeneratedParserStep::Predicate { .. } => true,
@@ -7328,10 +7446,10 @@ fn render_generated_decision(
         .flatten();
     // A tool-LL(1) decision dispatches on the tool's complete LOOK table
     // (exit alternatives included), like Java's switch compilation.
-    let tool_fast_path = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_fast_path(decision));
-    let fast_path = tool_fast_path.as_ref().or(fast_path);
+    let ResolvedDecisionDispatch {
+        complete_ll1_dispatch,
+        fast_path,
+    } = resolve_decision_dispatch(render_context, decision, fast_path);
     if let Some(table) = static_table {
         render_generated_fixed_lookahead_prediction(
             out,
@@ -7341,6 +7459,7 @@ fn render_generated_decision(
             table,
             render_context,
             "false",
+            complete_ll1_dispatch,
         );
     } else if let Some(fast_path) = fast_path.filter(|_| {
         !allow_semantic_context
@@ -7366,13 +7485,22 @@ fn render_generated_decision(
             "{pad}        __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
         )
         .expect("writing to a string cannot fail");
-        render_generated_ll1_then_adaptive_prediction(
-            out,
-            &format!("{pad}        "),
-            state,
-            decision,
-            false,
-        );
+        if let Some(dispatch) = complete_ll1_dispatch {
+            render_generated_complete_ll1_prediction(
+                out,
+                &format!("{pad}        "),
+                dispatch,
+                false,
+            );
+        } else {
+            render_generated_ll1_then_adaptive_prediction(
+                out,
+                &format!("{pad}        "),
+                state,
+                decision,
+                false,
+            );
+        }
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
         writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
     } else {
@@ -7391,6 +7519,8 @@ fn render_generated_decision(
             render_generated_adaptive_prediction(out, &pad, decision);
         } else if force_adaptive {
             render_generated_two_stage_adaptive_assignment(out, &pad, decision);
+        } else if let Some(dispatch) = complete_ll1_dispatch {
+            render_generated_complete_ll1_prediction(out, &pad, dispatch, true);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &pad, state, decision, true);
         }
@@ -7456,6 +7586,33 @@ fn render_generated_fast_prediction_arms(
     }
 }
 
+fn render_generated_complete_ll1_prediction(
+    out: &mut String,
+    pad: &str,
+    dispatch: &CompleteLl1Dispatch,
+    assign: bool,
+) {
+    let prefix = if assign { "let __prediction = " } else { "" };
+    let suffix = if assign { ";" } else { "" };
+    writeln!(out, "{pad}{prefix}match self.base.la(1) {{")
+        .expect("writing to a string cannot fail");
+    render_generated_fast_prediction_arms(out, pad, &dispatch.fast_path);
+    if let Some(default_alt) = dispatch.default_alt {
+        writeln!(
+            out,
+            "{pad}    _ => antlr4_runtime::ParserAtnPrediction {{ alt: {default_alt}, requires_full_context: false, has_semantic_context: false, diagnostic: None }},"
+        )
+        .expect("writing to a string cannot fail");
+    } else {
+        writeln!(
+            out,
+            "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}}}{suffix}").expect("writing to a string cannot fail");
+}
+
 /// Two-stage adaptive prediction without the LL(1) shortcut — Java's plain
 /// `adaptivePredict`: the SLL probe resolves or flags a full-context
 /// conflict, and the retry with real outer context only runs when the
@@ -7494,10 +7651,9 @@ fn render_generated_ll1_then_adaptive_prediction(
 /// within-rule lookahead — exactly the set for which `sync_decision`
 /// early-returns without doing recovery work (the same shape the default
 /// partial fast path ships today). Every other token — including
-/// context-dependent loop exits, where synchronization performs real
-/// single-token deletion — falls through to the decision's regular
-/// sync + adaptive body, so error recovery happens exactly where the
-/// untiered parser performs it.
+/// context-dependent loop exits fall through to synchronization. A complete
+/// LL(1) decision then reuses its proven-total dispatch; fixed/adaptive
+/// decisions retain their regular adaptive body.
 #[allow(clippy::too_many_arguments)]
 fn render_generated_fixed_lookahead_prediction(
     out: &mut String,
@@ -7507,6 +7663,7 @@ fn render_generated_fixed_lookahead_prediction(
     table: &FixedLookaheadTable,
     render_context: GeneratedStepRenderContext<'_>,
     loop_sync_flag: &str,
+    complete_ll1_dispatch: Option<&CompleteLl1Dispatch>,
 ) {
     writeln!(
         out,
@@ -7535,7 +7692,9 @@ fn render_generated_fixed_lookahead_prediction(
         "{inner_pad}__decision_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
-    if render_context
+    if let Some(dispatch) = complete_ll1_dispatch {
+        render_generated_complete_ll1_prediction(out, &inner_pad, dispatch, false);
+    } else if render_context
         .embedded
         .is_some_and(|embedded| embedded.adaptive_decision(decision))
     {
@@ -8109,10 +8268,10 @@ fn render_generated_star_loop(
         .flatten();
     // A tool-LL(1) loop decision dispatches on the tool's complete LOOK
     // table (exit alternative included), like Java's switch-driven loops.
-    let tool_fast_path = render_context
-        .embedded
-        .and_then(|embedded| embedded.tool_ll1_fast_path(decision));
-    let fast_path = tool_fast_path.as_ref().or(fast_path);
+    let ResolvedDecisionDispatch {
+        complete_ll1_dispatch,
+        fast_path,
+    } = resolve_decision_dispatch(render_context, decision, fast_path);
     // Per-loop "iteration started" flag, threaded into `sync_decision` so it
     // recovers like ANTLR: a `*` loop's first sync is at the loop ENTRY
     // (single-token deletion), every later sync is a loop-BACK (multi-token
@@ -8132,6 +8291,7 @@ fn render_generated_star_loop(
             table,
             render_context,
             &loop_iter,
+            complete_ll1_dispatch,
         );
     } else if let Some(fast_path) = fast_path.filter(|_| {
         !allow_semantic_context
@@ -8155,13 +8315,22 @@ fn render_generated_star_loop(
             "{pad}            __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
         )
         .expect("writing to a string cannot fail");
-        render_generated_ll1_then_adaptive_prediction(
-            out,
-            &format!("{pad}            "),
-            state,
-            decision,
-            false,
-        );
+        if let Some(dispatch) = complete_ll1_dispatch {
+            render_generated_complete_ll1_prediction(
+                out,
+                &format!("{pad}            "),
+                dispatch,
+                false,
+            );
+        } else {
+            render_generated_ll1_then_adaptive_prediction(
+                out,
+                &format!("{pad}            "),
+                state,
+                decision,
+                false,
+            );
+        }
         writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
         writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     } else {
@@ -8178,6 +8347,8 @@ fn render_generated_star_loop(
             render_generated_adaptive_prediction(out, &inner_pad, decision);
         } else if force_adaptive {
             render_generated_two_stage_adaptive_assignment(out, &inner_pad, decision);
+        } else if let Some(dispatch) = complete_ll1_dispatch {
+            render_generated_complete_ll1_prediction(out, &inner_pad, dispatch, true);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &inner_pad, state, decision, true);
         }
@@ -8676,8 +8847,8 @@ struct EmbeddedParserData {
     /// (non-LL(1) per [`tool_decision_analysis`]); the generated code must
     /// route these through the simulator on every visit.
     adaptive_decisions: BTreeSet<usize>,
-    /// Tool LOOK(1) dispatch intervals for LL(1)-disjoint decisions.
-    ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+    /// Complete tool LOOK(1) dispatches for LL(1)-disjoint decisions.
+    complete_ll1_dispatches: BTreeMap<usize, CompleteLl1Dispatch>,
 }
 
 /// Raw grammar-local booleans whose actions and predicates are portable
@@ -8840,6 +9011,10 @@ fn build_structural_portable_local_data(
 struct DecisionAltLook {
     symbols: BTreeSet<i32>,
     hit_pred: bool,
+    /// This alternative can reach the owning rule's stop state without
+    /// consuming input, so generated optional/loop dispatch may select it as
+    /// the default after nullable synchronization.
+    nullable: bool,
 }
 
 /// Upper bound accepted by `--fixed-lookahead`. Dispatch-table size and
@@ -8890,6 +9065,7 @@ fn classify_decisions(
             decision,
             state: state_number,
             rule_index: state.rule_index(),
+            fallback: tier.fallback_capability(),
             tier,
         };
         // The tool never LL(1)-compiles non-greedy or left-recursion
@@ -8923,6 +9099,9 @@ fn classify_decisions(
                 let mut look = DecisionAltLook::default();
                 let mut walk = DecisionLookWalk {
                     atn,
+                    owning_rule_stop: state
+                        .rule_index()
+                        .and_then(|rule_index| atn.rule_to_stop_state().get(rule_index)),
                     busy: BTreeSet::new(),
                     called_rules: vec![false; atn.rule_to_start_state().len()],
                 };
@@ -8955,6 +9134,10 @@ fn classify_decisions(
                 .iter()
                 .map(|look| symbol_intervals(&look.symbols))
                 .collect();
+            let default_alt = looks
+                .iter()
+                .enumerate()
+                .find_map(|(index, look)| look.nullable.then_some(index + 1));
             // With the opt-in flag, plain mode compiles the switch
             // statically. Only arms over sync-no-op lookahead commit
             // without the decision's recovery synchronization.
@@ -8974,7 +9157,22 @@ fn classify_decisions(
                         .insert(decision, FixedLookaheadTable { lookahead: 1, root });
                 }
             }
-            classification.ll1_decision_arms.insert(decision, arms);
+            classification.complete_ll1_dispatches.insert(
+                decision,
+                CompleteLl1Dispatch {
+                    fast_path: GeneratedDecisionFastPath {
+                        arms: arms
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, intervals)| GeneratedDecisionFastArm {
+                                alt: index + 1,
+                                intervals,
+                            })
+                            .collect(),
+                    },
+                    default_alt,
+                },
+            );
             classification
                 .report_rows
                 .push(report(DecisionTierReport::Ll1));
@@ -9125,11 +9323,11 @@ struct DecisionClassification {
     /// table's fall-through branch must render the same adaptive body the
     /// decision would get without the table.
     adaptive_decisions: BTreeSet<usize>,
-    /// Complete LOOK(1) dispatch intervals per alt for LL(1)-disjoint
-    /// decisions — exit alternatives included, unlike the within-rule
-    /// fast-path/LL(1) analyses, so legit input never falls through to the
-    /// simulator (Java's switch never does).
-    ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+    /// Complete LOOK(1) dispatches for LL(1)-disjoint decisions — exit
+    /// alternatives included, unlike the within-rule fast-path/LL(1)
+    /// analyses. A nullable default alternative makes recovery misses total
+    /// without deferring to the simulator.
+    complete_ll1_dispatches: BTreeMap<usize, CompleteLl1Dispatch>,
     /// `--fixed-lookahead` in plain mode: depth-1 static dispatch for the
     /// LL(1) decisions above, restricted to sync-no-op lookahead.
     ll1_dispatch_tables: BTreeMap<usize, FixedLookaheadTable>,
@@ -9147,6 +9345,7 @@ struct DecisionReportRow {
     decision: usize,
     state: usize,
     rule_index: Option<usize>,
+    fallback: DecisionFallbackCapability,
     tier: DecisionTierReport,
 }
 
@@ -9171,6 +9370,25 @@ impl DecisionTierReport {
             reason,
             probed_lookahead,
         }
+    }
+
+    const fn fallback_capability(self) -> DecisionFallbackCapability {
+        match self {
+            Self::Ll1 => DecisionFallbackCapability::None,
+            Self::Fixed { .. } | Self::Adaptive { .. } => DecisionFallbackCapability::CanDefer,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DecisionFallbackCapability {
+    None,
+    CanDefer,
+}
+
+impl DecisionFallbackCapability {
+    const fn can_defer(self) -> bool {
+        matches!(self, Self::CanDefer)
     }
 }
 
@@ -9233,7 +9451,7 @@ struct FixedLookaheadTable {
 
 /// Dispatch trie over `la(1) .. la(k)`. Arms at each probe level are
 /// pairwise disjoint interval sets; lookahead words outside every arm fall
-/// through to the decision's regular adaptive body.
+/// through to synchronization and the decision's tier-specific miss path.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum FixedLookaheadNode {
     /// Every surviving rectangle belongs to this 1-based alternative; no
@@ -9609,6 +9827,9 @@ fn decision_alt_looks_disjoint(looks: &[DecisionAltLook]) -> bool {
 
 struct DecisionLookWalk<'a> {
     atn: &'a ParserAtn,
+    /// Stop state of the rule that owns the decision. Reaching it with an
+    /// empty simulated call stack is ANTLR's EPSILON result for this alt.
+    owning_rule_stop: Option<usize>,
     /// Java's `lookBusy`: (state, calling context) pairs already expanded.
     busy: BTreeSet<(usize, Vec<usize>)>,
     /// Java's `calledRuleStack`: rules on the walk's invocation path, the
@@ -9625,6 +9846,9 @@ impl DecisionLookWalk<'_> {
     fn walk(&mut self, state_number: usize, ctx: &mut Vec<usize>, look: &mut DecisionAltLook) {
         if !self.busy.insert((state_number, ctx.clone())) {
             return;
+        }
+        if self.owning_rule_stop == Some(state_number) && ctx.is_empty() {
+            look.nullable = true;
         }
         let Some(state) = self.atn.state(state_number) else {
             return;
@@ -9720,7 +9944,7 @@ fn build_embedded_parser_data(
             .map(embedded::RuleModel::has_attrs)
             .collect(),
         adaptive_decisions: decisions.adaptive_decisions.clone(),
-        ll1_decision_arms: decisions.ll1_decision_arms.clone(),
+        complete_ll1_dispatches: decisions.complete_ll1_dispatches.clone(),
         ..EmbeddedParserData::default()
     };
 
@@ -12569,7 +12793,7 @@ fn embedded_step_render(embedded: &EmbeddedParserData) -> EmbeddedStepRender<'_>
     EmbeddedStepRender {
         force_adaptive: false,
         adaptive_decisions: &embedded.adaptive_decisions,
-        ll1_decision_arms: &embedded.ll1_decision_arms,
+        complete_ll1_dispatches: &embedded.complete_ll1_dispatches,
         predicates: &embedded.predicates,
         rule_has_attrs: &embedded.rule_has_attrs,
         init_entry: &embedded.init_entry,
@@ -12700,6 +12924,8 @@ fn decision_routing_render<'a>(
     options: ParserRenderOptions<'_>,
 ) -> DecisionRoutingRender<'a> {
     DecisionRoutingRender {
+        complete_ll1_dispatches: (!options.embedded)
+            .then_some(&classification.complete_ll1_dispatches),
         ll1_dispatch_tables: (!options.embedded && options.fixed_lookahead.is_some())
             .then_some(&classification.ll1_dispatch_tables),
         fixed_lookahead_tables: options
@@ -12876,6 +13102,8 @@ fn render_parser_with_decision_report(
         (has_action_dispatch || has_predicate_dispatch || portable_local_data.has_semantics())
             && !options.embedded,
     )?;
+    let decision_report_rows =
+        rendered_decision_report_rows(&decision_classification.report_rows, &generated_rules);
     require_portable_local_rules_generated(
         &generated_rules,
         &portable_local_data.required_generated_rules,
@@ -13342,7 +13570,7 @@ where
 }}
 {generated_footer}"#
     );
-    Ok((module, decision_classification.report_rows))
+    Ok((module, decision_report_rows))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -16566,7 +16794,7 @@ mod tests {
             .collect::<Vec<_>>();
         let direct_generated_rule_calls = vec![true; rules.len()];
         let adaptive_decisions = BTreeSet::new();
-        let ll1_decision_arms = BTreeMap::new();
+        let complete_ll1_dispatches = BTreeMap::new();
         let predicates = BTreeMap::new();
         let rule_has_attrs = vec![false; rules.len()];
         let init_entry = BTreeMap::new();
@@ -16584,7 +16812,7 @@ mod tests {
             Some(EmbeddedStepRender {
                 force_adaptive: false,
                 adaptive_decisions: &adaptive_decisions,
-                ll1_decision_arms: &ll1_decision_arms,
+                complete_ll1_dispatches: &complete_ll1_dispatches,
                 predicates: &predicates,
                 rule_has_attrs: &rule_has_attrs,
                 init_entry: &init_entry,
@@ -20064,6 +20292,81 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
     }
 
     #[test]
+    fn complete_ll1_dispatches_do_not_emit_adaptive_fallbacks() {
+        let data = parser_fixture_data("ll1-no-fallback/T.g4");
+        let classification = classify_decisions(&data, Some(3)).expect("classification succeeds");
+
+        assert_eq!(classification.complete_ll1_dispatches.len(), 7);
+        assert!(classification.adaptive_decisions.is_empty());
+        insta::assert_debug_snapshot!(
+            "complete_ll1_dispatches",
+            classification.complete_ll1_dispatches
+        );
+
+        for (mode, options) in [
+            ("plain", ParserRenderOptions::default()),
+            (
+                "embedded",
+                ParserRenderOptions {
+                    embedded: true,
+                    ..ParserRenderOptions::default()
+                },
+            ),
+            (
+                "fixed",
+                ParserRenderOptions {
+                    fixed_lookahead: Some(3),
+                    ..ParserRenderOptions::default()
+                },
+            ),
+        ] {
+            let rendered = render_parser_with_options("T", &data, options).expect("parser renders");
+            assert!(
+                !rendered.contains("adaptive_predict_stream_info_sll_probe("),
+                "{mode} complete LL(1) decisions must not emit SLL fallback"
+            );
+            assert!(
+                !rendered.contains("adaptive_predict_stream_info_with_context("),
+                "{mode} complete LL(1) decisions must not emit full-context fallback"
+            );
+            assert!(
+                !rendered.contains("ll1_decision_prediction("),
+                "{mode} recovery misses must reuse the proven-complete dispatch"
+            );
+        }
+    }
+
+    #[test]
+    fn decision_manifest_reports_render_forced_adaptive_fallback() {
+        let data = parser_fixture_data("decision-manifest-fallback/T.g4");
+        let (rendered, rows) =
+            render_parser_with_decision_report("T", &data, ParserRenderOptions::default())
+                .expect("parser renders");
+        let ll1 = rows
+            .iter()
+            .find(|row| row.decision == 0)
+            .expect("nested LL(1) decision");
+
+        assert_eq!(ll1.tier, DecisionTierReport::Ll1);
+        assert_eq!(
+            ll1.fallback,
+            DecisionFallbackCapability::CanDefer,
+            "render-forced full-context prediction must be visible in the manifest"
+        );
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
+
+        let manifest = render_decisions_manifest(
+            None,
+            &[DecisionReportGrammar {
+                name: "T".to_owned(),
+                rule_names: data.rule_names,
+                rows,
+            }],
+        );
+        insta::assert_snapshot!("render_forced_adaptive_decisions_manifest", manifest);
+    }
+
+    #[test]
     fn fixed_lookahead_dispatch_commits_bare_and_syncs_on_miss() {
         let data = parser_fixture_data("fixed-lookahead/T.g4");
         let without_flag = render_parser("T", &data).expect("parser renders");
@@ -20094,6 +20397,14 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
             .expect("dispatch is inside a generated rule method");
         assert!(!rendered[method_start..dispatch_start].contains("sync_decision"));
         assert!(rendered[dispatch_start..].contains("sync_decision"));
+        assert!(
+            !rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"),
+            "the complete LL(1) loop must not emit an adaptive miss path"
+        );
+        assert!(
+            rendered.contains("adaptive_predict_stream_info_sll_probe(1, 0"),
+            "the fixed-LL(2) decision must retain its adaptive miss path"
+        );
     }
 
     #[test]

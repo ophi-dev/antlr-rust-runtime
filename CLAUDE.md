@@ -110,13 +110,14 @@ hook adapters for bare helper predicates; lexer callers can route closure hooks
 through `LexerSemCtx` and the shared `SemanticHooks` trait.
 
 A `decisions.json` manifest is written alongside, reporting each parser
-decision's tier (`ll1` / `fixed` / `adaptive` + reason). The opt-in
-`--fixed-lookahead <k>` flag compiles decisions provable within `k` tokens
-into static dispatch tables; hits commit bare only on within-rule (sync-no-op)
-lookahead and a miss falls through to the regular sync + adaptive body (see
-the README "Decision Tiers" section; research background in issue 150). The
-conformance harness forwards `ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"`
-for flag-on sweeps.
+decision's tier (`ll1` / `fixed` / `adaptive` + reason) and whether its emitted
+path `canDefer` to adaptive prediction. The opt-in `--fixed-lookahead <k>` flag
+compiles decisions provable within `k` tokens into static dispatch tables; hits
+commit bare only on within-rule (sync-no-op) lookahead. Complete LL(1) misses
+reuse their proven-total dispatch after sync, while fixed/adaptive misses retain
+the regular sync + adaptive body (see the README "Decision Tiers" section;
+research background in issue 150). The conformance harness forwards
+`ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"` for flag-on sweeps.
 
 ## Kotlin parser parity perf benchmark
 

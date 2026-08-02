@@ -6799,7 +6799,7 @@ where
         &mut self,
         atn: &Atn,
         state_number: usize,
-        current_context_empty: bool,
+        _current_context_empty: bool,
         loop_back: bool,
     ) -> Result<Vec<ParseTree>, AntlrError> {
         self.set_state(isize::try_from(state_number).unwrap_or(isize::MAX));
@@ -6833,26 +6833,33 @@ where
             nullable |= transition.nullable;
             explicit_eof_expected |= transition.symbols.contains(TOKEN_EOF);
         }
-        // Happy path: a nullable decision exits when the symbol is in the
-        // rule-stack follow set. Answer the membership question with an
-        // early-exit walk; the full union below is only needed for the
-        // mismatch/deletion diagnostics.
-        if nullable && self.context_expected_contains(atn, symbol) {
+        // Java's DefaultErrorStrategy.sync returns as soon as nextTokens
+        // contains EPSILON. It remembers the decision/context expected set for
+        // a later mismatch, but must not attempt single-token deletion or
+        // loop-back recovery first: a nullable decision leaves the current
+        // token to its caller even when that token is not in the context-free
+        // FOLLOW set.
+        if nullable {
+            // Valid exits only need a membership probe. Materialize the full
+            // expected set below solely when a later caller mismatch may need
+            // the combined decision/context diagnostic.
+            if self.context_expected_contains(atn, symbol) {
+                return Ok(Vec::new());
+            }
+            let mut expected = self.context_expected_token_set(atn);
+            for transition in &entry.transitions {
+                expected.extend_from(&transition.symbols);
+            }
+            self.generated_sync_expected = Some(expected);
             return Ok(Vec::new());
         }
-        let context_expected = nullable.then(|| self.context_expected_token_set(atn));
-        if !has_expected_symbols && context_expected.as_ref().is_none_or(TokenBitSet::is_empty) {
+        if !has_expected_symbols {
             return Ok(Vec::new());
         }
         let mut expected = TokenBitSet::default();
         for transition in &entry.transitions {
             expected.extend_from(&transition.symbols);
         }
-        if let Some(context_expected) = context_expected {
-            expected.extend_from(&context_expected);
-        }
-        let can_delete_in_place =
-            !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
         // ANTLR's `DefaultErrorStrategy.sync` recovers differently by decision kind:
         // a loop-BACK sync (STAR_LOOP_BACK / PLUS_LOOP_BACK — reached only after at
         // least one iteration) does `consumeUntil` the follow set — multi-token
@@ -6870,7 +6877,7 @@ where
         // loop-back would over-consume (e.g. `s: A* EOF;` on `c c` would delete both
         // `c`s, which ANTLR rejects with `mismatched input`).
         let loop_sync = loop_back;
-        if symbol != TOKEN_EOF && can_delete_in_place {
+        if symbol != TOKEN_EOF {
             let mut cursor = self.input.index();
             let mut skipped = Vec::new();
             loop {
@@ -6931,10 +6938,6 @@ where
                 }
                 cursor = next;
             }
-        }
-        if nullable {
-            self.generated_sync_expected = Some(expected);
-            return Ok(Vec::new());
         }
         let current = self.input.lt(1);
         let expected_symbols = expected.to_btree_set();
@@ -7030,13 +7033,9 @@ where
     /// Reports whether `symbol` is in `context_expected_token_set(atn)`
     /// without materializing the union.
     ///
-    /// This walks the rule-invocation stack directly, innermost frame first —
-    /// the same frames, in the same order, with the same rule-stop gating as
-    /// the same outer-context return-state chain used by adaptive prediction.
-    /// The nullable
-    /// exit in `sync_decision` asks only this membership question, and on
-    /// valid input the innermost frame answers it, so the early exit replaces
-    /// an O(stack-depth) set union per loop/optional exit with one probe.
+    /// The walk follows the same rule-stack return chain as adaptive
+    /// prediction. Valid nullable exits normally match the innermost frame,
+    /// keeping their synchronization path to one cached membership probe.
     fn context_expected_contains(&mut self, atn: &Atn, symbol: i32) -> bool {
         for index in (1..self.rule_context_stack.len()).rev() {
             let invoking_state = self.rule_context_stack[index].invoking_state;
@@ -15202,6 +15201,77 @@ mod tests {
         .expect("star-loop-then-EOF ATN should deserialize")
     }
 
+    /// ATN for `entry : nested EOF; nested : A*;`.
+    ///
+    /// State 5 is nullable within `nested`; its caller follow is EOF.
+    fn nested_star_rule_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::RuleStop, 0),
+            (4, AtnStateKind::RuleStart, 1),
+            (5, AtnStateKind::StarLoopEntry, 1),
+            (6, AtnStateKind::Basic, 1),
+            (7, AtnStateKind::StarLoopBack, 1),
+            (8, AtnStateKind::LoopEnd, 1),
+            (9, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 4])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![3, 9])
+            .expect("rule stop states");
+        atn.add_decision_state(5).expect("decision state");
+        atn.set_loop_back_state(8, 7).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 3,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 8 })
+            .expect("transition");
+        atn.add_transition(
+            6,
+            ParserTransitionSpec::Atom {
+                target: 7,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(8, ParserTransitionSpec::Epsilon { target: 9 })
+            .expect("transition");
+        finish_atn(atn)
+    }
+
     /// ATN for `s : a+ Y ; a : X ;`.
     ///
     /// At EOF, recovery can synthesize an empty failed `a` child. The enclosing
@@ -15422,6 +15492,44 @@ mod tests {
         );
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
+    }
+
+    #[test]
+    fn sync_decision_returns_before_recovery_for_nullable_exit() {
+        let atn = nested_star_rule_atn();
+        for (current_context_empty, loop_back) in [(true, false), (false, true)] {
+            let mut parser = mini_parser(vec![
+                TestToken::new(2).with_text("c"),
+                TestToken::new(1).with_text("a"),
+                TestToken::eof("parser-test", 1, 2, 2),
+            ]);
+            parser.rule_context_stack = vec![
+                RuleContextFrame {
+                    rule_index: 0,
+                    invoking_state: 0,
+                },
+                RuleContextFrame {
+                    rule_index: 1,
+                    invoking_state: 1,
+                },
+            ];
+
+            let children = parser
+                .sync_decision(&atn, 5, current_context_empty, loop_back)
+                .expect("nullable synchronization is a no-op");
+
+            assert!(children.is_empty());
+            assert_eq!(parser.la(1), 2, "the caller must receive the current token");
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+            assert_eq!(
+                parser
+                    .generated_sync_expected
+                    .as_ref()
+                    .expect("nullable sync preserves expected symbols")
+                    .to_btree_set(),
+                BTreeSet::from([TOKEN_EOF, 1])
+            );
+        }
     }
 
     fn predicate_after_token_atn() -> Atn {

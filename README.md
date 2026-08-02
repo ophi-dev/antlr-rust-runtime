@@ -704,25 +704,28 @@ Every generation writes a **`decisions.json`** manifest next to
 `semantics.json` reporting the tier of each decision — `ll1`, `fixed`
 (see below), or `adaptive` with the reason it needs the simulator
 (`non-greedy`, `precedence`, `predicate`, `empty-look`, `not-disjoint`,
-`budget-exceeded`, `sync-bound`) — so you can see exactly which parts of a
-grammar pay for `ALL(*)` and why:
+`budget-exceeded`, `sync-bound`). Manifest version 2 also reports
+`canDefer`: complete LL(1) dispatches are `false`, while partial fixed
+tables and adaptive decisions are `true`, so the report agrees with whether
+the emitted path can reach adaptive prediction:
 
 ```json
-{"decision": 4, "rule": "namespace_", "state": 113, "tier": "fixed", "lookahead": 2}
+{"decision": 4, "rule": "namespace_", "state": 113, "canDefer": true, "tier": "fixed", "lookahead": 2}
 ```
 
 The opt-in **`--fixed-lookahead <k>`** flag (off by default) goes one tier
 further than Java: decisions that are not LL(1) but whose lookahead
 languages are pairwise disjoint within `k` tokens compile into a static
 nested `match` over `la(1) .. la(k)` — no simulator, no DFA warming, no
-per-decision cache. In plain (non-embedded) mode the flag also compiles the
-Java-parity LL(1) switches statically. Behavior is preserved by
+per-decision cache on a table hit. In plain (non-embedded) mode the flag also
+compiles the Java-parity LL(1) switches statically. Behavior is preserved by
 construction: dispatch arms are restricted to lookahead for which the
-decision's recovery sync is a provable no-op, and any other lookahead falls
-through to the decision's regular sync + adaptive body, so error recovery
-happens exactly where the untiered parser performs it. The classification
-is deterministic and idempotent; predicate-guarded, non-greedy, and
-precedence decisions always stay adaptive.
+decision's recovery sync is a provable no-op. A complete LL(1) miss runs
+sync and reuses the proven-total LL(1) dispatch without constructing a
+simulator; fixed-LL(k) and adaptive decisions can defer through their regular
+sync + adaptive body. The classification is deterministic and idempotent;
+predicate-guarded, non-greedy, and precedence decisions always stay
+adaptive.
 
 `grammars-v4` examples: Thrift classifies 53 of 54 decisions LL(1) and the
 last (`namespace_`) fixed-LL(2) — with `--fixed-lookahead 2` the whole
