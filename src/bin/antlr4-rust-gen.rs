@@ -13706,9 +13706,9 @@ fn collect_noop_action_states(
     patterns: &SemPatternFile,
 ) -> io::Result<BTreeSet<usize>> {
     let mut noop_action_states = BTreeSet::new();
-    let action_state_rules = parser_action_state_rules(data)?;
-    for state in action_state_rules.keys() {
-        if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
+    let action_state_coordinates = parser_action_state_coordinates(data)?;
+    for state in action_state_coordinates.keys() {
+        if parser_action_assume_overridden(patterns, data, &action_state_coordinates, *state) {
             noop_action_states.insert(*state);
         }
     }
@@ -13921,6 +13921,7 @@ fn parser_action_routing(
     embedded: bool,
     embedded_data: Option<&EmbeddedParserData>,
     portable_local_data: &PortableLocalData,
+    rule_args: &[(usize, usize, RuleArgTemplate)],
     noop_states: &BTreeSet<usize>,
 ) -> io::Result<ParserActionRouting> {
     let mut inline_statements = embedded_data.map_or_else(
@@ -13935,6 +13936,14 @@ fn parser_action_routing(
         .iter()
         .map(|action| (action.state, action.action_index))
         .collect::<BTreeMap<_, _>>();
+    let action_rules = structural_actions
+        .iter()
+        .map(|action| (action.state, action.rule_index))
+        .collect::<BTreeMap<_, _>>();
+    let parameterized_rules = rule_args
+        .iter()
+        .map(|(_, rule_index, _)| *rule_index)
+        .collect::<BTreeSet<_>>();
     let committed_indices = structural_actions
         .iter()
         .filter(|action| {
@@ -13956,10 +13965,15 @@ fn parser_action_routing(
             .difference(noop_states)
             .filter(|state| !portable_local_data.inline_actions.contains_key(state))
         {
-            inline_statements.insert(
-                *state,
-                "let _ = self.base.parser_action_hook_with_context(action, &__ctx);".to_owned(),
-            );
+            let statement = if action_rules
+                .get(state)
+                .is_some_and(|rule_index| parameterized_rules.contains(rule_index))
+            {
+                "let _ = self.base.parser_action_hook_with_context_and_local(action, &__ctx, __precedence);"
+            } else {
+                "let _ = self.base.parser_action_hook_with_context(action, &__ctx);"
+            };
+            inline_statements.insert(*state, statement.to_owned());
             generated_states.insert(*state);
         }
     }
@@ -14062,6 +14076,7 @@ fn render_parser_with_decision_report(
         options.embedded,
         embedded_data.as_ref(),
         &portable_local_data,
+        &rule_args,
         &noop_action_states,
     )?;
     let inline_action_states = inline_action_statements
@@ -15276,14 +15291,21 @@ fn parser_action_states(data: &CodegenData<'_>) -> io::Result<Vec<usize>> {
     Ok(states)
 }
 
-/// Reads the parser ATN action transitions keyed by source state.
-fn parser_action_state_rules(data: &CodegenData<'_>) -> io::Result<BTreeMap<usize, usize>> {
+/// Reads parser ATN action coordinates keyed by source state.
+fn parser_action_state_coordinates(
+    data: &CodegenData<'_>,
+) -> io::Result<BTreeMap<usize, (usize, Option<usize>)>> {
     let atn = data.parser_atn()?;
     let mut states = BTreeMap::new();
     for state in atn.states() {
         for transition in state.transitions() {
-            if let ParserTransitionData::Action { rule_index, .. } = transition.data() {
-                states.insert(state.state_number(), rule_index);
+            if let ParserTransitionData::Action {
+                rule_index,
+                action_index,
+                ..
+            } = transition.data()
+            {
+                states.insert(state.state_number(), (rule_index, action_index));
             }
         }
     }
@@ -15519,14 +15541,21 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 fn parser_action_assume_overridden(
     patterns: &SemPatternFile,
     data: &CodegenData<'_>,
-    action_state_rules: &BTreeMap<usize, usize>,
+    action_state_coordinates: &BTreeMap<usize, (usize, Option<usize>)>,
     state: usize,
 ) -> bool {
-    let rule_name = action_state_rules
+    let (rule_index, action_index) = action_state_coordinates
         .get(&state)
-        .and_then(|rule| data.rule_names.get(*rule).map(String::as_str));
+        .copied()
+        .unwrap_or((usize::MAX, None));
+    let rule_name = data.rule_names.get(rule_index).map(String::as_str);
     patterns
-        .coordinate_override(SemanticsKind::ParserAction, rule_name, None, Some(state))
+        .coordinate_override(
+            SemanticsKind::ParserAction,
+            rule_name,
+            action_index,
+            Some(state),
+        )
         .is_some_and(|override_| {
             matches!(
                 override_.dispose,
@@ -22023,8 +22052,8 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
         // Assumed parser actions get explicit no-op arms; hook/error overrides
         // keep falling through to the parser action hook.
         let data = predicate_parser_data(); // rule 0 = "s"
-        let mut action_state_rules = BTreeMap::new();
-        action_state_rules.insert(4_usize, 0_usize); // action state 4 belongs to rule `s`
+        let mut action_state_coordinates = BTreeMap::new();
+        action_state_coordinates.insert(4_usize, (0_usize, Some(0_usize)));
 
         for dispose in ["assume-true", "assume-false"] {
             let patterns = parse_sem_patterns(&format!(
@@ -22032,23 +22061,44 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
             ))
             .expect("pattern file parses");
             assert!(
-                parser_action_assume_overridden(&patterns, &data, &action_state_rules, 4),
+                parser_action_assume_overridden(&patterns, &data, &action_state_coordinates, 4),
                 "dispose {dispose}: an action state in rule `s` is assumed"
             );
         }
+        let indexed_patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = 0\ndispose = \"assume-true\"\n",
+        )
+        .expect("indexed pattern file parses");
+        assert!(
+            parser_action_assume_overridden(&indexed_patterns, &data, &action_state_coordinates, 4),
+            "an index-specific assume override should suppress hook routing"
+        );
+        let other_index_patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = 1\ndispose = \"assume-true\"\n",
+        )
+        .expect("other-index pattern file parses");
+        assert!(
+            !parser_action_assume_overridden(
+                &other_index_patterns,
+                &data,
+                &action_state_coordinates,
+                4
+            ),
+            "an override for another action index must not suppress this hook"
+        );
         let hook_patterns = parse_sem_patterns(
             "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\ndispose = \"hook\"\n",
         )
         .expect("pattern file parses");
         assert!(
-            !parser_action_assume_overridden(&hook_patterns, &data, &action_state_rules, 4),
+            !parser_action_assume_overridden(&hook_patterns, &data, &action_state_coordinates, 4),
             "hook overrides should keep routing through the hook arm"
         );
         assert!(
             !parser_action_assume_overridden(
                 &SemPatternFile::default(),
                 &data,
-                &action_state_rules,
+                &action_state_coordinates,
                 4
             ),
             "no override -> concrete arm is kept"

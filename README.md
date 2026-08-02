@@ -94,10 +94,10 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 2, which adds stable indexed
-parser-action hooks and committed-position fallback execution. The runtime also
-accepts revision 1 because its older generated recognizers use API surfaces that
-remain available.
+The bundled generator currently emits revision 3, which exposes parameterized
+rule arguments to committed parser-action hooks. The runtime also accepts
+revisions 1 and 2 because their older generated recognizers use API surfaces
+that remain available.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

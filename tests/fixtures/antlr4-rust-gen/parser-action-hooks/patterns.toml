@@ -64,3 +64,9 @@ kind      = "parser-action"
 lower     = "hook"
 name      = "Middle"
 returns   = "unit"
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "ObserveArgument"
+returns = "unit"

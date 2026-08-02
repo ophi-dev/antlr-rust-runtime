@@ -302,14 +302,16 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
-    let revision_one = "__antlr4_rust_require_codegen_api!(1,";
-    let mut revision_one_parser = parser.clone();
-    let check_start = revision_one_parser
-        .find(&current)
-        .expect("parser check should contain the current API revision");
-    revision_one_parser.replace_range(check_start..check_start + current.len(), revision_one);
-    fs::write(&parser_path, revision_one_parser).expect("parser should be writable");
-    assert_generated_modules_compile(temp.path(), &modules);
+    for revision in [1, 2] {
+        let supported = format!("__antlr4_rust_require_codegen_api!({revision},");
+        let mut supported_parser = parser.clone();
+        let check_start = supported_parser
+            .find(&current)
+            .expect("parser check should contain the current API revision");
+        supported_parser.replace_range(check_start..check_start + current.len(), &supported);
+        fs::write(&parser_path, supported_parser).expect("parser should be writable");
+        assert_generated_modules_compile(temp.path(), &modules);
+    }
 
     let unsupported = "__antlr4_rust_require_codegen_api!(999,";
     let mut incompatible_parser = parser;
@@ -332,7 +334,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        diagnostic.contains("supports revisions 1 and 2"),
+        diagnostic.contains("supports revisions 1, 2, and 3"),
         "diagnostic should name every supported revision: {diagnostic}"
     );
     insta::assert_snapshot!(
@@ -5029,6 +5031,7 @@ fn named_parser_actions_run_at_committed_positions_on_both_parser_paths() {
         "match (action.rule_index(), action.action_index())",
         "parser_action_at_current_indexed",
         "parser_action_hook_with_context",
+        "parser_action_hook_with_context_and_local",
         "action_indices: &[(",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
@@ -5134,6 +5137,16 @@ mod named_action_tests {
         {
             self.events.borrow_mut().push(name.to_owned());
         }
+
+        fn observe_argument<L>(&mut self, ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            let value = ctx
+                .local_int_arg()
+                .expect("the parameterized rule argument should be visible");
+            self.events.borrow_mut().push(format!("argument:{value}"));
+        }
     }
 
     type TestParser = ActionTimingParser<
@@ -5199,6 +5212,17 @@ mod named_action_tests {
             !generated.events.iter().any(|event| event == "lose"),
             "the action in the losing alternative must not run"
         );
+    }
+
+    #[test]
+    fn parameterized_rule_arguments_reach_both_action_paths() {
+        let generated = run("", TestParser::generated_argument);
+        let interpreted = run("", TestParser::interpreted_argument);
+
+        assert_eq!(generated.events, ["argument:17"]);
+        assert_eq!(interpreted.events, ["argument:23"]);
+        assert_eq!(generated.text, "<EOF>");
+        assert_eq!(interpreted.text, "<EOF>");
     }
 
     #[test]

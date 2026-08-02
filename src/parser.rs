@@ -4867,6 +4867,11 @@ where
     deferred_actions: Vec<ParserAction>,
 }
 
+struct CommittedRuleOutcome {
+    tree: ParseTree,
+    consumed_eof: bool,
+}
+
 struct CommittedDecisionContext<'a> {
     precedence: i32,
     local_int_arg: Option<(usize, i64)>,
@@ -7211,7 +7216,7 @@ where
     /// Generated parsers call this for action source states that were present
     /// in the ATN but not translated into a built-in Rust action template.
     pub fn parser_action_hook(&mut self, action: ParserAction, tree: ParseTree) -> bool {
-        self.parser_action_hook_inner(action, None, Some(tree), true)
+        self.parser_action_hook_inner(action, None, Some(tree), None, true)
     }
 
     /// Offers an action to semantic hooks at its committed grammar position.
@@ -7223,7 +7228,27 @@ where
         action: ParserAction,
         context: &ParserRuleContext,
     ) -> bool {
-        self.parser_action_hook_inner(action, Some(context), None, true)
+        self.parser_action_hook_inner(action, Some(context), None, None, true)
+    }
+
+    /// Offers an action with the current generated rule's integer argument.
+    ///
+    /// Generated parameterized rules use the same integer carrier as generated
+    /// predicate evaluation. The context exposes it through
+    /// [`ParserSemCtx::local_int_arg`].
+    pub fn parser_action_hook_with_context_and_local(
+        &mut self,
+        action: ParserAction,
+        context: &ParserRuleContext,
+        local_int_arg: i32,
+    ) -> bool {
+        self.parser_action_hook_inner(
+            action,
+            Some(context),
+            None,
+            Some((action.rule_index(), i64::from(local_int_arg))),
+            true,
+        )
     }
 
     /// Offers a rule-init action at rule entry while preserving legacy replay.
@@ -7234,9 +7259,10 @@ where
         &mut self,
         action: ParserAction,
         context: &ParserRuleContext,
+        local_int_arg: Option<(usize, i64)>,
     ) -> bool {
         debug_assert!(action.is_rule_init());
-        self.parser_action_hook_inner(action, Some(context), None, false)
+        self.parser_action_hook_inner(action, Some(context), None, local_int_arg, false)
     }
 
     fn parser_action_hook_inner(
@@ -7244,6 +7270,7 @@ where
         action: ParserAction,
         context: Option<&ParserRuleContext>,
         tree: Option<ParseTree>,
+        local_int_arg: Option<(usize, i64)>,
         record_unhandled: bool,
     ) -> bool {
         let rule_index = action.rule_index();
@@ -7259,7 +7286,7 @@ where
             rule_name,
             context,
             tree,
-            local_int_arg: None,
+            local_int_arg,
             member_values,
             action: Some(action),
         };
@@ -7971,7 +7998,7 @@ where
         if top_level_entry && let Some(error) = self.take_parse_abort() {
             return Err(error);
         }
-        result.map(|tree| (tree, deferred_actions))
+        result.map(|outcome| (outcome.tree, deferred_actions))
     }
 
     /// Parses a generated rule with action replay, parser predicate support,
@@ -12508,7 +12535,7 @@ where
         precedence: i32,
         inherited_local_int_arg: Option<(usize, i64)>,
         init_expected_state: Option<usize>,
-    ) -> Result<ParseTree, AntlrError> {
+    ) -> Result<CommittedRuleOutcome, AntlrError> {
         let start_state = self
             .atn
             .rule_to_start_state()
@@ -12564,7 +12591,7 @@ where
             );
             if !self
                 .parser
-                .parser_rule_init_hook_with_context(action, &context)
+                .parser_rule_init_hook_with_context(action, &context, local_int_arg)
             {
                 self.deferred_actions.push(action);
             }
@@ -12607,7 +12634,7 @@ where
             }
         };
         self.parser.parse_listener_exit_rule(rule_index);
-        result
+        result.map(|tree| CommittedRuleOutcome { tree, consumed_eof })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -13184,7 +13211,8 @@ where
                 };
                 self.parser.discard_invoking_state(marker);
                 let child = child?;
-                self.parser.add_parse_child(context, child);
+                *consumed_eof |= child.consumed_eof;
+                self.parser.add_parse_child(context, child.tree);
                 Ok(follow_state)
             }
             Transition::Predicate {
@@ -13240,7 +13268,13 @@ where
                         rule_start_index,
                         *consumed_eof,
                     );
-                    let _ = self.parser.parser_action_hook_with_context(action, context);
+                    let _ = self.parser.parser_action_hook_inner(
+                        action,
+                        Some(context),
+                        None,
+                        local_int_arg,
+                        true,
+                    );
                 }
                 Ok(target)
             }
@@ -16045,6 +16079,72 @@ mod tests {
             },
         )
         .expect("EOF transition");
+        finish_atn(atn)
+    }
+
+    /// ATN for `parent : child[42] {Parent();}; child[int value] : {Child();} EOF;`.
+    fn parameterized_child_action_eof_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::RuleStop, 0),
+            (4, AtnStateKind::RuleStart, 1),
+            (5, AtnStateKind::Basic, 1),
+            (6, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 4])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![3, 6])
+            .expect("rule stop states");
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 1,
+                precedence: 0,
+            },
+        )
+        .expect("parameterized child call");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Action {
+                target: 2,
+                rule_index: 0,
+                action_index: None,
+                context_dependent: false,
+            },
+        )
+        .expect("parent action");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("parent stop");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Action {
+                target: 5,
+                rule_index: 1,
+                action_index: None,
+                context_dependent: false,
+            },
+        )
+        .expect("child action");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("child EOF");
         finish_atn(atn)
     }
 
@@ -19286,6 +19386,25 @@ mod tests {
     }
 
     #[derive(Debug, Default)]
+    struct ActionContextHooks {
+        actions: Vec<(usize, Option<i64>, Option<usize>)>,
+    }
+
+    impl SemanticHooks for ActionContextHooks {
+        fn action<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+        where
+            S: TokenSource,
+        {
+            self.actions.push((
+                action.action_index().unwrap_or(usize::MAX),
+                ctx.local_int_arg(),
+                action.stop_index(),
+            ));
+            true
+        }
+    }
+
+    #[derive(Debug, Default)]
     struct ForcedSecondAlternativeHooks {
         decisions: Vec<(usize, usize, usize)>,
     }
@@ -19459,6 +19578,75 @@ mod tests {
         assert_eq!(parser.node(tree).text(), "x<EOF>");
         assert!(deferred_actions.is_empty());
         assert_eq!(parser.semantic_hooks.events, ["action:7", "predicate:true"]);
+    }
+
+    #[test]
+    fn committed_action_hook_observes_parameterized_rule_argument() {
+        let atn = parameterized_child_action_eof_atn();
+        let rule_args = [ParserRuleArg {
+            source_state: 0,
+            rule_index: 1,
+            value: 42,
+            inherit_local: false,
+        }];
+        let mut parser = mini_parser_with_hooks(
+            vec![TestToken::eof("parser-test", 0, 1, 0)],
+            ActionContextHooks::default(),
+        );
+
+        parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(1, 20), (4, 10)],
+                    rule_args: &rule_args,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the parameterized child should parse");
+
+        assert_eq!(
+            parser.semantic_hooks.actions[0],
+            (10, Some(42), None),
+            "the child action should observe its invocation argument"
+        );
+    }
+
+    #[test]
+    fn committed_parent_propagates_child_eof_consumption() {
+        let atn = parameterized_child_action_eof_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![TestToken::eof("parser-test", 0, 1, 0)],
+            ActionContextHooks::default(),
+        );
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(1, 20), (4, 10)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the parent should retain its child's EOF boundary");
+
+        assert_eq!(
+            parser.semantic_hooks.actions[1],
+            (20, None, Some(0)),
+            "the parent action should stop at EOF"
+        );
+        let root = parser.node(tree).as_rule().expect("entry result is a rule");
+        assert_eq!(root.stop().map(|token| token.token_type()), Some(TOKEN_EOF));
+        let child = root
+            .child_rules(1)
+            .next()
+            .expect("the parent should contain the child rule");
+        assert_eq!(
+            child.stop().map(|token| token.token_type()),
+            Some(TOKEN_EOF)
+        );
     }
 
     #[test]

@@ -16,6 +16,18 @@ recoverInterpreted
     : force[2147483648] recoveryBody EOF
     ;
 
+generatedArgument
+    : parameterized[17] EOF
+    ;
+
+interpretedArgument
+    : force[2147483648] parameterized[23] EOF
+    ;
+
+parameterized[int value]
+    : {ObserveArgument();}
+    ;
+
 body
     : {recog.Enter("outer", 1, true);}
       {this.IsEntered()}?

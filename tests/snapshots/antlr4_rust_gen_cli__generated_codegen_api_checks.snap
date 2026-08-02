@@ -2,5 +2,5 @@
 source: tests/antlr4_rust_gen_cli.rs
 expression: normalize_current_package_version(&checks)
 ---
-lexer: antlr4_runtime::__antlr4_rust_require_codegen_api!(2, "<generator-version>");
-parser: antlr4_runtime::__antlr4_rust_require_codegen_api!(2, "<generator-version>");
+lexer: antlr4_runtime::__antlr4_rust_require_codegen_api!(3, "<generator-version>");
+parser: antlr4_runtime::__antlr4_rust_require_codegen_api!(3, "<generator-version>");
