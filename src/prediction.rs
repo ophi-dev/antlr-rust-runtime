@@ -880,7 +880,8 @@ pub(crate) struct PredictionSemanticProvenanceId(u32);
 #[derive(Debug, Default)]
 pub(crate) struct PredictionSemanticProvenanceArena {
     records: Vec<PredictionSemanticProvenance>,
-    interner: FxHashMap<PredictionSemanticProvenance, PredictionSemanticProvenanceId>,
+    interner_heads: FxHashMap<u64, PredictionSemanticProvenanceId>,
+    interner_next: Vec<Option<PredictionSemanticProvenanceId>>,
 }
 
 impl PredictionSemanticProvenanceArena {
@@ -940,6 +941,22 @@ impl PredictionSemanticProvenanceArena {
         self.records.get(usize::try_from(index).ok()?)
     }
 
+    fn find_interned(
+        &self,
+        cached_hash: u64,
+        provenance: &PredictionSemanticProvenance,
+    ) -> Option<PredictionSemanticProvenanceId> {
+        let mut candidate = self.interner_heads.get(&cached_hash).copied();
+        while let Some(id) = candidate {
+            let index = usize::try_from(id.0.checked_sub(1)?).ok()?;
+            if self.records.get(index) == Some(provenance) {
+                return Some(id);
+            }
+            candidate = self.interner_next.get(index).copied().flatten();
+        }
+        None
+    }
+
     fn intern(
         &mut self,
         provenance: PredictionSemanticProvenance,
@@ -947,8 +964,11 @@ impl PredictionSemanticProvenanceArena {
         if provenance.active_rule_calls.is_empty() && provenance.predicate_calls.is_empty() {
             return PredictionSemanticProvenanceId::default();
         }
-        if let Some(id) = self.interner.get(&provenance) {
-            return *id;
+        let mut hasher = PredictionFxHasher::default();
+        provenance.hash(&mut hasher);
+        let cached_hash = hasher.finish();
+        if let Some(id) = self.find_interned(cached_hash, &provenance) {
+            return id;
         }
         let id = PredictionSemanticProvenanceId(
             u32::try_from(self.records.len() + 1)
@@ -958,8 +978,9 @@ impl PredictionSemanticProvenanceArena {
             id.0 <= ATN_CONFIG_PROVENANCE_MASK,
             "prediction semantic provenance arena exhausted"
         );
-        self.records.push(provenance.clone());
-        self.interner.insert(provenance, id);
+        let previous = self.interner_heads.insert(cached_hash, id);
+        self.records.push(provenance);
+        self.interner_next.push(previous);
         id
     }
 }
@@ -1132,22 +1153,7 @@ impl AtnConfigSet {
             self.dips_into_outer_context = true;
         }
         let key = AtnConfigKey::from(&config);
-        let indexed = self.config_index.get(&key).copied();
-        let existing_index = indexed.and_then(|index| {
-            let provenance = config.semantic_provenance_id();
-            if self.configs[index].semantic_provenance_id() == provenance {
-                Some(index)
-            } else {
-                self.configs
-                    .iter()
-                    .enumerate()
-                    .find(|(_, existing)| {
-                        key.matches(existing) && existing.semantic_provenance_id() == provenance
-                    })
-                    .map(|(index, _)| index)
-            }
-        });
-        if let Some(existing_index) = existing_index {
+        if let Some(existing_index) = self.config_index.get(&key).copied() {
             #[cfg(feature = "perf-counters")]
             crate::perf::record_config_merge();
             let existing = &mut self.configs[existing_index];
@@ -1166,9 +1172,7 @@ impl AtnConfigSet {
             false
         } else {
             let index = self.configs.len();
-            if indexed.is_none() {
-                self.config_index.insert(key, index);
-            }
+            self.config_index.insert(key, index);
             self.configs.push(config);
             #[cfg(feature = "perf-counters")]
             crate::perf::record_config_insert(self.configs.len());
@@ -1250,9 +1254,7 @@ impl AtnConfigSet {
         self.config_index.clear();
         if !self.readonly {
             for (index, config) in self.configs.iter().enumerate() {
-                self.config_index
-                    .entry(AtnConfigKey::from(config))
-                    .or_insert(index);
+                self.config_index.insert(AtnConfigKey::from(config), index);
             }
         }
     }
@@ -1307,6 +1309,7 @@ struct AtnConfigKey {
     state: usize,
     alt: usize,
     semantic_context: SemanticContext,
+    semantic_provenance: PredictionSemanticProvenanceId,
 }
 
 impl From<&AtnConfig> for AtnConfigKey {
@@ -1315,15 +1318,8 @@ impl From<&AtnConfig> for AtnConfigKey {
             state: config.state,
             alt: config.alt,
             semantic_context: config.semantic_context.clone(),
+            semantic_provenance: config.semantic_provenance_id(),
         }
-    }
-}
-
-impl AtnConfigKey {
-    fn matches(&self, config: &AtnConfig) -> bool {
-        self.state == config.state
-            && self.alt == config.alt
-            && self.semantic_context == config.semantic_context
     }
 }
 
@@ -1550,6 +1546,40 @@ mod tests {
     }
 
     #[test]
+    fn provenance_arena_stores_records_once_and_verifies_hash_collisions() {
+        let mut arena = PredictionSemanticProvenanceArena::default();
+        let first = PredictionSemanticProvenance {
+            active_rule_calls: vec![PredictionRuleCall {
+                source_state: 4,
+                rule_index: 2,
+            }],
+            predicate_calls: Vec::new(),
+        };
+        let first_id = arena.intern(first.clone());
+
+        assert_eq!(arena.intern(first), first_id);
+        assert_eq!(arena.records.len(), 1);
+        assert_eq!(arena.interner_next.len(), 1);
+
+        let second = PredictionSemanticProvenance {
+            active_rule_calls: vec![PredictionRuleCall {
+                source_state: 5,
+                rule_index: 3,
+            }],
+            predicate_calls: Vec::new(),
+        };
+        let mut hasher = PredictionFxHasher::default();
+        second.hash(&mut hasher);
+        arena.interner_heads.insert(hasher.finish(), first_id);
+
+        let second_id = arena.intern(second.clone());
+        assert_ne!(second_id, first_id);
+        assert_eq!(arena.intern(second), second_id);
+        assert_eq!(arena.records.len(), 2);
+        assert_eq!(arena.interner_next.len(), 2);
+    }
+
+    #[test]
     fn config_set_keeps_distinct_prediction_provenance() {
         let mut arena = ContextArena::new();
         let mut provenance = PredictionSemanticProvenanceArena::default();
@@ -1564,6 +1594,10 @@ mod tests {
         assert!(set.add(second, &mut arena, &mut workspace));
         assert!(!set.add(first, &mut arena, &mut workspace));
         assert_eq!(set.len(), 2);
+        assert_eq!(set.config_index.len(), set.len());
+
+        set.remap_contexts(&[EMPTY_CONTEXT], &arena);
+        assert_eq!(set.config_index.len(), set.len());
     }
 
     #[cfg(target_pointer_width = "64")]
@@ -1575,7 +1609,7 @@ mod tests {
             0
         };
         assert!(size_of::<AtnConfig>() <= 64 + debug_generation);
-        assert!(size_of::<AtnConfigKey>() <= 48);
+        assert!(size_of::<AtnConfigKey>() <= 56);
     }
 
     #[test]
