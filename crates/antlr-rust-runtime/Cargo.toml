@@ -9,6 +9,7 @@ homepage.workspace = true
 documentation = "https://docs.rs/antlr-rust-runtime"
 readme = "../../README.md"
 license.workspace = true
+license-file.workspace = true
 keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
 categories = ["parser-implementations", "development-tools", "parsing"]
 include = ["/Cargo.toml", "/README.md", "/src/**"]

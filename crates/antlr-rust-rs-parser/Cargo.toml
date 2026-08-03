@@ -7,6 +7,7 @@ description = "Rust syntax query parser used internally by antlr-rust-codegen"
 repository.workspace = true
 homepage.workspace = true
 license.workspace = true
+license-file.workspace = true
 readme = "README.md"
 publish = true
 keywords = ["antlr", "antlr4", "rust", "parser", "syntax"]
