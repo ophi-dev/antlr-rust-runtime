@@ -12917,7 +12917,7 @@ where
             .filter(|index| *index < transition_count)
             .ok_or_else(|| self.parser.no_viable_alternative_error(decision_start))?;
 
-        let semantic_candidates = self.simulator.prediction_semantic_candidates().to_vec();
+        let semantic_candidates = self.simulator.prediction_semantic_candidates();
         if !semantic_candidates.is_empty() {
             let predicted_alt = prediction.alt;
             let mut semantic_results = BTreeMap::new();
