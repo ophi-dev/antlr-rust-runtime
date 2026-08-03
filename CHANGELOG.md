@@ -9,6 +9,17 @@
   as a build dependency and use `Builder`; generated/runtime API revision 3 is
   unchanged.
 
+## [0.27.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.26.0...v0.27.0) (2026-08-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* antlr4-rust-gen and the runtime codegen feature move to the antlr-rust-codegen package.
+
+### refactor
+
+* split codegen into workspace packages ([#290](https://github.com/ophi-dev/antlr-rust-runtime/issues/290)) ([a44f645](https://github.com/ophi-dev/antlr-rust-runtime/commit/a44f6459d2642ac0db340004c89ed5c5ff899e57))
+
 ## [0.26.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.25.0...v0.26.0) (2026-08-03)
 
 
