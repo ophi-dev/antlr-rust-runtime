@@ -53,7 +53,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidunicodeescapesincharset-76b56aa346/fixture.json",
-      "sha256": "1776904480ac11739f406db6009268e3c2f1b6fbab6e5fa2f898e45d50c5240f"
+      "sha256": "fe9a57d77fdc42d0a8920f2916fd6ae55b4156a5fc77f34bbe285d2880d6b853"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidunicodeescapesincharset-76b56aa346/oracle/java-antlr.stderr",

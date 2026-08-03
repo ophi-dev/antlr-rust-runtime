@@ -81,7 +81,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/fixture.json",
-      "sha256": "ffb53555514bf61ea258ab9be9bf72c6b84cb0fe0b76b38ab8c6f05d13c10a5f"
+      "sha256": "e59eb34e3e20107542619f3ff30c37b1bf92199b6f07ee330fdee21f64558130"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/oracle/java-antlr.stderr",

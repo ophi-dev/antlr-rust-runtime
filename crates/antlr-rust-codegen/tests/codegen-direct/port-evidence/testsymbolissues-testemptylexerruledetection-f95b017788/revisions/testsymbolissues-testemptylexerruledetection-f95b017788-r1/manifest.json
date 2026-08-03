@@ -63,7 +63,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/fixture.json",
-      "sha256": "f2f84c3db47bcb77a90c50d6ba91b55770200e4f1272d8c41b177debcf54a74d"
+      "sha256": "107a6d1392db5ccd5b933943e767674eb83d6c3fe05398cf50ffa3a4f2ed5ec2"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testemptylexerruledetection-f95b017788/oracle/java-antlr.stderr",

@@ -71,7 +71,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/fixture.json",
-      "sha256": "22607cd40e07de3ec2ffb3a85c34d9ade9c73f438ed61d5abee23f334bae692b"
+      "sha256": "c5bb089f4a2ea69eaa1dc6204c28c7cc2c4c61bcbf4b7cd0481c25d8723b1be9"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stderr",

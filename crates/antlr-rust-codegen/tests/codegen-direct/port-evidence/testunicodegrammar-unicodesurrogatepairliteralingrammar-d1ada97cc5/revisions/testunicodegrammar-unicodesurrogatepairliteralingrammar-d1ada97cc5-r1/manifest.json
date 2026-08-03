@@ -60,7 +60,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/fixture.json",
-      "sha256": "560e1835fd047f888b0e57eb70a2dae9218814920dc41ec8cdaa2de51008cf80"
+      "sha256": "c43fbd62f0d772427163c0bf70dfdf39abf4695ddeb09480cbba5d54519ab9da"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stderr",

@@ -61,7 +61,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/fixture.json",
-      "sha256": "8f30ee50a0ae652391b15b05b2474b2bbc53643284718573e200a9617ddb6fd6"
+      "sha256": "8978aafe4449ea5cb93c285de272607c2798e21cc5ad73c4188b99c4e44c115d"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stderr",

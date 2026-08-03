@@ -52,7 +52,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/fixture.json",
-      "sha256": "179643d83b6a8bed0c44f06327d83700d5e24799357cb5aff5c0f73727fbb070"
+      "sha256": "338c6a28776618a6087d56036c17b7faf86347ebb446d20150c3d62ca3161495"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/oracle/java-antlr.stderr",

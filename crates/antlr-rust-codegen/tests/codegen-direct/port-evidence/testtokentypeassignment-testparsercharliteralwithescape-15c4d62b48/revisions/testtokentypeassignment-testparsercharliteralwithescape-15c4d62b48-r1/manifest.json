@@ -48,7 +48,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/fixture.json",
-      "sha256": "ae81db42ad8c23cfeef19a97785c26fe87e868da5fdb0cdc0628c3e50d761fd3"
+      "sha256": "b732ecb553266799af45057d07ea9d6bc9f88d6309c26647abf0a627eaf32402"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/oracle/java-antlr.stderr",

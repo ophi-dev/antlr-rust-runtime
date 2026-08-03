@@ -42,6 +42,9 @@ jobs:
       - name: Validate direct-codegen fixtures
         run: node tools/grammar-frontend/validate-interp-fixtures.mjs
 
+      - name: Validate port evidence
+        run: node tools/grammar-frontend/validate-port-evidence.mjs
+
       - name: Validate workspace release metadata
         run: tools/release/check-workspace-version.sh
 
@@ -90,9 +93,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust 1.95
-        run: |
-          rustup toolchain install 1.95 --profile minimal --no-self-update
-          rustup default 1.95
+        run: rustup toolchain install 1.95 --profile minimal --no-self-update
 
       - name: Check workspace at MSRV
-        run: cargo check --locked --workspace --all-targets --all-features
+        run: cargo +1.95 check --locked --workspace --all-targets --all-features

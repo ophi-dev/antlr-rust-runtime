@@ -66,7 +66,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/fixture.json",
-      "sha256": "8479e1981f52c50b621156937fa94c150ab5a7b4e55571519e507c7f5c9847db"
+      "sha256": "ce647ac927a2a0a5256130ff79a9d54c2d755e14f6d85399f6d6290954491968"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/oracle/java-antlr.stderr",

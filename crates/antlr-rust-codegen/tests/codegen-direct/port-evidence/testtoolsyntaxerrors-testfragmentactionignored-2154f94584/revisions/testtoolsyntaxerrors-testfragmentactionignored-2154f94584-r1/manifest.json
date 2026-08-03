@@ -61,7 +61,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testfragmentactionignored-2154f94584/fixture.json",
-      "sha256": "ca450cecea3fbf88a1f2a5d1d8095d875841fd19fe42b06dd027e9c49bdf9ba2"
+      "sha256": "1030485ddf10a72646f59802a8b7ef75229c192b7a1ef91e2e5989274294bc1c"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testfragmentactionignored-2154f94584/oracle/java-antlr.stderr",

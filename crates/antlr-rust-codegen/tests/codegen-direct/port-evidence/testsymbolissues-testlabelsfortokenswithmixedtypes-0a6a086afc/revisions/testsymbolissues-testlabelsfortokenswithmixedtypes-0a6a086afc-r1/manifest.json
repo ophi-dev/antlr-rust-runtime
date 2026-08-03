@@ -61,7 +61,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/fixture.json",
-      "sha256": "ffe18763dbf0cafccb89d6ab46b0db5d45ecc7e258f7a3630f044e86fc588733"
+      "sha256": "6901bdbf87821b6c005f16da5ee4e0fd546eff8fc5b34210795146274052f7ea"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc/oracle/java-antlr.stderr",

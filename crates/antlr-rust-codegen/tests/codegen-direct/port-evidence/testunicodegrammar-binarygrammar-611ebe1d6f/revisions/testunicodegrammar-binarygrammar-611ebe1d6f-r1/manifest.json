@@ -62,7 +62,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/fixture.json",
-      "sha256": "8f7759ff81d7ef93eb401a4919a74a8bd2bcbbd5fe5300d6620ebb27e42559df"
+      "sha256": "37e597dbe9118833232291604e9d57a84da3b1065d0d89d36b173f3aed05ab8d"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/oracle/java-antlr.stderr",

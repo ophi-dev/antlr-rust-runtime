@@ -68,7 +68,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/fixture.json",
-      "sha256": "71b9a357ab407ceb54e89b9b36b3ddde367c49b938647dc93223c91ca2d73409"
+      "sha256": "c54d71d5edef352c4abfa8e3efc1518261783e09dc217429e073a3a8f0258c05"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stderr",

@@ -61,7 +61,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/fixture.json",
-      "sha256": "f65a7adf934f5c20823f43666109ec86b50739603c00a35183071f159585f279"
+      "sha256": "8303e32bbc9ee910b3c8b3e200462457b3fc9b23db339e0359bc024740547fff"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stderr",

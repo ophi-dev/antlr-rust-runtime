@@ -73,7 +73,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f/fixture.json",
-      "sha256": "e4310c196f4cf8007a02352ae116da72b3d3083bf0fb5a009d2e396b2597613b"
+      "sha256": "75cea69e9d630066f01055c1b32113f4ece48fc7346578a57830fa25f694cc5b"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f/oracle/java-antlr.stderr",

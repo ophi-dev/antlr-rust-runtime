@@ -51,7 +51,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430/fixture.json",
-      "sha256": "059d468088b304af3f4c2c0ebfcf02252597eb06bf49aba3ea3d264c5d7c3476"
+      "sha256": "7161c3efa151a1e14eed61485c2f8e95bcec4ea43614d3c96d91b9facd79ac81"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430/oracle/java-antlr.stderr",

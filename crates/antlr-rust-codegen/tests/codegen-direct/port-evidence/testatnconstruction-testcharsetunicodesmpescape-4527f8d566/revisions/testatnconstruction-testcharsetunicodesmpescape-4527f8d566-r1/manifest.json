@@ -60,7 +60,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/fixture.json",
-      "sha256": "f775dd5f41a81b8768e206f9c43a7bdeee5a5e9a66dbdfe0cca56aa16454a98f"
+      "sha256": "c59ca8f46fbad8eaea685e4576d1db073b1fea46ae45b1569c9ee33bd1de96ca"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/antlr-ng-atn-mode-default-mode.txt",

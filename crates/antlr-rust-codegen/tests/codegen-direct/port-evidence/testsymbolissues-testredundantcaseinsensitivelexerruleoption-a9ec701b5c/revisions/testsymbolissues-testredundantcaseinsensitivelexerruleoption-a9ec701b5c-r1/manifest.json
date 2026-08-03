@@ -70,7 +70,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/fixture.json",
-      "sha256": "c9d1d0c3fa88050e9298b999e3c3e2b33b4a8e1f8fde3f39824e08d33ccc4e24"
+      "sha256": "e012abe64ded8201db83ed8e48739c702748d9d7119b1cacb1a83f6bdc2d3efb"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2/oracle/java-antlr.stderr",
@@ -106,7 +106,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/fixture.json",
-      "sha256": "a11a2c0feb870132b87debf56388d2ccac33e7bd1edcfe87568bd7bf7c55cacb"
+      "sha256": "caee145d1921e458166bbd4f5931378a220f9dbcd0d538292667e2dcaf5d4e27"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c/oracle/java-antlr.stderr",

@@ -59,7 +59,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/fixture.json",
-      "sha256": "57195d82e23c6ed5860ba947154bad77067284dc3339fff41a8ef56ccf743564"
+      "sha256": "93286ee69ec3abff51aad039e42c87f413047817c7f17427d2a5c8c3b5133e6d"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stderr",

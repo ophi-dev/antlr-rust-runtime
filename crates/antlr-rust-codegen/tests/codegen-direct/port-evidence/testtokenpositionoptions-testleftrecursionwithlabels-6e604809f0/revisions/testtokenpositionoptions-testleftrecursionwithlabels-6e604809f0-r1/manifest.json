@@ -75,7 +75,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/fixture.json",
-      "sha256": "1e77b4da2ff37562b767c3d5b99b6e807231fa1a291b855bc74684877b4e5fba"
+      "sha256": "c74280e85f1aaf8e27bf41a7cfd0cb6149e0c9b93fdc72dd5b8777264237c808"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/oracle/java-antlr.stderr",

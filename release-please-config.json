@@ -49,6 +49,10 @@
                 {
                     "type": "generic",
                     "path": "crates/antlr-rust-codegen/README.md"
+                },
+                {
+                    "type": "generic",
+                    "path": "docs/migration.md"
                 }
             ]
         }

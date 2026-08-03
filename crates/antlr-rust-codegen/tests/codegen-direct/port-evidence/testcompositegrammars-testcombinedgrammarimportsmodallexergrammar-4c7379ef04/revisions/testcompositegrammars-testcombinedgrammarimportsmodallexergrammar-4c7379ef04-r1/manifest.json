@@ -66,7 +66,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/fixture.json",
-      "sha256": "f0ecad156cb345335b6b951792e748cf72bbfdd6640c2d4aad26590eddf71fb3"
+      "sha256": "4b560ac979f8f716d0c662a7997048c931ef31f61cdf7fd9a8d2de362b9cb541"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/oracle/java-antlr.stderr",

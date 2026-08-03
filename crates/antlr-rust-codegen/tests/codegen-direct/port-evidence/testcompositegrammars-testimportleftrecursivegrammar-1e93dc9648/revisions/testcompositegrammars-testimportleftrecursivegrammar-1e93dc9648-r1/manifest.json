@@ -73,7 +73,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/fixture.json",
-      "sha256": "b470c7fd2c2db8045b85e471e2bea6e475dfe40f02e0e84b91cd5c213f947e29"
+      "sha256": "6192536d5ac8f29788c35d1c6d1a83df70793df7f1b219939d09853cf7f64964"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stderr",

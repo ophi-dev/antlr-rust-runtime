@@ -65,7 +65,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/fixture.json",
-      "sha256": "f1d314152dc6ad3ce70af3beb2a51612b631ab9d93045d58cdb43b312a4edb91"
+      "sha256": "2212cd13cec37101c04e1042973515df3faf00095a981ca010745f2dd5136476"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/antlr-ng-atn-rule-a.txt",

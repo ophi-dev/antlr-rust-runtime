@@ -53,7 +53,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/fixture.json",
-      "sha256": "f039c3bc1b58040797896ba2d8b219a2213a492f45f1036268469dce33371c0f"
+      "sha256": "81e954c7437e3bdbd044208e7c8c9e0930c1bf39040c3dfa7d50247919cd55b2"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-antlr.stderr",

@@ -63,7 +63,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/fixture.json",
-      "sha256": "df49d8393487400563771a0af207acba5d17d338b6d1e16570a956d8a7624ba9"
+      "sha256": "22ad60141634de24fd33fe513ea5425501f15d89c87c03c8582b0b8b69c84663"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-GoLexer.EOS.dot",

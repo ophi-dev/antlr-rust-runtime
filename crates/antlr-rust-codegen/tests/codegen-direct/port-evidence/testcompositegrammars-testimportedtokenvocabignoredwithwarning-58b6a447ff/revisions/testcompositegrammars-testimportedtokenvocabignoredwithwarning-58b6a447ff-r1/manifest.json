@@ -76,7 +76,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/fixture.json",
-      "sha256": "1e172173f86228bfd44cd26cdcdb7b57630d4d3f3aab6ed5fa1b6e8e0f880f51"
+      "sha256": "4b9066ab50a74826e7d734495d50f013a2f2c4455fb38bbc361e6e1a88481a7d"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/oracle/java-antlr.stderr",

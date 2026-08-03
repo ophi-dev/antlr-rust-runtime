@@ -59,7 +59,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/fixture.json",
-      "sha256": "578bf6b3352c70b342555c88d93e6f834a69c10d968a773db1ddeac8b1a9c2b6"
+      "sha256": "2aa124ebd29aa9002efc7e14c1ffbcf615e67aafedb965222b6c35564d753a54"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stderr",

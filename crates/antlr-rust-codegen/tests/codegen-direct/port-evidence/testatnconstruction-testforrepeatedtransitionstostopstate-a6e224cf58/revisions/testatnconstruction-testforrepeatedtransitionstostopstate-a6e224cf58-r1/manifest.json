@@ -68,7 +68,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/fixture.json",
-      "sha256": "04a4304623eb0ea2330d264daa3fb2950d32d0a2fba84132595cc1876cf463f9"
+      "sha256": "161936c9b41fc4caafca340d2c14a530cc06e84af46a2300d08fdc827776fb97"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn-rule-e.txt",

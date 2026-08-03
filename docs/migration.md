@@ -33,13 +33,17 @@ cargo install antlr-rust-codegen --bin antlr4-rust-gen
 
 Rust build scripts can instead use the same generation pipeline as a library:
 
+<!-- x-release-please-start-version -->
+
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.26"
+antlr-rust-runtime = "0.26.0"
 
 [build-dependencies]
-antlr-rust-codegen = "0.26"
+antlr-rust-codegen = "0.26.0"
 ```
+
+<!-- x-release-please-end -->
 
 Generate only into Cargo's `OUT_DIR` with `antlr_rust_codegen::Builder`, then
 call `Generation::emit_rerun_if_changed()` to track the resolved roots,

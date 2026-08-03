@@ -64,7 +64,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/fixture.json",
-      "sha256": "d634d1e871f1ad279322d7c6ab10f05acfa83e79c271bc75b7a4ba8d705b1192"
+      "sha256": "cb5932a399ba00fda4f32aa9aa5eb909dc9d1e49e6686e299e0060915ee3699b"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/oracle/java-antlr.stderr",

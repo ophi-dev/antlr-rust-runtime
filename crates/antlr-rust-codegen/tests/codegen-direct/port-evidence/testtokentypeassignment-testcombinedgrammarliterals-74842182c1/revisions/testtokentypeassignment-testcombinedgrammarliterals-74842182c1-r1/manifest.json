@@ -53,7 +53,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/fixture.json",
-      "sha256": "922c1fb6dbfc2fb36c746fa0a674cffc46e5ae7a38f860a8a5fd9b9d048419f6"
+      "sha256": "836b9fd6905850c80b84c1cbb09123f6636a87d3d12a57fa331ae2a2c9e732b4"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stderr",

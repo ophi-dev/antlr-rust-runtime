@@ -51,7 +51,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4/fixture.json",
-      "sha256": "cc78a6c79abe40b9f4c055467167c23fe4e93b45f0e84fa63aa597f239d76b3a"
+      "sha256": "f707c11398a1dc9bcd51d58dc3fb43204ac9174056b43b5e36cb03dc3213414d"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4/oracle/java-antlr.stderr",

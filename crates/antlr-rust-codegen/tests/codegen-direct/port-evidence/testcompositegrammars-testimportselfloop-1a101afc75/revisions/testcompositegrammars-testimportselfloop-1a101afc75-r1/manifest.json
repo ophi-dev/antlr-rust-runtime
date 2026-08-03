@@ -66,7 +66,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/fixture.json",
-      "sha256": "573014384fd95cbebeee461e100f385bee0e951074031026bc3909087a04373d"
+      "sha256": "2002c7da1d9bcb8860b6f6f07925cd46349fa2b1e9a6442a58d4ea6a90e36425"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/oracle/java-antlr.stderr",

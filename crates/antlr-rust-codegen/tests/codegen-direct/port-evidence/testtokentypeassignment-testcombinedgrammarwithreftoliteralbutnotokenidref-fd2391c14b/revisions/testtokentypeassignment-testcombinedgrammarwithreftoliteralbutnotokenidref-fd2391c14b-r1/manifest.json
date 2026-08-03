@@ -48,7 +48,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/fixture.json",
-      "sha256": "b3e85aa56ab0cfe84750677097d175aefe3a84a28779c573251a8d928b86ebfc"
+      "sha256": "242d0340615b7ae03316f5071369c47245c2b878e34149c7c1f14697322f370a"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/oracle/java-antlr.stderr",

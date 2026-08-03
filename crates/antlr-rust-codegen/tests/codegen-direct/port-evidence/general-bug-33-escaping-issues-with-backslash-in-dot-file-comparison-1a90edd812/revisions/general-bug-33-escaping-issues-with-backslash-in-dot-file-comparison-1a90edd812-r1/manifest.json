@@ -59,7 +59,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/fixture.json",
-      "sha256": "88a52fc6d79c5c07315e6822fa5618fc788a2accfaa0df8fa8c321a0fadb5f93"
+      "sha256": "0ec6ce144a02b584214f05c9d8b0aa2e51f9729e4e7931018e58a95b106d622a"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-abbLexer.EscapeSequence.dot",

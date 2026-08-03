@@ -53,7 +53,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testnotallowedemptystrings-3bf75c4497/fixture.json",
-      "sha256": "a4226b0c35c6b5df808359830445d1dff5b0b88cf6a638df41e70cb297fad573"
+      "sha256": "3261e7cb7908bec5316b473487db9e487ce9259578beb81ad8af37202328aec3"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testnotallowedemptystrings-3bf75c4497/oracle/java-antlr.stderr",

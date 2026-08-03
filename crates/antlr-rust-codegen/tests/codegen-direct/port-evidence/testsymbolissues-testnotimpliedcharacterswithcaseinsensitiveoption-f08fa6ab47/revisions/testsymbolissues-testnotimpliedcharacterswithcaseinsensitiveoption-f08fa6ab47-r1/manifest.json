@@ -61,7 +61,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/fixture.json",
-      "sha256": "6410a8ef61644fad9e1a121e187eefd9108ec4b6989fac8806fe71f0f4111121"
+      "sha256": "70009d799af1893c2775e15b322bb40d1ebe80f2da2482ef9c3a7d9c5b13807b"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47/oracle/java-antlr.stderr",

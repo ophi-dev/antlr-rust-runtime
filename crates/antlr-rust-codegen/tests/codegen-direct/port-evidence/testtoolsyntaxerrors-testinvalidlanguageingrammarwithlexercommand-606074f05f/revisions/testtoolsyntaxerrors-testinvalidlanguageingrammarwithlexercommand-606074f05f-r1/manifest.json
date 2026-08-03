@@ -51,7 +51,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidlanguageingrammarwithlexercommand-606074f05f/fixture.json",
-      "sha256": "ee94c4f42fa773c89a75b81f5b4274b39b2fc327058183a0124226b8a0e73aaf"
+      "sha256": "2dca4a201d314ad0ec1d66044c069569bd3c7e030e95783991005a9365308294"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testtoolsyntaxerrors-testinvalidlanguageingrammarwithlexercommand-606074f05f/oracle/java-antlr.stderr",

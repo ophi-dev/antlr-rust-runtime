@@ -56,7 +56,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/fixture.json",
-      "sha256": "c6c61d077b5208bcf8eb6ff4396a5ad0a5b686025f4e1938bb30a978d842ba25"
+      "sha256": "95318bbf94dbef41cf817d8cf54d7c794191bd1f8ad2081cba223b183d921e9b"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/oracle/java-antlr.stderr",

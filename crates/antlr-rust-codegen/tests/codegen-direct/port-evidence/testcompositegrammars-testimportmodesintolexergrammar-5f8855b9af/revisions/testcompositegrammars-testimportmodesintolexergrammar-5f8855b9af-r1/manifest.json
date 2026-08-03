@@ -63,7 +63,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/fixture.json",
-      "sha256": "ce37ebd56742deed46747e22819557c5d16aa20e8ab3f08736a94fe8c152d880"
+      "sha256": "a120cfc8775fa78a00c79e3be5ffbcbd5bee0201d1f628cd33df0f0c56419ddf"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/oracle/java-antlr.stderr",

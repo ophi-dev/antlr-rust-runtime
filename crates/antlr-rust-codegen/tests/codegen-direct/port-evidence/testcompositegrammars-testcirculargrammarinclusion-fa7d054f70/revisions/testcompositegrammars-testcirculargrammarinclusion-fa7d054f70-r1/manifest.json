@@ -71,7 +71,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/fixture.json",
-      "sha256": "b81d00b4c4cf5f951a50a2cb1048f6c01934cf02ae06f567a2b6c25444ba8b32"
+      "sha256": "4bcd1c3277f4b8ebc3b7e694bcc97d8c01c631e600f6e3005e9ab740ad61ade5"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stderr",

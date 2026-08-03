@@ -51,7 +51,7 @@
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/fixture.json",
-      "sha256": "27a715dc78e4358aafc5fa5a5c0845fd0d4566ad0e6a6feb0e8e82ec5b18994f"
+      "sha256": "710358f62fc8d8b863c8df74b3744de99fe7cd858d1588db7048eabc2784babd"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/oracle/java-antlr.stderr",
