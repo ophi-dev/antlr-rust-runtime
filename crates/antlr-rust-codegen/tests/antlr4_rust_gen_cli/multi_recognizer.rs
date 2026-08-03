@@ -265,7 +265,7 @@ fn three_build_dependency_consumers_share_codegen_and_track_only_resolved_inputs
              [workspace.dependencies]\n\
              antlr-rust-runtime = {{ path = {:?} }}\n\
              antlr-rust-codegen = {{ path = {:?} }}\n",
-            root,
+            runtime_crate_root(),
             root.join("crates/antlr-rust-codegen")
         ),
     )

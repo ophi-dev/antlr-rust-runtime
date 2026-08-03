@@ -2,7 +2,9 @@
     "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
     "packages": {
         ".": {
-            "release-type": "rust",
+            "release-type": "simple",
+            "package-name": "antlr-rust-runtime",
+            "version-file": "VERSION",
             "changelog-path": "CHANGELOG.md",
             "include-v-in-tag": true,
             "include-component-in-tag": false,
@@ -41,6 +43,11 @@
                 {
                     "type": "generic",
                     "path": "Cargo.toml"
+                },
+                {
+                    "type": "toml",
+                    "path": "Cargo.lock",
+                    "jsonpath": "$.package[?(!@.source)].version"
                 },
                 {
                     "type": "generic",

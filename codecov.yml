@@ -30,13 +30,13 @@ flag_management:
   individual_flags:
     - name: unittests
       paths:
-        - src/
+        - crates/antlr-rust-runtime/src/
         - crates/antlr-rust-g4-parser/src/
         - crates/antlr-rust-rs-parser/src/
         - crates/antlr-rust-codegen/src/
     - name: conformance
       paths:
-        - src/
+        - crates/antlr-rust-runtime/src/
         - crates/antlr-rust-g4-parser/src/
         - crates/antlr-rust-rs-parser/src/
         - crates/antlr-rust-codegen/src/

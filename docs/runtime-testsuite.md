@@ -12,7 +12,7 @@ The Rust harness keeps the upstream descriptor/template contract but uses the
 direct source compiler:
 
 1. the ANTLR jar's StringTemplate engine renders each descriptor through
-   [`Rust.test.stg`](../tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg),
+   [`Rust.test.stg`](../tests/antlr-rust-runtime-testsuite/templates/Rust.test.stg),
 2. `antlr4-rust-gen` compiles the rendered `.g4` root and import graph directly,
 3. the generated modules run against `antlr4_runtime`.
 

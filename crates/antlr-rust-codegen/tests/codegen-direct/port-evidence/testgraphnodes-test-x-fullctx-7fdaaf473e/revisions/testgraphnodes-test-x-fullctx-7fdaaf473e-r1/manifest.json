@@ -60,7 +60,7 @@
   },
   "locked_oracle_sections": [
     {
-      "path": "src/prediction.rs",
+      "path": "crates/antlr-rust-runtime/src/prediction.rs",
       "marker": "    mod upstream_graph_nodes {",
       "sha256": "3690e29ecfdc3a109eb772a04584e65cf4c97759b9a6b0e6b035ff92e9cbda09"
     }

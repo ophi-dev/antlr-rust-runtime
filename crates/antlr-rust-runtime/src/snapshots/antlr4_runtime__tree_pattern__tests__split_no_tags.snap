@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-runtime/src/tree_pattern.rs
+expression: chunks
+---
+[
+    Text(
+        "a = 3 ;",
+    ),
+]

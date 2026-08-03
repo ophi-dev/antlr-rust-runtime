@@ -13,9 +13,9 @@ codebase has since grown a working — but *closed* — heuristic system:
 |---|---|---|
 | Grammar-source scraping | Brace/template matcher that finds action & predicate blocks in `.g4` text, in ANTLR serialization order | `crates/antlr-rust-codegen/src/semantics/templates.rs` |
 | Generator-side classification | Closed enums `ActionTemplate` (~20 variants), `PredicateTemplate` (~16 variants), `RuleArgTemplate`, `IntMemberTemplate`; per-variant recognizers | `crates/antlr-rust-codegen/src/semantics/` |
-| Runtime predicate table | `ParserRuntimeOptions { predicates: &[(rule, pred, ParserPredicate)], rule_args, member_actions, return_actions }` — static data interpreted at parse/prediction time | `src/parser.rs:305-442` |
-| Lexer hook surface | `next_token_with_hooks(lexer, atn, custom_action, semantic_predicate, accept_adjuster)` — closure hooks; generator renders `run_action` / `run_predicate` match arms into the generated lexer | `src/atn/lexer.rs:199`, gen `render_lexer_predicate_method` |
-| Prediction semantics | `SemanticContext` (And/Or/Predicate) collected during closure, "action hides predicates" rule, `has_semantic_context` plumbed through DFA states | `src/prediction.rs:839`, `src/atn/parser.rs:1186` |
+| Runtime predicate table | `ParserRuntimeOptions { predicates: &[(rule, pred, ParserPredicate)], rule_args, member_actions, return_actions }` — static data interpreted at parse/prediction time | `crates/antlr-rust-runtime/src/parser.rs:305-442` |
+| Lexer hook surface | `next_token_with_hooks(lexer, atn, custom_action, semantic_predicate, accept_adjuster)` — closure hooks; generator renders `run_action` / `run_predicate` match arms into the generated lexer | `crates/antlr-rust-runtime/src/atn/lexer.rs:199`, gen `render_lexer_predicate_method` |
+| Prediction semantics | `SemanticContext` (And/Or/Predicate) collected during closure, "action hides predicates" rule, `has_semantic_context` plumbed through DFA states | `crates/antlr-rust-runtime/src/prediction.rs:839`, `crates/antlr-rust-runtime/src/atn/parser.rs:1186` |
 | Fail-loud (lexer only, codegen-time) | Unsupported lexer action templates are a codegen **error** unless `--allow-unsupported-lexer-actions` | gen `lexer_action_templates` |
 
 This passes the full upstream conformance sweep (357/357), so the *semantics*
@@ -26,7 +26,7 @@ already correct for the covered shapes.
 
 1. **Silent-true fallback in the parser.** A predicate coordinate absent from
    the table evaluates to `true` (`BaseParser::parser_predicate_matches`,
-   `src/parser.rs:7016`). This is exactly the silent correctness bug the issue
+   `crates/antlr-rust-runtime/src/parser.rs:7016`). This is exactly the silent correctness bug the issue
    warns about, and there is no parser-side codegen error either.
 2. **Closed-world extensibility.** Supporting a new grammar (say
    `grammars-v4/javascript`) means writing a new recognizer function + enum
@@ -118,7 +118,7 @@ pub enum UnknownSemanticPolicy {
 - Add `unknown_predicate_policy` / `unknown_action_policy` to
   `ParserRuntimeOptions` and to the lexer hook wrappers' default closures
   (today `|_, _| true`).
-- `parser_predicate_matches` (src/parser.rs:7016): the `else` branch consults
+- `parser_predicate_matches` (crates/antlr-rust-runtime/src/parser.rs:7016): the `else` branch consults
   the policy instead of hardcoding `true`. Error shape follows the issue:
 
   ```text
@@ -147,7 +147,7 @@ pub enum UnknownSemanticPolicy {
 ## 4. The semantic IR (`SemIR`)
 
 The pivot from "enum variant per idiom" to "small language, many idioms".
-Lives in a new `src/semir.rs`; both the generator (producer) and runtime
+Lives in a new `crates/antlr-rust-runtime/src/semir.rs`; both the generator (producer) and runtime
 (evaluator) depend on it.
 
 ### 4.1 Expressions (predicates — pure by construction)
@@ -323,7 +323,7 @@ Turing-complete. Guards (`where`) keep matches honest. Match ambiguity
   position is a codegen error (G5).
 - **Speculation classification**: mark member-only actions speculative
   (§4.2); everything else defers to the committed path, and the existing
-  "action hides predicates" collection rule (`src/atn/parser.rs:1186`)
+  "action hides predicates" collection rule (`crates/antlr-rust-runtime/src/atn/parser.rs:1186`)
   continues to govern what prediction may see.
 - **Manifest**: `semantics.json` next to the generated code +
   `pub const SEMANTICS: …` table. Each entry: coordinate, source span, raw
@@ -383,7 +383,7 @@ for users; the numeric trait remains for the general case.
 
 - Predicate-free grammars: no IR tables, `NoHooks`, compiled lexer DFA path
   untouched — the `has_semantic_context` short-circuits already in place
-  (`src/dfa.rs:163`, `src/lexer.rs:234`) keep gating everything (G4).
+  (`crates/antlr-rust-runtime/src/dfa.rs:163`, `crates/antlr-rust-runtime/src/lexer.rs:234`) keep gating everything (G4).
 - IR evaluation is an iterative walk over a flat arena with short-circuit
   And/Or; no allocation. For the hot case (single comparison) it's a couple
   of array reads — comparable to today's enum match.
@@ -408,7 +408,7 @@ for users; the numeric trait remains for the general case.
    `And`/`Or` short-circuit order matches ANTLR (left-to-right).
 3. **Lowering equivalence**: for every legacy enum variant, a test asserting
    the lowered IR evaluates identically to the old evaluator across a state
-   corpus (differential harness inside `src/parser.rs` tests, then delete the
+   corpus (differential harness inside `crates/antlr-rust-runtime/src/parser.rs` tests, then delete the
    old evaluator).
 4. **Pattern-file tests**: fixture grammars + TOML files under
    `tests/sem-patterns/`; assert manifest dispositions and generated-code
@@ -433,7 +433,7 @@ Phases are independently shippable; each ends green on conformance + bench.
 - `UnknownSemanticPolicy` in `ParserRuntimeOptions` + lexer default-closure
   wiring; kill the silent `true` (default stays `AssumeTrue` for one release
   with a deprecation note in the manifest, flips to `Error` next minor).
-  → `src/parser.rs` `unknown_predicate_result` / `unknown_semantic_error`;
+  → `crates/antlr-rust-runtime/src/parser.rs` `unknown_predicate_result` / `unknown_semantic_error`;
   the lexer side is handled at codegen (assume-false emits an `|_, _| false`
   predicate hook and forces the hook-taking token path).
 - Parser-side codegen strictness flag `--sem-unknown`.
@@ -457,7 +457,7 @@ Implemented follow-up:
 
 ### Phase 3 — SemIR core + enum lowering (M/L, ~2-3 PRs) — ✅ implemented 2026-07-05
 
-- ✅ `src/semir.rs`: arena, `PExpr`/`AStmt`, evaluator, hook nodes, and unit
+- ✅ `crates/antlr-rust-runtime/src/semir.rs`: arena, `PExpr`/`AStmt`, evaluator, hook nodes, and unit
   tests for lookahead text, token adjacency, member/local predicates,
   short-circuiting, lexer column/text predicates, and action execution.
 - `ParserPredicate`, `ParserMemberAction`, and `ParserReturnAction` lower to

@@ -22,6 +22,9 @@ require_file() {
     fi
 }
 
+require_file "LICENSE"
+require_file "README.md"
+
 case "$package" in
     antlr-rust-runtime)
         require_file "src/lib.rs"

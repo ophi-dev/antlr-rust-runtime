@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/antlr-rust-codegen"
 license.workspace = true
+license-file.workspace = true
 readme = "README.md"
 keywords = ["antlr", "antlr4", "codegen", "parser", "lexer"]
 categories = ["development-tools::build-utils", "parser-implementations", "parsing"]

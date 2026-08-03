@@ -1,0 +1,16 @@
+---
+source: crates/antlr-rust-runtime/src/tree_pattern.rs
+expression: chunks
+---
+[
+    Text(
+        "x ",
+    ),
+    Tag {
+        name: "expr",
+        label: None,
+    },
+    Text(
+        " y",
+    ),
+]

@@ -873,7 +873,7 @@ ANTLR grammars can parse binary formats, not just text. The convention the
 reference runtimes use is to treat each byte as a codepoint in
 `U+0000..=U+00FF` and write lexer rules over that range
 (`BYTE : '\u0000' .. '\u00FF';`). This runtime ships
-[`ByteStream`](src/byte_stream.rs) for exactly that: a `CharStream` backed by
+[`ByteStream`](crates/antlr-rust-runtime/src/byte_stream.rs) for exactly that: a `CharStream` backed by
 raw bytes where the stream index is the byte offset and lookahead returns the
 byte value (`0..=255`). It is generic over the
 backing store — `ByteStream::new(vec)` owns, `ByteStream::new(&buf[..])` borrows
@@ -890,7 +890,7 @@ let parsed = midi_parser::parse_stream(input, MidiLexer::new, MidiParser::file)?
 Length-prefixed formats ("read N, then consume N bytes") are data-dependent, so
 a pure grammar cannot frame them alone — the same constraint ANTLR's `bencoding`
 grammar solves with a lexer `superClass`. Here that role is filled by a
-[`SemanticHooks`](src/parser.rs) implementation: `LexerSemCtx`/`LexerLifecycleCtx`
+[`SemanticHooks`](crates/antlr-rust-runtime/src/parser.rs) implementation: `LexerSemCtx`/`LexerLifecycleCtx`
 expose `push_mode`/`pop_mode`, `enqueue_token` (to synthesize framing tokens),
 and raw `la()` lookbehind, so a small hook struct can count down a declared
 chunk length and emit an end-of-chunk token. A bare `{helper();}` lexer action
@@ -920,7 +920,7 @@ cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime
 
 The harness runs descriptors the way every official ANTLR target does: each
 descriptor grammar is rendered through
-`tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
+`tests/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
 StringTemplate engine, so its actions and predicates become real Rust code.
 The rendered `.g4` source graph is then compiled directly by
 `antlr4-rust-gen`, and the resulting code is executed inline.

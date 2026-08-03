@@ -1,0 +1,19 @@
+---
+source: crates/antlr-rust-runtime/src/parser.rs
+expression: recorded
+---
+[
+    RecordedDiagnostic {
+        grammar_file_name: "Mini.g4",
+        offending_text: Some(
+            "oops",
+        ),
+        line: 1,
+        column: 2,
+        span: Some(
+            0..4,
+        ),
+        message: "extraneous input 'oops'",
+        error: None,
+    },
+]

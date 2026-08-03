@@ -1,0 +1,42 @@
+---
+source: crates/antlr-rust-runtime/src/parser.rs
+expression: "(error, diagnostics)"
+---
+(
+    ParserError {
+        line: 3,
+        column: 5,
+        message: "mismatched input 'y' expecting 'x'",
+        offending: Some(
+            TokenId(
+                0,
+            ),
+        ),
+    },
+    [
+        RecordedDiagnostic {
+            grammar_file_name: "Mini.g4",
+            offending_text: Some(
+                "y",
+            ),
+            line: 3,
+            column: 5,
+            span: Some(
+                0..1,
+            ),
+            message: "mismatched input 'y' expecting 'x'",
+            error: Some(
+                ParserError {
+                    line: 3,
+                    column: 5,
+                    message: "mismatched input 'y' expecting 'x'",
+                    offending: Some(
+                        TokenId(
+                            0,
+                        ),
+                    ),
+                },
+            ),
+        },
+    ],
+)

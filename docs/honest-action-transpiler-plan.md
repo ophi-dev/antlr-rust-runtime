@@ -194,7 +194,7 @@ enum ActionStmt { SetReturn(AttrName, ActionExpr) }
 **no grammar label (`a=e`, `left=e`), no occurrence ordinal, no list-label
 info** (verified at src/bin/antlr4-rust-gen.rs:1814). And the existing read path
 `first_rule_int_return` is a **depth-first FIRST match by rule_index**
-(src/tree.rs:64), so `$a.v` and `$b.v` in `a=e '+' b=e` would both resolve to the
+(crates/antlr-rust-runtime/src/tree.rs:64), so `$a.v` and `$b.v` in `a=e '+' b=e` would both resolve to the
 *same first* `e` child. Binding by rule-name / first-match would **recreate the
 fixture-fit bug behind a new parser** — the exact failure we are removing.
 
@@ -252,10 +252,10 @@ alternative's action bottom-up — real left-recursion, not a hardwired re-parse
 **Correction:** an earlier draft treated `$result = $ID.text` /
 `AppendStr(...)` as "a small parallel string-return slot." That is not
 sufficient. The current SemIR value model is integer-only:
-`semir::Value = Null | Bool | Int` (src/semir.rs:222); text nodes evaluate to
-`Null` outside comparisons (src/semir.rs:384); `AStmt::SetReturn` coerces through
-`int_or_zero` (src/semir.rs:361); return storage is `BTreeMap<String, i64>`
-(src/tree.rs:197). Lowering `$ID.text` or concatenation through this today would
+`semir::Value = Null | Bool | Int` (crates/antlr-rust-runtime/src/semir.rs:222); text nodes evaluate to
+`Null` outside comparisons (crates/antlr-rust-runtime/src/semir.rs:384); `AStmt::SetReturn` coerces through
+`int_or_zero` (crates/antlr-rust-runtime/src/semir.rs:361); return storage is `BTreeMap<String, i64>`
+(crates/antlr-rust-runtime/src/tree.rs:197). Lowering `$ID.text` or concatenation through this today would
 silently become `0`/empty — another silent-wrong path.
 
 String support therefore requires, *in order*:

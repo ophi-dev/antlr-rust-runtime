@@ -20,6 +20,7 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parents[2]
 BENCH_ROOT = Path(__file__).resolve().parent
 FIXTURE_ROOT = BENCH_ROOT / "fixtures"
+RUNTIME_CRATE = Path("crates/antlr-rust-runtime")
 DEFAULT_ANTLR_JAR = ROOT / "target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"
 DEFAULT_GRAMMARS_V4 = ROOT / "target/antlr-cleanroom/grammars-v4"
 # ANTLR 4.13.2 still generates Go imports for github.com/antlr4-go/antlr/v4,
@@ -441,7 +442,7 @@ def write_rust_runner(
         'perf-counters = ["antlr-rust-runtime/perf-counters"]',
         "",
         "[dependencies]",
-        f'antlr-rust-runtime = {{ path = "{runtime_root}" }}',
+        f'antlr-rust-runtime = {{ path = "{runtime_root / RUNTIME_CRATE}" }}',
         "",
         "[workspace]",
         "",
@@ -1688,7 +1689,7 @@ def parse_args() -> argparse.Namespace:
         "--runtime-root",
         type=Path,
         default=ROOT,
-        help="Runtime checkout to generate and link into the Rust benchmark runner.",
+        help="Workspace checkout to generate and link into the Rust benchmark runner.",
     )
     parser.add_argument("--work-dir", type=Path, default=ROOT / "target" / "parse-bench")
     parser.add_argument("--python", default=os.environ.get("PYTHON", sys.executable))
@@ -1794,7 +1795,11 @@ def main() -> int:
     fixtures = load_fixtures(set(languages), args.phase)
     require_path(args.antlr_jar, "ANTLR jar")
     require_path(args.grammars_v4, "grammars-v4 checkout")
-    require_path(args.runtime_root / "Cargo.toml", "runtime Cargo manifest")
+    require_path(args.runtime_root / "Cargo.toml", "workspace Cargo manifest")
+    require_path(
+        args.runtime_root / RUNTIME_CRATE / "Cargo.toml",
+        "runtime crate Cargo manifest",
+    )
     if args.rust_pgo_generate is not None and args.rust_pgo_generate.exists():
         if not args.rust_pgo_generate.is_dir():
             raise SystemExit(

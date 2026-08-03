@@ -1,0 +1,16 @@
+---
+source: crates/antlr-rust-runtime/src/tree_pattern.rs
+expression: chunks
+---
+[
+    Text(
+        "a < b ",
+    ),
+    Tag {
+        name: "ID",
+        label: None,
+    },
+    Text(
+        " c > d",
+    ),
+]

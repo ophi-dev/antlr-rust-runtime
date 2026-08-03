@@ -33,6 +33,12 @@ if [[ "${#versions[@]}" -ne 1 ]]; then
 fi
 version="${versions[0]}"
 
+release_version="$(<VERSION)"
+if [[ "$release_version" != "$version" ]]; then
+    echo "VERSION $release_version does not match workspace version $version" >&2
+    exit 1
+fi
+
 if [[ "${1:-}" == "--version" ]]; then
     if [[ "$#" -ne 2 ]]; then
         echo "usage: $0 [--version VERSION]" >&2

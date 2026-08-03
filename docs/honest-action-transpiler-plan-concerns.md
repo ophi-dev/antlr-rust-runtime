@@ -53,7 +53,7 @@ Evidence:
 - Existing label handling for `$label.y` resolves the label to a rule name only
   (`src/bin/antlr4-rust-gen.rs:7100`).
 - The read path then uses `first_rule_int_return`, a depth-first first match by
-  rule index (`src/tree.rs:61`).
+  rule index (`crates/antlr-rust-runtime/src/tree.rs:61`).
 
 Concern: resolving `$a.v`, `$b.v`, `$left.v`, `$e.v`, and common-label cases by
 rule name or depth-first search will be wrong whenever an alternative contains
@@ -78,12 +78,12 @@ and `SetReturn` coerces the evaluated value through `int_or_zero`.
 
 Evidence:
 
-- `src/semir.rs:219` defines `Value` as `Null | Bool | Int`.
-- `src/semir.rs:384` says text-valued nodes evaluate to `Null` outside
+- `crates/antlr-rust-runtime/src/semir.rs:219` defines `Value` as `Null | Bool | Int`.
+- `crates/antlr-rust-runtime/src/semir.rs:384` says text-valued nodes evaluate to `Null` outside
   comparisons.
-- `src/semir.rs:361` stores `AStmt::SetReturn` through `int_or_zero`.
-- `src/semir.rs:275` exposes `ActContext::set_return(&str, i64)`.
-- `src/parser.rs:1042` and `src/tree.rs:276` store return values as integer
+- `crates/antlr-rust-runtime/src/semir.rs:361` stores `AStmt::SetReturn` through `int_or_zero`.
+- `crates/antlr-rust-runtime/src/semir.rs:275` exposes `ActContext::set_return(&str, i64)`.
+- `crates/antlr-rust-runtime/src/parser.rs:1042` and `crates/antlr-rust-runtime/src/tree.rs:276` store return values as integer
   maps only.
 
 Concern: lowering `$ID.text` or string concatenation through the current SemIR

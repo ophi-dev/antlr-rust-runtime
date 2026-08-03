@@ -10,9 +10,9 @@ guidance in docs or tests for that language.
 
 ## Generated-code API revision
 
-`src/lib.rs::__ANTLR4_RUST_CODEGEN_API` is the single current revision emitted
+`crates/antlr-rust-runtime/src/lib.rs::__ANTLR4_RUST_CODEGEN_API` is the single current revision emitted
 by `antlr4-rust-gen`. The accepted revisions are the literal match arms in
-`src/lib.rs::__antlr4_rust_require_codegen_api!`.
+`crates/antlr-rust-runtime/src/lib.rs::__antlr4_rust_require_codegen_api!`.
 
 Any change that makes newly generated source require an incompatible runtime
 interface, or makes existing generated source incompatible with the runtime,
@@ -115,9 +115,9 @@ regular sync + adaptive body (see the README "Decision Tiers" section).
 
 The harness runs descriptors the way every official ANTLR target does:
 each descriptor grammar is rendered through
-`tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
+`tests/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
 StringTemplate engine
-(`tools/antlr-rust-runtime-testsuite/java/RenderGrammar.java`, executed via the ANTLR jar and the
+(`tests/antlr-rust-runtime-testsuite/java/RenderGrammar.java`, executed via the ANTLR jar and the
 Java single-file source launcher), so its actions/predicates become real
 Rust code. The rendered grammar feeds `antlr4-rust-gen --actions embedded`
 directly, which splices the bodies verbatim
@@ -252,7 +252,7 @@ it shellchecks `run:` scripts too.
 Run `cargo fmt` on files you touched before committing so formatting-only churn
 doesn't ride along with logic changes (and never bulk-`cargo fmt` unrelated files
 in a logic commit). Hand-grouped data — e.g. the positional serialized-ATN
-fixtures in `src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
+fixtures in `crates/antlr-rust-runtime/src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
 ANTLR layout — carries `#[rustfmt::skip]`; leave those attributes in place rather
 than letting fmt explode the block to one element per line.
 

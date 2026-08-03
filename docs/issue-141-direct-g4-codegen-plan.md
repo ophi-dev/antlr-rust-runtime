@@ -121,7 +121,7 @@ The concrete coupling is:
 `GrammarMetadata` already avoids embedding duplicate serialized parser data:
 `render_parser_metadata` passes an empty ATN slice at
 `src/bin/antlr4-rust-gen.rs:10014-10018`. This makes `ParserAtnBuilder`
-(`src/atn/parser_atn.rs:1182-1348`) the established final parser artifact
+(`crates/antlr-rust-runtime/src/atn/parser_atn.rs:1182-1348`) the established final parser artifact
 rather than a new format to design.
 
 ### 2.3 Positional machinery that must be removed
@@ -476,7 +476,7 @@ src/bin_support/grammar/
 existing Rust emitter modules
 ```
 
-Do not place the frontend in `src/lib.rs`:
+Do not place the frontend in `crates/antlr-rust-runtime/src/lib.rs`:
 
 - runtime users should not compile or see a grammar compiler API;
 - exposing tool-model types would prematurely freeze them;
@@ -1644,9 +1644,9 @@ Primary existing-file changes:
 | `src/bin/antlr4-rust-gen.rs` | shrink to source-only CLI, compile, and emit |
 | `src/bin_support/embedded.rs` | consume structural model; keep only embedded-Rust body lowering |
 | `src/bin_support/templates.rs` | keep body/template parsing; remove grammar-wide structural scans |
-| `src/atn/parser_atn.rs` | minimal lowering APIs if the private build graph proves they are needed |
-| `src/atn/mod.rs` | minimal lexer construction/encoding support |
-| `src/generated.rs` | distinguish parser metadata from `LexerRuntimeArtifact` cleanly |
+| `crates/antlr-rust-runtime/src/atn/parser_atn.rs` | minimal lowering APIs if the private build graph proves they are needed |
+| `crates/antlr-rust-runtime/src/atn/mod.rs` | minimal lexer construction/encoding support |
+| `crates/antlr-rust-runtime/src/generated.rs` | distinguish parser metadata from `LexerRuntimeArtifact` cleanly |
 | `src/bin/antlr4-runtime-testsuite.rs` | direct roots/imports, no metadata Java stage or concatenation |
 | `tests/*-parity/run.sh` | direct Rust generation |
 | `tools/parse-bench/run.py` | direct Rust generation independent of oracle targets |

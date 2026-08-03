@@ -1,0 +1,37 @@
+---
+source: crates/antlr-rust-runtime/src/parser.rs
+expression: "*diagnostics.lock().expect(\"recorded diagnostics lock\")"
+---
+[
+    RecordedDiagnostic {
+        grammar_file_name: "Mini.g4",
+        offending_text: None,
+        line: 1,
+        column: 1,
+        span: Some(
+            1..2,
+        ),
+        message: "token recognition error at: '@'",
+        error: None,
+    },
+    RecordedDiagnostic {
+        grammar_file_name: "Mini.g4",
+        offending_text: None,
+        line: 1,
+        column: 2,
+        span: None,
+        message: "missing 'x' at 'y'",
+        error: None,
+    },
+    RecordedDiagnostic {
+        grammar_file_name: "Mini.g4",
+        offending_text: None,
+        line: 1,
+        column: 3,
+        span: Some(
+            3..4,
+        ),
+        message: "token recognition error at: '#'",
+        error: None,
+    },
+]
