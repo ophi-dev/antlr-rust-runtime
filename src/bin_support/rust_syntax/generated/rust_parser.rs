@@ -55118,25 +55118,21 @@ where
                     if allow_generated_fallback && __report_error {
                         self.base.report_generated_parser_diagnostics();
                     }
-                    // A generated predicate that consulted an unimplemented hook
-                    // (returning None under the Error policy) fails the alternative
-                    // and surfaces here as a generic failed-predicate/rule error.
-                    // The documented contract is to fail loud with
-                    // `AntlrError::Unsupported`, so prefer a recorded semantic error
-                    // over the generic one — but only at the top-level entry, mirroring
-                    // the post-parse check below: a nested child keeps its hits so the
-                    // generated parent surfaces them at that boundary instead.
                     if allow_generated_fallback {
+                        // A sticky abort (depth cap, listener) wins over an
+                        // error or semantic miss derived after recovery absorbed
+                        // the aborted rule. Drain any masked semantic miss too,
+                        // so neither condition poisons the next entry.
+                        if let Some(abort) = self.base.take_parse_abort() {
+                            let _ = self.base.take_unknown_semantic_error();
+                            return Err(abort);
+                        }
+                        // A generated predicate that consulted an unimplemented
+                        // hook fails the alternative and surfaces here as a generic
+                        // failed-predicate/rule error. Prefer the recorded fail-loud
+                        // semantic error when no parser abort occurred.
                         if let Some(semantic_error) = self.base.take_unknown_semantic_error() {
                             return Err(semantic_error);
-                        }
-                        // A sticky abort (depth cap, listener) wins over an
-                        // error derived from it (e.g. a sync failure after
-                        // recovery absorbed the aborted rule): the caller must
-                        // learn the real cause, and draining un-poisons the
-                        // instance for the next entry-rule call.
-                        if let Some(abort) = self.base.take_parse_abort() {
-                            return Err(abort);
                         }
                     }
                     let error = error.into_error();
@@ -55151,26 +55147,19 @@ where
         } else {
             self.parse_interpreted_rule_precedence(rule_index, precedence)?
         };
-        // Surface unknown-predicate coordinates recorded under the Error policy
-        // at the top-level entry. Generated predicate steps evaluate on the
-        // committed path and are recovered as rule errors, so a parse that
-        // consulted an unimplemented hook predicate must fail with
-        // `AntlrError::Unsupported` instead of returning a recovered `Ok` tree.
-        if allow_generated_fallback {
-            if let Some(error) = self.base.take_unknown_semantic_error() {
-                return Err(error);
-            }
-        }
         if allow_generated_fallback {
             self.base.report_generated_parser_diagnostics();
-            if let Some(error) = self.base.take_unknown_semantic_error() {
-                return Err(error);
-            }
             // A sticky abort (depth-cap violation, listener abort) is not a
             // syntax error: rule-level recovery may have produced a tree
-            // anyway, but the parse must still fail (and a reused parser
-            // must start clean).
+            // and semantic miss anyway, but the abort is the root cause. Drain
+            // both sticky conditions before returning so parser reuse is clean.
             if let Some(error) = self.base.take_parse_abort() {
+                let _ = self.base.take_unknown_semantic_error();
+                return Err(error);
+            }
+            // Surface unknown predicate/action coordinates recorded under the
+            // Error policy only after parser aborts have been ruled out.
+            if let Some(error) = self.base.take_unknown_semantic_error() {
                 return Err(error);
             }
         }

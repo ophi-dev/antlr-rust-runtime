@@ -8823,11 +8823,11 @@ fn render_parser_parse_rule_fallback(options: ParserFallbackRender<'_>) -> Strin
     } = options;
     let mut out = String::new();
     let action_indices = render_parser_action_index_array(action_indices);
+    let rule_args = render_parser_rule_arg_array(rule_args);
     if has_predicate_dispatch || unknown_policy_literal.is_some() {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
-            render_parser_rule_arg_array(rule_args),
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{rule_args}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
             unknown_policy_literal
                 .unwrap_or("antlr4_runtime::UnknownSemanticPolicy::AssumeTrue")
         )
@@ -8835,13 +8835,13 @@ fn render_parser_parse_rule_fallback(options: ParserFallbackRender<'_>) -> Strin
     } else if track_alt_numbers || track_context_alt_numbers {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, rule_args: &{rule_args}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
         )
         .expect("writing to a string cannot fail");
     } else if has_action_dispatch {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, rule_args: &{rule_args}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
         )
         .expect("writing to a string cannot fail");
     } else {
@@ -14511,25 +14511,21 @@ where
                     if allow_generated_fallback && __report_error {{
                         self.base.report_generated_parser_diagnostics();
                     }}
-                    // A generated predicate that consulted an unimplemented hook
-                    // (returning None under the Error policy) fails the alternative
-                    // and surfaces here as a generic failed-predicate/rule error.
-                    // The documented contract is to fail loud with
-                    // `AntlrError::Unsupported`, so prefer a recorded semantic error
-                    // over the generic one — but only at the top-level entry, mirroring
-                    // the post-parse check below: a nested child keeps its hits so the
-                    // generated parent surfaces them at that boundary instead.
                     if allow_generated_fallback {{
+                        // A sticky abort (depth cap, listener) wins over an
+                        // error or semantic miss derived after recovery absorbed
+                        // the aborted rule. Drain any masked semantic miss too,
+                        // so neither condition poisons the next entry.
+                        if let Some(abort) = self.base.take_parse_abort() {{
+                            let _ = self.base.take_unknown_semantic_error();
+                            return Err(abort);
+                        }}
+                        // A generated predicate that consulted an unimplemented
+                        // hook fails the alternative and surfaces here as a generic
+                        // failed-predicate/rule error. Prefer the recorded fail-loud
+                        // semantic error when no parser abort occurred.
                         if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
                             return Err(semantic_error);
-                        }}
-                        // A sticky abort (depth cap, listener) wins over an
-                        // error derived from it (e.g. a sync failure after
-                        // recovery absorbed the aborted rule): the caller must
-                        // learn the real cause, and draining un-poisons the
-                        // instance for the next entry-rule call.
-                        if let Some(abort) = self.base.take_parse_abort() {{
-                            return Err(abort);
                         }}
                     }}
                     let error = error.into_error();
@@ -14544,26 +14540,19 @@ where
         }} else {{
             self.parse_interpreted_rule_precedence(rule_index, precedence)?
         }};
-        // Surface unknown-predicate coordinates recorded under the Error policy
-        // at the top-level entry. Generated predicate steps evaluate on the
-        // committed path and are recovered as rule errors, so a parse that
-        // consulted an unimplemented hook predicate must fail with
-        // `AntlrError::Unsupported` instead of returning a recovered `Ok` tree.
-        if allow_generated_fallback {{
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
-            }}
-        }}
         if allow_generated_fallback {{
             self.base.report_generated_parser_diagnostics();
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
-            }}
             // A sticky abort (depth-cap violation, listener abort) is not a
             // syntax error: rule-level recovery may have produced a tree
-            // anyway, but the parse must still fail (and a reused parser
-            // must start clean).
+            // and semantic miss anyway, but the abort is the root cause. Drain
+            // both sticky conditions before returning so parser reuse is clean.
             if let Some(error) = self.base.take_parse_abort() {{
+                let _ = self.base.take_unknown_semantic_error();
+                return Err(error);
+            }}
+            // Surface unknown predicate/action coordinates recorded under the
+            // Error policy only after parser aborts have been ruled out.
+            if let Some(error) = self.base.take_unknown_semantic_error() {{
                 return Err(error);
             }}
         }}
@@ -18736,11 +18725,13 @@ mod tests {
 
     #[test]
     fn parse_rule_fallback_runs_parser_actions() {
+        let rule_args = [(4, 2, RuleArgTemplate::Literal(17))];
+        let action_indices = [(5, 0)];
         let fallback = render_parser_parse_rule_fallback(ParserFallbackRender {
             track_alt_numbers: false,
             track_context_alt_numbers: false,
-            rule_args: &[],
-            action_indices: &[],
+            rule_args: &rule_args,
+            action_indices: &action_indices,
             has_action_dispatch: true,
             has_predicate_dispatch: false,
             unknown_policy_literal: None,
@@ -18748,6 +18739,9 @@ mod tests {
 
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
+        ));
+        assert!(fallback.contains(
+            "rule_args: &[antlr4_runtime::ParserRuleArg { source_state: 4, rule_index: 2, value: 17, inherit_local: false }]"
         ));
         assert!(fallback.contains("for action in actions { self.run_action(action, tree); }"));
         assert!(fallback.contains("Ok(tree)"));
@@ -23122,8 +23116,8 @@ dispose = "hook"
             .find("if let Some(abort) = self.base.take_parse_abort()")
             .expect("the Err arm drains a recorded parser abort");
         assert!(
-            diagnostics_at < semantic_at && diagnostics_at < abort_at,
-            "retained diagnostics must be dispatched before either override can return"
+            diagnostics_at < abort_at && abort_at < semantic_at,
+            "retained diagnostics must dispatch first, then parser aborts must precede semantic misses"
         );
     }
 

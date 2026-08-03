@@ -7958,6 +7958,7 @@ where
         let top_level_entry = self.is_top_level_entry();
         self.unknown_predicate_policy = options.unknown_predicate_policy;
         let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
+        let prior_unhandled_action_hits = std::mem::take(&mut self.unhandled_action_hits);
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
         self.reset_recognition_arena();
@@ -7991,11 +7992,14 @@ where
         if top_level_entry {
             self.report_generated_parser_diagnostics();
         }
-        if let Some(error) = self.unknown_semantic_error() {
+        let semantic_error = self.unknown_semantic_error();
+        self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
+        self.restore_prior_unhandled_action_hits(prior_unhandled_action_hits);
+        if top_level_entry && let Some(error) = self.take_parse_abort() {
+            self.reset_unknown_semantic_hits();
             return Err(error);
         }
-        self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
-        if top_level_entry && let Some(error) = self.take_parse_abort() {
+        if let Some(error) = semantic_error {
             return Err(error);
         }
         result.map(|outcome| (outcome.tree, deferred_actions))
@@ -11716,6 +11720,21 @@ where
             }
         }
         self.unknown_predicate_hits = merged;
+    }
+
+    /// Re-inserts unhandled action coordinates recorded before a nested
+    /// committed parse so only that child parse's misses affect its result.
+    fn restore_prior_unhandled_action_hits(&mut self, prior: Vec<(usize, usize)>) {
+        if prior.is_empty() {
+            return;
+        }
+        let mut merged = prior;
+        for coordinate in std::mem::take(&mut self.unhandled_action_hits) {
+            if !merged.contains(&coordinate) {
+                merged.push(coordinate);
+            }
+        }
+        self.unhandled_action_hits = merged;
     }
 
     /// Applies the active [`UnknownSemanticPolicy`] to a predicate coordinate
@@ -16150,6 +16169,60 @@ mod tests {
         finish_atn(atn)
     }
 
+    fn action_then_nested_rule_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::RuleStop, 0),
+            (4, AtnStateKind::RuleStart, 1),
+            (5, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 4])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![3, 5])
+            .expect("rule stop states");
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Action {
+                target: 1,
+                rule_index: 0,
+                action_index: None,
+                context_dependent: false,
+            },
+        )
+        .expect("parent action");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("nested rule call");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("parent stop");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("child EOF");
+        finish_atn(atn)
+    }
+
     fn losing_alternative_action_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         for (state_number, kind) in [
@@ -19145,6 +19218,38 @@ mod tests {
     }
 
     #[test]
+    fn nested_committed_parse_preserves_prior_unhandled_action_hits() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.unhandled_action_hits.push((7, 42));
+
+        parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a child with no action miss must not observe its parent's miss");
+
+        let error = parser
+            .take_unknown_semantic_error()
+            .expect("the parent's action miss must survive the nested committed parse");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("rule_index=7") && message.contains("state=42"),
+            "message: {message}"
+        );
+    }
+
+    #[test]
     fn unknown_predicate_policy_assume_false_kills_the_guarded_path() {
         let atn = predicate_after_token_atn();
         let mut parser = mini_parser(vec![
@@ -19403,6 +19508,21 @@ mod tests {
                 action.stop_index(),
             ));
             true
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct DecliningActionHooks {
+        actions: Vec<usize>,
+    }
+
+    impl SemanticHooks for DecliningActionHooks {
+        fn action<S>(&mut self, _ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+        where
+            S: TokenSource,
+        {
+            self.actions.push(action.source_state());
+            false
         }
     }
 
@@ -20264,6 +20384,44 @@ mod tests {
                 .to_string()
                 .contains("rule nesting depth limit of 1 exceeded"),
             "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn committed_abort_precedes_and_clears_unhandled_action_error() {
+        let atn = action_then_nested_rule_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![TestToken::eof("parser-test", 0, 1, 0)],
+            DecliningActionHooks::default(),
+        );
+        parser.set_max_rule_depth(Some(1));
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(0, 7)],
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("the recovered child abort must outrank the earlier action miss");
+
+        assert_eq!(parser.semantic_hooks.actions, [0]);
+        assert!(
+            error
+                .to_string()
+                .contains("rule nesting depth limit of 1 exceeded"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            parser.take_parse_abort().is_none(),
+            "the returned abort must not remain sticky"
+        );
+        assert!(
+            parser.take_unknown_semantic_error().is_none(),
+            "the masked action miss must not poison parser reuse"
         );
     }
 
