@@ -12922,7 +12922,9 @@ where
                     .and_then(|alternative| alternative.checked_sub(1))
                     .ok_or_else(|| self.parser.no_viable_alternative_error(decision_start))?;
             }
-            if let Some(diagnostic) = prediction.diagnostic.as_ref() {
+            if self.parser.report_diagnostic_errors
+                && let Some(diagnostic) = prediction.diagnostic.as_ref()
+            {
                 for alternative in diagnostic.conflicting_alts.clone() {
                     if semantic_results.contains_key(&alternative)
                         || !semantic_candidates
@@ -19789,6 +19791,42 @@ mod tests {
                 .expect("recorded diagnostics lock")
                 .is_empty(),
             "predicate filtering made the decision unambiguous"
+        );
+    }
+
+    #[test]
+    fn committed_walker_skips_diagnostic_only_predicates_when_reporting_is_disabled() {
+        let atn = predicate_gated_same_lookahead_atn([0, 1]);
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("x"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            RecordingHooks::default(),
+        );
+        parser.set_prediction_mode(PredictionMode::LlExactAmbigDetection);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    track_alt_numbers: true,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the first predicate-bearing alternative should parse");
+
+        let root = parser.node(tree).as_rule().expect("entry result is a rule");
+        assert_eq!(root.alt_number(), 1);
+        assert_eq!(
+            parser.semantic_hooks.predicates,
+            [
+                (0, 0, 0, Some("x".to_owned())),
+                (0, 0, 0, Some("x".to_owned())),
+            ],
+            "diagnostic-only alternatives must not invoke semantic hooks"
         );
     }
 

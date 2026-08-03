@@ -753,7 +753,11 @@ impl<'a> ParserAtnSimulator<'a> {
         &self.prediction_semantic_candidates
     }
 
-    pub(crate) const fn set_track_prediction_rule_calls(&mut self, track: bool) {
+    pub(crate) fn set_track_prediction_rule_calls(&mut self, track: bool) {
+        assert!(
+            self.shared_cache_key.is_none(),
+            "shared prediction simulators use a fixed untracked rule-call mode"
+        );
         self.track_prediction_rule_calls = track;
     }
 
@@ -2594,6 +2598,15 @@ mod tests {
 
         let simulator = ParserAtnSimulator::new_shared(atn);
         assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
+    }
+
+    #[test]
+    #[should_panic(expected = "shared prediction simulators use a fixed untracked rule-call mode")]
+    fn shared_simulator_rejects_rule_call_tracking_mode_changes() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        let mut simulator = ParserAtnSimulator::new_shared(atn);
+
+        simulator.set_track_prediction_rule_calls(true);
     }
 
     #[test]

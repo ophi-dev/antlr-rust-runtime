@@ -4652,7 +4652,7 @@ fn generated_atn_preferred_rule_calls(
 
 #[cfg(test)]
 fn generated_adaptive_atn_preferred_rule_calls(rules: &[Option<GeneratedParserRule>]) -> Vec<bool> {
-    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &BTreeSet::new())
+    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &BTreeSet::new(), &BTreeSet::new())
 }
 
 struct GeneratedAdaptiveAtnRouting {
@@ -4712,15 +4712,25 @@ fn generated_atn_preferred_rule_calls_excluding(
 fn generated_adaptive_atn_preferred_rule_calls_excluding(
     rules: &[Option<GeneratedParserRule>],
     force_generated: &BTreeSet<usize>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> Vec<bool> {
-    generated_adaptive_atn_routing_excluding(rules, force_generated).candidates
+    generated_adaptive_atn_routing_excluding(rules, force_generated, effectful_action_states)
+        .candidates
 }
 
 fn generated_adaptive_atn_routing_excluding(
     rules: &[Option<GeneratedParserRule>],
     force_generated: &BTreeSet<usize>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> GeneratedAdaptiveAtnRouting {
     let shapes = generated_rule_shapes(rules);
+    let action_rules = rules
+        .iter()
+        .flatten()
+        .filter(|rule| generated_steps_have_actions(&rule.steps, effectful_action_states))
+        .map(|rule| rule.rule_index)
+        .collect::<BTreeSet<_>>();
+    let action_rule_callers = generated_rule_callers_reaching(rules, &action_rules);
     let seeds = rules
         .iter()
         .flatten()
@@ -4764,6 +4774,10 @@ fn generated_adaptive_atn_routing_excluding(
         }
     }
     exclude_forced_generated_rules(&mut candidates, force_generated);
+    // Adaptive retry rewinds and reparses the candidate through the committed
+    // interpreter. Exclude every generated caller that could already have run
+    // an action before that retry boundary.
+    exclude_forced_generated_rules(&mut candidates, &action_rule_callers);
     let probe_candidate_rules = probe_candidate_rules
         .into_iter()
         .map(|candidates_for_probe| {
@@ -5042,6 +5056,31 @@ fn generated_steps_shape(steps: &[GeneratedParserStep]) -> GeneratedRuleShape {
         shape += generated_step_shape(step);
     }
     shape
+}
+
+fn generated_steps_have_actions(
+    steps: &[GeneratedParserStep],
+    effectful_action_states: &BTreeSet<usize>,
+) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::Action { source_state, .. } => {
+            effectful_action_states.contains(source_state)
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_have_actions(alt, effectful_action_states)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_have_actions(body, effectful_action_states)
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::CallRule { .. } => false,
+    })
 }
 
 fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
@@ -6326,13 +6365,18 @@ fn generated_adaptive_atn_preferred_rule_count(
     rules: &[Option<GeneratedParserRule>],
     embedded: bool,
     portable_required_generated_rules: Option<&BTreeSet<usize>>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> usize {
     let force_generated_rules =
         generated_force_generated_rules(rules, embedded, portable_required_generated_rules);
-    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &force_generated_rules)
-        .into_iter()
-        .filter(|preferred| *preferred)
-        .count()
+    generated_adaptive_atn_preferred_rule_calls_excluding(
+        rules,
+        &force_generated_rules,
+        effectful_action_states,
+    )
+    .into_iter()
+    .filter(|preferred| *preferred)
+    .count()
 }
 
 struct AdaptiveAtnParserRenderSlots {
@@ -6397,10 +6441,15 @@ fn render_generated_rule_routing(
     decision_routing: DecisionRoutingRender<'_>,
 ) -> (String, usize) {
     let direct_generated_rule_calls = rules.iter().map(Option::is_some).collect::<Vec<_>>();
+    let effectful_action_states = inline_action_statements
+        .iter()
+        .filter_map(|(state, statement)| (!statement.trim().is_empty()).then_some(*state))
+        .collect::<BTreeSet<_>>();
     let preferred_rule_count = generated_adaptive_atn_preferred_rule_count(
         rules,
         embedded.is_some(),
         portable_locals.map(|portable| portable.required_generated_rules),
+        &effectful_action_states,
     );
     let dispatch = render_generated_rule_dispatch_with_rule_names(
         rules,
@@ -6436,8 +6485,15 @@ fn render_generated_rule_dispatch_with_rule_names(
     );
     let atn_preferred_rule_calls =
         generated_atn_preferred_rule_calls_excluding(rules, rule_names, &force_generated_rules);
-    let adaptive_atn_routing =
-        generated_adaptive_atn_routing_excluding(rules, &force_generated_rules);
+    let effectful_action_states = inline_action_statements
+        .iter()
+        .filter_map(|(state, statement)| (!statement.trim().is_empty()).then_some(*state))
+        .collect::<BTreeSet<_>>();
+    let adaptive_atn_routing = generated_adaptive_atn_routing_excluding(
+        rules,
+        &force_generated_rules,
+        &effectful_action_states,
+    );
     let adaptive_atn_preferred_rule_slots = indexed_rule_slots(&adaptive_atn_routing.candidates);
     let adaptive_atn_probe_rule_slots = indexed_probe_slots(
         &adaptive_atn_routing.probe_candidate_rules,
@@ -17907,7 +17963,8 @@ mod tests {
             "left-recursive routing must remain separate from unconditional cascade routing"
         );
         let preferred = generated_adaptive_atn_preferred_rule_calls(&rules);
-        let routing = generated_adaptive_atn_routing_excluding(&rules, &BTreeSet::new());
+        let routing =
+            generated_adaptive_atn_routing_excluding(&rules, &BTreeSet::new(), &BTreeSet::new());
 
         assert!(
             preferred[0],
@@ -17934,8 +17991,60 @@ mod tests {
 
         let force_generated = generated_rule_callers_reaching(&rules, &BTreeSet::from([1]));
         assert_eq!(
-            generated_adaptive_atn_preferred_rule_calls_excluding(&rules, &force_generated),
+            generated_adaptive_atn_preferred_rule_calls_excluding(
+                &rules,
+                &force_generated,
+                &BTreeSet::new(),
+            ),
             vec![false, false, false, false, true]
+        );
+    }
+
+    #[test]
+    fn adaptive_atn_retries_exclude_effectful_action_rules_and_callers() {
+        let mut action_seed = left_recursive_rule(
+            1,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        );
+        action_seed.steps.push(GeneratedParserStep::Action {
+            source_state: 9_001,
+            rule_index: 1,
+            action_index: Some(0),
+        });
+        let mut synthetic_action_seed = left_recursive_rule(
+            2,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        );
+        synthetic_action_seed
+            .steps
+            .push(GeneratedParserStep::Action {
+                source_state: 9_002,
+                rule_index: 2,
+                action_index: Some(0),
+            });
+        let rules = vec![
+            Some(test_rule(0, {
+                let mut steps = (100..108).map(adaptive_loop).collect::<Vec<_>>();
+                steps.push(cr(1));
+                steps
+            })),
+            Some(action_seed),
+            Some(synthetic_action_seed),
+        ];
+        let effectful_action_states = BTreeSet::from([9_001]);
+
+        let routing = generated_adaptive_atn_routing_excluding(
+            &rules,
+            &BTreeSet::new(),
+            &effectful_action_states,
+        );
+
+        assert_eq!(routing.candidates, [false, false, true]);
+        assert!(
+            routing.probe_candidate_rules[1].is_empty(),
+            "an effectful action seed must not request a retry from its generated caller"
         );
     }
 

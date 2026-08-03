@@ -952,11 +952,14 @@ impl AtnConfig {
             .semantic_provenance
             .get_or_insert_with(|| Arc::new(PredictionSemanticProvenance::default()));
         let provenance = Arc::make_mut(provenance);
-        provenance.predicate_calls.push(PredictionPredicateCall {
+        let call = PredictionPredicateCall {
             rule_index,
             pred_index,
             rule_calls: provenance.active_rule_calls.clone(),
-        });
+        };
+        if !provenance.predicate_calls.contains(&call) {
+            provenance.predicate_calls.push(call);
+        }
     }
 
     pub(crate) fn prediction_predicate_calls(&self) -> &[PredictionPredicateCall] {
@@ -1394,6 +1397,23 @@ mod tests {
         ));
         assert_eq!(set.len(), 1);
         assert_eq!(arena.len(set.configs()[0].context), 2);
+    }
+
+    #[test]
+    fn predicate_provenance_is_idempotent_per_rule_path() {
+        let arena = ContextArena::new();
+        let mut config = AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena);
+        config.enter_prediction_rule(4, 2);
+        config.record_prediction_predicate(2, 3);
+        let after_first = config.prediction_predicate_calls().to_vec();
+
+        config.record_prediction_predicate(2, 3);
+
+        assert_eq!(
+            config.prediction_predicate_calls(),
+            after_first,
+            "revisiting one predicate on the same rule path must not grow closure keys"
+        );
     }
 
     #[test]
