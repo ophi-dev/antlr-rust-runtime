@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.26.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.25.0...v0.26.0) (2026-08-03)
+
+
+### Features
+
+* **codegen:** enforce generated runtime compatibility ([#274](https://github.com/ophi-dev/antlr-rust-runtime/issues/274)) ([39a09a8](https://github.com/ophi-dev/antlr-rust-runtime/commit/39a09a8acc41406ba6c3e460b9f54d4a32bad3a4))
+* **codegen:** run named parser actions at committed positions ([#287](https://github.com/ophi-dev/antlr-rust-runtime/issues/287)) ([dee1944](https://github.com/ophi-dev/antlr-rust-runtime/commit/dee1944d728287baf2f793122ed2326bf31336d5))
+* **codegen:** support antlr4rust embedded parser surface ([#270](https://github.com/ophi-dev/antlr-rust-runtime/issues/270)) ([f85c971](https://github.com/ophi-dev/antlr-rust-runtime/commit/f85c971d913d9f544f0b6609c4d55a3a97755b4c))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate intl to 0.6.0 ([#268](https://github.com/ophi-dev/antlr-rust-runtime/issues/268)) ([5bae7bf](https://github.com/ophi-dev/antlr-rust-runtime/commit/5bae7bfa2d73a4509052847f9de674f0afa943f1))
+
+
+### Performance Improvements
+
+* **codegen:** omit adaptive fallback from complete LL(1) dispatch ([#285](https://github.com/ophi-dev/antlr-rust-runtime/issues/285)) ([90a5052](https://github.com/ophi-dev/antlr-rust-runtime/commit/90a50520b2395fafe765096d1edac66eb67d6bcc))
+
 ## [0.25.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.24.0...v0.25.0) (2026-08-01)
 
 
