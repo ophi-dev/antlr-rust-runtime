@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testmusttrackpreviousgoodalt-c9f647e58d",
+  "active_revision_id": "testatninterpreter-testmusttrackpreviousgoodalt-c9f647e58d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testmusttrackpreviousgoodalt-c9f647e58d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatninterpreter-testmusttrackpreviousgoodalt-c9f647e58d/revisions/testatninterpreter-testmusttrackpreviousgoodalt-c9f647e58d-r1/manifest.json",
+      "closure_sha256": "8708e20e1d00f3ed78d9ad9a2087ed2d2e27f2625f2fd327cded42c0269e540c"
+    }
+  ]
+}

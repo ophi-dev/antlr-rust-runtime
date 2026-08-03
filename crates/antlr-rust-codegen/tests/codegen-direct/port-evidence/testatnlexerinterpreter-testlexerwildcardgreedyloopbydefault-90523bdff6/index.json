@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerwildcardgreedyloopbydefault-90523bdff6",
+  "active_revision_id": "testatnlexerinterpreter-testlexerwildcardgreedyloopbydefault-90523bdff6-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerwildcardgreedyloopbydefault-90523bdff6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerwildcardgreedyloopbydefault-90523bdff6/revisions/testatnlexerinterpreter-testlexerwildcardgreedyloopbydefault-90523bdff6-r1/manifest.json",
+      "closure_sha256": "38b1ea4c1c8b385b6292f524ad2d148201a84a04eb84d95eb2af71daae44e5ad"
+    }
+  ]
+}

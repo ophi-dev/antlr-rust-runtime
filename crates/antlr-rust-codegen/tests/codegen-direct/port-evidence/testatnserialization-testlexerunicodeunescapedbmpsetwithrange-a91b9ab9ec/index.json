@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
+  "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/revisions/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1/manifest.json",
+      "closure_sha256": "00b7ff3d7f5339830516978431ee13bb65615963e4b69ac8af5944b82a54756a"
+    }
+  ]
+}

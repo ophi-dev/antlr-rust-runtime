@@ -1,0 +1,6 @@
+---
+source: crates/antlr-rust-codegen/src/semantics/stack_member.rs
+assertion_line: 543
+expression: error.to_string()
+---
+duplicate member slot declaration "x"

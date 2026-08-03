@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-testcaseinsensitiveincombinedgrammar-6e1c4cb8b9",
+  "active_revision_id": "testparserexec-testcaseinsensitiveincombinedgrammar-6e1c4cb8b9-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-testcaseinsensitiveincombinedgrammar-6e1c4cb8b9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testparserexec-testcaseinsensitiveincombinedgrammar-6e1c4cb8b9/revisions/testparserexec-testcaseinsensitiveincombinedgrammar-6e1c4cb8b9-r1/manifest.json",
+      "closure_sha256": "0a58dc8398f0d238127b9b6d44063ccd050bc9dd693c6218fa082dbc33235857"
+    }
+  ]
+}

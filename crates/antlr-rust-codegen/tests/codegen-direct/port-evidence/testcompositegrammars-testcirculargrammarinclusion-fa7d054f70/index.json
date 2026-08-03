@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+  "active_revision_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/revisions/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1/manifest.json",
+      "closure_sha256": "623a4d7bbd7a94dcda4cbf532e5282c0bbb4fda276a210c1705e8417d53a63f1"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 7189
+expression: lowered.source
+---
+{
+#[cfg(not(any()))]
+#[allow(unused_imports)]
+use __antlr4rust_token_aliases::{CompatParser_CFG, CompatParser_ESCAPED_HEX, CompatParser_ESCAPED_UNICODE, CompatParser_ID};
+#[cfg(any())]
+use missing::format;
+let cfg_fallback = format!("{CompatParser_CFG}");
+let token = format!("{CompatParser_ID}");
+let standard = std::format!("{CompatParser_STD}", CompatParser_STD = __antlr4rust_token_aliases::CompatParser_STD);
+let escaped_unicode = format!("\u{7b}CompatParser_ESCAPED_UNICODE}");
+let escaped_hex = format!("\x7b\
+CompatParser_ESCAPED_HEX}");
+assert_eq!(helper::<A, B>(), 1, "{CompatParser_ASSERT}", CompatParser_ASSERT = __antlr4rust_token_aliases::CompatParser_ASSERT);
+let CompatParser_LOCAL = 7;
+let local = format!("{CompatParser_LOCAL}");
+macro_rules! format {
+("{CompatParser_SHADOWED}") => { "shadowed" };
+}
+let shadowed = format!("{CompatParser_SHADOWED}");
+token == "1" && standard == "4"
+&& escaped_unicode == "2" && escaped_hex == "3"
+&& !cfg_fallback.is_empty()
+&& local == "7" && shadowed == "shadowed"
+}

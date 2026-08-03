@@ -43,7 +43,7 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 grammar="$repo_root/third_party/rust-grammar/Rust.g4"
-checked_in="$repo_root/src/bin_support/rust_syntax/generated"
+checked_in="$repo_root/crates/antlr-rust-rs-parser/src/generated"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/antlr-rust-syntax.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 
@@ -51,7 +51,7 @@ cargo run \
     --quiet \
     --locked \
     --manifest-path "$repo_root/Cargo.toml" \
-    --features codegen \
+    -p antlr-rust-codegen \
     --bin antlr4-rust-gen \
     -- \
     "$grammar" \
@@ -68,7 +68,20 @@ if [[ "$mode" == update ]]; then
     echo "updated the checked-in Rust recognizer"
 else
     for output in "${outputs[@]}"; do
-        cmp "$work_dir/$output" "$checked_in/$output"
+        if [[ "$output" == *.rs ]]; then
+            sed -E \
+                -e '1s/v[^ ]+ -/v<generator-version> -/' \
+                -e 's/(__antlr4_rust_require_codegen_api!\([0-9]+, )"[^"]+"/\1"<generator-version>"/' \
+                "$work_dir/$output" >"$work_dir/generated-normalized-$output"
+            sed -E \
+                -e '1s/v[^ ]+ -/v<generator-version> -/' \
+                -e 's/(__antlr4_rust_require_codegen_api!\([0-9]+, )"[^"]+"/\1"<generator-version>"/' \
+                "$checked_in/$output" >"$work_dir/checked-normalized-$output"
+            cmp "$work_dir/generated-normalized-$output" \
+                "$work_dir/checked-normalized-$output"
+        else
+            cmp "$work_dir/$output" "$checked_in/$output"
+        fi
     done
     echo "the checked-in Rust recognizer is current"
 fi

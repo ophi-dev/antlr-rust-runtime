@@ -1,0 +1,16 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 21163
+expression: lowered
+---
+[
+    Some(
+        TokenPairAdjacent,
+    ),
+    Some(
+        ContextChildRuleTextNotEquals {
+            rule_name: "local_type",
+            text: "var",
+        },
+    ),
+]

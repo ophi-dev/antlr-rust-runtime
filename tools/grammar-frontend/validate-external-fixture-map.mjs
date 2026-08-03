@@ -16,9 +16,9 @@ const OUTCOMES = new Set(["valid", "semantic-error", "dependency-error"]);
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
-const inventory = await load("tests/codegen-direct/external-source-inventory.json");
-const fixtureMap = await load("tests/codegen-direct/external-fixture-map.json");
-const upstreamMap = await load("tests/codegen-direct/upstream-test-map.json");
+const inventory = await load("crates/antlr-rust-codegen/tests/codegen-direct/external-source-inventory.json");
+const fixtureMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/external-fixture-map.json");
+const upstreamMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json");
 const failures = [];
 
 expect(inventory.schema_version === 1, "inventory schema_version must be 1");

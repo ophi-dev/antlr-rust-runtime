@@ -3,9 +3,12 @@
 version = 4
 
 [[package]]
-name = "antlr-rust-runtime"
+name = "antlr-rust-codegen"
 version = "0.26.0"
 dependencies = [
+ "antlr-rust-g4-parser",
+ "antlr-rust-rs-parser",
+ "antlr-rust-runtime",
  "hmac-sha256",
  "icu_casemap",
  "icu_properties",
@@ -13,9 +16,42 @@ dependencies = [
  "intl",
  "memchr",
  "petgraph",
- "pretty_assertions",
+ "thiserror",
+]
+
+[[package]]
+name = "antlr-rust-g4-parser"
+version = "0.26.0"
+dependencies = [
+ "antlr-rust-runtime",
+ "insta",
+]
+
+[[package]]
+name = "antlr-rust-rs-parser"
+version = "0.26.0"
+dependencies = [
+ "antlr-rust-runtime",
+ "insta",
+]
+
+[[package]]
+name = "antlr-rust-runtime"
+version = "0.26.0"
+dependencies = [
+ "insta",
+ "memchr",
  "stacker",
  "thiserror",
+]
+
+[[package]]
+name = "antlr-rust-runtime-testsuite"
+version = "0.26.0"
+dependencies = [
+ "antlr-rust-codegen",
+ "antlr-rust-runtime",
+ "icu_properties",
 ]
 
 [[package]]
@@ -48,12 +84,6 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
-
-[[package]]
-name = "diff"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 
 [[package]]
 name = "displaydoc"
@@ -316,16 +346,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pretty_assertions"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
-dependencies = [
- "diff",
- "yansi",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,12 +562,6 @@ name = "writeable"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
-
-[[package]]
-name = "yansi"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"

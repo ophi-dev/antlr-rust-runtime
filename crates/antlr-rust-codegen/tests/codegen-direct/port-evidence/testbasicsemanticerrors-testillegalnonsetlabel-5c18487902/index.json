@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+  "active_revision_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1",
+  "revisions": [
+    {
+      "revision_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/revisions/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1/manifest.json",
+      "closure_sha256": "3ff333875a7fa91cac448afdbf5733e938950191da72d668533d903f88221c07"
+    }
+  ]
+}

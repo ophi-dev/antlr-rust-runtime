@@ -1,0 +1,8 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 6760
+expression: "format!(\"{}\\n---\\n{}\", translated_method.source,\ntranslated_const_argument.source)"
+---
+fn CompatParser_ID(&self) -> bool { __antlr4rust_token_aliases_2::CompatParser_ID == Self::ID }
+---
+Wrapper<{ __antlr4rust_token_aliases_2::CompatParser_OTHER as usize }>

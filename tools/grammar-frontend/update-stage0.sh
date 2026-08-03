@@ -64,7 +64,7 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 seed_dir="$repo_root/third_party/antlr-v4-grammar"
-checked_in_dir="$repo_root/src/bin_support/grammar/generated"
+checked_in_dir="$repo_root/crates/antlr-rust-g4-parser/src/generated"
 hash_file="$seed_dir/self-hosted.sha256"
 
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/antlr-self-host.XXXXXX")"
@@ -98,13 +98,33 @@ generate_frontend() {
         --require-generated-parser
 }
 
+compare_generated_source() {
+    local candidate="$1"
+    local checked_in="$2"
+    local candidate_normalized
+    local checked_in_normalized
+    candidate_normalized="$work_dir/candidate-$(basename "$candidate")"
+    checked_in_normalized="$work_dir/checked-$(basename "$checked_in")"
+    for pair in \
+        "$candidate:$candidate_normalized" \
+        "$checked_in:$checked_in_normalized"; do
+        local source="${pair%%:*}"
+        local normalized="${pair#*:}"
+        sed -E \
+            -e '1s/v[^ ]+ -/v<generator-version> -/' \
+            -e 's/(__antlr4_rust_require_codegen_api!\([0-9]+, )"[^"]+"/\1"<generator-version>"/' \
+            "$source" >"$normalized"
+    done
+    cmp "$candidate_normalized" "$checked_in_normalized"
+}
+
 echo "building Stage 0 generator"
 cargo build \
     --quiet \
     --locked \
     --manifest-path "$repo_root/Cargo.toml" \
     --target-dir "$work_dir/stage0-target" \
-    --features codegen \
+    -p antlr-rust-codegen \
     --bin antlr4-rust-gen
 
 echo "generating Stage 1"
@@ -123,9 +143,9 @@ rsync \
     "$repo_root/" \
     "$stage1_repo/"
 cp "$stage1_dir/antl_rv4_lexer.rs" \
-    "$stage1_repo/src/bin_support/grammar/generated/antlr_v4_lexer.rs"
+    "$stage1_repo/crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs"
 cp "$stage1_dir/antl_rv4_parser.rs" \
-    "$stage1_repo/src/bin_support/grammar/generated/antlr_v4_parser.rs"
+    "$stage1_repo/crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs"
 
 echo "building Stage 1 generator"
 cargo build \
@@ -133,7 +153,7 @@ cargo build \
     --locked \
     --manifest-path "$stage1_repo/Cargo.toml" \
     --target-dir "$work_dir/stage1-target" \
-    --features codegen \
+    -p antlr-rust-codegen \
     --bin antlr4-rust-gen
 
 echo "generating Stage 2"
@@ -157,9 +177,8 @@ cargo test \
     --locked \
     --manifest-path "$stage1_repo/Cargo.toml" \
     --target-dir "$work_dir/stage1-target" \
-    --features codegen \
-    --bin antlr4-rust-gen \
-    grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles \
+    -p antlr-rust-g4-parser \
+    frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles \
     -- \
     --exact
 cargo test \
@@ -167,9 +186,8 @@ cargo test \
     --locked \
     --manifest-path "$stage1_repo/Cargo.toml" \
     --target-dir "$work_dir/stage1-target" \
-    --features codegen \
-    --bin antlr4-rust-gen \
-    grammar::frontend::tests::malformed_bootstrap_inputs_fail_closed \
+    -p antlr-rust-g4-parser \
+    frontend::tests::malformed_bootstrap_inputs_fail_closed \
     -- \
     --exact
 
@@ -185,15 +203,15 @@ if [[ "$mode" == update ]]; then
             third_party/antlr-v4-grammar/ANTLRv4Parser.g4 \
             third_party/antlr-v4-grammar/predefined.tokens \
             third_party/antlr-v4-grammar/antlr-v4.toml \
-            src/bin_support/grammar/generated/antlr_v4_lexer.rs \
-            src/bin_support/grammar/generated/antlr_v4_parser.rs \
+            crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs \
+            crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs \
             >"$hash_file"
     )
     echo "updated the checked-in self-hosted frontend and hashes"
 else
-    cmp "$stage1_dir/antl_rv4_lexer.rs" \
+    compare_generated_source "$stage1_dir/antl_rv4_lexer.rs" \
         "$checked_in_dir/antlr_v4_lexer.rs"
-    cmp "$stage1_dir/antl_rv4_parser.rs" \
+    compare_generated_source "$stage1_dir/antl_rv4_parser.rs" \
         "$checked_in_dir/antlr_v4_parser.rs"
     (
         cd "$repo_root"

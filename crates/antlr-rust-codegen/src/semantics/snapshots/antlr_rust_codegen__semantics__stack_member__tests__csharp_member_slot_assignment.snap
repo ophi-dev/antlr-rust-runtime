@@ -1,0 +1,27 @@
+---
+source: crates/antlr-rust-codegen/src/semantics/stack_member.rs
+assertion_line: 517
+expression: "slots.entries().collect::<Vec<_>>()"
+---
+[
+    (
+        "curlyLevels",
+        Stack,
+        1,
+    ),
+    (
+        "interpolatedStringLevel",
+        Int,
+        0,
+    ),
+    (
+        "interpolatedVerbatiums",
+        Stack,
+        0,
+    ),
+    (
+        "verbatium",
+        Int,
+        1,
+    ),
+]

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af",
+  "active_revision_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/revisions/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af-r1/manifest.json",
+      "closure_sha256": "86ede1f4565133f6999db1cb4a50ff99e04d03362800a2fe5f157a6302ef9a00"
+    }
+  ]
+}

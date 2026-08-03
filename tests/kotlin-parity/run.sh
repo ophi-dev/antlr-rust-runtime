@@ -40,20 +40,23 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -z "$ANTLR4_JAR" ]; then
+if [ -z "$ANTLR4_JAR" ] || [ ! -f "$ANTLR4_JAR" ]; then
     echo "ANTLR4_JAR is required (env var or --antlr-jar)" >&2
     exit 2
 fi
-if [ -z "$GRAMMARS_V4" ]; then
+if [ -z "$GRAMMARS_V4" ] || [ ! -d "$GRAMMARS_V4" ]; then
     echo "GRAMMARS_V4 is required (env var or --grammars-v4)" >&2
     exit 2
 fi
+ANTLR4_JAR="$(cd "$(dirname "$ANTLR4_JAR")" && pwd)/$(basename "$ANTLR4_JAR")"
+GRAMMARS_V4="$(cd "$GRAMMARS_V4" && pwd)"
 
 if [ -z "$WORK_DIR" ]; then
     WORK_DIR="$(mktemp -d -t kotlin-parity.XXXXXX)"
     trap 'rm -rf "$WORK_DIR"' EXIT
 fi
 mkdir -p "$WORK_DIR/grammar" "$WORK_DIR/py-gen" "$WORK_DIR/rust-gen"
+WORK_DIR="$(cd "$WORK_DIR" && pwd)"
 
 KOTLIN_DIR="$GRAMMARS_V4/kotlin/kotlin"
 for grammar in KotlinLexer.g4 KotlinParser.g4 UnicodeClasses.g4; do
@@ -75,7 +78,7 @@ DUMPER_DIR="$SCRIPT_DIR/dumper"
 DUMPER_GEN="$DUMPER_DIR/src/generated"
 mkdir -p "$DUMPER_GEN"
 cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
-    --features codegen \
+    -p antlr-rust-codegen \
     --bin antlr4-rust-gen -- \
     "$WORK_DIR/grammar/KotlinLexer.g4" \
     "$WORK_DIR/grammar/KotlinParser.g4" \

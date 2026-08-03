@@ -1,0 +1,43 @@
+[package]
+name = "antlr-rust-codegen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "ANTLR v4 grammar compiler and Rust source generator"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/antlr-rust-codegen"
+license.workspace = true
+readme = "README.md"
+keywords = ["antlr", "antlr4", "codegen", "parser", "lexer"]
+categories = ["development-tools::build-utils", "parser-implementations", "parsing"]
+include = ["/Cargo.toml", "/README.md", "/src/**"]
+
+[lib]
+name = "antlr_rust_codegen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "antlr4-rust-gen"
+path = "src/bin/antlr4-rust-gen.rs"
+
+[dependencies]
+antlr-rust-runtime.workspace = true
+antlr-rust-g4-parser.workspace = true
+antlr-rust-rs-parser.workspace = true
+icu_casemap.workspace = true
+icu_properties.workspace = true
+intl.workspace = true
+petgraph.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+hmac-sha256.workspace = true
+insta.workspace = true
+memchr.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

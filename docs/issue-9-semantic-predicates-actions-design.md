@@ -11,8 +11,8 @@ codebase has since grown a working — but *closed* — heuristic system:
 
 | Layer | What exists today | Where |
 |---|---|---|
-| Grammar-source scraping | Brace/template matcher that finds action & predicate blocks in `.g4` text, in ANTLR serialization order | `src/bin_support/templates.rs` |
-| Generator-side classification | Closed enums `ActionTemplate` (~20 variants), `PredicateTemplate` (~16 variants), `RuleArgTemplate`, `IntMemberTemplate`; per-variant recognizers | `src/bin/antlr4-rust-gen.rs` |
+| Grammar-source scraping | Brace/template matcher that finds action & predicate blocks in `.g4` text, in ANTLR serialization order | `crates/antlr-rust-codegen/src/semantics/templates.rs` |
+| Generator-side classification | Closed enums `ActionTemplate` (~20 variants), `PredicateTemplate` (~16 variants), `RuleArgTemplate`, `IntMemberTemplate`; per-variant recognizers | `crates/antlr-rust-codegen/src/semantics/` |
 | Runtime predicate table | `ParserRuntimeOptions { predicates: &[(rule, pred, ParserPredicate)], rule_args, member_actions, return_actions }` — static data interpreted at parse/prediction time | `src/parser.rs:305-442` |
 | Lexer hook surface | `next_token_with_hooks(lexer, atn, custom_action, semantic_predicate, accept_adjuster)` — closure hooks; generator renders `run_action` / `run_predicate` match arms into the generated lexer | `src/atn/lexer.rs:199`, gen `render_lexer_predicate_method` |
 | Prediction semantics | `SemanticContext` (And/Or/Predicate) collected during closure, "action hides predicates" rule, `has_semantic_context` plumbed through DFA states | `src/prediction.rs:839`, `src/atn/parser.rs:1186` |

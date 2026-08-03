@@ -12,7 +12,7 @@ The Rust harness keeps the upstream descriptor/template contract but uses the
 direct source compiler:
 
 1. the ANTLR jar's StringTemplate engine renders each descriptor through
-   `Rust.test.stg`,
+   [`Rust.test.stg`](../tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg),
 2. `antlr4-rust-gen` compiles the rendered `.g4` root and import graph directly,
 3. the generated modules run against `antlr4_runtime`.
 
@@ -21,11 +21,14 @@ not generate Rust metadata or recognizers.
 
 ## Run Full Sweep
 
-On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
-live under `/tmp/antlr-cleanroom`, the full Rust sweep is:
+Keep the ANTLR jar and upstream runtime-testsuite under
+`target/antlr-cleanroom`. The repository ignores this directory, and unlike an operating-system
+temporary directory it is not periodically purged. `cargo clean` removes it.
+
+Run the full Rust sweep with:
 
 ```bash
-cargo run --quiet --bin antlr4-runtime-testsuite
+cargo run --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 ```
 
 In other environments, pass explicit paths or set `ANTLR4_JAR` and
@@ -34,9 +37,9 @@ In other environments, pass explicit paths or set `ANTLR4_JAR` and
 ## Run One Descriptor
 
 ```bash
-cargo run --bin antlr4-runtime-testsuite -- \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --descriptors /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite \
+cargo run -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- \
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --descriptors target/antlr-cleanroom/antlr4-upstream/runtime-testsuite \
   --case LexerExec/KeywordID
 ```
 
@@ -46,9 +49,9 @@ directly at its `resources/org/antlr/v4/test/runtime/descriptors` directory.
 ## Run a Group Sample
 
 ```bash
-cargo run --bin antlr4-runtime-testsuite -- \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --descriptors /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite \
+cargo run -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- \
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --descriptors target/antlr-cleanroom/antlr4-upstream/runtime-testsuite \
   --group LexerExec \
   --limit 20
 ```

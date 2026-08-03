@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
+  "active_revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/revisions/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1/manifest.json",
+      "closure_sha256": "2674e847643e598b6cd6be1bf652f09d4d0fcdc2af9252e558bb5b07f6a6385e"
+    }
+  ]
+}

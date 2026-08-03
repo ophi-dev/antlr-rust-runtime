@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51",
+  "active_revision_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51/revisions/testatnlexerinterpreter-testrecursivelexerrulerefwithwildcard-b355598a51-r1/manifest.json",
+      "closure_sha256": "6eb3f20acf044d75a227cfdcb45941447cfb8567f472baacce5133114ba11f7b"
+    }
+  ]
+}

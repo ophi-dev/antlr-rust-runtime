@@ -1,4 +1,4 @@
-name: Publish Crate
+name: Publish Workspace
 
 on:
   release:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   publish:
-    name: Publish to crates.io
+    name: Publish release set to crates.io
     runs-on: ubuntu-latest
     environment: release
 
@@ -38,20 +38,14 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          set -euo pipefail
           if [[ "$TAG" != v* ]]; then
             echo "::error::Release tag ${TAG} must start with v." >&2
             exit 1
           fi
 
           VERSION="${TAG#v}"
-          PACKAGE_VERSION="$(
-            cargo metadata --no-deps --format-version 1 |
-              jq -er '.packages[] | select(.name == "antlr-rust-runtime") | .version'
-          )"
-          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
-            echo "::error::Release tag ${TAG} does not match Cargo.toml version ${PACKAGE_VERSION}." >&2
-            exit 1
-          fi
+          tools/release/check-workspace-version.sh --version "$VERSION"
 
           TAG_SHA="$(git rev-parse "${TAG}^{commit}")"
           HEAD_SHA="$(git rev-parse HEAD)"
@@ -59,15 +53,131 @@ jobs:
             echo "::error::Checked out ${HEAD_SHA}, but ${TAG} resolves to ${TAG_SHA}." >&2
             exit 1
           fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Verify package
-        run: cargo publish --dry-run --locked
+      - name: Test complete workspace
+        run: cargo test --locked --workspace --all-features
+
+      - name: Preflight every package archive
+        # Local patches make the unpublished exact-version dependencies
+        # resolvable for archive construction only. Normal verified packaging
+        # still runs below after each predecessor is registry-visible.
+        run: tools/release/preflight-package-archives.sh
 
       - name: Authenticate with crates.io
         id: auth
         uses: rust-lang/crates-io-auth-action@v1.0.5
 
-      - name: Publish to crates.io
-        run: cargo publish --locked
+      - name: Publish packages in dependency order
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+          packages=(
+            antlr-rust-runtime
+            antlr-rust-g4-parser
+            antlr-rust-rs-parser
+            antlr-rust-codegen
+          )
+
+          api_status() {
+            local package="$1"
+            local version="${2:-}"
+            local suffix="$package"
+            if [[ -n "$version" ]]; then
+              suffix="${suffix}/${version}"
+            fi
+            curl --silent --show-error --location \
+              --retry 5 --retry-all-errors \
+              --user-agent "antlr-rust-runtime-publish (+https://github.com/${GITHUB_REPOSITORY})" \
+              --output "${RUNNER_TEMP}/crates-io-response.json" \
+              --write-out '%{http_code}' \
+              "https://crates.io/api/v1/crates/${suffix}"
+          }
+
+          package_exists() {
+            local package="$1"
+            local version="$2"
+            local status
+            status="$(api_status "$package" "$version")"
+            case "$status" in
+              200)
+                jq -e \
+                  --arg package "$package" \
+                  --arg version "$version" \
+                  '.version.crate == $package and .version.num == $version' \
+                  "${RUNNER_TEMP}/crates-io-response.json" >/dev/null
+                return 0
+                ;;
+              404)
+                return 1
+                ;;
+              *)
+                echo "::error::crates.io returned HTTP ${status} for ${package} ${version}." >&2
+                cat "${RUNNER_TEMP}/crates-io-response.json" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          check_normalized_name() {
+            local package="$1"
+            local normalized="${package//-/_}"
+            local status
+            status="$(api_status "$normalized")"
+            case "$status" in
+              200)
+                if ! jq -e --arg package "$package" \
+                  '.crate.id == $package' \
+                  "${RUNNER_TEMP}/crates-io-response.json" >/dev/null
+                then
+                  echo "::error::Normalized crate name ${normalized} belongs to another package." >&2
+                  exit 1
+                fi
+                ;;
+              404)
+                ;;
+              *)
+                echo "::error::crates.io returned HTTP ${status} for ${normalized}." >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          wait_for_registry() {
+            local package="$1"
+            local version="$2"
+            local poll_home
+            poll_home="$(mktemp -d)"
+            for attempt in {1..30}; do
+              if CARGO_HOME="$poll_home" \
+                cargo info "${package}@${version}" --registry crates-io \
+                  >/dev/null 2>&1
+              then
+                echo "${package} ${version} is visible in the sparse registry."
+                return 0
+              fi
+              echo "Waiting for ${package} ${version} registry visibility (${attempt}/30)..."
+              sleep 10
+            done
+            echo "::error::${package} ${version} did not become registry-visible." >&2
+            return 1
+          }
+
+          for package in "${packages[@]:1}"; do
+            check_normalized_name "$package"
+          done
+
+          for package in "${packages[@]}"; do
+            tools/release/verify-package-contents.sh "$package"
+            cargo package --locked -p "$package"
+            if package_exists "$package" "$VERSION"; then
+              echo "${package} ${VERSION} is already published; skipping."
+            else
+              cargo publish --locked -p "$package"
+            fi
+            wait_for_registry "$package" "$VERSION"
+          done
+
+      - name: Run registry-backed build-dependency smoke test
+        run: tools/release/registry-smoke.sh "$VERSION"

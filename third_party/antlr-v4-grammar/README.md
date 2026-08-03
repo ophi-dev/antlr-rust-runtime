@@ -9,7 +9,7 @@ The source changes are:
 
 - removal of the TypeScript-only `@header` block from `ANTLRv4Lexer.g4`; the
   Rust frontend supplies `LexerAdaptor` behavior in
-  `src/bin_support/grammar/lexer_adaptor.rs`;
+  `crates/antlr-rust-g4-parser/src/lexer_adaptor.rs`;
 - acceptance of a bare `RULE_REF` in `lexerAtom`, matching Java ANTLR's
   `ANTLRParser.g`, so the semantic pipeline can issue
   `PARSER_RULE_REF_IN_LEXER_RULE`;
@@ -50,8 +50,8 @@ third_party/antlr-v4-grammar/ANTLRv4Parser.g4
 Expected generated files:
 
 ```text
-src/bin_support/grammar/generated/antlr_v4_lexer.rs
-src/bin_support/grammar/generated/antlr_v4_parser.rs
+crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs
+crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs
 ```
 
 Their hashes, the intermediate `.interp` hashes, the seed JDK, and the exact

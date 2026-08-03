@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testcall2-9342fd98a3",
+  "active_revision_id": "testparserinterpreter-testcall2-9342fd98a3-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testcall2-9342fd98a3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testparserinterpreter-testcall2-9342fd98a3/revisions/testparserinterpreter-testcall2-9342fd98a3-r1/manifest.json",
+      "closure_sha256": "4c05d3c8414359843810b0c883b830cc0b7aee5d87d617a899f8ed80d4cc2776"
+    }
+  ]
+}

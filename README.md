@@ -4,10 +4,11 @@
 [![ANTLR Runtime Testsuite](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml/badge.svg)](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml)
 [![codecov](https://codecov.io/github/ophi-dev/antlr-rust-runtime/graph/badge.svg?token=QzgT4jB57u)](https://codecov.io/github/ophi-dev/antlr-rust-runtime)
 
-`antlr-rust-runtime` is a pure Rust runtime and source generator for ANTLR v4
-lexers and parsers. It is a clean-room implementation written from scratch from
-the public ANTLR runtime contract; it does not vendor or fork an older Rust
-ANTLR runtime.
+`antlr-rust-runtime` is a pure Rust runtime for ANTLR v4 lexers and parsers.
+The companion `antlr-rust-codegen` package provides the generator library and
+`antlr4-rust-gen` command. The implementation is written from scratch from the
+public ANTLR runtime contract; it does not vendor or fork an older Rust ANTLR
+runtime.
 
 ## First Steps
 
@@ -35,6 +36,9 @@ For Rust projects, add the runtime crate:
 ```toml
 [dependencies]
 antlr-rust-runtime = "0.26.0"
+
+[build-dependencies]
+antlr-rust-codegen = "0.26.0"
 ```
 
 <!-- x-release-please-end -->
@@ -48,7 +52,7 @@ use antlr4_runtime::{CommonTokenStream, InputStream};
 Install the companion generator binary:
 
 ```bash
-cargo install antlr-rust-runtime --features codegen --bin antlr4-rust-gen
+cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
 This installs `antlr4-rust-gen`, which compiles ANTLR `.g4` source into Rust
@@ -56,7 +60,33 @@ lexer and parser modules. During generation it also compiles the lexer's DFA
 ahead of time and embeds the tables in the generated lexer, so tokenization
 runs at full speed from the first character with no per-process warmup.
 
-### 3. Generate your parser
+The former `antlr-rust-runtime` `codegen` feature and generator binary have
+moved to `antlr-rust-codegen`. This packaging change does not alter the
+generated-source/runtime API revision.
+
+### 3. Generate at build time
+
+Build scripts can generate directly into Cargo's `OUT_DIR`:
+
+```rust
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let generation = antlr_rust_codegen::Builder::new()
+        .grammar("grammar/MyGrammarLexer.g4")
+        .grammar("grammar/MyGrammarParser.g4")
+        .library_directory("grammar")
+        .out_dir(std::env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"))
+        .generate()?;
+    generation.emit_rerun_if_changed();
+    Ok(())
+}
+```
+
+`Generation::inputs()` contains every resolved root, import, and token
+vocabulary. `Generation::outputs()` and `Generation::warnings()` expose the
+other build artifacts without process-global CLI state. Projects that commit
+generated source can omit the build dependency and use the command instead.
+
+### 4. Generate from the command line
 
 Pass one or more root grammars directly. Imports and `tokenVocab` dependencies
 are resolved from each root's directory and any additional `--lib`/`-I`
@@ -402,7 +432,10 @@ The runtime contains:
 - `Vocabulary`
 - recognizer metadata and error listener plumbing
 - parse tree node types, rule contexts, terminal nodes, error nodes, and walkers
-- parse-tree XPath queries on par with the official ANTLR runtimes
+- parse-tree XPath queries on par with the official ANTLR runtimes; XPath's
+  checked-in lexer intentionally remains in the runtime because XPath is a
+  runtime API, and extracting only its generated recognizer would introduce a
+  runtime dependency cycle
 - parse-tree pattern matching (`compileParseTreePattern` / `ParseTreePattern` /
   `ParseTreeMatch`) with rule/token tags, labels, and rule-bypass ATNs
 - ANTLR v4 serialized lexer ATN deserialization
@@ -415,10 +448,10 @@ The runtime contains:
 - versioned, packed parser ATN tables embedded directly in generated parsers,
   with rule recognition over borrowing state/transition views
 - canonical `ContextId` prediction graphs pooled with learned parser DFA state
-- `antlr4-rust-gen`, a source-only Rust generator that compiles `.g4` roots and
-  their import graph into Rust modules
-- `antlr4-runtime-testsuite`, a harness for running upstream ANTLR
-  runtime-test descriptors through the direct Rust source compiler
+
+The workspace also contains `antlr4-rust-gen`, the source-only generator in
+`antlr-rust-codegen`, and the unpublished `antlr4-runtime-testsuite` conformance
+harness.
 
 See [docs/kotlin-build.md](docs/kotlin-build.md) for the Kotlin smoke workflow.
 See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream
@@ -640,9 +673,9 @@ A worked example — the C# interpolated-string lexer, generated with
 `--sem-unknown error --require-full-semantics` (i.e. zero hooks and zero policy
 fallbacks) and validated token-for-token against an ANTLR 4.13.2 **Java** lexer
 built from the same grammar — lives in
-[`tests/fixtures/antlr4-rust-gen/stack-member-lexer/`](tests/fixtures/antlr4-rust-gen/stack-member-lexer/)
+[`crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/stack-member-lexer/`](crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/stack-member-lexer/)
 with its integration test (`inline_lexer_member_stacks_generate_without_hooks`
-in [tests/antlr4_rust_gen_cli.rs](tests/antlr4_rust_gen_cli.rs)).
+in [parser.rs](crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/parser.rs)).
 
 #### Embedded target-language actions are not portable — including in official ANTLR
 
@@ -867,31 +900,35 @@ lowers to a typed hook method via a `--sem-patterns` `[[helper]]` entry with
 A complete worked example — a Standard MIDI File grammar (MThd/MTrk chunks,
 variable-length delta-times, note and meta events) with a chunk-framing hook,
 parsed over a `ByteStream` from a real `.mid` fixture — lives in
-[`tests/fixtures/antlr4-rust-gen/midi-binary/`](tests/fixtures/antlr4-rust-gen/midi-binary/)
+[`crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/midi-binary/`](crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/midi-binary/)
 and its integration test (`midi_binary_grammar_parses_standard_midi_file_over_byte_stream`
-in [tests/antlr4_rust_gen_cli.rs](tests/antlr4_rust_gen_cli.rs)). The grammar is
+in [parser.rs](crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/parser.rs)). The grammar is
 adapted from [milnet2/midi-grammar](https://github.com/milnet2/midi-grammar)
 (Tobias Blaschke, BSD-3-Clause).
 
 ## Runtime Testsuite
 
-On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
-live under `/tmp/antlr-cleanroom`, run the full sweep with:
+Keep the ANTLR jar and upstream runtime-testsuite under
+`target/antlr-cleanroom`. The repository ignores this directory, and unlike an operating-system
+temporary directory it is not periodically purged. `cargo clean` removes it.
+
+Run the full sweep with:
 
 ```bash
-cargo run --release --quiet --bin antlr4-runtime-testsuite
+cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 ```
 
 The harness runs descriptors the way every official ANTLR target does: each
-descriptor grammar is rendered through `.conformance-review/Rust.test.stg`
-with the real StringTemplate engine, so its actions and predicates become real
-Rust code. The rendered `.g4` source graph is then compiled directly by
+descriptor grammar is rendered through
+`tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
+StringTemplate engine, so its actions and predicates become real Rust code.
+The rendered `.g4` source graph is then compiled directly by
 `antlr4-rust-gen`, and the resulting code is executed inline.
 
 Run a specific descriptor:
 
 ```bash
-cargo run --bin antlr4-runtime-testsuite -- \
+cargo run -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- \
   --antlr-jar path/to/antlr-4.13.2-complete.jar \
   --descriptors path/to/antlr4/runtime-testsuite \
   --case LexerExec/KeywordID

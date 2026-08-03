@@ -38,7 +38,7 @@ const EXPECTED_JAVA = {
 };
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
-const fixturesRoot = resolve(repositoryRoot, "tests/codegen-direct/fixtures");
+const fixturesRoot = resolve(repositoryRoot, "crates/antlr-rust-codegen/tests/codegen-direct/fixtures");
 const unicodeGenerator = resolve(
     scriptDirectory,
     "oracle/GenerateUnicodeData.java",
@@ -177,8 +177,8 @@ try {
     };
     manifest.regeneration_command =
         `tools/grammar-frontend/update-interp-fixtures.sh ${options.fixture} ` +
-        "--antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar " +
-        "--icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar";
+        "--antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar " +
+        "--icu-jar target/antlr-cleanroom/tools/icu4j-78.1.jar";
     manifest.files = await fixtureHashes(fixtureDirectory);
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
@@ -194,11 +194,11 @@ function parseArguments(args) {
     const result = {
         antlrJar:
             process.env.ANTLR4_JAR
-            ?? "/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"),
         fixture: null,
         icuJar:
             process.env.ICU4J_JAR
-            ?? "/tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/tools/icu4j-78.1.jar"),
         java: process.env.JAVA ?? "java",
     };
     for (let index = 0; index < args.length; index++) {

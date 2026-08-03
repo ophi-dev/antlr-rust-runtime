@@ -6,18 +6,20 @@ grammar.
 ## Inputs
 
 - Kotlin grammar from `antlr/grammars-v4`, directory `kotlin/kotlin`.
+- Keep the checkout and generated scratch files under the repository's ignored
+  `target/antlr-cleanroom/`; `cargo clean` removes them.
 
 ## Generate Rust Modules
 
 ```bash
-GRAMMAR=/tmp/antlr-cleanroom/grammars-v4/kotlin/kotlin
+GRAMMAR=target/antlr-cleanroom/grammars-v4/kotlin/kotlin
 
-cargo run --features codegen --bin antlr4-rust-gen -- \
+cargo run -p antlr-rust-codegen --bin antlr4-rust-gen -- \
   "$GRAMMAR/KotlinLexer.g4" \
   "$GRAMMAR/KotlinParser.g4" \
   --lib "$GRAMMAR" \
   --require-generated-parser \
-  --out-dir /tmp/antlr-cleanroom/kotlin-rust
+  --out-dir target/antlr-cleanroom/kotlin-rust
 ```
 
 `UnicodeClasses.g4` is resolved through `--lib`; it does not need to be listed

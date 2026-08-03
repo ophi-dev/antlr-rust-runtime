@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a",
+  "active_revision_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testparserexec-testfailedpredicateexceptionstate-3ff3f5083a/revisions/testparserexec-testfailedpredicateexceptionstate-3ff3f5083a-r1/manifest.json",
+      "closure_sha256": "c5c09f267377ecb827fe2b61fee14246364363a3e94a2c608a1d5c243c4a9610"
+    }
+  ]
+}

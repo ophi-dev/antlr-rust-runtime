@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691",
+  "active_revision_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testgreedybetweenrules-5a20e79691/revisions/testatnlexerinterpreter-testgreedybetweenrules-5a20e79691-r1/manifest.json",
+      "closure_sha256": "1f90b613f5bdb9f8dcb0cedcf260aeb6b35f2b3c4e58d79902f88a0f7bd27e1e"
+    }
+  ]
+}

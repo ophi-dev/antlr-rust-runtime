@@ -105,17 +105,18 @@ import {
     VOCABULARY_TEST_COMMIT,
     VSCODE_COMMIT,
     digest,
-    gitShowOptional,
+    gitShowOptional as gitShowAtPath,
     parseMode,
     stableStringify,
 } from "./evidence-common.mjs";
 
 const TEST_COMMAND =
-    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::";
-const TEST_MODULE_PATH = "src/bin_support/grammar/frontend.rs";
+    "cargo test --locked -p antlr-rust-g4-parser --lib frontend::tests::";
+const REFACTOR_BASE_COMMIT = "bd6710eaedbd79e652681b7b102e03680fd96fbd";
+const TEST_MODULE_PATH = "crates/antlr-rust-g4-parser/src/frontend.rs";
 const TEST_MODULE_MARKER = "#[cfg(test)]";
 const FRONTEND_SYNTAX_TEST_PATH =
-    "src/bin_support/grammar/ported_tests.rs";
+    "crates/antlr-rust-g4-parser/src/ported_tests.rs";
 const FRONTEND_SYNTAX_TEST_MARKER =
     "fn frontend_tool_syntax_cases_match_upstream_outcomes() {";
 const FRONTEND_SYNTAX_TEST_END =
@@ -123,10 +124,10 @@ const FRONTEND_SYNTAX_TEST_END =
 const FRONTEND_SYNTAX_REJECTED_MARKER =
     "    let rejected = [";
 const FRONTEND_SYNTAX_REJECTED_END = "\n    ];\n";
-const FRONTEND_SYNTAX_MODULE_PATH = "src/bin_support/grammar/mod.rs";
+const FRONTEND_SYNTAX_MODULE_PATH = "crates/antlr-rust-g4-parser/src/lib.rs";
 const FRONTEND_SYNTAX_MODULE_MARKER = "#[cfg(test)]\nmod ported_tests;";
 const ATN_SERIALIZATION_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const ATN_SERIALIZATION_TEST_START =
     "    mod upstream_atn_serialization {";
 const ATN_SERIALIZATION_TEST_END = "\n    fn assert_lexer_fixture";
@@ -146,7 +147,7 @@ const TOKEN_POSITION_TEST_START =
 const TOKEN_POSITION_TEST_END =
     "\n    struct ExpectedSemanticDiagnostic {";
 const TOPOLOGICAL_SORT_TEST_PATH =
-    "src/bin_support/grammar/loader.rs";
+    "crates/antlr-rust-codegen/src/grammar/loader.rs";
 const TOPOLOGICAL_SORT_TEST_START =
     "    mod upstream_topological_sort {";
 const TOPOLOGICAL_SORT_TEST_END =
@@ -160,16 +161,16 @@ const TOKEN_NAMES_VOCABULARY_TEST_START =
     "        #[test]\n        fn vocabulary_from_token_names_matches_java() {";
 const TOKEN_NAMES_VOCABULARY_TEST_END =
     "\n            );\n";
-const SCOPE_PARSING_TEST_PATH = "src/bin_support/embedded.rs";
+const SCOPE_PARSING_TEST_PATH = "crates/antlr-rust-codegen/src/embedded/mod.rs";
 const SCOPE_PARSING_TEST_START =
     "    mod upstream_scope_parsing {";
 const SCOPE_PARSING_TEST_END =
     "\n    #[test]\n    fn translates_attr_and_rule_reads()";
 const CHAR_SUPPORT_TEST_PATH =
-    "src/bin_support/grammar/char_support.rs";
+    "crates/antlr-rust-codegen/src/grammar/char_support.rs";
 const CHAR_SUPPORT_TEST_MARKER = "mod tests {";
 const NESTED_ACTION_TEST_PATH =
-    "src/bin_support/grammar/syntax.rs";
+    "crates/antlr-rust-codegen/src/grammar/syntax.rs";
 const NESTED_ACTION_TEST_MARKER =
     "        let rule = unit\n" +
     "            .rules\n" +
@@ -179,36 +180,36 @@ const NESTED_ACTION_TEST_END = "\n    }\n\n    #[test]";
 const NESTED_ACTION_LOGICAL_ID =
     "testlexeractions-nested-actions-3d175db5e5";
 const ESCAPE_SEQUENCE_TEST_PATH =
-    "src/bin_support/grammar/escape_sequence.rs";
+    "crates/antlr-rust-codegen/src/grammar/escape_sequence.rs";
 const ESCAPE_SEQUENCE_TEST_MARKER = "mod tests {";
 const ESCAPE_SEQUENCE_TEST_END =
     "\n    #[test]\n    fn parse_unicode_property_inverted_matches_java()";
 const UNICODE_ESCAPE_TEST_PATH =
-    "src/bin_support/grammar/unicode_escape.rs";
+    "crates/antlr-rust-codegen/src/grammar/unicode_escape.rs";
 const UNICODE_ESCAPE_TEST_MARKER = "mod tests {";
 const UNICODE_DATA_TEST_PATH =
-    "src/bin_support/grammar/unicode.rs";
+    "crates/antlr-rust-codegen/src/grammar/unicode.rs";
 const UNICODE_DATA_TEST_MARKER = "mod tests {";
 const UNICODE_GRAMMAR_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const UNICODE_GRAMMAR_TEST_START =
     "    mod upstream_unicode_grammar {";
 const UNICODE_GRAMMAR_TEST_END =
     "\n    fn assert_combined_fixture";
 const TOKEN_ASSIGNMENT_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const TOKEN_ASSIGNMENT_TEST_START =
     "    mod upstream_token_type_assignment {";
 const TOKEN_ASSIGNMENT_TEST_END =
     "\n    fn assert_lexer_interp";
 const LEFT_RECURSION_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const LEFT_RECURSION_TEST_START =
     "    mod upstream_left_recursion_tool_issues {";
 const LEFT_RECURSION_TEST_END =
     "\n    mod upstream_atn_construction {";
 const LOOKAHEAD_TREE_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const LOOKAHEAD_TREE_TEST_START =
     "    mod upstream_lookahead_trees {";
 const LOOKAHEAD_TREE_TEST_END =
@@ -216,20 +217,20 @@ const LOOKAHEAD_TREE_TEST_END =
 const LOOKAHEAD_TREE_HISTORICAL_TEST_END =
     LOOKAHEAD_TREE_TEST_END;
 const PHASE_C_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const PHASE_C_TEST_START =
     "    mod upstream_phase_c_runtime {";
 const PHASE_C_TEST_END =
     "\n    mod upstream_left_recursion_tool_issues {";
 const PHASE_C_CASES_PATH =
-    "tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs";
+    "crates/antlr-rust-codegen/tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs";
 const PHASE_C_CASES_MARKER =
     "// Generated by tools/grammar-frontend/generate-phase-c-runtime-fixtures.mjs.";
 const GRAPH_NODES_TEST_PATH = "src/prediction.rs";
 const GRAPH_NODES_TEST_MARKER =
     "    mod upstream_graph_nodes {";
 const SYMBOL_ISSUES_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const SYMBOL_ISSUES_TEST_START =
     "    mod upstream_symbol_issues {";
 const SYMBOL_ISSUES_TEST_END =
@@ -237,41 +238,41 @@ const SYMBOL_ISSUES_TEST_END =
 const SYMBOL_ISSUES_HISTORICAL_TEST_END =
     "\n    mod upstream_token_position_options {";
 const ATTRIBUTE_CHECKS_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const ATTRIBUTE_CHECKS_TEST_START =
     "    mod upstream_attribute_checks {";
 const ATTRIBUTE_CHECKS_TEST_END =
     "\n    mod upstream_symbol_issues {";
 const ATTRIBUTE_CHECKS_CASES_PATH =
-    "tests/codegen-direct/generated/attribute-checks-cases.inc.rs";
+    "crates/antlr-rust-codegen/tests/codegen-direct/generated/attribute-checks-cases.inc.rs";
 const ATTRIBUTE_CHECKS_CASES_MARKER =
     "// Generated by tools/grammar-frontend/generate-attribute-checks-fixtures.mjs.";
 const TOOL_SYNTAX_ERRORS_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const TOOL_SYNTAX_ERRORS_TEST_START =
     "    mod upstream_tool_syntax_errors {";
 const TOOL_SYNTAX_ERRORS_TEST_END =
     "\n        #[derive(Clone, Copy)]\n        struct ExpectedDiagnostic";
 const TOOL_SYNTAX_ERRORS_CASES_PATH =
-    "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs";
+    "crates/antlr-rust-codegen/tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs";
 const TOOL_SYNTAX_ERRORS_CASES_MARKER =
     "// Generated by tools/grammar-frontend/generate-tool-syntax-errors-fixtures.mjs.";
 const COMPOSITE_GRAMMARS_TEST_PATH =
-    "src/bin_support/grammar/atn/interp_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs";
 const COMPOSITE_GRAMMARS_TEST_START =
     "    mod upstream_composite_grammars {";
 const COMPOSITE_GRAMMARS_TEST_END =
     "\n    mod upstream_tool_syntax_errors {";
 const COMPOSITE_GRAMMARS_CASES_PATH =
-    "tests/codegen-direct/generated/composite-grammars-cases.inc.rs";
+    "crates/antlr-rust-codegen/tests/codegen-direct/generated/composite-grammars-cases.inc.rs";
 const COMPOSITE_GRAMMARS_CASES_MARKER =
     "// Generated by tools/grammar-frontend/generate-composite-grammars-fixtures.mjs.";
 const GENERAL_ATN_DOT_TEST_PATH =
-    "src/bin_support/grammar/atn/general_bug_test.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/general_bug_test.rs";
 const GENERAL_ATN_DOT_TEST_MARKER =
     "use std::collections::{BTreeMap, BTreeSet, VecDeque};";
 const GENERAL_ATN_DOT_MODULE_PATH =
-    "src/bin_support/grammar/atn/mod.rs";
+    "crates/antlr-rust-codegen/src/grammar/atn/mod.rs";
 const GENERAL_ATN_DOT_MODULE_MARKER =
     "#[cfg(test)]\nmod general_bug_test;";
 const GENERAL_ATN_DOT_MODULE_END =
@@ -295,7 +296,7 @@ const EXTERNAL_DEFINITIONS = {
             sha256: SYMBOL_INFO_SHA256,
         },
         canonical_input:
-            "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
+            "crates/antlr-rust-codegen/tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
         expected_observable: {
             named_action_bytes: [1090, 1264],
             parser_rule_bytes: [3421, 3650],
@@ -350,22 +351,65 @@ const EXTERNAL_DEFINITIONS = {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
+
+function historicalPath(path) {
+    const exactRenames = new Map([
+        [
+            "crates/antlr-rust-g4-parser/src/frontend.rs",
+            "src/bin_support/grammar/frontend.rs",
+        ],
+        [
+            "crates/antlr-rust-g4-parser/src/ported_tests.rs",
+            "src/bin_support/grammar/ported_tests.rs",
+        ],
+        [
+            "crates/antlr-rust-g4-parser/src/lib.rs",
+            "src/bin_support/grammar/mod.rs",
+        ],
+        [
+            "crates/antlr-rust-codegen/src/embedded/mod.rs",
+            "src/bin_support/embedded.rs",
+        ],
+    ]);
+    const exact = exactRenames.get(path);
+    if (exact) {
+        return exact;
+    }
+    if (path.startsWith("crates/antlr-rust-codegen/src/grammar/")) {
+        return path.replace(
+            "crates/antlr-rust-codegen/src/grammar/",
+            "src/bin_support/grammar/",
+        );
+    }
+    if (path.startsWith("crates/antlr-rust-codegen/tests/codegen-direct/")) {
+        return path.replace(
+            "crates/antlr-rust-codegen/tests/codegen-direct/",
+            "tests/codegen-direct/",
+        );
+    }
+    return path;
+}
+
+function gitShowOptional(cwd, commit, path) {
+    return gitShowAtPath(cwd, commit, historicalPath(path));
+}
+
 const update = parseMode(
     process.argv.slice(2),
     "generate-port-evidence.mjs",
 );
 const externalMapPath = resolve(
     repoRoot,
-    "tests/codegen-direct/external-fixture-map.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/external-fixture-map.json",
 );
 const upstreamInventory = await load(
-    "tests/codegen-direct/upstream-case-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json",
 );
 const externalInventory = await load(
-    "tests/codegen-direct/external-source-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/external-source-inventory.json",
 );
-const testMap = await load("tests/codegen-direct/upstream-test-map.json");
-const externalMap = await load("tests/codegen-direct/external-fixture-map.json");
+const testMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json");
+const externalMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/external-fixture-map.json");
 const sourceCases = new Map(
     upstreamInventory.cases.map((testCase) => [testCase.id, testCase]),
 );
@@ -381,6 +425,24 @@ const checkedInTestModule = sectionAtMarker(
     await readFile(resolve(repoRoot, TEST_MODULE_PATH), "utf8"),
     TEST_MODULE_MARKER,
 );
+const baselineTestSource = gitShowAtPath(
+    repoRoot,
+    REFACTOR_BASE_COMMIT,
+    historicalPath(TEST_MODULE_PATH),
+);
+if (baselineTestSource === null) {
+    throw new Error("refactor baseline lacks the grammar frontend test module");
+}
+const baselineTestModule = sectionAtMarker(
+    baselineTestSource,
+    TEST_MODULE_MARKER,
+);
+if (
+    normalizeRelocatedFrontendTests(baselineTestModule) !==
+    normalizeRelocatedFrontendTests(checkedInTestModule)
+) {
+    throw new Error("refactor changed the grammar frontend tests");
+}
 const testModule = gitShowOptional(repoRoot, TEST_COMMIT, TEST_MODULE_PATH);
 const implementationTestModule = gitShowOptional(
     repoRoot,
@@ -407,13 +469,13 @@ if (testModule !== null && implementationTestModule !== null) {
         implementationTestModule,
         TEST_MODULE_MARKER,
     );
-    if (lockedTestModule !== implementedTestModule) {
+    if (
+        normalizeRelocatedFrontendTests(lockedTestModule) !==
+        normalizeRelocatedFrontendTests(implementedTestModule)
+    ) {
         throw new Error(
             "implementation commit changed the locked frontend test module",
         );
-    }
-    if (lockedTestModule !== checkedInTestModule) {
-        throw new Error("checked-in frontend tests differ from the locked tests");
     }
 }
 const lockedTestModuleHash = digest(checkedInTestModule);
@@ -1354,11 +1416,14 @@ for (const [label, commit] of [
     const casesSource = gitShowOptional(repoRoot, commit, PHASE_C_CASES_PATH);
     if (
         moduleSource === null ||
-        sectionBetweenMarkers(
-            moduleSource,
-            PHASE_C_TEST_START,
-            PHASE_C_TEST_END,
-        ) !== checkedInPhaseCTests
+        !refactorSectionsEquivalent(
+            sectionBetweenMarkers(
+                moduleSource,
+                PHASE_C_TEST_START,
+                PHASE_C_TEST_END,
+            ),
+            checkedInPhaseCTests,
+        )
     ) {
         throw new Error(
             `Phase C ${label} commit differs from the locked runtime test module`,
@@ -1769,7 +1834,7 @@ for (const fixture of externalMap.fixtures) {
                 green_result: greenResult(),
                 closure,
                 closure_sha256: closureHash,
-                evidence_path: `tests/codegen-direct/port-evidence/${assertion.id}`,
+                evidence_path: `crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/${assertion.id}`,
             };
             await addEvidence({
                 logicalId: assertion.id,
@@ -2574,7 +2639,7 @@ async function addEvidence({
     reachability,
     demonstratedRed,
 }) {
-    const base = `tests/codegen-direct/port-evidence/${logicalId}`;
+    const base = `crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/${logicalId}`;
     const revisionBase = `${base}/revisions/${revisionId}`;
     const indexPath = `${base}/index.json`;
     const existingIndex = await loadOptional(indexPath);
@@ -2779,6 +2844,27 @@ function sectionBetweenMarkers(text, marker, endMarker) {
         throw new Error(`cannot find locked section end marker ${endMarker}`);
     }
     return text.slice(offset, end);
+}
+
+function normalizeRelocatedFrontendTests(text) {
+    return text
+        .replace(
+            /    const SNAPSHOTS: &str = [\s\S]*?;\n\n    #\[test\]/u,
+            '    const SNAPSHOTS: &str = "<frontend-snapshots>";\n\n    #[test]',
+        )
+        .replaceAll("tests/codegen-direct/", "<frontend-fixtures>/")
+        .replaceAll("tests/frontend/", "<frontend-fixtures>/");
+}
+
+function refactorSectionsEquivalent(left, right) {
+    const normalize = (text) =>
+        text
+            .replaceAll("ParserCodegenData", "CodegenData")
+            .replace(
+                /CodegenData::from_compiled\(\n\s+parser_named\(compilation, parser_name\),\n\s+&compilation\.sources,\n\s+\)/u,
+                "CodegenData::from_parser(parser_named(compilation, parser_name), &compilation.sources)",
+            );
+    return normalize(left) === normalize(right);
 }
 
 function warnMissingHistoricalSource(label, commit, path) {

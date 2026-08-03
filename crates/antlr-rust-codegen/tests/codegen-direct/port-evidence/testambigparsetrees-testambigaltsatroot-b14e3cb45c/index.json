@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testambigparsetrees-testambigaltsatroot-b14e3cb45c",
+  "active_revision_id": "testambigparsetrees-testambigaltsatroot-b14e3cb45c-r1",
+  "revisions": [
+    {
+      "revision_id": "testambigparsetrees-testambigaltsatroot-b14e3cb45c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testambigparsetrees-testambigaltsatroot-b14e3cb45c/revisions/testambigparsetrees-testambigaltsatroot-b14e3cb45c-r1/manifest.json",
+      "closure_sha256": "951595b28b4d92d0683436b366638383780928f6d069d87c8a51654ed6ef85c4"
+    }
+  ]
+}

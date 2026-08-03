@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+  "active_revision_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/revisions/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f-r1/manifest.json",
+      "closure_sha256": "1e478b8280f74f9b9bfe959640a9c4a0810137326eef65bf4e5aed7d777fdc63"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+parser grammar @GRAMMAR@Parser;
+
+import @GRAMMAR@Shared;
+
+options {
+    tokenVocab = @GRAMMAR@Lexer;
+}
+
+start: atom EOF;

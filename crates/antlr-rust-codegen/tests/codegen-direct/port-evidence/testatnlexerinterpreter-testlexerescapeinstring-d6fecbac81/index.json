@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81",
+  "active_revision_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81/revisions/testatnlexerinterpreter-testlexerescapeinstring-d6fecbac81-r1/manifest.json",
+      "closure_sha256": "d451b1012925a49a89d976f0f47f7c985ceb7db6300d8232de7008a4b6cc3601"
+    }
+  ]
+}

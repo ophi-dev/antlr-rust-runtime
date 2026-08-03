@@ -1,0 +1,76 @@
+---
+source: tests/antlr4_rust_gen_cli/compatibility.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "error",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "CCompatLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "CCompatParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "assignment", "rule_index": 0, "index": 0, "atn_state": null, "line": 6, "column": 6, "body": "let __not_code = r#\"recog.input.peek(1) _localctx.context()\"#; // recog.output.write(\"not code\")...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "history", "rule_index": 1, "index": 1, "atn_state": null, "line": 27, "column": 28, "body": "let mut __bk: isize = 1; let (__last_type, __last_text) = recog.input.lt(-__bk) .map(|t| (t.get_...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-action", "rule": "inlineAction", "rule_index": 2, "index": 0, "atn_state": 24, "line": 44, "column": 17, "body": "let __ek: isize = 1; let __text = recog.input.lt(-__ek) .map(|t| t.get_text().to_owned()) .unwra...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeAssignment", "rule_index": 3, "index": 2, "atn_state": null, "line": 55, "column": 6, "body": "let __first = self.base.token_stream().lt(1); let __first_type = __first.map(|t| t.token_type())...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeHistory", "rule_index": 4, "index": 3, "atn_state": null, "line": 79, "column": 28, "body": "let mut __bk: isize = 1; let (__last_type, __last_text) = self.base.token_stream().lt(-__bk) .ma...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-action", "rule": "nativeInlineAction", "rule_index": 5, "index": 1, "atn_state": 39, "line": 96, "column": 17, "body": "let __ek: isize = 1; let __text = self.base.token_stream().lt(-__ek) .map(|t| t.text_or_empty()....", "disposition": "translated", "template": "Embedded"}
+      ]
+    },
+    {
+      "kind": "lexer",
+      "name": "JavaCompatLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "JavaCompatParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "notIdentifierAssign", "rule_index": 0, "index": 0, "atn_state": null, "line": 6, "column": 6, "body": "!matches!( recog.input.la(1), JavaCompatParser_IDENTIFIER | JavaCompatParser_MODULE ) || recog.i...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "endLookahead", "rule_index": 1, "index": 1, "atn_state": null, "line": 15, "column": 17, "body": "recog.input.la(1) == antlr4_runtime::TOKEN_EOF && recog.input.la(2) == antlr4_runtime::TOKEN_EOF", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "recordComponentList", "rule_index": 2, "index": 2, "atn_state": null, "line": 23, "column": 8, "body": "_localctx.as_deref() .map(|ctx| { let rcs = ctx.recordComponent_all(); let count = rcs.len(); ct...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "repeatedTokens", "rule_index": 4, "index": 3, "atn_state": null, "line": 45, "column": 28, "body": "_localctx.as_deref() .map(|ctx| { ctx.IDENTIFIER_all().len() == 2 && ctx.IDENTIFIER(1).is_some()...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "commonAccessorCollisions", "rule_index": 5, "index": 4, "atn_state": null, "line": 57, "column": 42, "body": "_localctx.as_deref() .map(|ctx| { ctx.text().is_some() && ctx.start().is_some() && ctx.child_cou...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "liveAttributes", "rule_index": 6, "index": 5, "atn_state": null, "line": 73, "column": 6, "body": "_localctx.as_deref() .map(|ctx| ctx.value == 1) .unwrap_or(false)", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "sameBodyAttributes", "rule_index": 7, "index": 6, "atn_state": null, "line": 81, "column": 6, "body": "$value = 2; _localctx.as_deref() .map(|ctx| ctx.value == 2) .unwrap_or(false)", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "keywordAccessor", "rule_index": 8, "index": 7, "atn_state": null, "line": 90, "column": 16, "body": "_localctx.as_deref() .map(|ctx| ctx.r#type().is_some() && ctx.self_().is_some()) .unwrap_or(fals...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeNotIdentifierAssign", "rule_index": 16, "index": 8, "atn_state": null, "line": 110, "column": 6, "body": "!matches!( self.base.token_stream().la_token(1), IDENTIFIER | MODULE ) || self.base.token_stream...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeEndLookahead", "rule_index": 17, "index": 9, "atn_state": null, "line": 119, "column": 17, "body": "self.base.token_stream().la_token(1) == antlr4_runtime::TOKEN_EOF && self.base.token_stream().la...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "nativeRecordComponentList", "rule_index": 18, "index": 10, "atn_state": null, "line": 127, "column": 8, "body": "let rcs = __ctx.child_rules( self.base.parse_tree_storage(), self.base.token_store(), RULE_RECOR...", "disposition": "translated", "template": "Embedded"}
+      ]
+    },
+    {
+      "kind": "lexer",
+      "name": "AliasOnlyLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "AliasOnlyParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 6, "column": 6, "body": "AliasOnlyParser_ID == ID && AliasOnlyParser_T__0 == T__0", "disposition": "translated", "template": "Embedded"}
+      ]
+    },
+    {
+      "kind": "lexer",
+      "name": "AliasCollisionLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "AliasCollisionParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "start", "rule_index": 0, "index": 0, "atn_state": null, "line": 89, "column": 6, "body": "let _user_symbol = AliasCollisionParser_ID; let _user_import = AliasCollisionParser_EOF; let _co...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-predicate", "rule": "crossBody", "rule_index": 1, "index": 1, "atn_state": null, "line": 949, "column": 6, "body": "AliasCollisionParser_CROSS == CROSS", "disposition": "translated", "template": "Embedded"}
+      ]
+    }
+  ]
+}

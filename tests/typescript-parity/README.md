@@ -14,8 +14,8 @@ Run:
 
 ```bash
 tests/typescript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 ```
 
 The fixtures cover TypeScript declarations, the argument-taking `p("of")` and

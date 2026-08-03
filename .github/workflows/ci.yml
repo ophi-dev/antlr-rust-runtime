@@ -42,8 +42,14 @@ jobs:
       - name: Validate direct-codegen fixtures
         run: node tools/grammar-frontend/validate-interp-fixtures.mjs
 
+      - name: Validate port evidence
+        run: node tools/grammar-frontend/validate-port-evidence.mjs
+
+      - name: Validate workspace release metadata
+        run: tools/release/check-workspace-version.sh
+
       - name: Run Clippy
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
       # `cargo llvm-cov` runs the same suite as `cargo test` but under LLVM
       # source-based instrumentation, so it replaces the plain test step and
@@ -63,8 +69,31 @@ jobs:
           fail_ci_if_error: false
           disable_search: true
 
+      - name: Validate publishable package archives
+        run: tools/release/preflight-package-archives.sh
+
       - uses: ophi-dev/mehen@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           paths: |
             src
+            crates/antlr-rust-codegen/src
+            crates/antlr-rust-g4-parser/src
+            crates/antlr-rust-rs-parser/src
+            tools/antlr-rust-runtime-testsuite/src
+
+  msrv:
+    name: Rust 1.95
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust 1.95
+        run: rustup toolchain install 1.95 --profile minimal --no-self-update
+
+      - name: Check workspace at MSRV
+        run: cargo +1.95 check --locked --workspace --all-targets --all-features

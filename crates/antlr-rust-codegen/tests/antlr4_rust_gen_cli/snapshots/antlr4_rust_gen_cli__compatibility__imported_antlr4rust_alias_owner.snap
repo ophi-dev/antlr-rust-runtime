@@ -1,0 +1,8 @@
+---
+source: tests/antlr4_rust_gen_cli/compatibility.rs
+expression: alias_excerpt
+---
+pub(super) const DelegateParser_ID: i32 = 2;
+marker: __antlr4rust_token_aliases::DelegateParser_ID,
+__antlr4rust_token_aliases::DelegateParser_ID == ID && self.imported_member_alias_matches()
+__antlr4rust_token_aliases::DelegateParser_ID == Self::ID && self.marker == Self::ID

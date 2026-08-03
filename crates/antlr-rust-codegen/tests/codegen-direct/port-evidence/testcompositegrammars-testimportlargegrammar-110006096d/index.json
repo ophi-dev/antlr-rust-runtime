@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportlargegrammar-110006096d",
+  "active_revision_id": "testcompositegrammars-testimportlargegrammar-110006096d-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportlargegrammar-110006096d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testimportlargegrammar-110006096d/revisions/testcompositegrammars-testimportlargegrammar-110006096d-r1/manifest.json",
+      "closure_sha256": "04c8f96af91635a20d6c69348dacb77210c68457bb9fe413977175b3132091cb"
+    }
+  ]
+}

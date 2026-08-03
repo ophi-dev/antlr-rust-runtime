@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
+  "active_revision_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/revisions/testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1/manifest.json",
+      "closure_sha256": "fca86279467c68771c0b595099f490e9bd35dbfe9281fdb3794a424d12a64529"
+    }
+  ]
+}

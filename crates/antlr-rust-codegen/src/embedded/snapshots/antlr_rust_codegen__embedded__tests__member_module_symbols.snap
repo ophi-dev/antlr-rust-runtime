@@ -1,0 +1,17 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 6626
+expression: members.module_symbols
+---
+{
+    "AliasTypeParser_CFG_ATTR",
+    "AliasTypeParser_CONDITIONAL",
+    "AliasTypeParser_ID",
+    "FieldFollower",
+    "LeafListener",
+    "Other",
+    "RenamedItem",
+    "fmt",
+    "nested",
+    "type",
+}

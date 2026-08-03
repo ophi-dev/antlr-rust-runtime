@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05",
+  "active_revision_id": "testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05/revisions/testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05-r1/manifest.json",
+      "closure_sha256": "da5bb7cad8983945e7652cb6e917133d062580dc9cc2e5855d7fbd2bf9ef860a"
+    }
+  ]
+}

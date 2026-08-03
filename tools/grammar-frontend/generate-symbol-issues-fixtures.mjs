@@ -34,15 +34,15 @@ const ERROR_CASES = new Set([
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
-const fixturesRoot = resolve(repositoryRoot, "tests/codegen-direct/fixtures");
+const fixturesRoot = resolve(repositoryRoot, "crates/antlr-rust-codegen/tests/codegen-direct/fixtures");
 const options = parseArguments(process.argv.slice(2));
 
 verifyCommit(options.javaRoot, JAVA_COMMIT, "Java ANTLR");
 verifyCommit(options.antlrNgRoot, ANTLR_NG_COMMIT, "antlr-ng");
 
-const testMap = await load("tests/codegen-direct/upstream-test-map.json");
+const testMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json");
 const inventory = await load(
-    "tests/codegen-direct/upstream-case-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json",
 );
 const inventoryById = new Map(
     inventory.cases.map((testCase) => [testCase.id, testCase]),
@@ -573,16 +573,16 @@ function parseArguments(args) {
         update: null,
         javaRoot:
             process.env.ANTLR4_TOOL_ROOT
-            ?? "/tmp/antlr-cleanroom/antlr4-4.13.2-tool",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/antlr4-4.13.2-tool"),
         antlrNgRoot:
             process.env.ANTLR_NG_ROOT
-            ?? "/tmp/antlr-cleanroom/antlr-ng-1f68422",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/antlr-ng-1f68422"),
         antlrJar:
             process.env.ANTLR4_JAR
-            ?? "/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"),
         icuJar:
             process.env.ICU4J_JAR
-            ?? "/tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+            ?? resolve(repositoryRoot, "target/antlr-cleanroom/tools/icu4j-78.1.jar"),
         java: process.env.JAVA ?? "java",
     };
     for (let index = 0; index < args.length; index += 1) {

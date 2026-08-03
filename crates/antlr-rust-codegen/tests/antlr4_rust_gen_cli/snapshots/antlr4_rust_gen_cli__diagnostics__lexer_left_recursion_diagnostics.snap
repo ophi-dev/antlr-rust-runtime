@@ -1,0 +1,5 @@
+---
+source: tests/antlr4_rust_gen_cli/diagnostics.rs
+expression: stderr
+---
+Error: Custom { kind: InvalidInput, error: "error[G4A005]: <grammar>:3:0: mutually left-recursive rules: [A]\nerror[G4A005]: <grammar>:4:0: mutually left-recursive rules: [B, C]\n" }

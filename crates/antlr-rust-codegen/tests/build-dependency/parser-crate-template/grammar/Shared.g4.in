@@ -1,0 +1,7 @@
+parser grammar @GRAMMAR@Shared;
+
+options {
+    tokenVocab = @GRAMMAR@Lexer;
+}
+
+atom: ID;

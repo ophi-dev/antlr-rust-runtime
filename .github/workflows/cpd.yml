@@ -14,7 +14,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: cpd-${{ github.event.pull_request.number || github.run_id }}
+  group: cpd-bounded-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -26,6 +26,7 @@ jobs:
   cpd:
     name: Copy/Paste Detection
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -42,12 +43,12 @@ jobs:
           BASE_SHA=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
 
           git diff --name-only --diff-filter=d "$BASE_SHA" HEAD -- "*.rs" \
-            | grep -Ev "^target/" \
+            | grep -Ev '(^target/|(^|/)generated(/|$))' \
             > changed-files.txt || true
 
           COUNT=$(wc -l < changed-files.txt | tr -d " ")
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "Changed Rust files ($COUNT):"
+          echo "Changed non-generated Rust files ($COUNT):"
           cat changed-files.txt || true
 
       - name: Setup Java
@@ -101,7 +102,21 @@ jobs:
 
           if [ -s cpd-stderr.log ]; then
             echo "=== PMD stderr ==="
-            cat cpd-stderr.log
+            STDERR_BYTES=$(wc -c < cpd-stderr.log | tr -d " ")
+            head -c 20000 cpd-stderr.log
+            echo ""
+            if [ "$STDERR_BYTES" -gt 20000 ]; then
+              echo "... PMD stderr truncated from ${STDERR_BYTES} bytes."
+            fi
+          fi
+
+          DUP_COUNT=$(grep -c "^Found a " cpd-report.md || true)
+          REPORT_BYTES=$(wc -c < cpd-report.md | tr -d " ")
+          REPORT_TRUNCATED=0
+          if [ "$REPORT_BYTES" -gt 50000 ]; then
+            head -c 50000 cpd-report.md > cpd-report.preview.md
+            mv cpd-report.preview.md cpd-report.md
+            REPORT_TRUNCATED=1
           fi
 
           sed -i "s|${GITHUB_WORKSPACE}/||g" cpd-report.md
@@ -114,14 +129,22 @@ jobs:
               next
             }
             { print }
+            END {
+              if (open != 0) { print "```" }
+            }
           ' cpd-report.md > cpd-report.tagged.md
           mv cpd-report.tagged.md cpd-report.md
 
-          DUP_COUNT=$(grep -c "^Found a " cpd-report.md || true)
-          echo "duplications=${DUP_COUNT:-0}" >> "$GITHUB_OUTPUT"
+          if [ "$REPORT_TRUNCATED" -eq 1 ]; then
+            {
+              echo ""
+              echo "_(report preview truncated from ${REPORT_BYTES} bytes)_"
+            } >> cpd-report.md
+          fi
 
-          echo "=== Report ==="
-          cat cpd-report.md
+          echo "duplications=${DUP_COUNT:-0}" >> "$GITHUB_OUTPUT"
+          PREVIEW_BYTES=$(wc -c < cpd-report.md | tr -d " ")
+          echo "CPD found ${DUP_COUNT:-0} duplication(s); report ${REPORT_BYTES} bytes, preview ${PREVIEW_BYTES} bytes."
 
       - name: Build comment body
         shell: bash
@@ -135,9 +158,9 @@ jobs:
             echo "## Copy/Paste Detection"
             echo ""
             if [ "${DUP_COUNT:-0}" = "0" ]; then
-              echo "No duplications found in ${CHANGED_COUNT} changed Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
+              echo "No duplications found in ${CHANGED_COUNT} changed non-generated Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
             else
-              echo "Found **${DUP_COUNT}** duplication(s) across ${CHANGED_COUNT} changed Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
+              echo "Found **${DUP_COUNT}** duplication(s) across ${CHANGED_COUNT} changed non-generated Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
               echo ""
               echo "<details>"
               echo "<summary>Show duplications</summary>"

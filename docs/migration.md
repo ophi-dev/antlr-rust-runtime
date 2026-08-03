@@ -22,6 +22,35 @@ runtime or regenerate with its matching older generator.
 `antlr4-rust-gen --version` reports the generator package version for auditing
 and reproducible regeneration.
 
+## Generator Package and Build Scripts
+
+`antlr4-rust-gen` no longer ships from the runtime package or behind its
+removed `codegen` feature. Install the command from its companion package:
+
+```bash
+cargo install antlr-rust-codegen --bin antlr4-rust-gen
+```
+
+Rust build scripts can instead use the same generation pipeline as a library:
+
+<!-- x-release-please-start-version -->
+
+```toml
+[dependencies]
+antlr-rust-runtime = "0.26.0"
+
+[build-dependencies]
+antlr-rust-codegen = "0.26.0"
+```
+
+<!-- x-release-please-end -->
+
+Generate only into Cargo's `OUT_DIR` with `antlr_rust_codegen::Builder`, then
+call `Generation::emit_rerun_if_changed()` to track the resolved roots,
+imports, and token vocabularies. Projects that commit generated modules need
+only the runtime dependency and can keep generation in an `xtask` or the CLI.
+This package move does not change generated-code API revision 3.
+
 ## Structured Syntax Error Events and Byte Spans
 
 `ErrorListener::syntax_error` now receives one `&SyntaxErrorEvent<'_>` instead

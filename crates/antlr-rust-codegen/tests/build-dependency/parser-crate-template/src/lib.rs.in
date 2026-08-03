@@ -1,0 +1,21 @@
+pub mod lexer {
+    include!(concat!(env!("OUT_DIR"), "/@MODULE@_lexer.rs"));
+}
+
+pub mod parser {
+    include!(concat!(env!("OUT_DIR"), "/@MODULE@_parser.rs"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lexer::@GRAMMAR@Lexer;
+    use super::parser::@GRAMMAR@Parser;
+    use antlr4_runtime::{CommonTokenStream, InputStream};
+
+    #[test]
+    fn generated_parser_runs() {
+        let lexer = @GRAMMAR@Lexer::new(InputStream::new("value"));
+        let mut parser = @GRAMMAR@Parser::new(CommonTokenStream::new(lexer));
+        parser.start().expect("fixture input should parse");
+    }
+}

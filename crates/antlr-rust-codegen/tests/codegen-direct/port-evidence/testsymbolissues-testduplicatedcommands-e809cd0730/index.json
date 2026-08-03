@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
+  "active_revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testsymbolissues-testduplicatedcommands-e809cd0730/revisions/testsymbolissues-testduplicatedcommands-e809cd0730-r1/manifest.json",
+      "closure_sha256": "c38a866cb4e7fbd8b86e8b6d58f21b987d4651447a7f0c671307b2f356936262"
+    }
+  ]
+}

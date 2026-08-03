@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c",
+  "active_revision_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c/revisions/testatnlexerinterpreter-testlexercaseinsensitivefragments-a467dc676c-r1/manifest.json",
+      "closure_sha256": "6dbe6b14c48d5494d70374c107005b7f59425047fc4b7e99cef108e7413c21d5"
+    }
+  ]
+}

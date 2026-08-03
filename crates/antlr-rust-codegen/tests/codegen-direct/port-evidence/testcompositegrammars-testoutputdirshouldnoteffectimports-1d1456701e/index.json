@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
+  "active_revision_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/revisions/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1/manifest.json",
+      "closure_sha256": "42ed9d18109e582e58a6385aa794f0ef483e921a37cf70e6930d9323b654ca0a"
+    }
+  ]
+}

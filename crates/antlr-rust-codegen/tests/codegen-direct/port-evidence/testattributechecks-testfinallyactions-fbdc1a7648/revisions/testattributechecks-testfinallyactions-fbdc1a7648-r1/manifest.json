@@ -1,0 +1,936 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testfinallyactions-fbdc1a7648",
+  "revision_id": "testattributechecks-testfinallyactions-fbdc1a7648-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testattributechecks-testfinallyactions-fbdc1a7648",
+    "source_case_ids": [
+      "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/diagnostics.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.g4",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.interp",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.tokens",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/fixture.json",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stdout",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stderr",
+      "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_attribute_checks",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust action attribute diagnostics and accepted serialization match Java 4.13.2 for TestAttributeChecks.testFinallyActions",
+    "scaffold_commit": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test_commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1"
+  },
+  "closure_sha256": "ea80a74443a7c51ebf0057b91043ae635190a93483c6f3f9b3a479f0436a50b9",
+  "allowed_inputs": [
+    {
+      "source_case_id": "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestAttributeChecks.java",
+      "sha256": "7e267fd9a376f7d8d63161d3caac6c4289c80136c3957146c419323cd87b6d4a"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.g4",
+      "sha256": "b808d85632175e12d74c186fe3e78cb2a7615cf30a13e7c763dc92e11311f6e7"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/fixture.json",
+      "sha256": "3d40aae941176c2917a520687c3bcdc25b4e99ab69e313ba8ed6474ed5d64d85"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/A.g4",
+      "sha256": "f2796c6d1bf98f9306c82e3e7c664cacdeeb245a40e98ab1de84a0eb2e67756b"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/diagnostics.json",
+      "sha256": "04e9e35dcb2543fc6d61d3414d4b1b8bc5443383b214f9b72870d2c0f08d0e4a"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/fixture.json",
+      "sha256": "c732112b5949d45e67b89ac24a7feb3d583494366b3889bc5b19e48feac44b34"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stderr",
+      "sha256": "0302a489fcb9eb2b7007fb517f90e30b13103076390c4edef9b6988e8f0fea0f"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/A.g4",
+      "sha256": "9f9ccd0be6f75cc8cee4c47bf2bf0abbe012c05b5a32e3753a4a78d6dc1d1bf5"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/diagnostics.json",
+      "sha256": "faba611b4c24e7ebdba97d5b6526a8ba1f85cd821f1b6e0ccbb01287caf5ae2c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/fixture.json",
+      "sha256": "b9086f44755048f8e7e8bc3e03770616e2a818f3b5a68afd93c5d6c05f026592"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stderr",
+      "sha256": "0db63773976d6d9c2bb5bcb8ea262984ab00fd5405bf779997abe768a73fb200"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/A.g4",
+      "sha256": "f45678a39ad9efa272cdaaffd2fe084c9b3b26e887fa8b19f50583a9f671a578"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/diagnostics.json",
+      "sha256": "f6c392a71f54486eb785037df343191cfe467e87aea5b22808878149874e2dbe"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/fixture.json",
+      "sha256": "844e88277285f8b9c810575888f5cdc528bc26c07e550ee08e121759bf655a24"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stderr",
+      "sha256": "f25577d15b37155752dbc59749535cec4f795eebfeec577da417906660ba084c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/A.g4",
+      "sha256": "d5c8c240901f6af6c7a0c0aae40d1fa39f7b86649746c2cdd96aa086842002b1"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/diagnostics.json",
+      "sha256": "faba611b4c24e7ebdba97d5b6526a8ba1f85cd821f1b6e0ccbb01287caf5ae2c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/fixture.json",
+      "sha256": "350a89f01a79dffd078474c6354d759da5d2f5d7d95fd722fc1d0cb027cbde19"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stderr",
+      "sha256": "0db63773976d6d9c2bb5bcb8ea262984ab00fd5405bf779997abe768a73fb200"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/A.g4",
+      "sha256": "8f0c71e299aaa03ac7a66e436b4b89021f11423b5ff5156c768dedbd73b51b70"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/diagnostics.json",
+      "sha256": "2db81e3e34a29b51c7e3d6b54acd1543d9312ec61bc10b84f5169bb4381d48df"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/fixture.json",
+      "sha256": "17c2defef711b1ae5c718b2858d8a77b2c9f20c2c081813d03ca6aa28a015c28"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stderr",
+      "sha256": "1cd16b48359d602dd143ad8e76ff29750c6022eff926db9c259b2425f2e4d87b"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/A.g4",
+      "sha256": "3c1b1c56339f97eeab83999098c6e041ee29472826861eadc2838f416028b885"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/diagnostics.json",
+      "sha256": "f6c392a71f54486eb785037df343191cfe467e87aea5b22808878149874e2dbe"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/fixture.json",
+      "sha256": "3e8b2a9e6ffcce945f66793bc69a0b14725b6728fa331514928717e3dbec641b"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stderr",
+      "sha256": "f25577d15b37155752dbc59749535cec4f795eebfeec577da417906660ba084c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/A.g4",
+      "sha256": "1ffef2d2662e1c6783667368d5a1b4a66286722cc4329d7baac4d0ab48836d0f"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/diagnostics.json",
+      "sha256": "c971371aac941a2b0b949693c7d008771fc572988ef1ceac0f33063668b6a0ac"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/fixture.json",
+      "sha256": "aeb1e72d9bafa75e7f7f50cc41d77dca50f49dd9a16b8c2f4bf248a513ae460e"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stderr",
+      "sha256": "4eed8b4279075172bbd3807165fe965470151ed347d5b86d2c5a8bd1c7d4ed04"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/A.g4",
+      "sha256": "170c98bbd2e9e0b4037fc3cc6b7f7f47cc0ae0a7f7005485eb79d6f90193882c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/diagnostics.json",
+      "sha256": "df9b90674c2a4c766bf3cafe9badfd5dab6e5437f56dec4e12592abe3bb81098"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/fixture.json",
+      "sha256": "c1df14d22c09b9d2f344c4033676a85aad254ce933c7c7f766b42905011dd2b8"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stderr",
+      "sha256": "ad085baec24eb9d2189bd12d370bc53a310bd486717980fe95e680b0948144a8"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/A.g4",
+      "sha256": "91c02ea12f70109d89b9423aba509e003899bf871ae4cae19c7d108176df21da"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/diagnostics.json",
+      "sha256": "df9b90674c2a4c766bf3cafe9badfd5dab6e5437f56dec4e12592abe3bb81098"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/fixture.json",
+      "sha256": "dd3c4d5eb56febbeff82c90765c3c9256a69bef005ead3cd62a0a32ad2791c36"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stderr",
+      "sha256": "ad085baec24eb9d2189bd12d370bc53a310bd486717980fe95e680b0948144a8"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.g4",
+      "sha256": "6e726308cd407aa7abf221a7d0391795a1561b87ff0f9d1b0be87a45522520ef"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/fixture.json",
+      "sha256": "2490fca9d9871bd152bfe87c11fcea8d24205565e6e8a227cea2e5fc7faf4bb3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/A.g4",
+      "sha256": "04979fa8af8053b7fb50008dfb5dc9394a29c1f545856a1793b367f62cacf7c4"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/diagnostics.json",
+      "sha256": "03884faddfa4503e77058714a13f9b0149ac0111cb8ec6e5848c0a6e66f00f20"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/fixture.json",
+      "sha256": "e9af1dc4cc990309efd9c632295754a1f23a3d4bc00c993b7e122ca4cebcb6b9"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stderr",
+      "sha256": "e463d4d25cadaf3aca19a611e63dd70ceaf0cc3a6d75548f568042e4272cefa2"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/A.g4",
+      "sha256": "2b37a19477cc616f2e3aa93e4677e2118dc5832cc6b6d7c554f3f00658fd5e07"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/diagnostics.json",
+      "sha256": "25f7bca9489a7f3d5bcc3215a6d67d4d671c9c1d36e201b7154391061b84eef4"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/fixture.json",
+      "sha256": "56c0733ec0f357426a1cd30242fe39cf43aee045b75f9d5090d9f393c83b6eb8"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stderr",
+      "sha256": "653475445d51203acaa5f33a2238901d1401ade55f637ed8f1b6da7d10369afc"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/A.g4",
+      "sha256": "f950499bf13b44c0a31145c2f6e127693a482be3a91b6f86a6d95059d5eff0e4"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/diagnostics.json",
+      "sha256": "b1a41d5451e7d7a09821a4cee27cebd8e4553718f4402c31011dc60bc784847a"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/fixture.json",
+      "sha256": "6e2f635367071f1863cb3688889656427aa5a7c1e67fdddebf441d48c5a2c249"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stderr",
+      "sha256": "9e582ac1c52659c96d1fe9d7cbc9ea897da84242d2aebffbd8713c4f8a1dc339"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/A.g4",
+      "sha256": "2370631cf4903ab2c74cfa5811c048c03f3afa29afa3d6bf1166a82e01489661"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/diagnostics.json",
+      "sha256": "5fb5309210c360bf0455f2fd8584471cf2f6d704922542cf4e30fd607f2a165b"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/fixture.json",
+      "sha256": "617ce71a3f5343f61d02be0d980e1e02a8d0eecc5983e39deae6a7368e35093c"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stderr",
+      "sha256": "e9db94e2fb7a07c54e043460530d04749004f2dcd84b8c766fcc7bf2aeb913a1"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.g4",
+      "sha256": "979c86c9bd5935961eb59202bda1f084a1517ee46d137fb99458cc9893c14b95"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/fixture.json",
+      "sha256": "eba008d32fdeed2e43775a93f515acb4c1f3e519be49ce4795b3ecc809d396f1"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.g4",
+      "sha256": "b27646a6c805109150d2ddb52132dec3aab903272e99c7f8d6d50469056d5b92"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/fixture.json",
+      "sha256": "9bb9f94288a5f4b03411943f63c0057dace7705543b31e19f5ebf7ffde70c1b9"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.g4",
+      "sha256": "9bb734ab95b5f378f8e956097bde81a6d19d60d517e9580b7ad24edb1af9f475"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/fixture.json",
+      "sha256": "4638ac689464f3f7d23a499ec48be08bfccd3748df8234fc2304c6f5907f896a"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.g4",
+      "sha256": "572eeee92f9a599c721a14789c3b87831b1732eff220fd3524e56f8e142f1294"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/fixture.json",
+      "sha256": "0a89a766a333b2f72ed310cc4ebba0aec198a7a503be118897eb875256374ce9"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.g4",
+      "sha256": "10d7581f7a950684b5182c6ef06cdc0c3c6847282953655e61378159664d3fc1"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/fixture.json",
+      "sha256": "9f989430268029bb66c9df85a814ee99b2e42ca14483ccba2521bbe6ef128238"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.g4",
+      "sha256": "59efe93da4ac6429e49f1d5e16d2ea25f428abaef0d95e5e454a9fe63e7877b5"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/fixture.json",
+      "sha256": "dc3879ee16e533c1d31029e688a73ddcdee5673fbed8ca51f1181aeb2eeb0b7b"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.g4",
+      "sha256": "18687112f6de7c214e7b69aac782837938712f09c7fc2249744bd50d82748b59"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/fixture.json",
+      "sha256": "ff0a837f8c34a041712610e3aa8bd6970ac6914864512fa04aeb8b96214ac3a5"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.g4",
+      "sha256": "360964ee4f86dd98c9086631b7232d25e08ee608a7a7da76ae3db6eb64c4b7f3"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/fixture.json",
+      "sha256": "18ebf3b178a55ec6c708637c9e960bb4417b207f2a57160324ed63ef1dfdfe92"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "primary_implementation": "ede783206bb4dfc3d8f5d031fdfea9feab507763"
+  },
+  "ancestry": {
+    "primary_test_parent": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_implementation_parent": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "reachability": "the action attribute implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_attribute_checks {",
+      "end_marker": "\n    mod upstream_symbol_issues {",
+      "sha256": "9a702c53ed62affffdd100dd10595a4f32419df1a8aef05e4f03347047b371f5"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/generated/attribute-checks-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-attribute-checks-fixtures.mjs.",
+      "sha256": "3da2bd6944363db668fd6bddc34c446ccf240c9a12b9ee3990da38d346dba045"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked -p antlr-rust-codegen --lib grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testfinallyactions_fbdc1a7648",
+    "commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "exit_code": 101,
+    "fingerprint": "testattributechecks-testfinallyactions-fbdc1a7648-variant-11: expected semantic failure"
+  },
+  "green_result": {
+    "command": "cargo test --locked -p antlr-rust-codegen --lib grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testfinallyactions_fbdc1a7648",
+    "commit": "ede783206bb4dfc3d8f5d031fdfea9feab507763",
+    "exit_code": 0,
+    "result": "23 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testattributechecks-testfinallyactions-fbdc1a7648/revisions/testattributechecks-testfinallyactions-fbdc1a7648-r1/oracle-results/declared-sources.json",
+      "sha256": "3ee6bfe6768483790367c8e08031d9e0a5ed6637d20789468e11308084168a84"
+    },
+    {
+      "path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testattributechecks-testfinallyactions-fbdc1a7648/revisions/testattributechecks-testfinallyactions-fbdc1a7648-r1/matrix-results/results.json",
+      "sha256": "434cc9c9ed81db51ba4ef300b0bbc9880b55b66e2cc3f6a495b9ac032a37d974"
+    }
+  ]
+}

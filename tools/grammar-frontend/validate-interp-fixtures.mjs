@@ -10,7 +10,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
 const fixturesRoot = resolve(
     repositoryRoot,
-    "tests/codegen-direct/fixtures",
+    "crates/antlr-rust-codegen/tests/codegen-direct/fixtures",
 );
 const failures = [];
 let artifactCount = 0;

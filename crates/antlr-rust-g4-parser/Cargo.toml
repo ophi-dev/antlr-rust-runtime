@@ -1,0 +1,23 @@
+[package]
+name = "antlr-rust-g4-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "ANTLR v4 grammar parser used internally by antlr-rust-codegen"
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme = "README.md"
+publish = true
+keywords = ["antlr", "antlr4", "grammar", "parser", "codegen"]
+categories = ["development-tools::build-utils", "parser-implementations", "parsing"]
+include = ["/Cargo.toml", "/README.md", "/src/**"]
+
+[dependencies]
+antlr-rust-runtime.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true

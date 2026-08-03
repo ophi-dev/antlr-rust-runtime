@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+* Move `antlr4-rust-gen` and the removed runtime `codegen` feature to the
+  `antlr-rust-codegen` package. Install the binary from that package or add it
+  as a build dependency and use `Builder`; generated/runtime API revision 3 is
+  unchanged.
+
 ## [0.26.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.25.0...v0.26.0) (2026-08-03)
 
 

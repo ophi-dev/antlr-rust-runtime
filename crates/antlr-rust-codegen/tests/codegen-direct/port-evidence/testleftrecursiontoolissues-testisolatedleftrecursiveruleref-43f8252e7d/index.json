@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+  "active_revision_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d-r1",
+  "revisions": [
+    {
+      "revision_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/revisions/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d-r1/manifest.json",
+      "closure_sha256": "e54713b9cdf4e7422f28e637f75dbc2443d6e2e27d76cd08368377ea25b7b098"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[package]
+name = "@PACKAGE@"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+antlr-rust-runtime.workspace = true
+
+[build-dependencies]
+antlr-rust-codegen.workspace = true

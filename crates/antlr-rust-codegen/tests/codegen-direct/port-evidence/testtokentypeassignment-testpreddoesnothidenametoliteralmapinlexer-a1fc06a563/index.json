@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+  "active_revision_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/revisions/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1/manifest.json",
+      "closure_sha256": "f18678b941145323e14b60fd0bafec49fac05c9c6b77c8f35d98cb722d256d8d"
+    }
+  ]
+}

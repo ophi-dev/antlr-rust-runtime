@@ -37,7 +37,8 @@ if [ -z "$GRAMMARS" ]; then
 fi
 
 # 2. Build the generator and generate base/fixed parser pairs.
-cargo build --release --features codegen --bin antlr4-rust-gen --manifest-path "$ROOT/Cargo.toml"
+cargo build --release -p antlr-rust-codegen --bin antlr4-rust-gen \
+    --manifest-path "$ROOT/Cargo.toml"
 GEN="$ROOT/target/release/antlr4-rust-gen"
 
 "$GEN" "$GRAMMARS/thrift/Thrift.g4" --require-generated-parser \
@@ -70,7 +71,7 @@ antlr4_runtime = { package = "antlr-rust-runtime", path = "$ROOT" }
 EOF
 
 emit_bin() {
-  local bin=$1 gendir=$2 module=$3 lexer=$4 parser=$5 entry=$6
+  local bin=$1 gendir=$2 module=$3 lexer=$4 _parser=$5 entry=$6
   cat > "$DRIVER/src/bin/$bin.rs" <<EOF
 #[path = "$WORK/gen/$gendir/${module}_lexer.rs"]
 mod glexer;

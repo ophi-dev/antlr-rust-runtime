@@ -1,14 +1,17 @@
 # Generated code and reproducible metadata.
 **/generated/** linguist-generated=true
-src/bin_support/grammar/unicode_decomposition.bin linguist-generated=true
-tests/codegen-direct/port-evidence/** linguist-generated=true
-tests/codegen-direct/external-source-inventory.json linguist-generated=true
-tests/codegen-direct/frontend-snapshots.tsv linguist-generated=true
-tests/codegen-direct/upstream-case-inventory.json linguist-generated=true
-tests/codegen-direct/upstream-test-map.json linguist-generated=true
+crates/antlr-rust-codegen/src/grammar/unicode_decomposition.bin linguist-generated=true
+crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/** linguist-generated=true
+crates/antlr-rust-codegen/tests/codegen-direct/external-source-inventory.json linguist-generated=true
+crates/antlr-rust-codegen/tests/codegen-direct/frontend-snapshots.tsv linguist-generated=true
+crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json linguist-generated=true
+crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json linguist-generated=true
+crates/antlr-rust-g4-parser/tests/frontend/frontend-snapshots.tsv linguist-generated=true
 
 # Pinned third-party corpora and test fixtures.
-tests/codegen-direct/bootstrap/** linguist-vendored=true
-tests/codegen-direct/external/** linguist-vendored=true
-tests/codegen-direct/fixtures/** linguist-vendored=true
-tools/parse-bench/fixtures/** linguist-vendored=true
+crates/antlr-rust-codegen/tests/codegen-direct/bootstrap/** linguist-vendored=true -whitespace
+crates/antlr-rust-codegen/tests/codegen-direct/external/** linguist-vendored=true -whitespace
+crates/antlr-rust-codegen/tests/codegen-direct/fixtures/** linguist-vendored=true -whitespace
+crates/antlr-rust-g4-parser/tests/frontend/bootstrap/** linguist-vendored=true -whitespace
+crates/antlr-rust-g4-parser/tests/frontend/external/** linguist-vendored=true -whitespace
+tools/parse-bench/fixtures/** linguist-vendored=true -whitespace

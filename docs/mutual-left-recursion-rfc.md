@@ -534,9 +534,10 @@ decline.
 
 ## 5. Implementation notes (for the curious; Rust knowledge not required)
 
-The pass is one file, `src/bin_support/grammar/mutual_recursion.rs` (~600
-lines + ~400 of tests), in a Rust reimplementation of the ANTLR toolchain
-that consumes `.g4` source directly. Correspondences to the Java tool:
+The pass lives in
+`crates/antlr-rust-codegen/src/grammar/mutual_recursion.rs`, in a Rust
+reimplementation of the ANTLR toolchain that consumes `.g4` source directly.
+Correspondences to the Java tool:
 
 | This work | ANTLR 4 (Java) |
 |---|---|

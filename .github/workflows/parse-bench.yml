@@ -13,6 +13,9 @@ jobs:
   parse-bench:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      ANTLR4_JAR: ${{ github.workspace }}/target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+      GRAMMARS_V4: ${{ github.workspace }}/target/antlr-cleanroom/grammars-v4
 
     steps:
       - name: Checkout head
@@ -60,16 +63,16 @@ jobs:
 
       - name: Fetch ANTLR benchmark inputs
         run: |
-          mkdir -p /tmp/antlr-cleanroom/tools
-          curl -fLo /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+          mkdir -p "$(dirname "$ANTLR4_JAR")"
+          curl -fLo "$ANTLR4_JAR" \
             https://www.antlr.org/download/antlr-4.13.2-complete.jar
-          mkdir -p /tmp/antlr-cleanroom/grammars-v4
-          git -C /tmp/antlr-cleanroom/grammars-v4 init -q
-          git -C /tmp/antlr-cleanroom/grammars-v4 remote add origin https://github.com/antlr/grammars-v4.git
-          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
-          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
-          git -C /tmp/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
-          git -C /tmp/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
+          mkdir -p "$GRAMMARS_V4"
+          git -C "$GRAMMARS_V4" init -q
+          git -C "$GRAMMARS_V4" remote add origin https://github.com/antlr/grammars-v4.git
+          git -C "$GRAMMARS_V4" sparse-checkout init --cone
+          git -C "$GRAMMARS_V4" sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
+          git -C "$GRAMMARS_V4" fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
+          git -C "$GRAMMARS_V4" checkout FETCH_HEAD
 
       - name: Rust/Go AST parity
         run: |

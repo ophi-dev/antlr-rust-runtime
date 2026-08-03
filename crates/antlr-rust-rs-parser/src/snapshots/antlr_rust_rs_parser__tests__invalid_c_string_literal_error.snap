@@ -1,0 +1,6 @@
+---
+source: crates/antlr-rust-rs-parser/src/lib.rs
+assertion_line: 2717
+expression: error
+---
+cannot classify embedded Rust syntax: at 1:9: no viable alternative at input 'let_=c"\0"'

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
+  "active_revision_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/revisions/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1/manifest.json",
+      "closure_sha256": "d46c8e6e03e7fd5ffaa99b06753f4f4bdc0ab065f4bdbbf7bba329c84796dd34"
+    }
+  ]
+}

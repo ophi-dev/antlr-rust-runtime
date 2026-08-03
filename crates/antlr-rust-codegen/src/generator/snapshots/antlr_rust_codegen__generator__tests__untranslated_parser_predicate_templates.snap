@@ -1,0 +1,14 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 20036
+expression: templates
+---
+[
+    (
+        (
+            0,
+            0,
+        ),
+        Unknown,
+    ),
+]

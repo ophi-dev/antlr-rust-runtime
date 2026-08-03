@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnparserprediction-testll1ambig-f17d128ca5",
+  "active_revision_id": "testatnparserprediction-testll1ambig-f17d128ca5-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnparserprediction-testll1ambig-f17d128ca5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnparserprediction-testll1ambig-f17d128ca5/revisions/testatnparserprediction-testll1ambig-f17d128ca5-r1/manifest.json",
+      "closure_sha256": "7442d0baa0640ecb2ec0924d98b2bb4977e28e5f385eb9a3d6232d98df6b3888"
+    }
+  ]
+}

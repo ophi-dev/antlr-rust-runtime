@@ -17,7 +17,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
 const inventoryPath = resolve(
     repoRoot,
-    "tests/codegen-direct/upstream-case-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json",
 );
 const options = parseArguments(process.argv.slice(2));
 
