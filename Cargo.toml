@@ -1,16 +1,58 @@
-[package]
-name = "antlr-rust-runtime"
+[workspace]
+members = [
+    "crates/antlr-rust-g4-parser",
+    "crates/antlr-rust-rs-parser",
+    "crates/antlr-rust-codegen",
+    "tools/antlr-rust-runtime-testsuite",
+]
+exclude = [
+    "tests/javascript-parity/dumper",
+    "tests/kotlin-parity/dumper",
+    "tests/typescript-parity/dumper",
+]
+resolver = "3"
+
+[workspace.package]
+# x-release-please-start-version
 version = "0.26.0"
+# x-release-please-end
 edition = "2024"
 rust-version = "1.95"
-description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
+license = "BSD-3-Clause"
 repository = "https://github.com/ophi-dev/antlr-rust-runtime"
 homepage = "https://github.com/ophi-dev/antlr-rust-runtime"
+
+[workspace.dependencies]
+# x-release-please-start-version
+antlr-rust-runtime = { path = ".", version = "=0.26.0" }
+antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.26.0" }
+antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.26.0" }
+antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.26.0" }
+# x-release-please-end
+hmac-sha256 = "1"
+icu_casemap = "2.2.0"
+icu_properties = { version = "2.2.0", features = ["alloc"] }
+insta = { version = "1", default-features = false }
+intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
+memchr = "2"
+petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
+stacker = "0.1.24"
+thiserror = "2"
+
+[package]
+name = "antlr-rust-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/antlr-rust-runtime"
 readme = "README.md"
-license = "BSD-3-Clause"
+license.workspace = true
 keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
 categories = ["parser-implementations", "development-tools", "parsing"]
+include = ["/Cargo.toml", "/LICENSE", "/README.md", "/src/**"]
 
 [lib]
 name = "antlr4_runtime"
@@ -18,43 +60,24 @@ path = "src/lib.rs"
 
 [features]
 default = []
-codegen = [
-    "dep:icu_casemap",
-    "dep:icu_properties",
-    "dep:intl",
-    "dep:petgraph",
-]
 std = []
 perf-counters = []
 
 [dependencies]
-icu_casemap = { version = "2.2.0", optional = true }
-icu_properties = { version = "2.2.0", features = ["alloc"], optional = true }
-intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"], optional = true }
-memchr = "2"
-petgraph = { version = "0.8.3", default-features = false, features = ["std"], optional = true }
-stacker = "0.1.24"
-thiserror = "2"
+memchr.workspace = true
+stacker.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
-hmac-sha256 = "1"
-insta = { version = "1", default-features = false }
-pretty_assertions = "1"
-
-[[bin]]
-name = "antlr4-rust-gen"
-path = "src/bin/antlr4-rust-gen.rs"
-required-features = ["codegen"]
-
-[[test]]
-name = "antlr4_rust_gen_cli"
-path = "tests/antlr4_rust_gen_cli.rs"
-required-features = ["codegen"]
+insta.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
 
-[lints.rust]
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 missing_debug_implementations = "warn"
 rust_2018_compatibility = { level = "warn", priority = -2 }
 rust_2018_idioms = { level = "warn", priority = -2 }
@@ -69,7 +92,7 @@ unused_import_braces = "warn"
 unused_qualifications = "warn"
 variant_size_differences = "warn"
 
-[lints.clippy]
+[workspace.lints.clippy]
 cargo = { level = "warn", priority = -4 }
 nursery = { level = "warn", priority = -3 }
 pedantic = { level = "warn", priority = -2 }
@@ -102,6 +125,7 @@ match_same_arms = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 module_name_repetitions = "allow"
+multiple_crate_versions = "allow"
 must_use_candidate = "allow"
 needless_continue = "allow"
 needless_raw_string_hashes = "allow"

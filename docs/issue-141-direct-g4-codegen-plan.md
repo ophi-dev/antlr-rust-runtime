@@ -187,7 +187,7 @@ Using a clean ANTLR 4.13.2 checkout at release commit
 
 ```text
 cargo run --release --locked --quiet --bin antlr4-runtime-testsuite -- \
-  --descriptors /tmp/antlr-cleanroom/antlr4-4.13.2-runtime/runtime-testsuite
+  --descriptors target/antlr-cleanroom/antlr4-4.13.2-runtime/runtime-testsuite
 
 summary: 357 passed, 0 failed, 0 skipped, 357 run
 ```

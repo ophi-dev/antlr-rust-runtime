@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-teste-cd9e1fc41d",
+  "active_revision_id": "testsymbolissues-teste-cd9e1fc41d-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-teste-cd9e1fc41d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testsymbolissues-teste-cd9e1fc41d/revisions/testsymbolissues-teste-cd9e1fc41d-r1/manifest.json",
+      "closure_sha256": "6eb585b12eeb573268860b2b8d4fed856aaddd54bee2108134bbcc817f2f8614"
+    }
+  ]
+}

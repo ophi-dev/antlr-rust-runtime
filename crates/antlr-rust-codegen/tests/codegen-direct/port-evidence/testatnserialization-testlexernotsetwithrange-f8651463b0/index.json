@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexernotsetwithrange-f8651463b0",
+  "active_revision_id": "testatnserialization-testlexernotsetwithrange-f8651463b0-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexernotsetwithrange-f8651463b0-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testlexernotsetwithrange-f8651463b0/revisions/testatnserialization-testlexernotsetwithrange-f8651463b0-r1/manifest.json",
+      "closure_sha256": "e5e124d609ba68a115cf581155c3496fd68de5b27aee5175a5e6002e1e3a06a7"
+    }
+  ]
+}

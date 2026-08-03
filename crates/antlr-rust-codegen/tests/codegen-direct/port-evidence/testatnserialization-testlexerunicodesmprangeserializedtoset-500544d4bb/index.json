@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
+  "active_revision_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/revisions/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb-r1/manifest.json",
+      "closure_sha256": "41885edaf6659972a20dc84ac8391f3514a479fc712c607f8feb733c43ac38ff"
+    }
+  ]
+}

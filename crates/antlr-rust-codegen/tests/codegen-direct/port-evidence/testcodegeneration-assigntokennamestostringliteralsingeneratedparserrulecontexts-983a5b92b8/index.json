@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8",
+  "active_revision_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1",
+  "revisions": [
+    {
+      "revision_id": "testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8/revisions/testcodegeneration-assigntokennamestostringliteralsingeneratedparserrulecontexts-983a5b92b8-r1/manifest.json",
+      "closure_sha256": "8a6f1fd217b54e67d5908084173da7a9624b0b86e59444c8bafcb61740d95426"
+    }
+  ]
+}

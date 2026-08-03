@@ -11,21 +11,25 @@ typed Rust hooks and keeps the target-specific state in copyable base modules.
 - `antlr/grammars-v4` at the pinned parity commit
 - Java 17 and ANTLR 4.13.2 only when running the Java parity proof
 
+The setup below keeps downloaded inputs under the repository's ignored
+`target/antlr-cleanroom/`, which is not subject to operating-system temporary
+directory cleanup. `cargo clean` removes it.
+
 ```bash
 # The jar is an oracle dependency for the parity harness, not Rust generation.
-ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+ANTLR4_JAR=target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
 ANTLR_JAR_SHA256=eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76
-mkdir -p /tmp/antlr-cleanroom/tools
+mkdir -p target/antlr-cleanroom/tools
 curl -fLo "$ANTLR4_JAR" \
   https://www.antlr.org/download/antlr-4.13.2-complete.jar
 echo "${ANTLR_JAR_SHA256}  ${ANTLR4_JAR}" | shasum -a 256 -c -
 
 git clone --filter=blob:none --no-checkout \
   https://github.com/antlr/grammars-v4.git \
-  /tmp/antlr-cleanroom/grammars-v4
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set javascript/typescript
-git -C /tmp/antlr-cleanroom/grammars-v4 checkout \
+  target/antlr-cleanroom/grammars-v4
+git -C target/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
+git -C target/antlr-cleanroom/grammars-v4 sparse-checkout set javascript/typescript
+git -C target/antlr-cleanroom/grammars-v4 checkout \
   284602b3f23ca54dc30778204ab7ae9e969145e9
 ```
 
@@ -34,11 +38,11 @@ git -C /tmp/antlr-cleanroom/grammars-v4 checkout \
 From this repository's root:
 
 ```bash
-GRAMMAR=/tmp/antlr-cleanroom/grammars-v4/javascript/typescript
-BUILD=/tmp/antlr-cleanroom/typescript-rust
+GRAMMAR=target/antlr-cleanroom/grammars-v4/javascript/typescript
+BUILD=target/antlr-cleanroom/typescript-rust
 mkdir -p "$BUILD/generated"
 
-cargo run --locked --release --features codegen --bin antlr4-rust-gen -- \
+cargo run --locked --release -p antlr-rust-codegen --bin antlr4-rust-gen -- \
   "$GRAMMAR/TypeScriptLexer.g4" \
   "$GRAMMAR/TypeScriptParser.g4" \
   --lib "$GRAMMAR" \
@@ -107,7 +111,7 @@ interpreter, which receives the same typed hooks.
 ```bash
 tests/typescript-parity/run.sh \
   --antlr-jar "$ANTLR4_JAR" \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 ```
 
 The harness regenerates the Rust recognizers and the official Java target, then

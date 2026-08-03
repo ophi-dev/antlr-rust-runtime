@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+  "active_revision_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testnotimpliedcharacters-4c3481ae89-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testsymbolissues-testnotimpliedcharacters-4c3481ae89/revisions/testsymbolissues-testnotimpliedcharacters-4c3481ae89-r1/manifest.json",
+      "closure_sha256": "4bf16326c4318a992eec518f2550e0fbb05c9ed4c8cfb1ee9993eac72fa74f4b"
+    }
+  ]
+}

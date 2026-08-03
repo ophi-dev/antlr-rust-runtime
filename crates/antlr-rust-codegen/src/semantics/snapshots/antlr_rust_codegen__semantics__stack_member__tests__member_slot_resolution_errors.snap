@@ -1,0 +1,7 @@
+---
+source: crates/antlr-rust-codegen/src/semantics/stack_member.rs
+assertion_line: 758
+expression: "format!(\"{unknown}\\n{mistyped}\")"
+---
+unknown member slot "nope"; declare it with a [[member]] entry
+member slot "verbatium" is declared int but used as stack

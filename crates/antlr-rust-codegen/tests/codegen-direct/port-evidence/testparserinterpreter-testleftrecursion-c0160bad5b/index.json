@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testparserinterpreter-testleftrecursion-c0160bad5b",
+  "active_revision_id": "testparserinterpreter-testleftrecursion-c0160bad5b-r1",
+  "revisions": [
+    {
+      "revision_id": "testparserinterpreter-testleftrecursion-c0160bad5b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testparserinterpreter-testleftrecursion-c0160bad5b/revisions/testparserinterpreter-testleftrecursion-c0160bad5b-r1/manifest.json",
+      "closure_sha256": "f99b2e1c493fe91815929fe028a297886069b18c8926f6170e904d5c34e2eea9"
+    }
+  ]
+}

@@ -31,19 +31,19 @@ const SHARED_GRAMMAR_PARSER_LEXER =
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
-const fixturesRoot = resolve(repositoryRoot, "tests/codegen-direct/fixtures");
+const fixturesRoot = resolve(repositoryRoot, "crates/antlr-rust-codegen/tests/codegen-direct/fixtures");
 const generatedPath = resolve(
   repositoryRoot,
-  "tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs",
+  "crates/antlr-rust-codegen/tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs",
 );
 const options = parseArguments(process.argv.slice(2));
 
 verifyCommit(options.javaRoot, JAVA_COMMIT, "Java ANTLR");
 verifyCommit(options.antlrNgRoot, ANTLR_NG_COMMIT, "antlr-ng");
 
-const testMap = await load("tests/codegen-direct/upstream-test-map.json");
+const testMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json");
 const inventory = await load(
-  "tests/codegen-direct/upstream-case-inventory.json",
+  "crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json",
 );
 const inventoryById = new Map(
   inventory.cases.map((testCase) => [testCase.id, testCase]),
@@ -1712,9 +1712,9 @@ function parseArguments(args) {
   const result = {
     update: null,
     javaRoot:
-      process.env.ANTLR4_TOOL_ROOT ?? "/tmp/antlr-cleanroom/antlr4-4.13.2-tool",
+      process.env.ANTLR4_TOOL_ROOT ?? resolve(repositoryRoot, "target/antlr-cleanroom/antlr4-4.13.2-tool"),
     antlrNgRoot:
-      process.env.ANTLR_NG_ROOT ?? "/tmp/antlr-cleanroom/antlr-ng-1f68422",
+      process.env.ANTLR_NG_ROOT ?? resolve(repositoryRoot, "target/antlr-cleanroom/antlr-ng-1f68422"),
   };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];

@@ -1,7 +1,0 @@
----
-source: src/bin_support/grammar/mutual_recursion.rs
-expression: render(&unit)
----
-e:
-  | <assoc=right> e ''^'' e
-  | ID

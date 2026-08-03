@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+  "active_revision_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/revisions/testtokenpositionoptions-testleftrecursionwithset-57f72a753d-r1/manifest.json",
+      "closure_sha256": "c16eaf78271fcfc0898eb0beb480dbdbdf154d084366332458684df28ed701f9"
+    }
+  ]
+}

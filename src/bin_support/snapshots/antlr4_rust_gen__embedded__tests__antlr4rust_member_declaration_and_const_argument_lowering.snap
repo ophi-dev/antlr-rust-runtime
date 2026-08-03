@@ -1,7 +1,0 @@
----
-source: src/bin_support/embedded.rs
-expression: "format!(\"{}\\n---\\n{}\", translated_method.source,\ntranslated_const_argument.source)"
----
-fn CompatParser_ID(&self) -> bool { __antlr4rust_token_aliases_2::CompatParser_ID == Self::ID }
----
-Wrapper<{ __antlr4rust_token_aliases_2::CompatParser_OTHER as usize }>

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testsimpleloop-1e309afd1c",
+  "active_revision_id": "testatnserialization-testsimpleloop-1e309afd1c-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testsimpleloop-1e309afd1c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testsimpleloop-1e309afd1c/revisions/testatnserialization-testsimpleloop-1e309afd1c-r1/manifest.json",
+      "closure_sha256": "7c4586f1fc73d67b7c34fd248015acb28c71c253cfa96906c2e8bf3a17ed7d00"
+    }
+  ]
+}

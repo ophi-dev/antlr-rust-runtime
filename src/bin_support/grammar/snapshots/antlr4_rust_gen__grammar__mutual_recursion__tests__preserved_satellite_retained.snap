@@ -1,9 +1,0 @@
----
-source: src/bin_support/grammar/mutual_recursion.rs
-expression: render(&fixture.unit)
----
-e:
-  | e ''+'' ID
-  | ID
-s:
-  | e ''+'' ID

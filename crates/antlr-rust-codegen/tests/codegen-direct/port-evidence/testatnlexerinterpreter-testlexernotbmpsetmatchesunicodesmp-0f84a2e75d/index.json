@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d",
+  "active_revision_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d/revisions/testatnlexerinterpreter-testlexernotbmpsetmatchesunicodesmp-0f84a2e75d-r1/manifest.json",
+      "closure_sha256": "193b256759aaf3d98d989b5a157a0876928f9991c548442beb879c470d576b98"
+    }
+  ]
+}

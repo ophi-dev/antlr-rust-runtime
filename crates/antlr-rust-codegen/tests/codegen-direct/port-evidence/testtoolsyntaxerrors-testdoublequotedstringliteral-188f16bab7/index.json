@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7",
+  "active_revision_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/revisions/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1/manifest.json",
+      "closure_sha256": "0d9ee5c5675bad77a8fe32193099882246af54a69a76cabc4a30964e0ac60ecd"
+    }
+  ]
+}

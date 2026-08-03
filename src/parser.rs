@@ -11465,6 +11465,9 @@ where
         *sequence = self.recognition_arena.prepend(*sequence, node);
     }
 
+    // The perf-counters branch reads the process environment, so this cannot
+    // become const even when Clippy analyzes the branch-free configuration.
+    #[allow(clippy::missing_const_for_fn)]
     fn finish_recognition_arena(&mut self, root: NodeSeqId, diagnostics: DiagnosticSeqId) {
         self.last_recognition_arena_root = root;
         self.last_recognition_arena_diagnostics = diagnostics;

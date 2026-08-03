@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
+  "active_revision_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/revisions/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55-r1/manifest.json",
+      "closure_sha256": "85b5ac75e76ad66a5d5d914f70060986acaf067d24ab521fe1bc26b185732cb8"
+    }
+  ]
+}

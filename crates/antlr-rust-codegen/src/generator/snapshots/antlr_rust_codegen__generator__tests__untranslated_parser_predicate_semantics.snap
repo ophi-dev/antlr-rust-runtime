@@ -1,0 +1,31 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 22838
+expression: entries
+---
+[
+    SemanticsEntry {
+        kind: ParserPredicate,
+        rule_index: Some(
+            0,
+        ),
+        rule_name: Some(
+            "s",
+        ),
+        index: Some(
+            0,
+        ),
+        atn_state: None,
+        line: Some(
+            4,
+        ),
+        column: Some(
+            6,
+        ),
+        body: Some(
+            "isTypeName()",
+        ),
+        disposition: AssumeTrue,
+        template: None,
+    },
+]

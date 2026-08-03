@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetrange-b5d5ea2237",
+  "active_revision_id": "testatnconstruction-testcharsetrange-b5d5ea2237-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetrange-b5d5ea2237-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnconstruction-testcharsetrange-b5d5ea2237/revisions/testatnconstruction-testcharsetrange-b5d5ea2237-r1/manifest.json",
+      "closure_sha256": "7ef60138ccbf48ebecd6fe4c6fb385411c6b33cd4a9202405b05b61d85bfc391"
+    }
+  ]
+}

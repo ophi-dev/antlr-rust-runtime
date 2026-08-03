@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testinitactions-1c2e33025c",
+  "active_revision_id": "testattributechecks-testinitactions-1c2e33025c-r1",
+  "revisions": [
+    {
+      "revision_id": "testattributechecks-testinitactions-1c2e33025c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testattributechecks-testinitactions-1c2e33025c/revisions/testattributechecks-testinitactions-1c2e33025c-r1/manifest.json",
+      "closure_sha256": "49aa32eb5c2571b26ef7379ac3be4b093c01cccf393f18f38aa9cabd5e8d1029"
+    }
+  ]
+}

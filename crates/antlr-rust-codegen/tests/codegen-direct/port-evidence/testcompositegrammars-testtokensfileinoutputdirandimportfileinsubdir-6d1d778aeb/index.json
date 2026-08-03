@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+  "active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/revisions/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1/manifest.json",
+      "closure_sha256": "4119547a50e5f63972ccae57e0ee763430768a7c066496f6f05ce3dd753c42f8"
+    }
+  ]
+}

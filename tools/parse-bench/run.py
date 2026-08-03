@@ -20,8 +20,8 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parents[2]
 BENCH_ROOT = Path(__file__).resolve().parent
 FIXTURE_ROOT = BENCH_ROOT / "fixtures"
-DEFAULT_ANTLR_JAR = Path("/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar")
-DEFAULT_GRAMMARS_V4 = Path("/tmp/antlr-cleanroom/grammars-v4")
+DEFAULT_ANTLR_JAR = ROOT / "target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"
+DEFAULT_GRAMMARS_V4 = ROOT / "target/antlr-cleanroom/grammars-v4"
 # ANTLR 4.13.2 still generates Go imports for github.com/antlr4-go/antlr/v4,
 # whose latest published module tag is v4.13.1.
 GO_ANTLR_RUNTIME = "v4.13.1"
@@ -378,6 +378,7 @@ def generate_rust_modules(
     rust_generated_dir: Path,
     require_generated_parser: bool,
     runtime_root: Path,
+    generator_args: Iterable[str] = (),
 ) -> None:
     cmd = [
         "cargo",
@@ -408,6 +409,7 @@ def generate_rust_modules(
         cmd.append("--require-full-semantics")
     if require_generated_parser:
         cmd.append("--require-generated-parser")
+    cmd.extend(generator_args)
     run(cmd)
 
 
@@ -440,6 +442,8 @@ def write_rust_runner(
         "",
         "[dependencies]",
         f'antlr-rust-runtime = {{ path = "{runtime_root}" }}',
+        "",
+        "[workspace]",
         "",
     ]
     if rust_thin_lto:
@@ -1304,6 +1308,7 @@ def prepare_work(
                 rust_generated,
                 args.rust_generated_only,
                 args.runtime_root,
+                args.rust_generator_arg,
             )
 
         if "python-antlr" in runtimes:
@@ -1594,6 +1599,7 @@ def write_json(results: list[Measurement], args: argparse.Namespace) -> None:
         "warmups": args.warmups,
         "phase": args.phase,
         "rust_generated_only": args.rust_generated_only,
+        "rust_generator_args": args.rust_generator_arg,
         "repo": str(args.runtime_root),
         "repo_commit": git_rev(args.runtime_root),
         "rust_native": args.rust_native,
@@ -1632,6 +1638,7 @@ def write_markdown(results: list[Measurement], args: argparse.Namespace) -> None
         f"- PGO profile generation: `{args.rust_pgo_generate or 'no'}`",
         f"- PGO profile use: `{args.rust_pgo_use or 'no'}`",
         f"- Rust generated-only: `{'yes' if args.rust_generated_only else 'no'}`",
+        f"- Rust generator arguments: `{args.rust_generator_arg or 'none'}`",
         f"- grammars-v4: `{git_rev(args.grammars_v4) or args.grammars_v4}`",
         "",
         "| Language | Fixture | Runtime | Bytes | Min ms | Avg ms | vs Rust |",
@@ -1726,6 +1733,16 @@ def parse_args() -> argparse.Namespace:
             "Require all Rust parser rules to be generated, then run rust-antlr "
             "with ANTLR4_RUST_GENERATED_ONLY=1 so missing coverage fails instead "
             "of falling back to the interpreter."
+        ),
+    )
+    parser.add_argument(
+        "--rust-generator-arg",
+        action="append",
+        default=[],
+        metavar="ARG",
+        help=(
+            "Forward one argument to antlr4-rust-gen; repeat as needed. "
+            "Use --rust-generator-arg=--flag for values beginning with '--'."
         ),
     )
     parser.add_argument(

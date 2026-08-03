@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgrammarparserinterpreter-testalts-22eedde0ac",
+  "active_revision_id": "testgrammarparserinterpreter-testalts-22eedde0ac-r1",
+  "revisions": [
+    {
+      "revision_id": "testgrammarparserinterpreter-testalts-22eedde0ac-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testgrammarparserinterpreter-testalts-22eedde0ac/revisions/testgrammarparserinterpreter-testalts-22eedde0ac-r1/manifest.json",
+      "closure_sha256": "6cfd7d522c178a37d863e110a5fc1fcbfe749dee0829f41cf23fc144c45e71aa"
+    }
+  ]
+}

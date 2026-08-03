@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/mutual_recursion.rs
+assertion_line: 1753
+expression: render(&unit)
+---
+e:
+  | e ''*'' e
+  | e ''+'' e
+  | ID

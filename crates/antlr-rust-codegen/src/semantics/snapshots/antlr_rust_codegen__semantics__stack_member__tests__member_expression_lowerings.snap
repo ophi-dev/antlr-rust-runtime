@@ -1,0 +1,26 @@
+---
+source: crates/antlr-rust-codegen/src/semantics/stack_member.rs
+assertion_line: 704
+expression: parsed
+---
+[
+    Member(
+        1,
+    ),
+    MemberTop(
+        0,
+    ),
+    MemberLen(
+        1,
+    ),
+    Not(
+        MemberTop(
+            0,
+        ),
+    ),
+    Not(
+        Member(
+            1,
+        ),
+    ),
+]

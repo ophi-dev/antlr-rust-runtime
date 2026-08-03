@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/mutual_recursion.rs
+assertion_line: 1700
+expression: render(&fixture.unit)
+---
+b:
+  | b ''a'' ''b''
+  | A ''b''
+  | B

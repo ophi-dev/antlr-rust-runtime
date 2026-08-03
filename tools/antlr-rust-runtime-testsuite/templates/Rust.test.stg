@@ -1,0 +1,371 @@
+/*
+ * Rust.test.stg — conformance template for the ANTLR4 Rust target.
+ *
+ * AUTHORED BLIND. This file was written without reading any concrete Rust
+ * ANTLR runtime or code-generator in this (or any) repository. It is a
+ * *specification / reference artifact*: for each of ANTLR's 70 neutral test
+ * helpers it renders the Rust action code that an *ideal, idiomatic* Rust
+ * target would emit into a grammar `{...}` action or `{...}?` predicate. It is
+ * modeled on the other targets' `.test.stg` files (Java is canonical; Go is
+ * the reference for a target with distinct naming/getter conventions) plus
+ * idiomatic Rust — not on any real implementation.
+ *
+ * Signatures (template names + argument names/arity) match Java.test.stg
+ * exactly, because the runtime-testsuite harness invokes them positionally and
+ * by name. Only the *bodies* are Rust.
+ *
+ * Design summary (full rationale + assumed runtime API surface in the
+ * companion file Rust.test.stg.design-notes.md):
+ *
+ *   - Output goes through `self.output()`, a handle the generated recognizer
+ *     exposes over a `&mut dyn std::io::Write` sink the test harness captures;
+ *     `writeln!`/`write!` against it never surface a `io::Result` into
+ *     action/predicate position (the handle swallows/records it).
+ *   - Generated contexts are typed structs. Child accessors use snake_case
+ *     Rust names and reflect grammar cardinality: required children return
+ *     `Result`, optional children return `Option`, and repeated children are
+ *     lazy iterators (`ctx.e_children()`, `ctx.int_tokens()`).
+ *   - Rule return attributes are public fields on the returns/context value,
+ *     so `Result(r)`/`Production(p)` pass through as `<r>`/`<p>` (no getter
+ *     wrapper — the ideal Rust target exposes them directly, unlike Go).
+ *   - Parser "members" are injected as an `impl` block on the generated parser
+ *     via `@parser::members`; helpers are called `self.foo()` / `self.pred(v)`.
+ *   - The generated listener trait is `TListener` with snake_case
+ *     `enter_x`/`exit_x` and defaulted terminal/error-node visitors. Callbacks
+ *     are fallible and a test listener is walked by `ParseTreeWalker::walk`.
+ *   - Casts from an active `ParserRuleContext` to a labeled-alt / concrete
+ *     borrowing view use the generated `__active_context_view` adapter.
+ */
+
+writeln(s) ::= <<writeln!(self.output(), "{}", <s>);>>
+
+write(s) ::= <<write!(self.output(), "{}", <s>);>>
+
+writeList(s) ::= <<writeln!(self.output(), "{}", <s; separator=" + ">);>>
+
+False() ::= "false"
+
+True() ::= "true"
+
+Not(v) ::= "!<v>"
+
+// Rendered empty, following the Go/Python/Swift precedent: descriptors splice
+// raw Java fragments into Assert (e.g. `Concat(" != null"):Assert()` in the
+// LeftRecursion/MultipleAlternativesWithCommonLabel family), so any non-Java
+// target that renders a real assertion receives uncompilable Java syntax.
+Assert(s) ::= ""
+
+// The neutral descriptors use Java's unsuffixed labeled-alt context names.
+// Rust namespaces every labeled-alt context with `Label`.
+rustLabelContextType ::= [
+    "BinaryContext": "BinaryLabelContext",
+    "UnaryContext": "UnaryLabelContext",
+    default: key
+]
+
+Cast(t,v) ::= "__active_context_view::\<<rustLabelContextType.(t)>\<'_, __ActiveParserContext>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
+
+// Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
+// with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
+// so the only concatenation form that always compiles is `format!`.
+Append(a,b) ::= <%format!("{}{}", <a>, <b>)%>
+
+AppendStr(a,b) ::= <%format!("{}{}", <a>, <b>)%>
+
+Concat(a,b) ::= "<a><b>"
+
+AssertIsList(v) ::= "let _: Vec\<_> = <v>.collect();" // just use the static type system
+
+AssignLocal(s,v) ::= "<s> = <v>;"
+
+// Members are field declarations in the generated recognizer's struct body.
+// Rust separates struct fields from impl items, so — like TypeScript's
+// `<n> : number = <v>;` class-field rendering — the Rust target defines a
+// field-with-initializer declaration form that its code generator lowers to a
+// struct field plus constructor initialization.
+InitIntMember(n,v) ::= <%<n>: i32 = <v>;%>
+
+InitBooleanMember(n,v) ::= <%<n>: bool = <v>;%>
+
+// Rule-local variable (`@init`/locals scope): a real `let` statement. The
+// trailing `let _` keeps an otherwise-unread local from tripping
+// `unused_variables` under `-D warnings`.
+InitIntVar(n,v) ::= <%let mut <n>: i32 = <v>; let _ = <n>;%>
+
+IntArg(n) ::= "<n>: i32"
+
+VarRef(n) ::= "<n>"
+
+GetMember(n) ::= <%self.<n>%>
+
+SetMember(n,v) ::= <%self.<n> = <v>;%>
+
+AddMember(n,v) ::= <%self.<n> += <v>;%>
+
+MemberEquals(n,v) ::= <%self.<n> == <v>%>
+
+ModMemberEquals(n,m,v) ::= <%self.<n> % <m> == <v>%>
+
+ModMemberNotEquals(n,m,v) ::= <%self.<n> % <m> != <v>%>
+
+DumpDFA() ::= "self.dump_dfa();"
+
+Pass() ::= ""
+
+StringList() ::= "Vec\<String>"
+
+BuildParseTrees() ::= "self.set_build_parse_trees(true);"
+
+BailErrorStrategy() ::= <%self.set_error_handler(BailErrorStrategy::new());%>
+
+ToStringTree(s) ::= <%<s>.to_string_tree(Some(self), self.base.token_store())%>
+
+Column() ::= "self.char_position_in_line()"
+
+Text() ::= "self.text()"
+
+ValEquals(a,b) ::= <%<a> == <b>%>
+
+TextEquals(a) ::= <%self.text() == "<a>"%>
+
+PlusText(a) ::= <%"<a>".to_string() + &self.text()%>
+
+InputText() ::= "self.input().text()"
+
+LTEquals(i, v) ::= <%self.input().lt(<i>).text() == <v>%>
+
+LANotEquals(i, v) ::= <%self.input().la(<i>) != <v>%>
+
+TokenStartColumnEquals(i) ::= <%self.token_start_char_position_in_line() == <i>%>
+
+ImportListener(X) ::= ""
+
+GetExpectedTokenNames() ::= "self.expected_tokens().to_token_string(self.vocabulary())"
+
+ImportRuleInvocationStack() ::= ""
+
+// Java prints List.toString ("[a, b]"); Rust's Vec Debug quotes elements, so —
+// like Go's antlr.PrintArrayJavaStyle and Python's str_list — the runtime
+// provides a Java-style list formatter the generated module has in scope.
+RuleInvocationStack() ::= "java_style_list(&self.rule_invocation_stack())"
+
+LL_EXACT_AMBIG_DETECTION() ::= <<self.interpreter().set_prediction_mode(PredictionMode::LlExactAmbigDetection);>>
+
+ParserToken(parser, token) ::= <%<parser>::<token>%>
+
+Production(p) ::= <%<p>%>
+
+Result(r) ::= <%<r>%>
+
+ParserPropertyMember() ::= <<
+@members {
+#[allow(non_snake_case)]
+fn Property(&self) -> bool {
+    true
+}
+}
+>>
+
+ParserPropertyCall(p, call) ::= "<p>.<call>"
+
+// The Rust conformance harness supplies this behavior through
+// SemanticHooks::lexer_after_accept, exercising the public lifecycle contract
+// instead of injecting a target-specific superclass.
+PositionAdjustingLexerDef() ::= ""
+
+PositionAdjustingLexer() ::= ""
+
+BasicListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn visit_terminal(
+        &mut self,
+        node: &TerminalNode,
+    ) -> Result\<(), std::convert::Infallible> {
+        writeln!(self.output(), "{}", node.symbol().text_or_empty());
+        Ok(())
+    }
+}
+}
+>>
+
+WalkListener(s) ::= <<
+let mut listener = LeafListener::default();
+ParseTreeWalker::walk_with_invocation_states(
+    &mut listener,
+    <s>,
+    self.base.active_invocation_states(),
+).unwrap();
+>>
+
+// Java needs a custom context superclass because its default RuleContext does
+// not store the outer alternative number. The Rust target's ParserRuleContext
+// records the alternative number natively (and renders it in string trees),
+// so the customization point this template exists to inject is built in and
+// the template renders nothing. The grammar's `contextSuperClass=MyRuleNode`
+// option is grammar metadata the Rust code generator does not consume.
+TreeNodeWithAltNumField(X) ::= ""
+
+TokenGetterListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_a(
+        &mut self,
+        ctx: &AContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        if ctx.child_count() == 2 {
+            let tokens: Vec\<_> = ctx.int_tokens().collect();
+            writeln!(
+                self.output(),
+                "{} {} {}",
+                tokens[0].symbol().text_or_empty(),
+                tokens[1].symbol().text_or_empty(),
+                java_style_list(&tokens)
+            );
+        } else {
+            writeln!(
+                self.output(),
+                "{}",
+                ctx.id_token().expect("ID alternative").symbol()
+            );
+        }
+        Ok(())
+    }
+}
+}
+>>
+
+RuleGetterListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_a(
+        &mut self,
+        ctx: &AContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        let children: Vec\<_> = ctx.b_children().collect();
+        if ctx.child_count() == 2 {
+            writeln!(
+                self.output(),
+                "{} {} {}",
+                children[0].start().text(),
+                children[1].start().text(),
+                children[0].start().text()
+            );
+        } else {
+            writeln!(self.output(), "{}", children[0].start().text());
+        }
+        Ok(())
+    }
+}
+}
+>>
+
+
+LRListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_e(
+        &mut self,
+        ctx: &EContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        if ctx.child_count() == 3 {
+            let children: Vec\<_> = ctx.e_children().collect();
+            writeln!(
+                self.output(),
+                "{} {} {}",
+                children[0].start().text(),
+                children[1].start().text(),
+                children[0].start().text()
+            );
+        } else {
+            writeln!(
+                self.output(),
+                "{}",
+                ctx.int_token().expect("INT alternative").symbol().text_or_empty()
+            );
+        }
+        Ok(())
+    }
+}
+}
+>>
+
+LRWithLabelsListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_call_label(
+        &mut self,
+        ctx: &CallLabelContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        writeln!(
+            self.output(),
+            "{} {}",
+            ctx.e().expect("call target").start().text(),
+            ctx.e_list().expect("call arguments")
+        );
+        Ok(())
+    }
+    fn exit_int_label(
+        &mut self,
+        ctx: &IntLabelContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        writeln!(
+            self.output(),
+            "{}",
+            ctx.int_token().expect("INT alternative").symbol().text_or_empty()
+        );
+        Ok(())
+    }
+}
+}
+>>
+
+DeclareContextListGettersFunction() ::= <<
+fn foo() {
+    let s: Option\<SContext\> = None;
+    let _a: Vec\<AContext\> = s.as_ref().unwrap().a_children().collect();
+    let _b: Vec\<BContext\> = s.as_ref().unwrap().b_children().collect();
+}
+>>
+
+Declare_foo() ::= <<
+fn foo(&mut self) { writeln!(self.output(), "foo"); }
+>>
+
+Invoke_foo() ::= "self.foo();"
+
+Declare_pred() ::= <<fn pred(&mut self, v: bool) -> bool {
+    writeln!(self.output(), "eval={}", v);
+    v
+}
+>>
+
+Invoke_pred(v) ::= <<self.pred(<v>)>>
+
+ParserTokenType(t) ::= "Parser::<t>"
+ContextRuleFunction(ctx, rule) ::= "<ctx>.<rule>"
+ContextListFunction(ctx, rule) ::= "<ctx>.<rule>_children()"
+StringType() ::= "String"
+ContextMember(ctx, member) ::= "<ctx>.<member>"
+rustSubcontextAccessor ::= [
+    "e(0)": "e_children().next().unwrap()",
+    "e(1)": "e_children().nth(1).unwrap()",
+    default: key
+]
+SubContextLocal(ctx, subctx, local) ::= "<ctx>.<rustSubcontextAccessor.(subctx)>.<local>"
+SubContextMember(ctx, subctx, member) ::= "<ctx>.<rustSubcontextAccessor.(subctx)>.<member>"

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430",
+  "active_revision_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430/revisions/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1/manifest.json",
+      "closure_sha256": "32e4fb5853efd08df5b4dc7c40465c7b017518c30e72d0e2c5b1bbb058b98248"
+    }
+  ]
+}

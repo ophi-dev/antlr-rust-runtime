@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnlexerinterpreter-testrecursivelexerruleref-2047e777de",
+  "active_revision_id": "testatnlexerinterpreter-testrecursivelexerruleref-2047e777de-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnlexerinterpreter-testrecursivelexerruleref-2047e777de-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnlexerinterpreter-testrecursivelexerruleref-2047e777de/revisions/testatnlexerinterpreter-testrecursivelexerruleref-2047e777de-r1/manifest.json",
+      "closure_sha256": "8190b2af223a1e6152ea9bab1665f5f459b18a45f987c30beef94ac90f285b60"
+    }
+  ]
+}

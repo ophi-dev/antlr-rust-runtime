@@ -1,5 +1,0 @@
----
-source: src/bin_support/stack_member.rs
-expression: error.to_string()
----
-duplicate member slot declaration "x"

@@ -1,0 +1,133 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+expression: "rendered_context_impl(&rendered, \"MixedRepetitionFollowedContext\")"
+---
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+
+    /// Iterates terminals owned directly by this context without descending
+    /// into nested rule contexts.
+    ///
+    /// Recovered trees expose inserted and deleted recovery tokens as error
+    /// nodes through the same `TerminalNode` surface. Use
+    /// `TerminalNode::is_error()` to identify recovery nodes and
+    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
+    pub fn direct_terminals(
+        &self,
+    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {
+        __terminal_children(self.__node).map(TerminalNode::new)
+    }
+
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }
+    }
+
+    pub fn text(&self) -> String {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.text(),
+            __GeneratedRuleContext::Active { context, storage, tokens } => context.text(storage, tokens),
+        }
+    }
+}
+
+#[allow(dead_code, private_bounds, clippy::all)]
+impl<'a, State: __RecoveryContextState> MixedRepetitionFollowedContext<'a, State> {
+    pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 8).map(TerminalNode::new)
+    }
+    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 9)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn plus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 11).map(TerminalNode::new)
+    }
+    pub fn minus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 12).map(TerminalNode::new)
+    }
+    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
+        __token_children(self.__node, 14)
+            .next()
+            .map(TerminalNode::new)
+            .ok_or_else(|| MissingChildError::new("MixedRepetitionFollowedContext", "NUM"))
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> MixedRepetitionFollowedContext<'a, ValidatedTreeContext> {
+    fn __from_validated_node(node: RuleNodeView<'a>) -> Self {
+        Self::__from_validated_node_with_invocation_states(node, None)
+    }
+
+    fn __from_validated_child_node(
+        node: RuleNodeView<'a>,
+        parent_invocation_states: Option<&[isize]>,
+    ) -> Self {
+        let invocation_states = parent_invocation_states.map(|states| {
+            let mut invocation_states = Vec::with_capacity(states.len() + 1);
+            invocation_states.push(node.invoking_state());
+            invocation_states.extend_from_slice(states);
+            invocation_states
+        });
+        Self::__from_validated_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_validated_listener_node(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<&[isize]>,
+    ) -> Self {
+        Self::__from_validated_node_with_invocation_states(
+            node,
+            invocation_states.map(|states| states.to_vec()),
+        )
+    }
+
+    fn __from_validated_node_with_invocation_states(
+        node: RuleNodeView<'a>,
+        invocation_states: Option<Vec<isize>>,
+    ) -> Self {
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+            __state: std::marker::PhantomData,
+        }
+    }
+
+    pub fn rule_node(&self) -> RuleNodeView<'a> {
+        match self.__node {
+            __GeneratedRuleContext::Stored(node) => node,
+            __GeneratedRuleContext::Active { .. } => unreachable!("validated context contains an active parser context"),
+        }
+    }
+
+    pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 8).map(TerminalNode::new)
+    }
+    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
+        __token_children(self.__node, 9)
+            .next()
+            .map(TerminalNode::new)
+    }
+    pub fn plus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 11).map(TerminalNode::new)
+    }
+    pub fn minus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+        __token_children(self.__node, 12).map(TerminalNode::new)
+    }
+    pub fn num_token(&self) -> TerminalNode<'a> {
+        let Some(node) = __token_children(self.__node, 14).next() else {
+            unreachable!("validated MixedRepetitionFollowedContext is missing required child NUM")
+        };
+        TerminalNode::new(node)
+    }
+}

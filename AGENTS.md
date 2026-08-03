@@ -4,7 +4,7 @@
 
 Generic runtime and codegen paths must stay grammar-agnostic. Do not add
 language-specific rule names, grammar names, file extensions, or semantic
-workarounds to `src/bin/antlr4-rust-gen.rs` or runtime modules; model the
+workarounds to `crates/antlr-rust-codegen/src/` or runtime modules; model the
 behavior from ANTLR metadata/ATN structure instead, and keep language-specific
 guidance in docs or tests for that language.
 
@@ -31,28 +31,32 @@ Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.
 
 ### One-time setup (fresh checkout)
 
+Keep downloaded tools and upstream checkouts under the repository's ignored
+`target/antlr-cleanroom/`. This survives operating-system temporary-directory
+cleanup; `cargo clean` intentionally removes it.
+
 ```bash
-# 1. ANTLR jar (any path; pin v4.13.2)
-mkdir -p /tmp/antlr-cleanroom/tools
-curl -fLo /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+# 1. ANTLR jar (repository-local ignored path; pin v4.13.2)
+mkdir -p target/antlr-cleanroom/tools
+curl -fLo target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
     https://www.antlr.org/download/antlr-4.13.2-complete.jar
 
 # 2. grammars-v4 checkout (sparse, just the kotlin grammar)
-mkdir -p /tmp/antlr-cleanroom/grammars-v4
-git -C /tmp/antlr-cleanroom/grammars-v4 init -q
-git -C /tmp/antlr-cleanroom/grammars-v4 remote add origin https://github.com/antlr/grammars-v4.git
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin
-git -C /tmp/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
-git -C /tmp/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
+mkdir -p target/antlr-cleanroom/grammars-v4
+git -C target/antlr-cleanroom/grammars-v4 init -q
+git -C target/antlr-cleanroom/grammars-v4 remote add origin https://github.com/antlr/grammars-v4.git
+git -C target/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
+git -C target/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin
+git -C target/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
+git -C target/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
 ```
 
 ### Run the parity smoke + dumper build
 
 ```bash
 tests/kotlin-parity/run.sh \
-    --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-    --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+    --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+    --grammars-v4 target/antlr-cleanroom/grammars-v4
 ```
 
 That generates the Rust recognizers directly from the Kotlin `.g4` source,
@@ -68,7 +72,7 @@ The dumper has a built-in parse-only stopwatch so process startup (~10 ms) is ex
 DUMPER=tests/kotlin-parity/dumper/target/release/kotlin-parity-dumper
 for snippet in tests/kotlin-parity/snippets/*.kt; do
     echo "=== $(basename "$snippet") ==="
-    "$DUMPER" --input "$snippet" --output /tmp/dump.txt --iters 5 --time
+    "$DUMPER" --input "$snippet" --output target/kotlin-parity-dump.txt --iters 5 --time
 done
 ```
 
@@ -81,7 +85,7 @@ Validates the Rust runtime against ANTLR's upstream conformance descriptors.
 ### One-time setup
 
 ```bash
-git clone --depth 1 https://github.com/antlr/antlr4 /tmp/antlr-cleanroom/antlr4-upstream
+git clone --depth 1 https://github.com/antlr/antlr4 target/antlr-cleanroom/antlr4-upstream
 ```
 
 The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fetched above.
@@ -89,11 +93,11 @@ The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fet
 ### Run the full sweep
 
 ```bash
-cargo run --release --quiet --bin antlr4-runtime-testsuite
+cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 ```
 
-Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and
-`ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Cases run
+Defaults to `ANTLR4_JAR=target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and
+`ANTLR4_RUNTIME_TESTSUITE=target/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Cases run
 on `--jobs` parallel workers (default `min(cores, 8)`), each with its own cargo target-dir stripe; the render driver and `antlr4-rust-gen` are
 prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon. `ANTLR4_RUST_GEN_EXTRA_ARGS="--fixed-lookahead 3"` forwards extra generator flags
 for opt-in-tier sweeps.
@@ -111,12 +115,13 @@ regular sync + adaptive body (see the README "Decision Tiers" section).
 
 The harness runs descriptors the way every official ANTLR target does:
 each descriptor grammar is rendered through
-`.conformance-review/Rust.test.stg` with the real StringTemplate engine
-(`tools/stg-render/RenderGrammar.java`, executed via the ANTLR jar and the
+`tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
+StringTemplate engine
+(`tools/antlr-rust-runtime-testsuite/java/RenderGrammar.java`, executed via the ANTLR jar and the
 Java single-file source launcher), so its actions/predicates become real
 Rust code. The rendered grammar feeds `antlr4-rust-gen --actions embedded`
 directly, which splices the bodies verbatim
-after `$`-attribute translation (`src/bin_support/embedded.rs`) and
+after `$`-attribute translation (`crates/antlr-rust-codegen/src/embedded/`) and
 generates typed context views, per-rule attrs structs, members
 fields/methods, listener traits, and recognizer facades. `--stg PATH`
 overrides the template group. (An earlier template-recognition pipeline,
@@ -127,13 +132,13 @@ this one before ever shipping.)
 
 ```bash
 # One descriptor:
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case LexerExec/KeywordID
+cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- --case LexerExec/KeywordID
 
 # One group (e.g. while debugging left-recursion):
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --group LeftRecursion --limit 20
+cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- --group LeftRecursion --limit 20
 
 # Keep the per-case temp crates for inspection:
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserErrors/SingleSetInsertion --keep
+cargo run --release --quiet -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite -- --case ParserErrors/SingleSetInsertion --keep
 ```
 
 Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with
@@ -171,8 +176,8 @@ per-case smoke crates as `cargo run` with their own `CARGO_TARGET_DIR` stripes:
 ```bash
 source <(cargo llvm-cov show-env --sh)   # exports RUSTC_WRAPPER + %p-keyed LLVM_PROFILE_FILE
 cargo llvm-cov clean --workspace
-cargo build --bin antlr4-runtime-testsuite --features codegen
-cargo run   --bin antlr4-runtime-testsuite --features codegen
+cargo build -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
+cargo run   -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 # `report` sees only the harness + generator (its object list comes from cargo
 # build metadata, not a target/ scan), so fold the subprocess-built smoke
 # binaries in by hand: capture report's own `llvm-cov export` and append them.
@@ -215,7 +220,8 @@ only for small, stable values. Project specifics:
 - **Every test module (or bare `#[test]` fn) that calls an insta macro needs
   `#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.`**
   — `.clippy.toml` bans `.unwrap()` and the macros unwrap internally, so CI
-  clippy fails without it (see `src/bin_support/grammar/semantics.rs`).
+  clippy fails without it (see
+  `crates/antlr-rust-codegen/src/grammar/semantics.rs`).
 - **insta is `default-features = false`**: only `assert_snapshot!`,
   `assert_debug_snapshot!`, and `assert_compact_debug_snapshot!` are available.
   The YAML/JSON/redaction macros need serde, which the runtime does not use.
@@ -231,7 +237,7 @@ only for small, stable values. Project specifics:
 
 ## CI parity
 
-CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing —
+CI runs `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing —
 `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
 
 Validate `.github/workflows/*.yml` with `actionlint` (not a generic YAML linter);

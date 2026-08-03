@@ -1,6 +1,6 @@
 # `antlr4-rust-gen` workspace-first refactoring plan
 
-Status: proposed
+Status: implemented
 
 Prepared: 2026-08-03
 
@@ -252,7 +252,11 @@ crates/
 tools/
   antlr-rust-runtime-testsuite/
     Cargo.toml                            publish = false
+    java/
+      RenderGrammar.java
     src/
+    templates/
+      Rust.test.stg
 ```
 
 The final dependency graph is one-way:
@@ -373,6 +377,10 @@ paths.
 Move the runtime testsuite to its own package and mark it `publish = false`.
 Its smoke crates continue to use the local runtime path, while the harness
 invokes the workspace codegen binary explicitly.
+
+Keep the harness's StringTemplate group, Java render driver, and companion
+design notes inside the testsuite package. They are conformance inputs, not
+repository-level scratch artifacts.
 
 Do not introduce a shared miscellaneous package just for `rust_names`. Either
 give the testsuite a local equivalent or expose a genuinely stable artifact
@@ -1093,14 +1101,14 @@ cargo run --release --quiet \
   -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 
 tests/kotlin-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 tests/javascript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 tests/typescript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 
 actionlint
 ```

@@ -1,0 +1,10 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/mutual_recursion.rs
+assertion_line: 1679
+expression: render(&fixture.unit)
+---
+e:
+  | e ''+'' ID
+  | ID
+s:
+  | e ''+'' ID

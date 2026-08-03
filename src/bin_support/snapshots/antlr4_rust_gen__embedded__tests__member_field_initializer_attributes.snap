@@ -1,6 +1,0 @@
----
-source: src/bin_support/embedded.rs
-expression: member_field_initializer_attributes(attributes)
----
-#[cfg(any())]
-#[cfg(any(not(all()), any()))]

@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/syntax.rs
+assertion_line: 1221
+expression: members.body
+---
+
+static isIdentifierChar (c: string) {
+    return c.match(/^[0-9a-zA-Z_]+$/);
+}

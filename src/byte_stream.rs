@@ -45,7 +45,8 @@
 //!
 //! Write lexer rules against the byte range, e.g. `BYTE : ' ' .. 'ÿ';`. A
 //! complete worked example — a Standard MIDI File grammar parsed over a
-//! `ByteStream` — lives under `tests/fixtures/antlr4-rust-gen/midi-binary/`.
+//! `ByteStream` — lives under
+//! `crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/midi-binary/`.
 //!
 //! # Token text is hex
 //!

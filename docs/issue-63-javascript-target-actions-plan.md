@@ -494,14 +494,14 @@ cargo test --locked
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo run --release --quiet --bin antlr4-runtime-testsuite
 tests/kotlin-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 tests/javascript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 tests/typescript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 ```
 
 ## Implementation sequence

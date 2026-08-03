@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testpegachillesheel-72c27bc08f",
+  "active_revision_id": "testatnserialization-testpegachillesheel-72c27bc08f-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testpegachillesheel-72c27bc08f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testpegachillesheel-72c27bc08f/revisions/testatnserialization-testpegachillesheel-72c27bc08f-r1/manifest.json",
+      "closure_sha256": "28ec8fd5d129ae0a244f6194a3aa44efb640416fc7e2b5b397bbbcf9d8ef82e0"
+    }
+  ]
+}

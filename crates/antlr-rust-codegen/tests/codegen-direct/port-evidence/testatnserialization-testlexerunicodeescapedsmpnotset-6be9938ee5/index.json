@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
+  "active_revision_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/revisions/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5-r1/manifest.json",
+      "closure_sha256": "18cf13dd42c2083cc7ae3b8b3f0c0b59a8161322b90766cb8c11e3ab6ea1beae"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 6964
+expression: lowered.source
+---
+trait Local { type CompatParser_ASSOCIATED; }
+struct Value;
+impl Local for Value { type CompatParser_ASSOCIATED = u8; }
+unsafe extern "C" { static CompatParser_FOREIGN: i32; }
+mod local { pub const CompatParser_GLOB: i32 = 99; }
+use local::*;
+let values = (unsafe { CompatParser_FOREIGN }, CompatParser_GLOB);

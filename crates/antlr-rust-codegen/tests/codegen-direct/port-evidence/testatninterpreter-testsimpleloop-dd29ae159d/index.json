@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatninterpreter-testsimpleloop-dd29ae159d",
+  "active_revision_id": "testatninterpreter-testsimpleloop-dd29ae159d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatninterpreter-testsimpleloop-dd29ae159d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testatninterpreter-testsimpleloop-dd29ae159d/revisions/testatninterpreter-testsimpleloop-dd29ae159d-r1/manifest.json",
+      "closure_sha256": "d8d8e593c2788f7f8059629702bba3a4747572d212eccb2f3de29bff6430dc61"
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+---
+source: tests/antlr4_rust_gen_cli/optimizations.rs
+expression: recovery
+---
+[
+    Outcome {
+        case: "required-valid",
+        status: "ok",
+        syntax_errors: 0,
+        token_index: 2,
+        events: [],
+        tree: Some(
+            "(required a a)",
+        ),
+    },
+    Outcome {
+        case: "required-invalid-first",
+        status: "ParserError { line: 1, column: 0, message: \"mismatched input 'c' expecting {'a', 'b'}\", offending: Some(TokenId(0)) }",
+        syntax_errors: 1,
+        token_index: 0,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "mismatched input 'c' expecting {'a', 'b'}",
+            },
+        ],
+        tree: None,
+    },
+    Outcome {
+        case: "required-single-deletion",
+        status: "ok",
+        syntax_errors: 1,
+        token_index: 3,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "extraneous input 'c' expecting {'a', 'b'}",
+            },
+        ],
+        tree: Some(
+            "(required <error:c> a a)",
+        ),
+    },
+    Outcome {
+        case: "required-multiple-unexpected",
+        status: "ParserError { line: 1, column: 0, message: \"mismatched input 'c' expecting {'a', 'b'}\", offending: Some(TokenId(0)) }",
+        syntax_errors: 1,
+        token_index: 0,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "mismatched input 'c' expecting {'a', 'b'}",
+            },
+        ],
+        tree: None,
+    },
+    Outcome {
+        case: "direct-optional-eof",
+        status: "ok",
+        syntax_errors: 0,
+        token_index: 0,
+        events: [],
+        tree: Some(
+            "(directOptional <EOF>)",
+        ),
+    },
+    Outcome {
+        case: "direct-star-single-deletion",
+        status: "ok",
+        syntax_errors: 1,
+        token_index: 2,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "extraneous input 'c' expecting {<EOF>, 'a'}",
+            },
+        ],
+        tree: Some(
+            "(directStar <error:c> a <EOF>)",
+        ),
+    },
+    Outcome {
+        case: "direct-star-multiple-unexpected",
+        status: "ParserError { line: 1, column: 0, message: \"mismatched input 'c' expecting {<EOF>, 'a'}\", offending: Some(TokenId(0)) }",
+        syntax_errors: 1,
+        token_index: 0,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "mismatched input 'c' expecting {<EOF>, 'a'}",
+            },
+        ],
+        tree: None,
+    },
+    Outcome {
+        case: "nested-optional-caller-exit",
+        status: "ok",
+        syntax_errors: 1,
+        token_index: 2,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 0,
+                span: Some(
+                    0..1,
+                ),
+                message: "mismatched input 'c' expecting {<EOF>, 'a'}",
+            },
+        ],
+        tree: Some(
+            "(nestedOptionalEntry (nestedOptional) <error:c> <error:a>)",
+        ),
+    },
+    Outcome {
+        case: "nested-star-eof",
+        status: "ok",
+        syntax_errors: 0,
+        token_index: 0,
+        events: [],
+        tree: Some(
+            "(nestedStarEntry (nestedStar) <EOF>)",
+        ),
+    },
+    Outcome {
+        case: "nested-star-after-iteration",
+        status: "ok",
+        syntax_errors: 1,
+        token_index: 3,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 1,
+                span: Some(
+                    1..2,
+                ),
+                message: "mismatched input 'c' expecting {<EOF>, 'a'}",
+            },
+        ],
+        tree: Some(
+            "(nestedStarEntry (nestedStar a) <error:c> <error:a>)",
+        ),
+    },
+    Outcome {
+        case: "nested-plus-after-iteration",
+        status: "ok",
+        syntax_errors: 1,
+        token_index: 3,
+        events: [
+            Event {
+                offending: Some(
+                    "c",
+                ),
+                line: 1,
+                column: 1,
+                span: Some(
+                    1..2,
+                ),
+                message: "mismatched input 'c' expecting {<EOF>, 'a'}",
+            },
+        ],
+        tree: Some(
+            "(nestedPlusEntry (nestedPlus a) <error:c> <error:a>)",
+        ),
+    },
+]

@@ -18,11 +18,11 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
 const inventoryPath = resolve(
     repoRoot,
-    "tests/codegen-direct/external-source-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/external-source-inventory.json",
 );
 const mirrorRoot = resolve(
     repoRoot,
-    "tests/codegen-direct/external/vscode-antlr4",
+    "crates/antlr-rust-codegen/tests/codegen-direct/external/vscode-antlr4",
 );
 const options = parseArguments(process.argv.slice(2));
 
@@ -54,7 +54,7 @@ for (const entry of entries) {
         mode: entry.mode,
         git_blob: entry.object,
         sha256: digest(contents),
-        mirror_path: `tests/codegen-direct/external/vscode-antlr4/${entry.path}`,
+        mirror_path: `crates/antlr-rust-codegen/tests/codegen-direct/external/vscode-antlr4/${entry.path}`,
     };
     artifacts.push(artifact);
 

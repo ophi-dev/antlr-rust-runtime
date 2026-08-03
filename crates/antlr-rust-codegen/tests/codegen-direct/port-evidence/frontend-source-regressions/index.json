@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-source-regressions",
+  "active_revision_id": "frontend-source-regressions-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-source-regressions-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/frontend-source-regressions/revisions/frontend-source-regressions-r1/manifest.json",
+      "closure_sha256": "3737aa64ee64451348a1b69e7412c264caee735dbf6d795fa98c90978cc751bc"
+    }
+  ]
+}

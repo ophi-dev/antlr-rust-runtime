@@ -1,0 +1,12 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 6804
+expression: translated.source
+---
+impl Helper {
+const CompatParser_ID: i32 = 1;
+fn sees_id(&self) -> bool {
+use std::fmt::Write as _;
+__antlr4rust_token_aliases::CompatParser_ID == Self::CompatParser_ID
+}
+}

@@ -1,0 +1,7 @@
+---
+source: crates/antlr-rust-codegen/src/embedded/mod.rs
+assertion_line: 6652
+expression: member_field_initializer_attributes(attributes)
+---
+#[cfg(any())]
+#[cfg(any(not(all()), any()))]

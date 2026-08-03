@@ -15,8 +15,8 @@ permissions:
 
 env:
   ANTLR_VERSION: 4.13.2
-  ANTLR4_JAR: /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
-  ANTLR4_RUNTIME_TESTSUITE: /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite
+  ANTLR4_JAR: target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+  ANTLR4_RUNTIME_TESTSUITE: target/antlr-cleanroom/antlr4-upstream/runtime-testsuite
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -44,6 +44,9 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
+      - name: Clean coverage artifacts
+        run: cargo llvm-cov clean --workspace
+
       - name: Install Java
         uses: actions/setup-java@v5
         with:
@@ -53,12 +56,12 @@ jobs:
       - name: Prepare ANTLR runtime testsuite
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/antlr-cleanroom/tools
+          mkdir -p target/antlr-cleanroom/tools
           curl --fail --location --output "${ANTLR4_JAR}" \
             "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
           git clone --depth 1 --branch "${ANTLR_VERSION}" \
             https://github.com/antlr/antlr4.git \
-            /tmp/antlr-cleanroom/antlr4-upstream
+            target/antlr-cleanroom/antlr4-upstream
 
       # The sweep drives the runtime three ways — the ATN-interpreting generator,
       # the harness, and per-case smoke crates spawned as subprocess `cargo run`
@@ -78,12 +81,13 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC1090  # process-substitution source is dynamic by design
           source <(cargo llvm-cov show-env --sh)
-          cargo llvm-cov clean --workspace
-          cargo build --locked --quiet --bin antlr4-runtime-testsuite --features codegen
-          cargo run --locked --quiet --bin antlr4-runtime-testsuite --features codegen
+          cargo build --locked --quiet \
+            -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
+          cargo run --locked --quiet \
+            -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
           # Merge the profraw into a .profdata and grab the exact `llvm-cov export`
           # command report would run (same instr-profile, base objects, ignores).
-          export_cmd="$(cargo llvm-cov report --lcov -v 2>&1 >/dev/null \
+          export_cmd="$(cargo llvm-cov report --workspace --lcov -v 2>&1 >/dev/null \
             | sed -n "s/^ *Running \`\(.*llvm-cov export .*\)\`\$/\1/p")"
           if [ -z "$export_cmd" ]; then
             echo "::error::could not capture llvm-cov export command from report -v" >&2

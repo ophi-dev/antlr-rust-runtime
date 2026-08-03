@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a",
+  "active_revision_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testnestedcomposite-6c1f19c65a/revisions/testcompositegrammars-testnestedcomposite-6c1f19c65a-r1/manifest.json",
+      "closure_sha256": "962b4e91b0cb7f0218ceb16a7a097274faf16ef7491600683d5abf67a9534e3b"
+    }
+  ]
+}

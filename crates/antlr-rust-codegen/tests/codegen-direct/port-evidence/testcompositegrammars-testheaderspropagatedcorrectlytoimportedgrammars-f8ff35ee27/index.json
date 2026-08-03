@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
+  "active_revision_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/revisions/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1/manifest.json",
+      "closure_sha256": "13dd82798feb22f9f9b39a96a2fd5afd5895d9d3a30836c6d3e3cba21fed64d3"
+    }
+  ]
+}

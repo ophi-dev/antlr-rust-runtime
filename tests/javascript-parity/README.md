@@ -15,8 +15,8 @@ Run:
 ```bash
 python3 -m pip install antlr4-python3-runtime==4.13.2
 tests/javascript-parity/run.sh \
-  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+  --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 target/antlr-cleanroom/grammars-v4
 ```
 
 The fixtures cover hashbang start-of-file handling, regex/division

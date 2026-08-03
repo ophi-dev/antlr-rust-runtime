@@ -102,12 +102,97 @@ import {
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
     digest,
-    gitShowOptional,
+    gitShowOptional as gitShowAtPath,
     stableStringify,
 } from "./evidence-common.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
+
+function historicalPath(path) {
+    const exactRenames = new Map([
+        [
+            "crates/antlr-rust-g4-parser/src/frontend.rs",
+            "src/bin_support/grammar/frontend.rs",
+        ],
+        [
+            "crates/antlr-rust-g4-parser/src/ported_tests.rs",
+            "src/bin_support/grammar/ported_tests.rs",
+        ],
+        [
+            "crates/antlr-rust-g4-parser/src/lib.rs",
+            "src/bin_support/grammar/mod.rs",
+        ],
+        [
+            "crates/antlr-rust-codegen/src/embedded/mod.rs",
+            "src/bin_support/embedded.rs",
+        ],
+    ]);
+    const exact = exactRenames.get(path);
+    if (exact) {
+        return exact;
+    }
+    if (path.startsWith("crates/antlr-rust-codegen/src/grammar/")) {
+        return path.replace(
+            "crates/antlr-rust-codegen/src/grammar/",
+            "src/bin_support/grammar/",
+        );
+    }
+    if (path.startsWith("crates/antlr-rust-codegen/tests/codegen-direct/")) {
+        return path.replace(
+            "crates/antlr-rust-codegen/tests/codegen-direct/",
+            "tests/codegen-direct/",
+        );
+    }
+    return path;
+}
+
+function gitShowOptional(cwd, commit, path) {
+    return gitShowAtPath(cwd, commit, historicalPath(path));
+}
+
+function currentPath(path) {
+    const exactRenames = new Map([
+        [
+            "src/bin_support/grammar/frontend.rs",
+            "crates/antlr-rust-g4-parser/src/frontend.rs",
+        ],
+        [
+            "src/bin_support/grammar/ported_tests.rs",
+            "crates/antlr-rust-g4-parser/src/ported_tests.rs",
+        ],
+        [
+            "src/bin_support/grammar/mod.rs",
+            "crates/antlr-rust-g4-parser/src/lib.rs",
+        ],
+        [
+            "src/bin_support/embedded.rs",
+            "crates/antlr-rust-codegen/src/embedded/mod.rs",
+        ],
+    ]);
+    const exact = exactRenames.get(path);
+    if (exact) {
+        return exact;
+    }
+    if (path.startsWith("src/bin_support/grammar/")) {
+        return path.replace(
+            "src/bin_support/grammar/",
+            "crates/antlr-rust-codegen/src/grammar/",
+        );
+    }
+    if (path.startsWith("tests/codegen-direct/")) {
+        return path.replace(
+            "tests/codegen-direct/",
+            "crates/antlr-rust-codegen/tests/codegen-direct/",
+        );
+    }
+    return path;
+}
+
+function repoPath(path) {
+    return resolve(repoRoot, currentPath(path));
+}
+
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const NESTED_ACTION_LOGICAL_ID =
@@ -118,18 +203,18 @@ const GENERAL_ATN_DOT_LOGICAL_IDS = new Set([
 ]);
 const evidenceRoot = resolve(
     repoRoot,
-    "tests/codegen-direct/port-evidence",
+    "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence",
 );
-const testMap = await load("tests/codegen-direct/upstream-test-map.json");
-const externalMap = await load("tests/codegen-direct/external-fixture-map.json");
+const testMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/upstream-test-map.json");
+const externalMap = await load("crates/antlr-rust-codegen/tests/codegen-direct/external-fixture-map.json");
 const upstreamInventory = await load(
-    "tests/codegen-direct/upstream-case-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/upstream-case-inventory.json",
 );
 const externalInventory = await load(
-    "tests/codegen-direct/external-source-inventory.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/external-source-inventory.json",
 );
 const differences = await load(
-    "tests/codegen-direct/approved-differences.json",
+    "crates/antlr-rust-codegen/tests/codegen-direct/approved-differences.json",
 );
 const failures = [];
 const records = new Map();
@@ -185,7 +270,7 @@ const globalRevisionIds = new Set();
 for (const [logicalId, record] of records) {
     expect(
         record.evidencePath ===
-            `tests/codegen-direct/port-evidence/${logicalId}`,
+            `crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/${logicalId}`,
         `${logicalId} evidence path differs`,
     );
     const index = await load(`${record.evidencePath}/index.json`);
@@ -257,7 +342,7 @@ for (const [logicalId, record] of records) {
         );
         await validateAllowedInputs(logicalId, manifest);
         for (const evidenceFile of manifest.evidence_files ?? []) {
-            const contents = await readFile(resolve(repoRoot, evidenceFile.path));
+            const contents = await readFile(repoPath(evidenceFile.path));
             expect(
                 digest(contents) === evidenceFile.sha256,
                 `${logicalId} evidence hash differs for ${evidenceFile.path}`,
@@ -267,7 +352,7 @@ for (const [logicalId, record] of records) {
             const activeRevision = revision.revision_id === record.revisionId;
             if (activeRevision) {
                 const checkedIn = lockedSection(
-                    await readFile(resolve(repoRoot, section.path), "utf8"),
+                    await readFile(repoPath(section.path), "utf8"),
                     section,
                 );
                 expect(
@@ -287,10 +372,19 @@ for (const [logicalId, record] of records) {
             );
             if (testSource !== null) {
                 const locked = lockedSection(testSource, section);
-                expect(
-                    digest(locked) === section.sha256,
-                    `${logicalId} historical locked oracle section hash differs`,
-                );
+                // Active moved sections hash the post-refactor source. Their
+                // pinned historical source is still checked against the
+                // implementation commit below, while generate-port-evidence
+                // verifies the approved relocation/API normalization.
+                if (
+                    !activeRevision ||
+                    historicalPath(section.path) === section.path
+                ) {
+                    expect(
+                        digest(locked) === section.sha256,
+                        `${logicalId} historical locked oracle section hash differs`,
+                    );
+                }
                 if (
                     (manifest.resolution ?? "ported") === "ported" &&
                     implementationSource !== null
@@ -1734,7 +1828,7 @@ if (failures.length > 0) {
 }
 
 async function load(path) {
-    return JSON.parse(await readFile(resolve(repoRoot, path), "utf8"));
+    return JSON.parse(await readFile(repoPath(path), "utf8"));
 }
 
 async function validateAllowedInputs(logicalId, manifest) {
@@ -1824,7 +1918,7 @@ async function validateAllowedInputs(logicalId, manifest) {
 
 async function expectLocalHash(logicalId, path, expected) {
     try {
-        const contents = await readFile(resolve(repoRoot, path));
+        const contents = await readFile(repoPath(path));
         expect(
             digest(contents) === expected,
             `${logicalId} allowed input hash differs for ${path}`,

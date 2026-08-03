@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728",
+  "active_revision_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728/revisions/testlexeractions-testfailingpredicateevalisnotcached-ccbdf3d728-r1/manifest.json",
+      "closure_sha256": "73c31b7b5b78f848f785968fb1384a0473067da5280cc13c9d30a5c1cab15faf"
+    }
+  ]
+}

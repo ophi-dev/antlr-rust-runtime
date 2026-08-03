@@ -1,0 +1,5 @@
+---
+source: tests/antlr4_rust_gen_cli/transforms.rs
+expression: stderr
+---
+Error: Custom { kind: InvalidInput, error: "error[G4S079]: <grammar>:1:0: configured parser entry rule missing is not defined\n" }

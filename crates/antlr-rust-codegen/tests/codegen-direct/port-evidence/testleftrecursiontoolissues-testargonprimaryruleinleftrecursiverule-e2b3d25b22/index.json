@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+  "active_revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
+  "revisions": [
+    {
+      "revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/revisions/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1/manifest.json",
+      "closure_sha256": "899f847f8cfc57bb2a57402ba60621862ad730cea3ec2005b362ee741bc7db74"
+    }
+  ]
+}

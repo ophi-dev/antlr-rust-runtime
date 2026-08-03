@@ -1,0 +1,33 @@
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest directory"));
+    let output_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
+    let run_count_path = manifest_dir.join("build-runs.txt");
+    let run_count = fs::read_to_string(&run_count_path)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or_default()
+        + 1;
+    fs::write(run_count_path, run_count.to_string())?;
+
+    let generation = antlr_rust_codegen::Builder::new()
+        .grammar(manifest_dir.join("grammar/@GRAMMAR@Lexer.g4"))
+        .grammar(manifest_dir.join("grammar/@GRAMMAR@Parser.g4"))
+        .library_directory(manifest_dir.join("grammar"))
+        .out_dir(&output_dir)
+        .generate()?;
+    generation.emit_rerun_if_changed();
+
+    fs::write(
+        output_dir.join("host-target.txt"),
+        format!(
+            "{}\n{}\n",
+            env::var("HOST").expect("Cargo host"),
+            env::var("TARGET").expect("Cargo target")
+        ),
+    )?;
+    Ok(())
+}

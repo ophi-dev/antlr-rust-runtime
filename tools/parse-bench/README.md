@@ -13,16 +13,18 @@ the same command usable locally and in CI.
 ## Setup
 
 Use the same ANTLR jar and `grammars-v4` checkout described in `AGENTS.md`.
-The benchmark defaults to:
+The repository-local directory is ignored and survives operating-system
+temporary-directory cleanup; `cargo clean` removes it. The benchmark defaults
+to:
 
-- `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar`
-- `GRAMMARS_V4=/tmp/antlr-cleanroom/grammars-v4`
+- `ANTLR4_JAR=target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar`
+- `GRAMMARS_V4=target/antlr-cleanroom/grammars-v4`
 
 The sparse checkout must include C#, the modern Java grammar, and Trino SQL in
 addition to Kotlin:
 
 ```bash
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
+git -C target/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
 ```
 
 Install the Python dependencies in the interpreter you will use to run the
@@ -59,6 +61,19 @@ python3 tools/parse-bench/run.py \
   --rust-generated-only \
   --json target/parse-bench/results.json \
   --markdown target/parse-bench/results.md
+```
+
+Generator experiments use the same harness through repeatable passthrough
+arguments. Use separate work directories so generated sources and binaries do
+not overwrite the baseline:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages kotlin,trino \
+  --runtimes rust-antlr \
+  --rust-generator-arg=--fixed-lookahead \
+  --rust-generator-arg=3 \
+  --work-dir target/parse-bench-fixed
 ```
 
 The script regenerates parsers into `target/parse-bench`, builds:

@@ -74,6 +74,18 @@ class DumpTreeHelpersTests(unittest.TestCase):
             expected,
         )
 
+    def test_generated_rust_runner_is_a_standalone_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            runner = RUN.write_rust_runner(
+                Path(temp),
+                [RUN.LANGUAGES["java"]],
+                RUN.ROOT,
+                rust_thin_lto=False,
+            )
+
+            manifest = (runner / "Cargo.toml").read_text()
+            self.assertIn("\n[workspace]\n", manifest)
+
     def test_generated_dumpers_reject_lexer_and_parser_diagnostics(self) -> None:
         rust_source, go_source = self.generated_sources()
         rust_dump = rust_source[rust_source.index("fn dump_tree_java") :]
@@ -153,6 +165,24 @@ class RustCSharpSupportTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--sem-unknown") + 1],
             "error",
+        )
+
+    def test_codegen_forwards_extra_generator_arguments(self) -> None:
+        spec = RUN.LANGUAGES["kotlin"]
+        with tempfile.TemporaryDirectory() as temp, mock.patch.object(RUN, "run") as run:
+            root = Path(temp)
+            RUN.generate_rust_modules(
+                spec,
+                root / "grammar",
+                root / "generated",
+                require_generated_parser=False,
+                runtime_root=RUN.ROOT,
+                generator_args=("--fixed-lookahead", "3"),
+            )
+
+        self.assertEqual(
+            run.call_args.args[0][-2:],
+            ["--fixed-lookahead", "3"],
         )
 
 

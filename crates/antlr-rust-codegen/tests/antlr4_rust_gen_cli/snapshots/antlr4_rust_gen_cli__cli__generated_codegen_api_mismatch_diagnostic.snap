@@ -1,0 +1,6 @@
+---
+source: tests/antlr4_rust_gen_cli/cli.rs
+expression: normalize_current_package_version(&diagnostic)
+---
+error: antlr4-rust generated-code API mismatch: antlr4-rust-gen v<generator-version> emitted generated-code API revision 999, but the selected antlr-rust-runtime supports revisions 1, 2, and 3; regenerate this recognizer with a compatible antlr4-rust-gen or select a compatible antlr-rust-runtime dependency
+ --> src/codegen_api_parser.rs:3:1

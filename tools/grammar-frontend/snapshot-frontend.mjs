@@ -15,17 +15,18 @@ if (options["antlr-ng"] && options["antlr-ng-root"]) {
     throw new Error("pass only one of --antlr-ng-root or --antlr-ng");
 }
 const antlrNg = resolve(
+    repo,
     options["antlr-ng-root"] ??
         options["antlr-ng"] ??
-        "/tmp/antlr-cleanroom/antlr-ng-1f68422",
+        "target/antlr-cleanroom/antlr-ng-1f68422",
 );
 const corpusPath = resolve(
     repo,
-    options.corpus ?? "tests/codegen-direct/frontend-corpus.json",
+    options.corpus ?? "crates/antlr-rust-codegen/tests/codegen-direct/frontend-corpus.json",
 );
 const outputPath = resolve(
     repo,
-    options.output ?? "tests/codegen-direct/frontend-snapshots.tsv",
+    options.output ?? "crates/antlr-rust-codegen/tests/codegen-direct/frontend-snapshots.tsv",
 );
 
 const corpus = JSON.parse(await readFile(corpusPath, "utf8"));

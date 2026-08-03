@@ -1,0 +1,22 @@
+[package]
+name = "antlr-rust-runtime-testsuite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Unpublished ANTLR upstream runtime conformance harness"
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "antlr4-runtime-testsuite"
+path = "src/main.rs"
+
+[dependencies]
+antlr-rust-runtime.workspace = true
+antlr-rust-codegen.workspace = true
+icu_properties.workspace = true
+
+[lints]
+workspace = true

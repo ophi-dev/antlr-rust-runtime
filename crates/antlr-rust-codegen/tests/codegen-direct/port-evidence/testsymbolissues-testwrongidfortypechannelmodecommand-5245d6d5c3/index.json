@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
+  "active_revision_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3/revisions/testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1/manifest.json",
+      "closure_sha256": "4a95d8b7e06be8619476566a82b7e48e83ad5c26d415bf123155ae18bba42800"
+    }
+  ]
+}

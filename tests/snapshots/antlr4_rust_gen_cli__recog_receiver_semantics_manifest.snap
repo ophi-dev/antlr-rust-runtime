@@ -1,5 +1,0 @@
----
-source: tests/antlr4_rust_gen_cli.rs
-expression: predicate
----
-        {"kind": "parser-predicate", "rule": "shl", "rule_index": 0, "index": 0, "atn_state": null, "line": 8, "column": 6, "body": "recog.IsOk()", "disposition": "hooked", "template": "Hook"}

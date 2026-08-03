@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-bootstrap-corpus",
+  "active_revision_id": "frontend-bootstrap-corpus-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-bootstrap-corpus-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/frontend-bootstrap-corpus/revisions/frontend-bootstrap-corpus-r1/manifest.json",
+      "closure_sha256": "e777cb541b4e7f754d34caa7c09e1f79a0f6b8a74d0e35946e93313bf416ca39"
+    }
+  ]
+}

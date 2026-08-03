@@ -24,10 +24,14 @@ if [ -z "$GRAMMARS_V4" ] || [ ! -d "$GRAMMARS_V4" ]; then
     echo "GRAMMARS_V4 is required (env var or --grammars-v4)" >&2
     exit 2
 fi
+ANTLR4_JAR="$(cd "$(dirname "$ANTLR4_JAR")" && pwd)/$(basename "$ANTLR4_JAR")"
+GRAMMARS_V4="$(cd "$GRAMMARS_V4" && pwd)"
 if [ -z "$WORK_DIR" ]; then
     WORK_DIR="$(mktemp -d -t typescript-parity.XXXXXX)"
     trap 'rm -rf "$WORK_DIR"' EXIT
 fi
+mkdir -p "$WORK_DIR"
+WORK_DIR="$(cd "$WORK_DIR" && pwd)"
 
 UPSTREAM="$GRAMMARS_V4/javascript/typescript"
 mkdir -p "$WORK_DIR/grammar" "$WORK_DIR/java-gen" "$WORK_DIR/java-classes" \
@@ -45,7 +49,7 @@ javac --release 17 -cp "$ANTLR4_JAR" -d "$WORK_DIR/java-classes" \
     "$WORK_DIR/java-gen/"*.java "$SCRIPT_DIR/TypeScriptParityDumper.java"
 
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
-    --features codegen \
+    -p antlr-rust-codegen \
     --bin antlr4-rust-gen -- \
     "$WORK_DIR/grammar/TypeScriptLexer.g4" \
     "$WORK_DIR/grammar/TypeScriptParser.g4" \

@@ -1,0 +1,55 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 19491
+expression: "[(\"empty\", reconcile_context_label_selections(&[])),\n(\"unanimous nth\", reconcile_context_label_selections(&unanimous_nth),),\n(\"unanimous list\", reconcile_context_label_selections(&unanimous_list),),\n(\"promote zero\", reconcile_context_label_selections(&promote_zero),),\n(\"promote one\", reconcile_context_label_selections(&promote_one),),\n(\"different skips\", reconcile_context_label_selections(&different_skips),),\n(\"unsafe nth\", reconcile_context_label_selections(&unsafe_nth),),\n(\"incompatible modes\",\nreconcile_context_label_selections(&incompatible_modes),),]"
+---
+[
+    (
+        "empty",
+        None,
+    ),
+    (
+        "unanimous nth",
+        Some(
+            Nth(
+                2,
+            ),
+        ),
+    ),
+    (
+        "unanimous list",
+        Some(
+            AllAfter(
+                1,
+            ),
+        ),
+    ),
+    (
+        "promote zero",
+        Some(
+            LastAfter(
+                0,
+            ),
+        ),
+    ),
+    (
+        "promote one",
+        Some(
+            LastAfter(
+                1,
+            ),
+        ),
+    ),
+    (
+        "different skips",
+        None,
+    ),
+    (
+        "unsafe nth",
+        None,
+    ),
+    (
+        "incompatible modes",
+        None,
+    ),
+]

@@ -1,0 +1,19 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 21988
+expression: manifest
+---
+{
+  "version": 2,
+  "fixedLookahead": 2,
+  "grammars": [
+    {
+      "name": "T",
+      "summary": {"total": 2, "ll1": 1, "fixed": 1, "adaptive": 0},
+      "decisions": [
+        {"decision": 0, "rule": "s", "state": 7, "canDefer": false, "tier": "ll1"},
+        {"decision": 1, "rule": "a", "state": 20, "canDefer": true, "tier": "fixed", "lookahead": 2}
+      ]
+    }
+  ]
+}

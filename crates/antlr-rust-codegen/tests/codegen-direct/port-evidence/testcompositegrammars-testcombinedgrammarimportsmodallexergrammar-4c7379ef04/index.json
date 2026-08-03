@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+  "active_revision_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "crates/antlr-rust-codegen/tests/codegen-direct/port-evidence/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/revisions/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1/manifest.json",
+      "closure_sha256": "2ffcae44b1922072bbf24503e840baae3706d35e078cfc347bf8e5f92e274ca4"
+    }
+  ]
+}

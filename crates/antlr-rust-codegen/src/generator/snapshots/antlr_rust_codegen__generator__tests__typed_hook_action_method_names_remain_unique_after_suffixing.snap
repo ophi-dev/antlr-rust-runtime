@@ -1,0 +1,22 @@
+---
+source: crates/antlr-rust-codegen/src/generator.rs
+assertion_line: 22757
+expression: "mappings.iter().map(|mapping|\n(mapping.coordinate_index, mapping.kind,\nmapping.method_name.as_str(),)).collect::<Vec<_>>()"
+---
+[
+    (
+        0,
+        Action,
+        "custom_action_action",
+    ),
+    (
+        1,
+        Action,
+        "custom_action_action",
+    ),
+    (
+        2,
+        Action,
+        "custom_action_action_2",
+    ),
+]

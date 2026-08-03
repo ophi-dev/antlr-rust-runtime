@@ -40,7 +40,15 @@
             "extra-files": [
                 {
                     "type": "generic",
+                    "path": "Cargo.toml"
+                },
+                {
+                    "type": "generic",
                     "path": "README.md"
+                },
+                {
+                    "type": "generic",
+                    "path": "crates/antlr-rust-codegen/README.md"
                 }
             ]
         }

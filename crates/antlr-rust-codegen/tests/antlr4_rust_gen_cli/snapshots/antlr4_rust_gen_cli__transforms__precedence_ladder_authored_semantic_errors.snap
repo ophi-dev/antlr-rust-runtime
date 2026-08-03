@@ -1,0 +1,26 @@
+---
+source: tests/antlr4_rust_gen_cli/transforms.rs
+expression: diagnostics
+---
+[
+    (
+        "DuplicateRule",
+        "--optimize-precedence-ladders",
+        "Error: Custom { kind: InvalidInput, error: \"error[G4S002]: $TMP/DuplicateRule/DuplicateRule.g4:5:0: rule low is redefined\\n\" }\n",
+    ),
+    (
+        "DuplicateRule",
+        "--report-precedence-ladders",
+        "Error: Custom { kind: InvalidInput, error: \"error[G4S002]: $TMP/DuplicateRule/DuplicateRule.g4:5:0: rule low is redefined\\n\" }\n",
+    ),
+    (
+        "DuplicateLabel",
+        "--optimize-precedence-ladders",
+        "Error: Custom { kind: InvalidInput, error: \"error[G4S013]: $TMP/DuplicateLabel/DuplicateLabel.g4:4:25: alternative label Shared is redefined\\n\" }\n",
+    ),
+    (
+        "DuplicateLabel",
+        "--report-precedence-ladders",
+        "Error: Custom { kind: InvalidInput, error: \"error[G4S013]: $TMP/DuplicateLabel/DuplicateLabel.g4:4:25: alternative label Shared is redefined\\n\" }\n",
+    ),
+]
