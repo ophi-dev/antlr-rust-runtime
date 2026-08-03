@@ -1,0 +1,7 @@
+---
+source: crates/antlr-rust-runtime/src/xpath.rs
+expression: "display_nodes(nodes, recognizer.data().rule_names())"
+---
+[
+    "prog",
+]

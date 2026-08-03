@@ -2,9 +2,9 @@
 
 ## Generated-code API revision
 
-`src/lib.rs::__ANTLR4_RUST_CODEGEN_API` is the single current revision emitted
+`crates/antlr-rust-runtime/src/lib.rs::__ANTLR4_RUST_CODEGEN_API` is the single current revision emitted
 by `antlr4-rust-gen`. The accepted revisions are the literal match arms in
-`src/lib.rs::__antlr4_rust_require_codegen_api!`.
+`crates/antlr-rust-runtime/src/lib.rs::__antlr4_rust_require_codegen_api!`.
 
 Any change that makes newly generated source require an incompatible runtime
 interface, or makes existing generated source incompatible with the runtime,
@@ -31,7 +31,7 @@ locally before pushing.
 Run `cargo fmt` on files you touched before committing so formatting-only churn
 doesn't ride along with logic changes (and never bulk-`cargo fmt` unrelated files
 in a logic commit). Hand-grouped data — e.g. the positional serialized-ATN
-fixtures in `src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
+fixtures in `crates/antlr-rust-runtime/src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
 ANTLR layout — carries `#[rustfmt::skip]`; leave those attributes in place rather
 than letting fmt explode the block to one element per line.
 
@@ -74,18 +74,18 @@ only for small, stable values. Project specifics:
 
 ## Source layout
 
-- `src/lib.rs` — public exports
-- `src/lexer.rs`, `src/atn/lexer.rs` — `BaseLexer` + lexer ATN simulator
-- `src/parser.rs` — `BaseParser` and the recursive `recognize_state_fast` walker
-- `src/atn/`, `src/atn/serialized.rs` — runtime ATN graph and generated lexer
+- `crates/antlr-rust-runtime/src/lib.rs` — public exports
+- `crates/antlr-rust-runtime/src/lexer.rs`, `crates/antlr-rust-runtime/src/atn/lexer.rs` — `BaseLexer` + lexer ATN simulator
+- `crates/antlr-rust-runtime/src/parser.rs` — `BaseParser` and the recursive `recognize_state_fast` walker
+- `crates/antlr-rust-runtime/src/atn/`, `crates/antlr-rust-runtime/src/atn/serialized.rs` — runtime ATN graph and generated lexer
   artifact deserializer
-- `src/prediction.rs` — compact `ContextId` storage, `AtnConfig`, `PredictionFxHasher`
-- `src/token.rs`, `src/token_stream.rs`, `src/char_stream.rs` — input + token plumbing
-- `src/tree.rs` — public `ParseTree` / `ParserRuleContext`
+- `crates/antlr-rust-runtime/src/prediction.rs` — compact `ContextId` storage, `AtnConfig`, `PredictionFxHasher`
+- `crates/antlr-rust-runtime/src/token.rs`, `crates/antlr-rust-runtime/src/token_stream.rs`, `crates/antlr-rust-runtime/src/char_stream.rs` — input + token plumbing
+- `crates/antlr-rust-runtime/src/tree.rs` — public `ParseTree` / `ParserRuleContext`
 - `crates/antlr-rust-codegen/` — generator library and `antlr4-rust-gen`
 - `crates/antlr-rust-g4-parser/` — checked-in ANTLRv4 frontend
 - `crates/antlr-rust-rs-parser/` — checked-in Rust syntax frontend
-- `tools/antlr-rust-runtime-testsuite/` — conformance harness (see below)
+- `tests/antlr-rust-runtime-testsuite/` — runtime integration and conformance tests (see below)
 - `tests/kotlin-parity/` — Kotlin parity dumper + snippets
 - `tools/parse-bench/` — Python harness comparing rust/go/python/tree-sitter parse times
 
@@ -202,9 +202,9 @@ prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon.
 
 The harness runs descriptors the way every official ANTLR target does:
 each descriptor grammar is rendered through
-`tools/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
+`tests/antlr-rust-runtime-testsuite/templates/Rust.test.stg` with the real
 StringTemplate engine
-(`tools/antlr-rust-runtime-testsuite/java/RenderGrammar.java`, executed via the ANTLR jar and the
+(`tests/antlr-rust-runtime-testsuite/java/RenderGrammar.java`, executed via the ANTLR jar and the
 Java single-file source launcher), so its actions/predicates become real
 Rust code. The rendered grammar feeds `antlr4-rust-gen --actions embedded`
 directly, which splices the bodies verbatim

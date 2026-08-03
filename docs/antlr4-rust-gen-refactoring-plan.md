@@ -6,8 +6,10 @@ Prepared: 2026-08-03
 
 Repository baseline: `bd6710eaedbd79e652681b7b102e03680fd96fbd`
 
-Revision: 2. This revision supersedes the module-first packaging sequence in
-Revision 1. It retains the optimization-pipeline requirements from issues
+Revision: 3. Revision 2 superseded the module-first packaging sequence in
+Revision 1. Revision 3 makes the repository root a virtual workspace and puts
+the runtime beside the other published packages under `crates/`. It retains
+the optimization-pipeline requirements from issues
 [#125](https://github.com/ophi-dev/antlr-rust-runtime/issues/125) and
 `#128`-`#131`, and the multi-recognizer generated-support requirements from
 [#276](https://github.com/ophi-dev/antlr-rust-runtime/issues/276).
@@ -144,8 +146,8 @@ optimizations still wait for separate work.
   translation, and antlr4rust compatibility behavior.
 - `src/bin_support/stack_member.rs`, `templates.rs`, and `rust_names.rs` are
   small codegen services with clear ownership.
-- Runtime APIs stay in the root package. Grammar, optimization, and renderer
-  models must not move into the runtime for import convenience.
+- Runtime APIs stay in `antlr-rust-runtime`. Grammar, optimization, and
+  renderer models must not move into the runtime for import convenience.
 
 The package split should expose narrow facades around these boundaries. It must
 not make every former `pub(crate)` item an advertised public API.
@@ -198,14 +200,20 @@ not make every former `pub(crate)` item an advertised public API.
 
 ## 4. Target workspace
 
-Keep the runtime package at the repository root to minimize unrelated path
-churn:
+Keep the repository root as a virtual workspace manifest and give every
+published package the same `crates/<package>/` ownership boundary:
 
 ```text
-Cargo.toml
-src/                                      antlr-rust-runtime
+Cargo.toml                                virtual workspace
 
 crates/
+  antlr-rust-runtime/
+    Cargo.toml
+    src/
+      lib.rs                              public runtime facade
+      atn/
+      ...
+
   antlr-rust-g4-parser/
     Cargo.toml
     src/
@@ -249,9 +257,9 @@ crates/
       antlr4_rust_gen_cli.rs
       antlr4_rust_gen_cli/
 
-tools/
+tests/
   antlr-rust-runtime-testsuite/
-    Cargo.toml                            publish = false
+    Cargo.toml                            integration-test package; publish = false
     java/
       RenderGrammar.java
     src/
@@ -493,7 +501,7 @@ Use one version for every published workspace package initially. Internal
 package edges use an exact requirement plus a local path:
 
 ```toml
-antlr-rust-runtime = { version = "=0.25.0", path = "../.." }
+antlr-rust-runtime = { version = "=0.25.0", path = "../antlr-rust-runtime" }
 ```
 
 The actual relative path differs by package and belongs in
@@ -727,8 +735,8 @@ The PR is incomplete until all of these are present:
    frontend internals as supported consumer APIs.
 9. Add the public `Builder` entry point and make the CLI a thin adapter over
    the same pipeline.
-10. Remove the root package's `codegen` feature, generator binary/test targets,
-    and codegen-only dependencies.
+10. Remove the legacy runtime package's `codegen` feature, generator binary/test
+    targets, and codegen-only dependencies.
 11. Move and split the large CLI integration test while retaining one Cargo
     test target.
 12. Update all repository commands, scripts, updater paths, CI jobs, coverage
@@ -796,15 +804,17 @@ After merge, ordinary work lands directly in the final owner:
 
 ### 8.1 Manifest policy
 
-The root manifest becomes both the runtime package and workspace root:
+The root manifest is a virtual workspace. All published packages live under
+`crates/`:
 
 ```toml
 [workspace]
 members = [
+    "crates/antlr-rust-runtime",
     "crates/antlr-rust-g4-parser",
     "crates/antlr-rust-rs-parser",
     "crates/antlr-rust-codegen",
-    "tools/antlr-rust-runtime-testsuite",
+    "tests/antlr-rust-runtime-testsuite",
 ]
 resolver = "3"
 
@@ -825,7 +835,7 @@ versions:
 
 ```toml
 [workspace.dependencies]
-antlr-rust-runtime = { path = ".", version = "=0.25.0" }
+antlr-rust-runtime = { path = "crates/antlr-rust-runtime", version = "=0.25.0" }
 antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.25.0" }
 antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.25.0" }
 ```
@@ -868,16 +878,20 @@ Never use `--no-verify` as the normal solution to dependency propagation.
 Keep one release component, one tag, and one changelog. Update
 `release-please-config.json` and its manifest so a release PR changes:
 
+- the root `VERSION` adapter used by Release Please;
 - `[workspace.package].version`;
 - every exact internal version in `[workspace.dependencies]`;
+- every local workspace package version in `Cargo.lock`;
 - README dependency and install examples;
 - any checked release metadata consumed by generated headers.
 
-Do not assume the Rust updater understands inherited workspace versions and
-exact dependency strings. Add explicit extra-file update markers or a checked
-release script, then test the generated release diff. CI must fail when
-`cargo metadata` reports publishable package versions that differ or when an
-internal exact requirement points at another release.
+Release Please's Rust updater requires a root `[package]` and explicit package
+versions, so it is incompatible with this virtual workspace and its inherited
+versions. Use its `simple` strategy with `VERSION`, generic markers for the root
+manifest and documentation, and a targeted TOML update for local `Cargo.lock`
+entries. `tools/release/check-workspace-version.sh` must fail when `VERSION`,
+publishable package versions, lockfile resolution, or internal exact
+requirements disagree.
 
 The release commit message and changelog remain repository-wide. Internal
 packages do not receive independent release notes.

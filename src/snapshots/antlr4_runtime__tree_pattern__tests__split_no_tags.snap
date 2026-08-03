@@ -1,9 +1,0 @@
----
-source: src/tree_pattern.rs
-expression: chunks
----
-[
-    Text(
-        "a = 3 ;",
-    ),
-]

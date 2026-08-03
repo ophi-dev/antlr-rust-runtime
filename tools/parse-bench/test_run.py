@@ -85,6 +85,10 @@ class DumpTreeHelpersTests(unittest.TestCase):
 
             manifest = (runner / "Cargo.toml").read_text()
             self.assertIn("\n[workspace]\n", manifest)
+            self.assertIn(
+                f'antlr-rust-runtime = {{ path = "{RUN.ROOT / RUN.RUNTIME_CRATE}" }}',
+                manifest,
+            )
 
     def test_generated_dumpers_reject_lexer_and_parser_diagnostics(self) -> None:
         rust_source, go_source = self.generated_sources()

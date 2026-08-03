@@ -1,0 +1,37 @@
+[package]
+name = "antlr-rust-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/antlr-rust-runtime"
+readme = "../../README.md"
+license.workspace = true
+keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
+categories = ["parser-implementations", "development-tools", "parsing"]
+include = ["/Cargo.toml", "/README.md", "/src/**"]
+
+[lib]
+name = "antlr4_runtime"
+path = "src/lib.rs"
+
+[features]
+default = []
+std = []
+perf-counters = []
+
+[dependencies]
+memchr.workspace = true
+stacker.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

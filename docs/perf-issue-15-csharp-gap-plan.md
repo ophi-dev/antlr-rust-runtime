@@ -40,11 +40,11 @@ per-decision overheads dominate; tiny Trino files additionally expose a fixed
 
 ### RC1 — lexer re-learns its DFA every parse and traces every character
 
-- The learned lexer DFA lives in `BaseLexer.lexer_dfa` (`src/lexer.rs:115`),
+- The learned lexer DFA lives in `BaseLexer.lexer_dfa` (`crates/antlr-rust-runtime/src/lexer.rs:115`),
   **per instance** — a fresh lexer per parse rebuilds the whole DFA via ATN
   simulation (`close_config`/`epsilon_closure` appear throughout warm
   iterations in the profile).
-- The warm hot loop (`src/atn/lexer.rs:524-531`) calls `record_lexer_dfa_edge`
+- The warm hot loop (`crates/antlr-rust-runtime/src/atn/lexer.rs:524-531`) calls `record_lexer_dfa_edge`
   — a `BTreeSet<LexerDfaEdge>` insert, the hottest non-malloc frame in the
   profile — **on every input character even on cache hits**, purely to support
   the runtime-testsuite's `showDFA` output (`lexer_dfa_string`, consumed only
@@ -55,30 +55,30 @@ per-decision overheads dominate; tiny Trino files additionally expose a fixed
 
 ### RC2 — `sync_decision` walks the whole rule stack on every nullable exit
 
-Generated parsers call `sync_decision` (`src/parser.rs:3282`) before
+Generated parsers call `sync_decision` (`crates/antlr-rust-runtime/src/parser.rs:3282`) before
 optional/loop decisions. When the decision is nullable and the token does not
 start an alternative — the completely normal "exit the `*` loop" case —
-`src/parser.rs:3320` computes the full context-expected token set by
+`crates/antlr-rust-runtime/src/parser.rs:3320` computes the full context-expected token set by
 recursively walking every rule-stack frame and unioning per-state bitsets.
 Java/Go's `DefaultErrorStrategy.sync` returns immediately on nullable
 decisions via memoized `atn.nextTokens(s)` — O(1). C#'s deep expression
 nesting (15+ frames per expression) makes the O(depth) walk brutal. The
 per-state caches feeding it (`state_expected_token_cache`,
-`rule_stop_reach_cache`, `src/parser.rs:6526-6551`) are also per-instance.
+`rule_stop_reach_cache`, `crates/antlr-rust-runtime/src/parser.rs:6526-6551`) are also per-instance.
 
 ### RC3 — parser DFA is cloned in and cloned back per parser instance
 
-`ParserAtnSimulator::new_shared` (`src/atn/parser.rs:266`) deep-clones the
+`ParserAtnSimulator::new_shared` (`crates/antlr-rust-runtime/src/atn/parser.rs:266`) deep-clones the
 warm shared DFA vector out of a thread-local on every parser construction;
 `Drop` clones dirty DFAs back (`merge_shared_decision_dfas`,
-`src/atn/parser.rs:210`). Go/Java mutate one shared DFA in place — zero
+`crates/antlr-rust-runtime/src/atn/parser.rs:210`). Go/Java mutate one shared DFA in place — zero
 copies. Cost ∝ warm-DFA size: 2.6% on a 51 ms C# parse, 10.7% on a 1.6 ms
 Trino parse.
 
 ### RC4 — prediction-layer gap is real but smaller than framed
 
 Verified code-level: our merge keeps equal-return-state entries as separate
-array entries (`merge_two_context_entries`, `src/prediction.rs:315-350`)
+array entries (`merge_two_context_entries`, `crates/antlr-rust-runtime/src/prediction.rs:315-350`)
 where Go recursively merges parents; Go's `closureBusy` spans a whole
 `computeReachSet` across all seeds but is consulted at only two points
 (`closureWork`), while our `scratch.visited` is per-seed and gates every pop.
@@ -97,7 +97,7 @@ language, so Kotlin should improve, not regress.
 ### Phase 1 — lexer (biggest lever, ~30%+ of C# time)
 
 1. Make edge-trace recording opt-in: `record_dfa_trace: bool` (default off) on
-   `BaseLexer`; skip `record_lexer_dfa_edge` at `src/atn/lexer.rs:529`/`:580`
+   `BaseLexer`; skip `record_lexer_dfa_edge` at `crates/antlr-rust-runtime/src/atn/lexer.rs:529`/`:580`
    unless set. Only the testsuite `showDFA` template opts in.
 2. Share the learned lexer DFA across instances: thread-local keyed by ATN
    pointer holding `Rc<RefCell<...>>` with the mutable learned state
@@ -109,7 +109,7 @@ language, so Kotlin should improve, not regress.
 
 ### Phase 2 — `sync_decision` O(1) happy path (~15–20%)
 
-1. Replace the eager full-union build (`src/parser.rs:3320`) with an
+1. Replace the eager full-union build (`crates/antlr-rust-runtime/src/parser.rs:3320`) with an
    early-exit membership walk over rule-stack frames (outermost-in) against
    cached per-state bitsets; build the full union only on the actual
    mismatch/deletion/error path. Same semantics — membership in the union
@@ -117,14 +117,14 @@ language, so Kotlin should improve, not regress.
 2. Walk the stack directly instead of materializing a `PredictionContext`.
 3. Hoist `state_expected_token_cache` / `rule_stop_reach_cache` into
    `with_shared_atn_caches` (pattern already used by
-   `cached_decision_lookahead`, `src/parser.rs:6601`).
+   `cached_decision_lookahead`, `crates/antlr-rust-runtime/src/parser.rs:6601`).
 
 ### Phase 3 — parser DFA shared in place (~3% C#, ~11% Trino)
 
 Thread-local `Rc<RefCell<Vec<Dfa>>>`; simulator keeps the `Rc`, short
 `borrow_mut`s at existing mutation points. Delete `merge_shared_decision_dfas`,
 the `Drop` impl, dirty-tracking. Debug-assert non-reentrancy. Also fixes the
-stale-instance discard wart at `src/atn/parser.rs:222-229`.
+stale-instance discard wart at `crates/antlr-rust-runtime/src/atn/parser.rs:222-229`.
 
 ### Phase 4 — prediction layer (original frontier, correctly sized)
 
@@ -134,7 +134,7 @@ Only after 1–3 land and a fresh profile shows `adaptive_predict` dominant:
    equivalent to ours (closure invocations, config adds, merges, DFA states,
    LL retries); compare per fixture. Decides algorithmic vs per-op cost.
 2. If per-op: `ClosureConfigKey` clones `SemanticContext` per pop
-   (`src/atn/parser.rs:116`), config clones at `:1083`/`:1095`; consider
+   (`crates/antlr-rust-runtime/src/atn/parser.rs:116`), config clones at `:1083`/`:1095`; consider
    `Rc`-ing `SemanticContext`.
 3. If algorithmic: test Go's busy-set scope (one set per `compute_reach_set`
    spanning all seeds, consulted only at Go's two points), measured against

@@ -46,7 +46,7 @@
   },
   "locked_oracle_sections": [
     {
-      "path": "src/vocabulary.rs",
+      "path": "crates/antlr-rust-runtime/src/vocabulary.rs",
       "marker": "        #[test]\n        fn empty_vocabulary_matches_java() {",
       "end_marker": "\n        #[test]\n        fn vocabulary_from_token_names_matches_java() {",
       "sha256": "bbbf710a545d7bed3a3c7e6cb9cda5d8f5684059d7c4a13f3672671ed6cf48ef"

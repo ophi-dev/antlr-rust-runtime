@@ -18,7 +18,7 @@ extend-ignore-re = [
 [files]
 extend-exclude = [
     "**/*.g4",
-    "src/snapshots/**",
+    "crates/antlr-rust-runtime/src/**/snapshots/**",
     "tests/fixtures/**",
 ]
 ignore-vcs = true

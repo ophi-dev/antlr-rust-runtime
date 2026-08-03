@@ -76,11 +76,11 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           paths: |
-            src
+            crates/antlr-rust-runtime/src
             crates/antlr-rust-codegen/src
             crates/antlr-rust-g4-parser/src
             crates/antlr-rust-rs-parser/src
-            tools/antlr-rust-runtime-testsuite/src
+            tests/antlr-rust-runtime-testsuite/src
 
   msrv:
     name: Rust 1.95

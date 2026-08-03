@@ -23,11 +23,11 @@ package_archive() {
 
 package_archive antlr-rust-runtime
 package_archive antlr-rust-g4-parser \
-    --config 'patch.crates-io.antlr-rust-runtime.path="."'
+    --config 'patch.crates-io.antlr-rust-runtime.path="crates/antlr-rust-runtime"'
 package_archive antlr-rust-rs-parser \
-    --config 'patch.crates-io.antlr-rust-runtime.path="."'
+    --config 'patch.crates-io.antlr-rust-runtime.path="crates/antlr-rust-runtime"'
 package_archive antlr-rust-codegen \
-    --config 'patch.crates-io.antlr-rust-runtime.path="."' \
+    --config 'patch.crates-io.antlr-rust-runtime.path="crates/antlr-rust-runtime"' \
     --config 'patch.crates-io.antlr-rust-g4-parser.path="crates/antlr-rust-g4-parser"' \
     --config 'patch.crates-io.antlr-rust-rs-parser.path="crates/antlr-rust-rs-parser"'
 

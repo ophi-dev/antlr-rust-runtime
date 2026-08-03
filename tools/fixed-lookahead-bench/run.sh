@@ -65,7 +65,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-antlr4_runtime = { package = "antlr-rust-runtime", path = "$ROOT" }
+antlr4_runtime = { package = "antlr-rust-runtime", path = "$ROOT/crates/antlr-rust-runtime" }
 
 [workspace]
 EOF

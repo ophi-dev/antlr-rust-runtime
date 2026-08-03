@@ -1,0 +1,15 @@
+---
+source: crates/antlr-rust-runtime/src/tree.rs
+expression: "(raw, labeled)"
+---
+(
+    [
+        "x",
+        "<missing B>",
+        "c",
+    ],
+    [
+        "<missing B>",
+        "c",
+    ],
+)

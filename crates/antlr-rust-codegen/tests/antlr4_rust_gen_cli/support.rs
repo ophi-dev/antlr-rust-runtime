@@ -53,7 +53,7 @@ pub(super) fn run_generated_project(
              [dependencies]\n\
              antlr-rust-runtime = {{ path = {:?} }}\n\
              {dev_dependencies}",
-            workspace_root(),
+            runtime_crate_root(),
         ),
     )
     .expect("generated-module manifest should be writable");
@@ -194,6 +194,10 @@ pub(super) fn workspace_root() -> PathBuf {
         .nth(2)
         .expect("codegen package should live below the workspace root")
         .to_path_buf()
+}
+
+pub(super) fn runtime_crate_root() -> PathBuf {
+    workspace_root().join("crates/antlr-rust-runtime")
 }
 
 impl Drop for TempDirectory {

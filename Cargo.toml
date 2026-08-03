@@ -1,9 +1,10 @@
 [workspace]
 members = [
+    "crates/antlr-rust-runtime",
     "crates/antlr-rust-g4-parser",
     "crates/antlr-rust-rs-parser",
     "crates/antlr-rust-codegen",
-    "tools/antlr-rust-runtime-testsuite",
+    "tests/antlr-rust-runtime-testsuite",
 ]
 exclude = [
     "tests/javascript-parity/dumper",
@@ -24,7 +25,7 @@ homepage = "https://github.com/ophi-dev/antlr-rust-runtime"
 
 [workspace.dependencies]
 # x-release-please-start-version
-antlr-rust-runtime = { path = ".", version = "=0.26.0" }
+antlr-rust-runtime = { path = "crates/antlr-rust-runtime", version = "=0.26.0" }
 antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.26.0" }
 antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.26.0" }
 antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.26.0" }
@@ -38,44 +39,6 @@ memchr = "2"
 petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 stacker = "0.1.24"
 thiserror = "2"
-
-[package]
-name = "antlr-rust-runtime"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
-repository.workspace = true
-homepage.workspace = true
-documentation = "https://docs.rs/antlr-rust-runtime"
-readme = "README.md"
-license.workspace = true
-keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
-categories = ["parser-implementations", "development-tools", "parsing"]
-include = ["/Cargo.toml", "/LICENSE", "/README.md", "/src/**"]
-
-[lib]
-name = "antlr4_runtime"
-path = "src/lib.rs"
-
-[features]
-default = []
-std = []
-perf-counters = []
-
-[dependencies]
-memchr.workspace = true
-stacker.workspace = true
-thiserror.workspace = true
-
-[dev-dependencies]
-insta.workspace = true
-
-[package.metadata.docs.rs]
-all-features = true
-
-[lints]
-workspace = true
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

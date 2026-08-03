@@ -1,0 +1,17 @@
+---
+source: crates/antlr-rust-runtime/src/parser.rs
+expression: "*diagnostics.lock().expect(\"recorded diagnostics lock\")"
+---
+[
+    RecordedDiagnostic {
+        grammar_file_name: "Mini.g4",
+        offending_text: Some(
+            "x",
+        ),
+        line: 1,
+        column: 0,
+        span: None,
+        message: "extraneous input 'x' expecting {<EOF>, 'x'}",
+        error: None,
+    },
+]
