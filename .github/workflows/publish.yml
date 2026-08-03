@@ -89,6 +89,7 @@ jobs:
             fi
             curl --silent --show-error --location \
               --retry 5 --retry-all-errors \
+              --user-agent "antlr-rust-runtime-publish (+https://github.com/${GITHUB_REPOSITORY})" \
               --output "${RUNNER_TEMP}/crates-io-response.json" \
               --write-out '%{http_code}' \
               "https://crates.io/api/v1/crates/${suffix}"
