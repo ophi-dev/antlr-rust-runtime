@@ -144,6 +144,11 @@ class RustCSharpSupportTests(unittest.TestCase):
             )
 
         command = run.call_args.args[0]
+        self.assertNotIn("--features", command)
+        self.assertEqual(
+            command[command.index("--package") + 1],
+            "antlr-rust-codegen",
+        )
         self.assertNotIn("--allow-unsupported-lexer-actions", command)
         self.assertIn("--require-full-semantics", command)
         self.assertIn("--require-generated-parser", command)
