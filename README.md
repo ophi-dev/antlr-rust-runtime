@@ -94,6 +94,11 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
+The bundled generator currently emits revision 3, which exposes parameterized
+rule arguments to committed parser-action hooks. The runtime also accepts
+revisions 1 and 2 because their older generated recognizers use API surfaces
+that remain available.
+
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,
 regenerate every committed lexer and parser once. Thereafter, normal
@@ -494,12 +499,13 @@ Generated parsers also expose a parser-side hook escape hatch:
 `MyParser::with_hooks(tokens, hooks)`, where `hooks` implements
 `SemanticHooks`. Unknown parser predicates are offered to
 `SemanticHooks::sempred` before the fallback policy is applied, and unhandled
-parser action events are offered to `SemanticHooks::action` after the committed
-parse path is selected. Predicate hooks may run speculatively during
-prediction, so they must be replay-safe.
+parser action events are offered to `SemanticHooks::action` at their grammar
+position after the containing path is committed. Predicate hooks may run
+speculatively during prediction, so they must be replay-safe; action hooks never
+run on speculative or losing paths.
 
-For helper-call predicates written as `helper()`, `this.helper()`, or
-`self.helper()`, generated parsers also emit a typed hook adapter
+For helper-call predicates and actions written as `helper()`, `this.helper()`,
+or `self.helper()`, generated parsers also emit a typed hook adapter
 (`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable manifest
 coordinates to named Rust methods. A `[[helper]]` pattern can opt into one
 additional receiver spelling with `receiver = "..."`. For example, an
@@ -514,6 +520,10 @@ receiver = "recog"
 returns = "bool"
 lower = "hook"
 ```
+
+Use `kind = "parser-action"` and `returns = "unit"` for an action helper. Its
+typed method runs exactly once on the committed path, before any later
+predicate or nested-rule event.
 
 Lexer callers can use `LexerSemCtx` with
 `atn::lexer::next_token_with_semantic_hooks` or the

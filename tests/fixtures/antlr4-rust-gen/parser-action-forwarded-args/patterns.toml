@@ -1,0 +1,7 @@
+version = 1
+
+[[helper]]
+kind    = "parser-action"
+lower   = "hook"
+name    = "ObserveArgument"
+returns = "unit"

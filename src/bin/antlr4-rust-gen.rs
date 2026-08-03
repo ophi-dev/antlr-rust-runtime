@@ -1512,11 +1512,16 @@ fn collect_parser_semantics_for_mode(
     }
     for action in structural_actions(data)? {
         let (line, column) = structural_line_column(data, &action.span);
+        let hook_call = if embedded || !action.authored || action.body.trim().is_empty() {
+            None
+        } else {
+            patterns.hook_helper_call(SemanticsKind::ParserAction, &action.body)?
+        };
         entries.push(SemanticsEntry {
             kind: SemanticsKind::ParserAction,
             rule_index: Some(action.rule_index),
             rule_name: data.rule_names.get(action.rule_index).cloned(),
-            index: None,
+            index: Some(action.action_index),
             atn_state: Some(action.state),
             line: action.authored.then_some(line),
             column: action.authored.then_some(column),
@@ -1530,7 +1535,7 @@ fn collect_parser_semantics_for_mode(
                     .coordinate_disposition(
                         SemanticsKind::ParserAction,
                         data.rule_names.get(action.rule_index).map(String::as_str),
-                        None,
+                        Some(action.action_index),
                         Some(action.state),
                     )
                     .unwrap_or_else(|| {
@@ -1538,6 +1543,8 @@ fn collect_parser_semantics_for_mode(
                             SemanticsDisposition::Translated
                         } else if !action.authored || action.body.trim().is_empty() {
                             SemanticsDisposition::Synthetic
+                        } else if hook_call.is_some() {
+                            SemanticsDisposition::Hooked
                         } else {
                             policy.unknown_action_disposition()
                         }
@@ -1552,6 +1559,11 @@ fn collect_parser_semantics_for_mode(
                     .inline_actions
                     .contains_key(&action.state)
                     .then(|| "PortableBooleanLocal".to_owned())
+                    .or_else(|| {
+                        hook_call
+                            .as_ref()
+                            .map(|call| format!("Hook({})", rust_function_name(&call.name)))
+                    })
             },
         });
     }
@@ -2598,6 +2610,7 @@ struct StructuralRuleCall {
     target_rule_index: usize,
     state: usize,
     arguments: Option<String>,
+    caller_first_argument: Option<String>,
 }
 
 fn structural_elements<'model>(
@@ -2763,6 +2776,12 @@ fn structural_rule_calls(data: &CodegenData<'_>) -> io::Result<Vec<StructuralRul
                 target_rule_index: rule_index,
                 state: transition.source,
                 arguments: call.arguments.clone(),
+                caller_first_argument: semantic
+                    .bindings
+                    .attributes
+                    .get(&binding.caller)
+                    .and_then(|attributes| attributes.arguments.first())
+                    .map(|argument| argument.name.clone()),
             });
         }
     }
@@ -4202,6 +4221,7 @@ enum GeneratedParserStep {
     Action {
         source_state: usize,
         rule_index: usize,
+        action_index: Option<usize>,
     },
     CallRule {
         source_state: usize,
@@ -4346,7 +4366,6 @@ impl<'a> EmbeddedStepRender<'a> {
 #[derive(Clone, Copy)]
 struct PortableLocalStepRender<'a> {
     declarations: &'a [Vec<String>],
-    inline_actions: &'a BTreeMap<usize, String>,
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     required_generated_rules: &'a BTreeSet<usize>,
 }
@@ -4438,6 +4457,7 @@ struct GeneratedParserCompileContext<'a> {
     inline_action_states: &'a BTreeSet<usize>,
     action_states: &'a BTreeSet<usize>,
     generated_action_states: &'a BTreeSet<usize>,
+    action_indices: &'a BTreeMap<usize, usize>,
     predicate_coordinates: &'a BTreeSet<(usize, usize)>,
     generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
 }
@@ -4445,9 +4465,16 @@ struct GeneratedParserCompileContext<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TypedHookMapping {
     rule_index: usize,
-    pred_index: usize,
+    coordinate_index: usize,
+    kind: ParserTypedHookKind,
     method_name: String,
     call: SemanticHelperCall,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum ParserTypedHookKind {
+    Predicate,
+    Action,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -4516,6 +4543,7 @@ struct ActionStateSets<'a> {
     all: &'a BTreeSet<usize>,
     generated: &'a BTreeSet<usize>,
     inline: &'a BTreeSet<usize>,
+    indices: &'a BTreeMap<usize, usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -4531,6 +4559,7 @@ const fn generated_action_state_sets<'a>(
         all: context.action_states,
         generated: context.generated_action_states,
         inline: context.inline_action_states,
+        indices: context.action_indices,
     }
 }
 
@@ -4564,6 +4593,7 @@ fn parser_generated_rules(
         inline_action_states: action_states.inline,
         action_states: action_states.all,
         generated_action_states: action_states.generated,
+        action_indices: action_states.indices,
         predicate_coordinates: predicate_coordinates.all,
         generated_predicate_coordinates: predicate_coordinates.generated,
     };
@@ -4629,7 +4659,7 @@ fn generated_atn_preferred_rule_calls(
 
 #[cfg(test)]
 fn generated_adaptive_atn_preferred_rule_calls(rules: &[Option<GeneratedParserRule>]) -> Vec<bool> {
-    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &BTreeSet::new())
+    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &BTreeSet::new(), &BTreeSet::new())
 }
 
 struct GeneratedAdaptiveAtnRouting {
@@ -4689,15 +4719,25 @@ fn generated_atn_preferred_rule_calls_excluding(
 fn generated_adaptive_atn_preferred_rule_calls_excluding(
     rules: &[Option<GeneratedParserRule>],
     force_generated: &BTreeSet<usize>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> Vec<bool> {
-    generated_adaptive_atn_routing_excluding(rules, force_generated).candidates
+    generated_adaptive_atn_routing_excluding(rules, force_generated, effectful_action_states)
+        .candidates
 }
 
 fn generated_adaptive_atn_routing_excluding(
     rules: &[Option<GeneratedParserRule>],
     force_generated: &BTreeSet<usize>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> GeneratedAdaptiveAtnRouting {
     let shapes = generated_rule_shapes(rules);
+    let action_rules = rules
+        .iter()
+        .flatten()
+        .filter(|rule| generated_steps_have_actions(&rule.steps, effectful_action_states))
+        .map(|rule| rule.rule_index)
+        .collect::<BTreeSet<_>>();
+    let action_rule_callers = generated_rule_callers_reaching(rules, &action_rules);
     let seeds = rules
         .iter()
         .flatten()
@@ -4741,6 +4781,10 @@ fn generated_adaptive_atn_routing_excluding(
         }
     }
     exclude_forced_generated_rules(&mut candidates, force_generated);
+    // Adaptive retry rewinds and reparses the candidate through the committed
+    // interpreter. Exclude every generated caller that could already have run
+    // an action before that retry boundary.
+    exclude_forced_generated_rules(&mut candidates, &action_rule_callers);
     let probe_candidate_rules = probe_candidate_rules
         .into_iter()
         .map(|candidates_for_probe| {
@@ -5019,6 +5063,31 @@ fn generated_steps_shape(steps: &[GeneratedParserStep]) -> GeneratedRuleShape {
         shape += generated_step_shape(step);
     }
     shape
+}
+
+fn generated_steps_have_actions(
+    steps: &[GeneratedParserStep],
+    effectful_action_states: &BTreeSet<usize>,
+) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::Action { source_state, .. } => {
+            effectful_action_states.contains(source_state)
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_have_actions(alt, effectful_action_states)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_have_actions(body, effectful_action_states)
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::CallRule { .. } => false,
+    })
 }
 
 fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
@@ -6209,11 +6278,19 @@ fn compile_generated_parser_transition(
             follow_state,
         )),
         ParserTransitionData::Action {
-            target, rule_index, ..
+            target,
+            rule_index,
+            action_index,
+            ..
         } if action_states.generated.contains(&source_state) => Some((
             Some(GeneratedParserStep::Action {
                 source_state,
                 rule_index,
+                action_index: action_states
+                    .indices
+                    .get(&source_state)
+                    .copied()
+                    .or(action_index),
             }),
             target,
         )),
@@ -6295,13 +6372,18 @@ fn generated_adaptive_atn_preferred_rule_count(
     rules: &[Option<GeneratedParserRule>],
     embedded: bool,
     portable_required_generated_rules: Option<&BTreeSet<usize>>,
+    effectful_action_states: &BTreeSet<usize>,
 ) -> usize {
     let force_generated_rules =
         generated_force_generated_rules(rules, embedded, portable_required_generated_rules);
-    generated_adaptive_atn_preferred_rule_calls_excluding(rules, &force_generated_rules)
-        .into_iter()
-        .filter(|preferred| *preferred)
-        .count()
+    generated_adaptive_atn_preferred_rule_calls_excluding(
+        rules,
+        &force_generated_rules,
+        effectful_action_states,
+    )
+    .into_iter()
+    .filter(|preferred| *preferred)
+    .count()
 }
 
 struct AdaptiveAtnParserRenderSlots {
@@ -6366,10 +6448,15 @@ fn render_generated_rule_routing(
     decision_routing: DecisionRoutingRender<'_>,
 ) -> (String, usize) {
     let direct_generated_rule_calls = rules.iter().map(Option::is_some).collect::<Vec<_>>();
+    let effectful_action_states = inline_action_statements
+        .iter()
+        .filter_map(|(state, statement)| (!statement.trim().is_empty()).then_some(*state))
+        .collect::<BTreeSet<_>>();
     let preferred_rule_count = generated_adaptive_atn_preferred_rule_count(
         rules,
         embedded.is_some(),
         portable_locals.map(|portable| portable.required_generated_rules),
+        &effectful_action_states,
     );
     let dispatch = render_generated_rule_dispatch_with_rule_names(
         rules,
@@ -6405,8 +6492,15 @@ fn render_generated_rule_dispatch_with_rule_names(
     );
     let atn_preferred_rule_calls =
         generated_atn_preferred_rule_calls_excluding(rules, rule_names, &force_generated_rules);
-    let adaptive_atn_routing =
-        generated_adaptive_atn_routing_excluding(rules, &force_generated_rules);
+    let effectful_action_states = inline_action_statements
+        .iter()
+        .filter_map(|(state, statement)| (!statement.trim().is_empty()).then_some(*state))
+        .collect::<BTreeSet<_>>();
+    let adaptive_atn_routing = generated_adaptive_atn_routing_excluding(
+        rules,
+        &force_generated_rules,
+        &effectful_action_states,
+    );
     let adaptive_atn_preferred_rule_slots = indexed_rule_slots(&adaptive_atn_routing.candidates);
     let adaptive_atn_probe_rule_slots = indexed_probe_slots(
         &adaptive_atn_routing.probe_candidate_rules,
@@ -7332,12 +7426,21 @@ fn render_generated_step(
         GeneratedParserStep::Action {
             source_state,
             rule_index,
+            action_index,
         } => {
-            writeln!(
-                out,
-                "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
-            )
-            .expect("writing to a string cannot fail");
+            if let Some(action_index) = action_index {
+                writeln!(
+                    out,
+                    "{pad}let action = self.base.parser_action_at_current_indexed({source_state}, {rule_index}, {action_index}, __rule_start, __consumed_eof);"
+                )
+                .expect("writing to a string cannot fail");
+            } else {
+                writeln!(
+                    out,
+                    "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
+                )
+                .expect("writing to a string cannot fail");
+            }
             if let Some(statement) = render_context.inline_action_statements.get(source_state) {
                 if !statement.is_empty() {
                     writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
@@ -8014,7 +8117,7 @@ fn semantic_alt_guard_is_unresolved(
 
 fn leading_predicates(
     steps: &[GeneratedParserStep],
-    portable: Option<PortableLocalStepRender<'_>>,
+    _portable: Option<PortableLocalStepRender<'_>>,
 ) -> Vec<(usize, usize)> {
     let mut predicates = Vec::new();
     for step in steps {
@@ -8023,15 +8126,11 @@ fn leading_predicates(
                 rule_index,
                 pred_index,
             } => predicates.push((*rule_index, *pred_index)),
-            // Portable assignments run only after the alternative is selected,
-            // so predicates after one are not prediction-visible.
-            GeneratedParserStep::Action { source_state, .. }
-                if portable
-                    .is_some_and(|portable| portable.inline_actions.contains_key(source_state)) =>
-            {
-                break;
-            }
-            GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => {}
+            // ANTLR stops collecting prediction-visible predicates at every
+            // action boundary. The action runs only after the alternative is
+            // committed, so a later predicate must observe its side effects.
+            GeneratedParserStep::Action { .. } => break,
+            GeneratedParserStep::Precedence(_) => {}
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
             | GeneratedParserStep::MatchNotSet { .. }
@@ -8708,21 +8807,34 @@ fn loop_entry_condition(
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
-fn render_parser_parse_rule_fallback(
+#[derive(Clone, Copy)]
+struct ParserFallbackRender<'a> {
     track_alt_numbers: bool,
     track_context_alt_numbers: bool,
-    rule_args: &[(usize, usize, RuleArgTemplate)],
+    rule_args: &'a [(usize, usize, RuleArgTemplate)],
+    action_indices: &'a [(usize, usize)],
     has_action_dispatch: bool,
     has_predicate_dispatch: bool,
-    unknown_policy_literal: Option<&str>,
-) -> String {
+    unknown_policy_literal: Option<&'a str>,
+}
+
+fn render_parser_parse_rule_fallback(options: ParserFallbackRender<'_>) -> String {
+    let ParserFallbackRender {
+        track_alt_numbers,
+        track_context_alt_numbers,
+        rule_args,
+        action_indices,
+        has_action_dispatch,
+        has_predicate_dispatch,
+        unknown_policy_literal,
+    } = options;
     let mut out = String::new();
+    let action_indices = render_parser_action_index_array(action_indices);
+    let rule_args = render_parser_rule_arg_array(rule_args);
     if has_predicate_dispatch || unknown_policy_literal.is_some() {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
-            render_parser_rule_arg_array(rule_args),
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{rule_args}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
             unknown_policy_literal
                 .unwrap_or("antlr4_runtime::UnknownSemanticPolicy::AssumeTrue")
         )
@@ -8730,13 +8842,13 @@ fn render_parser_parse_rule_fallback(
     } else if track_alt_numbers || track_context_alt_numbers {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, rule_args: &{rule_args}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
         )
         .expect("writing to a string cannot fail");
     } else if has_action_dispatch {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions::default())?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ action_indices: &{action_indices}, rule_args: &{rule_args}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
         )
         .expect("writing to a string cannot fail");
     } else {
@@ -8885,7 +8997,6 @@ impl PortableLocalData {
     fn step_render(&self) -> Option<PortableLocalStepRender<'_>> {
         self.has_semantics().then_some(PortableLocalStepRender {
             declarations: &self.declarations,
-            inline_actions: &self.inline_actions,
             predicates: &self.predicates,
             required_generated_rules: &self.required_generated_rules,
         })
@@ -8967,7 +9078,7 @@ fn build_structural_portable_local_data(
             .coordinate_disposition(
                 SemanticsKind::ParserAction,
                 data.rule_names.get(action.rule_index).map(String::as_str),
-                None,
+                Some(action.action_index),
                 Some(action.state),
             )
             .is_some()
@@ -13658,9 +13769,9 @@ fn collect_noop_action_states(
     patterns: &SemPatternFile,
 ) -> io::Result<BTreeSet<usize>> {
     let mut noop_action_states = BTreeSet::new();
-    let action_state_rules = parser_action_state_rules(data)?;
-    for state in action_state_rules.keys() {
-        if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
+    let action_state_coordinates = parser_action_state_coordinates(data)?;
+    for state in action_state_coordinates.keys() {
+        if parser_action_assume_overridden(patterns, data, &action_state_coordinates, *state) {
             noop_action_states.insert(*state);
         }
     }
@@ -13860,6 +13971,80 @@ fn parser_render_surfaces(
     }
 }
 
+struct ParserActionRouting {
+    inline_statements: BTreeMap<usize, String>,
+    states: BTreeSet<usize>,
+    generated_states: BTreeSet<usize>,
+    indices: BTreeMap<usize, usize>,
+    committed_indices: Vec<(usize, usize)>,
+}
+
+fn parser_action_routing(
+    data: &CodegenData<'_>,
+    embedded: bool,
+    embedded_data: Option<&EmbeddedParserData>,
+    portable_local_data: &PortableLocalData,
+    parameterized_rules: &BTreeSet<usize>,
+    noop_states: &BTreeSet<usize>,
+) -> io::Result<ParserActionRouting> {
+    let mut inline_statements = embedded_data.map_or_else(
+        || portable_local_data.inline_actions.clone(),
+        |embedded| embedded.inline_actions.clone(),
+    );
+    let states = parser_action_states(data)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let structural_actions = structural_actions(data)?;
+    let indices = structural_actions
+        .iter()
+        .map(|action| (action.state, action.action_index))
+        .collect::<BTreeMap<_, _>>();
+    let action_rules = structural_actions
+        .iter()
+        .map(|action| (action.state, action.rule_index))
+        .collect::<BTreeMap<_, _>>();
+    let committed_indices = structural_actions
+        .iter()
+        .filter(|action| {
+            !embedded
+                && action.authored
+                && !action.body.trim().is_empty()
+                && !noop_states.contains(&action.state)
+        })
+        .map(|action| (action.state, action.action_index))
+        .collect::<Vec<_>>();
+    let mut generated_states = if embedded {
+        states.clone()
+    } else {
+        noop_states.intersection(&states).copied().collect()
+    };
+    generated_states.extend(portable_local_data.inline_actions.keys().copied());
+    if !embedded {
+        for state in states
+            .difference(noop_states)
+            .filter(|state| !portable_local_data.inline_actions.contains_key(state))
+        {
+            let statement = if action_rules
+                .get(state)
+                .is_some_and(|rule_index| parameterized_rules.contains(rule_index))
+            {
+                "let _ = self.base.parser_action_hook_with_context_and_local(action, &__ctx, __precedence);"
+            } else {
+                "let _ = self.base.parser_action_hook_with_context(action, &__ctx);"
+            };
+            inline_statements.insert(*state, statement.to_owned());
+            generated_states.insert(*state);
+        }
+    }
+    Ok(ParserActionRouting {
+        inline_statements,
+        states,
+        generated_states,
+        indices,
+        committed_indices,
+    })
+}
+
 /// Test-facing wrapper over [`render_parser_with_decision_report`] for the
 /// many render assertions that never look at the manifest rows.
 #[cfg(test)]
@@ -13939,30 +14124,29 @@ fn render_parser_with_decision_report(
     } else {
         structural_parser_rule_args(data)?
     };
-    let inline_action_statements = embedded_data.as_ref().map_or_else(
-        || portable_local_data.inline_actions.clone(),
-        |embedded| embedded.inline_actions.clone(),
-    );
+    let parameterized_rules = if options.embedded {
+        BTreeSet::new()
+    } else {
+        structural_parameterized_parser_rules(data)?
+    };
+    let ParserActionRouting {
+        inline_statements: inline_action_statements,
+        states: action_states,
+        generated_states: generated_action_states,
+        indices: action_indices,
+        committed_indices: committed_action_indices,
+    } = parser_action_routing(
+        data,
+        options.embedded,
+        embedded_data.as_ref(),
+        &portable_local_data,
+        &parameterized_rules,
+        &noop_action_states,
+    )?;
     let inline_action_states = inline_action_statements
         .keys()
         .copied()
         .collect::<BTreeSet<_>>();
-    let action_states = parser_action_states(data)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let mut generated_action_states = if options.embedded {
-        action_states.clone()
-    } else {
-        // Synthetic actions and explicit assume-* overrides are no-op states.
-        // They should not disable generated parser rules just because they have
-        // an ATN action transition; real author actions still fall through to
-        // the interpreted path in non-embedded mode.
-        noop_action_states
-            .intersection(&action_states)
-            .copied()
-            .collect()
-    };
-    generated_action_states.extend(portable_local_data.inline_actions.keys().copied());
     // Under a non-default unknown-coordinate policy every predicate transition
     // must reach the interpreter, which applies the policy to the complete
     // structurally bound coordinate inventory.
@@ -13993,6 +14177,7 @@ fn render_parser_with_decision_report(
             all: &action_states,
             generated: &generated_action_states,
             inline: &inline_action_states,
+            indices: &action_indices,
         },
         PredicateCoordinateSets {
             all: &predicate_coordinates,
@@ -14026,14 +14211,15 @@ fn render_parser_with_decision_report(
             decision_routing,
         );
     let unknown_policy_literal = parser_unknown_policy_literal(options.sem_unknown);
-    let parse_rule_fallback = render_parser_parse_rule_fallback(
+    let parse_rule_fallback = render_parser_parse_rule_fallback(ParserFallbackRender {
         track_alt_numbers,
         track_context_alt_numbers,
-        &rule_args,
+        rule_args: &rule_args,
+        action_indices: &committed_action_indices,
         has_action_dispatch,
         has_predicate_dispatch,
         unknown_policy_literal,
-    );
+    });
     let parser_semantics_function = render_parser_semantics_function(&predicates, data)?;
     let typed_hook_adapter =
         render_typed_hook_adapter(&type_name, &parser_typed_hook_mappings(data, patterns)?);
@@ -14333,25 +14519,21 @@ where
                     if allow_generated_fallback && __report_error {{
                         self.base.report_generated_parser_diagnostics();
                     }}
-                    // A generated predicate that consulted an unimplemented hook
-                    // (returning None under the Error policy) fails the alternative
-                    // and surfaces here as a generic failed-predicate/rule error.
-                    // The documented contract is to fail loud with
-                    // `AntlrError::Unsupported`, so prefer a recorded semantic error
-                    // over the generic one — but only at the top-level entry, mirroring
-                    // the post-parse check below: a nested child keeps its hits so the
-                    // generated parent surfaces them at that boundary instead.
                     if allow_generated_fallback {{
+                        // A sticky abort (depth cap, listener) wins over an
+                        // error or semantic miss derived after recovery absorbed
+                        // the aborted rule. Drain any masked semantic miss too,
+                        // so neither condition poisons the next entry.
+                        if let Some(abort) = self.base.take_parse_abort() {{
+                            let _ = self.base.take_unknown_semantic_error();
+                            return Err(abort);
+                        }}
+                        // A generated predicate that consulted an unimplemented
+                        // hook fails the alternative and surfaces here as a generic
+                        // failed-predicate/rule error. Prefer the recorded fail-loud
+                        // semantic error when no parser abort occurred.
                         if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
                             return Err(semantic_error);
-                        }}
-                        // A sticky abort (depth cap, listener) wins over an
-                        // error derived from it (e.g. a sync failure after
-                        // recovery absorbed the aborted rule): the caller must
-                        // learn the real cause, and draining un-poisons the
-                        // instance for the next entry-rule call.
-                        if let Some(abort) = self.base.take_parse_abort() {{
-                            return Err(abort);
                         }}
                     }}
                     let error = error.into_error();
@@ -14366,26 +14548,19 @@ where
         }} else {{
             self.parse_interpreted_rule_precedence(rule_index, precedence)?
         }};
-        // Surface unknown-predicate coordinates recorded under the Error policy
-        // at the top-level entry. Generated predicate steps evaluate on the
-        // committed path and are recovered as rule errors, so a parse that
-        // consulted an unimplemented hook predicate must fail with
-        // `AntlrError::Unsupported` instead of returning a recovered `Ok` tree.
-        if allow_generated_fallback {{
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
-            }}
-        }}
         if allow_generated_fallback {{
             self.base.report_generated_parser_diagnostics();
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
-            }}
             // A sticky abort (depth-cap violation, listener abort) is not a
             // syntax error: rule-level recovery may have produced a tree
-            // anyway, but the parse must still fail (and a reused parser
-            // must start clean).
+            // and semantic miss anyway, but the abort is the root cause. Drain
+            // both sticky conditions before returning so parser reuse is clean.
             if let Some(error) = self.base.take_parse_abort() {{
+                let _ = self.base.take_unknown_semantic_error();
+                return Err(error);
+            }}
+            // Surface unknown predicate/action coordinates recorded under the
+            // Error policy only after parser aborts have been ruled out.
+            if let Some(error) = self.base.take_unknown_semantic_error() {{
                 return Err(error);
             }}
         }}
@@ -15169,14 +15344,21 @@ fn parser_action_states(data: &CodegenData<'_>) -> io::Result<Vec<usize>> {
     Ok(states)
 }
 
-/// Reads the parser ATN action transitions keyed by source state.
-fn parser_action_state_rules(data: &CodegenData<'_>) -> io::Result<BTreeMap<usize, usize>> {
+/// Reads parser ATN action coordinates keyed by source state.
+fn parser_action_state_coordinates(
+    data: &CodegenData<'_>,
+) -> io::Result<BTreeMap<usize, (usize, Option<usize>)>> {
     let atn = data.parser_atn()?;
     let mut states = BTreeMap::new();
     for state in atn.states() {
         for transition in state.transitions() {
-            if let ParserTransitionData::Action { rule_index, .. } = transition.data() {
-                states.insert(state.state_number(), rule_index);
+            if let ParserTransitionData::Action {
+                rule_index,
+                action_index,
+                ..
+            } = transition.data()
+            {
+                states.insert(state.state_number(), (rule_index, action_index));
             }
         }
     }
@@ -15218,22 +15400,66 @@ fn empty_parser_action_states(data: &CodegenData<'_>) -> io::Result<BTreeSet<usi
 fn structural_parser_rule_args(
     data: &CodegenData<'_>,
 ) -> io::Result<Vec<(usize, usize, RuleArgTemplate)>> {
-    Ok(structural_rule_calls(data)?
-        .into_iter()
-        .filter_map(|call| {
-            let template = parse_rule_arg_template(call.arguments.as_deref()?)?;
-            Some((call.state, call.target_rule_index, template))
+    let mut args = Vec::new();
+    for call in structural_rule_calls(data)? {
+        let Some(value) = call.arguments.as_deref() else {
+            continue;
+        };
+        let Some(template) = parse_rule_arg_template(value, call.caller_first_argument.as_deref())
+        else {
+            let rule_name = data
+                .rule_names
+                .get(call.target_rule_index)
+                .map_or("<unknown>", String::as_str);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "unsupported parser rule argument expression `{}` for rule `{rule_name}`; use an integer/boolean literal or forward the caller's first declared argument",
+                    value.trim()
+                ),
+            ));
+        };
+        args.push((call.state, call.target_rule_index, template));
+    }
+    Ok(args)
+}
+
+fn structural_parameterized_parser_rules(data: &CodegenData<'_>) -> io::Result<BTreeSet<usize>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    Ok(semantic
+        .recognizer
+        .rule_numbers
+        .iter()
+        .filter_map(|(rule, rule_index)| {
+            semantic
+                .bindings
+                .attributes
+                .get(rule)
+                .is_some_and(|attributes| !attributes.arguments.is_empty())
+                .then_some(*rule_index)
         })
         .collect())
 }
 
-fn parse_rule_arg_template(value: &str) -> Option<RuleArgTemplate> {
+fn parse_rule_arg_template(
+    value: &str,
+    caller_first_argument: Option<&str>,
+) -> Option<RuleArgTemplate> {
     let value = value.trim();
     value.parse::<i64>().map_or_else(
         |_| {
             if matches!(value, "true" | "false") {
                 Some(RuleArgTemplate::Literal(i64::from(value == "true")))
-            } else if value == r#"<VarRef("i")>"# {
+            } else if caller_first_argument.is_some_and(|argument| {
+                value == argument
+                    || value.strip_prefix('$') == Some(argument)
+                    || value == format!(r#"<VarRef("{argument}")>"#)
+            }) {
                 Some(RuleArgTemplate::InheritLocal)
             } else {
                 None
@@ -15412,14 +15638,21 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 fn parser_action_assume_overridden(
     patterns: &SemPatternFile,
     data: &CodegenData<'_>,
-    action_state_rules: &BTreeMap<usize, usize>,
+    action_state_coordinates: &BTreeMap<usize, (usize, Option<usize>)>,
     state: usize,
 ) -> bool {
-    let rule_name = action_state_rules
+    let (rule_index, action_index) = action_state_coordinates
         .get(&state)
-        .and_then(|rule| data.rule_names.get(*rule).map(String::as_str));
+        .copied()
+        .unwrap_or((usize::MAX, None));
+    let rule_name = data.rule_names.get(rule_index).map(String::as_str);
     patterns
-        .coordinate_override(SemanticsKind::ParserAction, rule_name, None, Some(state))
+        .coordinate_override(
+            SemanticsKind::ParserAction,
+            rule_name,
+            action_index,
+            Some(state),
+        )
         .is_some_and(|override_| {
             matches!(
                 override_.dispose,
@@ -16278,7 +16511,7 @@ fn parser_typed_hook_mappings(
 ) -> io::Result<Vec<TypedHookMapping>> {
     let mut mappings = Vec::new();
     for predicate in structural_predicates(data)? {
-        push_typed_hook_mapping(
+        push_typed_predicate_hook_mapping(
             data,
             patterns,
             predicate.rule_index,
@@ -16287,13 +16520,28 @@ fn parser_typed_hook_mappings(
             &mut mappings,
         )?;
     }
-    mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.pred_index));
+    for action in structural_actions(data)?
+        .into_iter()
+        .filter(|action| action.authored && !action.body.trim().is_empty())
+    {
+        if let Some(call) = patterns.hook_helper_call(SemanticsKind::ParserAction, &action.body)? {
+            mappings.push(TypedHookMapping {
+                rule_index: action.rule_index,
+                coordinate_index: action.action_index,
+                kind: ParserTypedHookKind::Action,
+                method_name: rust_function_name(&call.name),
+                call,
+            });
+        }
+    }
+    disambiguate_parser_typed_hook_names(&mut mappings);
+    mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.coordinate_index, mapping.kind));
     mappings.dedup();
     validate_typed_hook_signatures(&mappings)?;
     Ok(mappings)
 }
 
-fn push_typed_hook_mapping(
+fn push_typed_predicate_hook_mapping(
     data: &CodegenData<'_>,
     patterns: &SemPatternFile,
     rule_index: usize,
@@ -16318,29 +16566,64 @@ fn push_typed_hook_mapping(
     {
         mappings.push(TypedHookMapping {
             rule_index,
-            pred_index,
-            method_name: typed_hook_predicate_method_name(&call.name),
+            coordinate_index: pred_index,
+            kind: ParserTypedHookKind::Predicate,
+            method_name: rust_function_name(&call.name),
             call,
         });
     }
     Ok(())
 }
 
-/// Reserved name of the fixed action-hook method emitted on the typed-hook
-/// trait. A predicate-helper method must not normalize to this, or the trait
-/// would declare two `custom_action` methods (Rust has no arity overloading).
 const TYPED_HOOK_ACTION_METHOD: &str = "custom_action";
 
-/// The typed-hook trait method name for a bare predicate helper, disambiguated
-/// so it never collides with the fixed [`TYPED_HOOK_ACTION_METHOD`]. A grammar
-/// helper literally named `customAction()` / `custom_action()` normalizes to
-/// `custom_action`; suffix it with `_pred` so the generated trait compiles.
-fn typed_hook_predicate_method_name(helper: &str) -> String {
-    let name = rust_function_name(helper);
-    if name == TYPED_HOOK_ACTION_METHOD {
-        format!("{name}_pred")
-    } else {
-        name
+fn disambiguate_parser_typed_hook_names(mappings: &mut [TypedHookMapping]) {
+    let predicate_names = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == ParserTypedHookKind::Predicate)
+        .map(|mapping| mapping.method_name.clone())
+        .collect::<BTreeSet<_>>();
+    let action_names = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == ParserTypedHookKind::Action)
+        .map(|mapping| mapping.method_name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut allocated = BTreeMap::<(ParserTypedHookKind, String), String>::new();
+    let mut used = BTreeSet::from([TYPED_HOOK_ACTION_METHOD.to_owned()]);
+    for mapping in mappings {
+        let helper = (mapping.kind, mapping.call.name.clone());
+        if let Some(method_name) = allocated.get(&helper) {
+            mapping.method_name.clone_from(method_name);
+            continue;
+        }
+        if mapping.method_name == TYPED_HOOK_ACTION_METHOD
+            || (predicate_names.contains(&mapping.method_name)
+                && action_names.contains(&mapping.method_name))
+        {
+            mapping.method_name.push_str(match mapping.kind {
+                ParserTypedHookKind::Predicate => "_pred",
+                ParserTypedHookKind::Action => "_action",
+            });
+        }
+        let method_name = unique_typed_hook_method_name(&mapping.method_name, &used);
+        used.insert(method_name.clone());
+        allocated.insert(helper, method_name.clone());
+        mapping.method_name = method_name;
+    }
+}
+
+fn unique_typed_hook_method_name(base: &str, used: &BTreeSet<String>) -> String {
+    if !used.contains(base) {
+        return base.to_owned();
+    }
+    let stem = base.strip_prefix("r#").unwrap_or(base);
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{stem}_{suffix}");
+        if !used.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
     }
 }
 
@@ -16353,7 +16636,7 @@ const fn semantic_literal_kind(literal: &SemanticLiteral) -> SemanticLiteralKind
 }
 
 fn validate_typed_hook_signatures(mappings: &[TypedHookMapping]) -> io::Result<()> {
-    let mut signatures = BTreeMap::<&str, Vec<SemanticLiteralKind>>::new();
+    let mut signatures = BTreeMap::<(&str, ParserTypedHookKind), Vec<SemanticLiteralKind>>::new();
     for mapping in mappings {
         let signature = mapping
             .call
@@ -16361,7 +16644,7 @@ fn validate_typed_hook_signatures(mappings: &[TypedHookMapping]) -> io::Result<(
             .iter()
             .map(semantic_literal_kind)
             .collect::<Vec<_>>();
-        match signatures.entry(&mapping.method_name) {
+        match signatures.entry((&mapping.method_name, mapping.kind)) {
             Entry::Occupied(entry) if entry.get() != &signature => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -16415,28 +16698,34 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
     }
     let trait_name = format!("{type_name}Hooks");
     let adapter_name = format!("{type_name}TypedHooks");
-    let mut methods = BTreeMap::new();
+    let mut methods = BTreeMap::<(String, ParserTypedHookKind), Vec<SemanticLiteral>>::new();
     for mapping in mappings {
         methods
-            .entry(mapping.method_name.clone())
+            .entry((mapping.method_name.clone(), mapping.kind))
             .or_insert_with(|| mapping.call.arguments.clone());
     }
     let method_decls = methods
         .iter()
-        .map(|(method, arguments)| {
+        .map(|((method, kind), arguments)| {
             let arguments = render_semantic_method_arguments(arguments);
             let separator = if arguments.is_empty() { "" } else { ", " };
+            let result = if *kind == ParserTypedHookKind::Predicate {
+                " -> bool"
+            } else {
+                ""
+            };
             format!(
-                "    fn {method}<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>{separator}{arguments}) -> bool\n    where\n        L: TokenSource;"
+                "    fn {method}<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>{separator}{arguments}){result}\n    where\n        L: TokenSource;"
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n");
-    let arms = mappings
+    let predicate_arms = mappings
         .iter()
+        .filter(|mapping| mapping.kind == ParserTypedHookKind::Predicate)
         .map(|mapping| {
             let rule_index = mapping.rule_index;
-            let pred_index = mapping.pred_index;
+            let pred_index = mapping.coordinate_index;
             let method = &mapping.method_name;
             let arguments = render_semantic_call_arguments(&mapping.call.arguments);
             let separator = if arguments.is_empty() { "" } else { ", " };
@@ -16450,6 +16739,28 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let action_arms = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == ParserTypedHookKind::Action)
+        .map(|mapping| {
+            let rule_index = mapping.rule_index;
+            let action_index = mapping.coordinate_index;
+            let method = &mapping.method_name;
+            let arguments = render_semantic_call_arguments(&mapping.call.arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
+            format!(
+                "            ({rule_index}, Some({action_index})) => {{ self.0.{method}(ctx{separator}{arguments}); true }},"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let action_dispatch = if action_arms.is_empty() {
+        "        self.0.custom_action(ctx, action)".to_owned()
+    } else {
+        format!(
+            "        match (action.rule_index(), action.action_index()) {{\n{action_arms}\n            _ => self.0.custom_action(ctx, action),\n        }}"
+        )
+    };
     format!(
         r#"pub trait {trait_name}: Sized {{
 {method_decls}
@@ -16482,7 +16793,7 @@ where
         L: TokenSource,
     {{
         match (rule_index, pred_index) {{
-{arms}
+{predicate_arms}
             _ => None,
         }}
     }}
@@ -16491,7 +16802,7 @@ where
     where
         L: TokenSource,
     {{
-        self.0.custom_action(ctx, action)
+{action_dispatch}
     }}
 }}
 "#
@@ -16717,6 +17028,16 @@ fn render_parser_predicate_array(
         items.push(format!("({rule_index}, {pred_index}, {expression})"));
     }
     Ok(format!("[{}]", items.join(", ")))
+}
+
+/// Renders stable authored parser-action coordinates for committed fallback.
+fn render_parser_action_index_array(action_indices: &[(usize, usize)]) -> String {
+    let items = action_indices
+        .iter()
+        .map(|(source_state, action_index)| format!("({source_state}, {action_index})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
 }
 
 /// Renders parser rule-argument metadata for generated calls into the runtime.
@@ -17201,6 +17522,7 @@ mod tests {
         let decision_by_state = decision_by_state(atn);
         let action_states = BTreeSet::new();
         let generated_action_states = BTreeSet::new();
+        let action_indices = BTreeMap::new();
         let predicate_coordinates = BTreeSet::new();
         let generated_predicate_coordinates = BTreeSet::new();
         let context = GeneratedParserCompileContext {
@@ -17210,6 +17532,7 @@ mod tests {
             inline_action_states,
             action_states: &action_states,
             generated_action_states: &generated_action_states,
+            action_indices: &action_indices,
             predicate_coordinates: &predicate_coordinates,
             generated_predicate_coordinates: &generated_predicate_coordinates,
         };
@@ -17681,7 +18004,8 @@ mod tests {
             "left-recursive routing must remain separate from unconditional cascade routing"
         );
         let preferred = generated_adaptive_atn_preferred_rule_calls(&rules);
-        let routing = generated_adaptive_atn_routing_excluding(&rules, &BTreeSet::new());
+        let routing =
+            generated_adaptive_atn_routing_excluding(&rules, &BTreeSet::new(), &BTreeSet::new());
 
         assert!(
             preferred[0],
@@ -17708,8 +18032,60 @@ mod tests {
 
         let force_generated = generated_rule_callers_reaching(&rules, &BTreeSet::from([1]));
         assert_eq!(
-            generated_adaptive_atn_preferred_rule_calls_excluding(&rules, &force_generated),
+            generated_adaptive_atn_preferred_rule_calls_excluding(
+                &rules,
+                &force_generated,
+                &BTreeSet::new(),
+            ),
             vec![false, false, false, false, true]
+        );
+    }
+
+    #[test]
+    fn adaptive_atn_retries_exclude_effectful_action_rules_and_callers() {
+        let mut action_seed = left_recursive_rule(
+            1,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        );
+        action_seed.steps.push(GeneratedParserStep::Action {
+            source_state: 9_001,
+            rule_index: 1,
+            action_index: Some(0),
+        });
+        let mut synthetic_action_seed = left_recursive_rule(
+            2,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_DECISION_COST,
+            ATN_PREFERRED_LEFT_RECURSIVE_MIN_OPERATOR_ALTS,
+        );
+        synthetic_action_seed
+            .steps
+            .push(GeneratedParserStep::Action {
+                source_state: 9_002,
+                rule_index: 2,
+                action_index: Some(0),
+            });
+        let rules = vec![
+            Some(test_rule(0, {
+                let mut steps = (100..108).map(adaptive_loop).collect::<Vec<_>>();
+                steps.push(cr(1));
+                steps
+            })),
+            Some(action_seed),
+            Some(synthetic_action_seed),
+        ];
+        let effectful_action_states = BTreeSet::from([9_001]);
+
+        let routing = generated_adaptive_atn_routing_excluding(
+            &rules,
+            &BTreeSet::new(),
+            &effectful_action_states,
+        );
+
+        assert_eq!(routing.candidates, [false, false, true]);
+        assert!(
+            routing.probe_candidate_rules[1].is_empty(),
+            "an effectful action seed must not request a retry from its generated caller"
         );
     }
 
@@ -17957,6 +18333,7 @@ mod tests {
             all: &empty_states,
             generated: &empty_states,
             inline: &empty_states,
+            indices: &BTreeMap::new(),
         };
         let predicate_coords = PredicateCoordinateSets {
             all: &empty_coords,
@@ -18020,6 +18397,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18040,6 +18418,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &generated_action_states,
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18050,6 +18429,7 @@ mod tests {
                 Some(GeneratedParserStep::Action {
                     source_state: 4,
                     rule_index: 2,
+                    action_index: Some(0),
                 }),
                 8
             ))
@@ -18075,6 +18455,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18100,6 +18481,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18135,6 +18517,18 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unsupported_rule_argument_expressions() {
+        let data = parser_fixture_data("unsupported-rule-argument/T.g4");
+        let error = structural_parser_rule_args(&data)
+            .expect_err("unsupported expressions must not be silently omitted");
+
+        insta::assert_snapshot!(
+            error,
+            @"unsupported parser rule argument expression `1 + 2` for rule `child`; use an integer/boolean literal or forward the caller's first declared argument"
+        );
+    }
+
+    #[test]
     fn compiles_synthetic_noop_action_transitions_as_epsilon() {
         let action_atn = transition_atn(|_| ParserTransitionSpec::Action {
             target: 8,
@@ -18152,6 +18546,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18182,6 +18577,7 @@ mod tests {
                     all: &action_states,
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18211,6 +18607,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &BTreeSet::new(),
@@ -18243,6 +18640,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &predicates,
@@ -18378,6 +18776,7 @@ mod tests {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
                     inline: &BTreeSet::new(),
+                    indices: &BTreeMap::new(),
                 },
                 PredicateCoordinateSets {
                     all: &predicates,
@@ -18390,10 +18789,23 @@ mod tests {
 
     #[test]
     fn parse_rule_fallback_runs_parser_actions() {
-        let fallback = render_parser_parse_rule_fallback(false, false, &[], true, false, None);
+        let rule_args = [(4, 2, RuleArgTemplate::Literal(17))];
+        let action_indices = [(5, 0)];
+        let fallback = render_parser_parse_rule_fallback(ParserFallbackRender {
+            track_alt_numbers: false,
+            track_context_alt_numbers: false,
+            rule_args: &rule_args,
+            action_indices: &action_indices,
+            has_action_dispatch: true,
+            has_predicate_dispatch: false,
+            unknown_policy_literal: None,
+        });
 
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
+        ));
+        assert!(fallback.contains(
+            "rule_args: &[antlr4_runtime::ParserRuleArg { source_state: 4, rule_index: 2, value: 17, inherit_local: false }]"
         ));
         assert!(fallback.contains("for action in actions { self.run_action(action, tree); }"));
         assert!(fallback.contains("Ok(tree)"));
@@ -19596,14 +20008,17 @@ mod tests {
     }
 
     #[test]
-    fn non_embedded_parser_action_disables_generated_rule() {
+    fn non_embedded_parser_action_runs_at_generated_position() {
         let rendered =
             render_parser("TParser", &action_parser_data()).expect("parser should render");
 
         assert!(
-            !rendered.contains("parse_generated_rule_0_dispatch"),
-            "non-embedded parser action rules must stay on the interpreted path"
+            rendered.contains("parse_generated_rule_0_dispatch"),
+            "a hook-routed parser action must remain on the generated path"
         );
+        assert!(rendered.contains("parser_action_at_current_indexed"));
+        assert!(rendered.contains("parser_action_hook_with_context(action, &__ctx)"));
+        assert!(rendered.contains("action_indices: &[("));
         assert!(rendered.contains("self.base.parser_action_hook(action, tree)"));
         assert!(!rendered.contains(&format!("{}{}", "Generated", "Action")));
         assert!(!rendered.contains(&format!("{}{}", "generated", "_actions")));
@@ -20099,6 +20514,7 @@ mod tests {
                 GeneratedParserStep::Action {
                     source_state: 5,
                     rule_index: 1,
+                    action_index: Some(0),
                 },
                 GeneratedParserStep::Predicate {
                     rule_index: 1,
@@ -20134,7 +20550,6 @@ mod tests {
                 embedded: None,
                 portable_locals: Some(PortableLocalStepRender {
                     declarations: &declarations,
-                    inline_actions: &inline_actions,
                     predicates: &predicates,
                     required_generated_rules: &required_generated_rules,
                 }),
@@ -20333,7 +20748,6 @@ mod tests {
                 embedded: None,
                 portable_locals: Some(PortableLocalStepRender {
                     declarations: &declarations,
-                    inline_actions: &BTreeMap::new(),
                     predicates: &predicates,
                     required_generated_rules: &required_generated_rules,
                 }),
@@ -21805,8 +22219,8 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
         // Assumed parser actions get explicit no-op arms; hook/error overrides
         // keep falling through to the parser action hook.
         let data = predicate_parser_data(); // rule 0 = "s"
-        let mut action_state_rules = BTreeMap::new();
-        action_state_rules.insert(4_usize, 0_usize); // action state 4 belongs to rule `s`
+        let mut action_state_coordinates = BTreeMap::new();
+        action_state_coordinates.insert(4_usize, (0_usize, Some(0_usize)));
 
         for dispose in ["assume-true", "assume-false"] {
             let patterns = parse_sem_patterns(&format!(
@@ -21814,23 +22228,44 @@ lower = "cmp(ne, ctx_rule_text(local_type), str(\"var\"))"
             ))
             .expect("pattern file parses");
             assert!(
-                parser_action_assume_overridden(&patterns, &data, &action_state_rules, 4),
+                parser_action_assume_overridden(&patterns, &data, &action_state_coordinates, 4),
                 "dispose {dispose}: an action state in rule `s` is assumed"
             );
         }
+        let indexed_patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = 0\ndispose = \"assume-true\"\n",
+        )
+        .expect("indexed pattern file parses");
+        assert!(
+            parser_action_assume_overridden(&indexed_patterns, &data, &action_state_coordinates, 4),
+            "an index-specific assume override should suppress hook routing"
+        );
+        let other_index_patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = 1\ndispose = \"assume-true\"\n",
+        )
+        .expect("other-index pattern file parses");
+        assert!(
+            !parser_action_assume_overridden(
+                &other_index_patterns,
+                &data,
+                &action_state_coordinates,
+                4
+            ),
+            "an override for another action index must not suppress this hook"
+        );
         let hook_patterns = parse_sem_patterns(
             "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\ndispose = \"hook\"\n",
         )
         .expect("pattern file parses");
         assert!(
-            !parser_action_assume_overridden(&hook_patterns, &data, &action_state_rules, 4),
+            !parser_action_assume_overridden(&hook_patterns, &data, &action_state_coordinates, 4),
             "hook overrides should keep routing through the hook arm"
         );
         assert!(
             !parser_action_assume_overridden(
                 &SemPatternFile::default(),
                 &data,
-                &action_state_rules,
+                &action_state_coordinates,
                 4
             ),
             "no override -> concrete arm is kept"
@@ -22245,27 +22680,94 @@ dispose = "hook"
             1,
             "only the parser-rule helper maps: {mappings:?}"
         );
-        assert_eq!((mappings[0].rule_index, mappings[0].pred_index), (0, 0));
+        assert_eq!(
+            (mappings[0].rule_index, mappings[0].coordinate_index),
+            (0, 0)
+        );
         assert_eq!(mappings[0].method_name, "is_type_name");
     }
 
     #[test]
     fn typed_hook_predicate_method_name_avoids_action_hook_collision() {
-        // A grammar helper that normalizes to the reserved action-hook method
-        // name must be disambiguated, or the generated trait would declare two
-        // `custom_action` methods (Rust has no arity overloading).
-        assert_eq!(
-            typed_hook_predicate_method_name("customAction"),
-            "custom_action_pred"
-        );
-        assert_eq!(
-            typed_hook_predicate_method_name("custom_action"),
-            "custom_action_pred"
-        );
-        // An unrelated helper keeps its normalized name.
-        assert_eq!(
-            typed_hook_predicate_method_name("isTypeName"),
-            "is_type_name"
+        let mut mappings = [
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 0,
+                kind: ParserTypedHookKind::Predicate,
+                method_name: "custom_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "customAction".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 1,
+                kind: ParserTypedHookKind::Predicate,
+                method_name: "is_type_name".to_owned(),
+                call: SemanticHelperCall {
+                    name: "isTypeName".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+        ];
+        disambiguate_parser_typed_hook_names(&mut mappings);
+        assert_eq!(mappings[0].method_name, "custom_action_pred");
+        assert_eq!(mappings[1].method_name, "is_type_name");
+    }
+
+    #[test]
+    fn typed_hook_action_method_names_remain_unique_after_suffixing() {
+        let mut mappings = [
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 0,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 1,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+            TypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 2,
+                kind: ParserTypedHookKind::Action,
+                method_name: "custom_action_action".to_owned(),
+                call: SemanticHelperCall {
+                    name: "custom_action_action".to_owned(),
+                    arguments: Vec::new(),
+                    negated: false,
+                },
+            },
+        ];
+
+        disambiguate_parser_typed_hook_names(&mut mappings);
+
+        insta::assert_debug_snapshot!(
+            "typed_hook_action_method_names_remain_unique_after_suffixing",
+            mappings
+                .iter()
+                .map(|mapping| (
+                    mapping.coordinate_index,
+                    mapping.kind,
+                    mapping.method_name.as_str(),
+                ))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -22570,6 +23072,31 @@ dispose = "hook"
     }
 
     #[test]
+    fn indexed_action_overrides_precede_portable_boolean_lowering() {
+        let data = portable_bool_parser_data();
+        let action = structural_actions(&data)
+            .expect("portable action inventory should build")
+            .into_iter()
+            .next()
+            .expect("portable fixture has one action");
+
+        for dispose in ["assume-true", "assume-false", "hook"] {
+            let patterns = parse_sem_patterns(&format!(
+                "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = {}\ndispose = \"{dispose}\"\n",
+                action.action_index
+            ))
+            .expect("indexed action override should parse");
+            let portable = build_structural_portable_local_data(&data, &patterns)
+                .expect("portable local semantics should build");
+
+            assert!(
+                portable.inline_actions.is_empty(),
+                "indexed {dispose} override must suppress portable action lowering"
+            );
+        }
+    }
+
+    #[test]
     fn semantics_manifest_renders_empty_inventory() {
         let manifest = render_semantics_manifest(
             SemUnknownPolicy::AssumeTrue,
@@ -22678,8 +23205,8 @@ dispose = "hook"
             .find("if let Some(abort) = self.base.take_parse_abort()")
             .expect("the Err arm drains a recorded parser abort");
         assert!(
-            diagnostics_at < semantic_at && diagnostics_at < abort_at,
-            "retained diagnostics must be dispatched before either override can return"
+            diagnostics_at < abort_at && abort_at < semantic_at,
+            "retained diagnostics must dispatch first, then parser aborts must precede semantic misses"
         );
     }
 

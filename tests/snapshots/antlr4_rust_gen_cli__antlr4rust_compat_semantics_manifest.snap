@@ -19,10 +19,10 @@ expression: manifest
       "coordinates": [
         {"kind": "parser-predicate", "rule": "assignment", "rule_index": 0, "index": 0, "atn_state": null, "line": 6, "column": 6, "body": "let __not_code = r#\"recog.input.peek(1) _localctx.context()\"#; // recog.output.write(\"not code\")...", "disposition": "translated", "template": "Embedded"},
         {"kind": "parser-predicate", "rule": "history", "rule_index": 1, "index": 1, "atn_state": null, "line": 27, "column": 28, "body": "let mut __bk: isize = 1; let (__last_type, __last_text) = recog.input.lt(-__bk) .map(|t| (t.get_...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-action", "rule": "inlineAction", "rule_index": 2, "index": null, "atn_state": 24, "line": 44, "column": 17, "body": "let __ek: isize = 1; let __text = recog.input.lt(-__ek) .map(|t| t.get_text().to_owned()) .unwra...", "disposition": "translated", "template": "Embedded"},
+        {"kind": "parser-action", "rule": "inlineAction", "rule_index": 2, "index": 0, "atn_state": 24, "line": 44, "column": 17, "body": "let __ek: isize = 1; let __text = recog.input.lt(-__ek) .map(|t| t.get_text().to_owned()) .unwra...", "disposition": "translated", "template": "Embedded"},
         {"kind": "parser-predicate", "rule": "nativeAssignment", "rule_index": 3, "index": 2, "atn_state": null, "line": 55, "column": 6, "body": "let __first = self.base.token_stream().lt(1); let __first_type = __first.map(|t| t.token_type())...", "disposition": "translated", "template": "Embedded"},
         {"kind": "parser-predicate", "rule": "nativeHistory", "rule_index": 4, "index": 3, "atn_state": null, "line": 79, "column": 28, "body": "let mut __bk: isize = 1; let (__last_type, __last_text) = self.base.token_stream().lt(-__bk) .ma...", "disposition": "translated", "template": "Embedded"},
-        {"kind": "parser-action", "rule": "nativeInlineAction", "rule_index": 5, "index": null, "atn_state": 39, "line": 96, "column": 17, "body": "let __ek: isize = 1; let __text = self.base.token_stream().lt(-__ek) .map(|t| t.text_or_empty()....", "disposition": "translated", "template": "Embedded"}
+        {"kind": "parser-action", "rule": "nativeInlineAction", "rule_index": 5, "index": 1, "atn_state": 39, "line": 96, "column": 17, "body": "let __ek: isize = 1; let __text = self.base.token_stream().lt(-__ek) .map(|t| t.text_or_empty()....", "disposition": "translated", "template": "Embedded"}
       ]
     },
     {

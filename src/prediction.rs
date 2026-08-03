@@ -70,6 +70,12 @@ pub struct ContextId(u32);
 
 pub const EMPTY_CONTEXT: ContextId = ContextId(0);
 
+impl ContextId {
+    pub(crate) const fn compact(self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ContextTag {
     Empty,
@@ -849,13 +855,147 @@ fn combine_semantic_context(
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionRuleCall {
+    pub(crate) source_state: usize,
+    pub(crate) rule_index: usize,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionPredicateCall {
+    pub(crate) rule_index: usize,
+    pub(crate) pred_index: usize,
+    pub(crate) rule_calls: Vec<PredictionRuleCall>,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct PredictionSemanticProvenance {
+    active_rule_calls: Vec<PredictionRuleCall>,
+    predicate_calls: Vec<PredictionPredicateCall>,
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct PredictionSemanticProvenanceId(u32);
+
+#[derive(Debug, Default)]
+pub(crate) struct PredictionSemanticProvenanceArena {
+    records: Vec<PredictionSemanticProvenance>,
+    interner_heads: FxHashMap<u64, PredictionSemanticProvenanceId>,
+    interner_next: Vec<Option<PredictionSemanticProvenanceId>>,
+}
+
+impl PredictionSemanticProvenanceArena {
+    pub(crate) fn enter_rule(
+        &mut self,
+        id: PredictionSemanticProvenanceId,
+        source_state: usize,
+        rule_index: usize,
+    ) -> PredictionSemanticProvenanceId {
+        let mut provenance = self.get(id).cloned().unwrap_or_default();
+        provenance.active_rule_calls.push(PredictionRuleCall {
+            source_state,
+            rule_index,
+        });
+        self.intern(provenance)
+    }
+
+    pub(crate) fn exit_rule(
+        &mut self,
+        id: PredictionSemanticProvenanceId,
+    ) -> PredictionSemanticProvenanceId {
+        let Some(mut provenance) = self.get(id).cloned() else {
+            return PredictionSemanticProvenanceId::default();
+        };
+        provenance.active_rule_calls.pop();
+        self.intern(provenance)
+    }
+
+    pub(crate) fn record_predicate(
+        &mut self,
+        id: PredictionSemanticProvenanceId,
+        rule_index: usize,
+        pred_index: usize,
+    ) -> PredictionSemanticProvenanceId {
+        let mut provenance = self.get(id).cloned().unwrap_or_default();
+        let call = PredictionPredicateCall {
+            rule_index,
+            pred_index,
+            rule_calls: provenance.active_rule_calls.clone(),
+        };
+        if !provenance.predicate_calls.contains(&call) {
+            provenance.predicate_calls.push(call);
+        }
+        self.intern(provenance)
+    }
+
+    pub(crate) fn predicate_calls(
+        &self,
+        id: PredictionSemanticProvenanceId,
+    ) -> &[PredictionPredicateCall] {
+        self.get(id)
+            .map_or(&[], |provenance| provenance.predicate_calls.as_slice())
+    }
+
+    fn get(&self, id: PredictionSemanticProvenanceId) -> Option<&PredictionSemanticProvenance> {
+        let index = id.0.checked_sub(1)?;
+        self.records.get(usize::try_from(index).ok()?)
+    }
+
+    fn find_interned(
+        &self,
+        cached_hash: u64,
+        provenance: &PredictionSemanticProvenance,
+    ) -> Option<PredictionSemanticProvenanceId> {
+        let mut candidate = self.interner_heads.get(&cached_hash).copied();
+        while let Some(id) = candidate {
+            let index = usize::try_from(id.0.checked_sub(1)?).ok()?;
+            if self.records.get(index) == Some(provenance) {
+                return Some(id);
+            }
+            candidate = self.interner_next.get(index).copied().flatten();
+        }
+        None
+    }
+
+    fn intern(
+        &mut self,
+        provenance: PredictionSemanticProvenance,
+    ) -> PredictionSemanticProvenanceId {
+        if provenance.active_rule_calls.is_empty() && provenance.predicate_calls.is_empty() {
+            return PredictionSemanticProvenanceId::default();
+        }
+        let mut hasher = PredictionFxHasher::default();
+        provenance.hash(&mut hasher);
+        let cached_hash = hasher.finish();
+        if let Some(id) = self.find_interned(cached_hash, &provenance) {
+            return id;
+        }
+        let id = PredictionSemanticProvenanceId(
+            u32::try_from(self.records.len() + 1)
+                .expect("prediction semantic provenance arena exhausted"),
+        );
+        assert!(
+            id.0 <= ATN_CONFIG_PROVENANCE_MASK,
+            "prediction semantic provenance arena exhausted"
+        );
+        let previous = self.interner_heads.insert(cached_hash, id);
+        self.records.push(provenance);
+        self.interner_next.push(previous);
+        id
+    }
+}
+
+const ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED: u32 = 1 << 31;
+const ATN_CONFIG_PROVENANCE_MASK: u32 = !ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED;
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct AtnConfig {
     pub(crate) state: usize,
     pub(crate) alt: usize,
     pub(crate) context: ContextId,
     pub(crate) semantic_context: SemanticContext,
     pub(crate) reaches_into_outer_context: usize,
-    pub(crate) precedence_filter_suppressed: bool,
+    semantic_provenance_and_flags: u32,
     #[cfg(debug_assertions)]
     context_generation: u64,
 }
@@ -869,7 +1009,7 @@ impl AtnConfig {
             context,
             semantic_context: SemanticContext::None,
             reaches_into_outer_context: 0,
-            precedence_filter_suppressed: false,
+            semantic_provenance_and_flags: 0,
             #[cfg(debug_assertions)]
             context_generation: arena.generation(),
         }
@@ -895,8 +1035,63 @@ impl AtnConfig {
         let mut moved = Self::new(state, self.alt, context, arena);
         moved.semantic_context = self.semantic_context.clone();
         moved.reaches_into_outer_context = self.reaches_into_outer_context;
-        moved.precedence_filter_suppressed = self.precedence_filter_suppressed;
+        moved.semantic_provenance_and_flags = self.semantic_provenance_and_flags;
         moved
+    }
+
+    pub(crate) fn enter_prediction_rule(
+        &mut self,
+        arena: &mut PredictionSemanticProvenanceArena,
+        source_state: usize,
+        rule_index: usize,
+    ) {
+        let id = arena.enter_rule(self.semantic_provenance_id(), source_state, rule_index);
+        self.set_semantic_provenance_id(id);
+    }
+
+    pub(crate) fn exit_prediction_rule(&mut self, arena: &mut PredictionSemanticProvenanceArena) {
+        let id = arena.exit_rule(self.semantic_provenance_id());
+        self.set_semantic_provenance_id(id);
+    }
+
+    pub(crate) fn record_prediction_predicate(
+        &mut self,
+        arena: &mut PredictionSemanticProvenanceArena,
+        rule_index: usize,
+        pred_index: usize,
+    ) {
+        let id = arena.record_predicate(self.semantic_provenance_id(), rule_index, pred_index);
+        self.set_semantic_provenance_id(id);
+    }
+
+    pub(crate) const fn semantic_provenance_id(&self) -> PredictionSemanticProvenanceId {
+        PredictionSemanticProvenanceId(
+            self.semantic_provenance_and_flags & ATN_CONFIG_PROVENANCE_MASK,
+        )
+    }
+
+    pub(crate) const fn semantic_provenance_and_flags(&self) -> u32 {
+        self.semantic_provenance_and_flags
+    }
+
+    fn set_semantic_provenance_id(&mut self, id: PredictionSemanticProvenanceId) {
+        debug_assert_eq!(id.0 & ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED, 0);
+        self.semantic_provenance_and_flags =
+            (self.semantic_provenance_and_flags & ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED) | id.0;
+    }
+
+    pub(crate) const fn precedence_filter_suppressed(&self) -> bool {
+        self.semantic_provenance_and_flags & ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED != 0
+    }
+
+    pub(crate) const fn suppress_precedence_filter(&mut self) {
+        self.semantic_provenance_and_flags |= ATN_CONFIG_PRECEDENCE_FILTER_SUPPRESSED;
+    }
+
+    pub(crate) const fn merge_precedence_filter_suppression(&mut self, other: &Self) {
+        if other.precedence_filter_suppressed() {
+            self.suppress_precedence_filter();
+        }
     }
 
     pub(crate) fn assert_store(&self, arena: &ContextArena) {
@@ -972,7 +1167,7 @@ impl AtnConfigSet {
             existing.reaches_into_outer_context = existing
                 .reaches_into_outer_context
                 .max(config.reaches_into_outer_context);
-            existing.precedence_filter_suppressed |= config.precedence_filter_suppressed;
+            existing.merge_precedence_filter_suppression(&config);
             self.conflicting_alts.clear();
             false
         } else {
@@ -1114,6 +1309,7 @@ struct AtnConfigKey {
     state: usize,
     alt: usize,
     semantic_context: SemanticContext,
+    semantic_provenance: PredictionSemanticProvenanceId,
 }
 
 impl From<&AtnConfig> for AtnConfigKey {
@@ -1122,6 +1318,7 @@ impl From<&AtnConfig> for AtnConfigKey {
             state: config.state,
             alt: config.alt,
             semantic_context: config.semantic_context.clone(),
+            semantic_provenance: config.semantic_provenance_id(),
         }
     }
 }
@@ -1326,6 +1523,93 @@ mod tests {
         ));
         assert_eq!(set.len(), 1);
         assert_eq!(arena.len(set.configs()[0].context), 2);
+    }
+
+    #[test]
+    fn predicate_provenance_is_idempotent_per_rule_path() {
+        let arena = ContextArena::new();
+        let mut provenance = PredictionSemanticProvenanceArena::default();
+        let mut config = AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena);
+        config.enter_prediction_rule(&mut provenance, 4, 2);
+        config.record_prediction_predicate(&mut provenance, 2, 3);
+        let after_first = provenance
+            .predicate_calls(config.semantic_provenance_id())
+            .to_vec();
+
+        config.record_prediction_predicate(&mut provenance, 2, 3);
+
+        assert_eq!(
+            provenance.predicate_calls(config.semantic_provenance_id()),
+            after_first,
+            "revisiting one predicate on the same rule path must not grow closure keys"
+        );
+    }
+
+    #[test]
+    fn provenance_arena_stores_records_once_and_verifies_hash_collisions() {
+        let mut arena = PredictionSemanticProvenanceArena::default();
+        let first = PredictionSemanticProvenance {
+            active_rule_calls: vec![PredictionRuleCall {
+                source_state: 4,
+                rule_index: 2,
+            }],
+            predicate_calls: Vec::new(),
+        };
+        let first_id = arena.intern(first.clone());
+
+        assert_eq!(arena.intern(first), first_id);
+        assert_eq!(arena.records.len(), 1);
+        assert_eq!(arena.interner_next.len(), 1);
+
+        let second = PredictionSemanticProvenance {
+            active_rule_calls: vec![PredictionRuleCall {
+                source_state: 5,
+                rule_index: 3,
+            }],
+            predicate_calls: Vec::new(),
+        };
+        let mut hasher = PredictionFxHasher::default();
+        second.hash(&mut hasher);
+        arena.interner_heads.insert(hasher.finish(), first_id);
+
+        let second_id = arena.intern(second.clone());
+        assert_ne!(second_id, first_id);
+        assert_eq!(arena.intern(second), second_id);
+        assert_eq!(arena.records.len(), 2);
+        assert_eq!(arena.interner_next.len(), 2);
+    }
+
+    #[test]
+    fn config_set_keeps_distinct_prediction_provenance() {
+        let mut arena = ContextArena::new();
+        let mut provenance = PredictionSemanticProvenanceArena::default();
+        let mut workspace = PredictionWorkspace::default();
+        let mut first = AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena);
+        first.enter_prediction_rule(&mut provenance, 4, 2);
+        let mut second = AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena);
+        second.enter_prediction_rule(&mut provenance, 5, 3);
+        let mut set = AtnConfigSet::new();
+
+        assert!(set.add(first.clone(), &mut arena, &mut workspace));
+        assert!(set.add(second, &mut arena, &mut workspace));
+        assert!(!set.add(first, &mut arena, &mut workspace));
+        assert_eq!(set.len(), 2);
+        assert_eq!(set.config_index.len(), set.len());
+
+        set.remap_contexts(&[EMPTY_CONTEXT], &arena);
+        assert_eq!(set.config_index.len(), set.len());
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn parser_config_hot_path_layout_stays_compact() {
+        let debug_generation = if cfg!(debug_assertions) {
+            size_of::<u64>()
+        } else {
+            0
+        };
+        assert!(size_of::<AtnConfig>() <= 64 + debug_generation);
+        assert!(size_of::<AtnConfigKey>() <= 56);
     }
 
     #[test]

@@ -7,6 +7,10 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
+The current generator emits revision 3 so generated parser-action hooks can
+observe parameterized rule arguments. This runtime continues to accept revision
+1 and 2 generated modules because their required APIs remain supported.
+
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when
 first adopting a release with this mechanism. If a later build reports a

@@ -26,7 +26,7 @@ if self.base.report_diagnostic_errors() {
 }
 match __prediction.alt {
     1 => {
-        let action = self.base.parser_action_at_current(5, 1, __rule_start, __consumed_eof);
+        let action = self.base.parser_action_at_current_indexed(5, 1, 0, __rule_start, __consumed_eof);
         __antlr_local_seen = true;
         let _ = action;
         if !(__antlr_local_seen) {

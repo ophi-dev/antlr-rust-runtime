@@ -10,8 +10,9 @@ use crate::dfa::{
 use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
-    PredictionContextStats, PredictionFxHasher, PredictionWorkspace, SemanticContext,
-    all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
+    PredictionContextStats, PredictionFxHasher, PredictionPredicateCall,
+    PredictionSemanticProvenanceArena, PredictionSemanticProvenanceId, PredictionWorkspace,
+    SemanticContext, all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
     has_sll_conflict_terminating_prediction, single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
@@ -62,6 +63,18 @@ pub struct ParserAtnSimulator<'a> {
     /// outcomes depend on caller-side evaluation, so any semantic transition
     /// disables memoization entirely. Computed lazily on first retry.
     full_context_memo_gate: Option<bool>,
+    /// Semantic configurations that survived the most recent prediction.
+    ///
+    /// The simulator defers predicate evaluation to the parser because hooks
+    /// need live parser state. Keeping the surviving alternative/context pairs
+    /// lets the committed parser evaluate only simulator-viable paths.
+    prediction_semantic_candidates: Vec<CompactParserSemanticCandidate>,
+    /// Whether ATN configs retain rule-call paths for parameterized predicates.
+    ///
+    /// This is enabled only by the committed parser when generated rule
+    /// argument metadata exists, keeping ordinary prediction configs compact.
+    track_prediction_rule_calls: bool,
+    semantic_provenance: Option<Box<PredictionSemanticProvenanceArena>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -216,6 +229,20 @@ pub enum ParserAtnPredictionDiagnosticKind {
     ContextSensitivity,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ParserSemanticCandidate {
+    pub(crate) alt: usize,
+    pub(crate) context: SemanticContext,
+    pub(crate) predicate_calls: Vec<PredictionPredicateCall>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CompactParserSemanticCandidate {
+    alt: usize,
+    context: SemanticContext,
+    semantic_provenance: PredictionSemanticProvenanceId,
+}
+
 #[derive(Clone, Copy)]
 struct PredictionCheck {
     decision: usize,
@@ -267,6 +294,7 @@ struct FullContextPrediction {
     prediction: ParserAtnPrediction,
     stop_index: usize,
     resolution: FullContextResolution,
+    semantic_candidates: Vec<CompactParserSemanticCandidate>,
 }
 
 /// How the full-context loop settled, mirroring the two exits of Java's
@@ -294,16 +322,34 @@ fn full_context_prediction(
         },
         stop_index,
         resolution,
+        semantic_candidates: semantic_prediction_candidates(configs),
     }
+}
+
+fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<CompactParserSemanticCandidate> {
+    if !configs.has_semantic_context() {
+        return Vec::new();
+    }
+    let mut candidates = configs
+        .configs()
+        .iter()
+        .map(|config| CompactParserSemanticCandidate {
+            alt: config.alt,
+            context: config.semantic_context.clone(),
+            semantic_provenance: config.semantic_provenance_id(),
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    candidates.dedup();
+    candidates
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ClosureConfigKey {
     state: usize,
     alt: usize,
-    context: ContextId,
     semantic_context: SemanticContext,
-    precedence_filter_suppressed: bool,
+    context_and_provenance: u64,
 }
 
 impl From<&AtnConfig> for ClosureConfigKey {
@@ -311,9 +357,9 @@ impl From<&AtnConfig> for ClosureConfigKey {
         Self {
             state: config.state,
             alt: config.alt,
-            context: config.context,
             semantic_context: config.semantic_context.clone(),
-            precedence_filter_suppressed: config.precedence_filter_suppressed,
+            context_and_provenance: u64::from(config.context.compact())
+                | (u64::from(config.semantic_provenance_and_flags()) << 32),
         }
     }
 }
@@ -556,6 +602,9 @@ impl<'a> ParserAtnSimulator<'a> {
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
             full_context_memo_gate: None,
+            prediction_semantic_candidates: Vec::new(),
+            track_prediction_rule_calls: false,
+            semantic_provenance: None,
         }
     }
 
@@ -566,6 +615,7 @@ impl<'a> ParserAtnSimulator<'a> {
         self.adaptive_closure_work = 0;
         self.outer_context_cache = None;
         self.deferred_accept_states.clear();
+        self.prediction_semantic_candidates.clear();
         self.workspace.reset();
     }
 
@@ -575,6 +625,9 @@ impl<'a> ParserAtnSimulator<'a> {
     /// an overlapping stale simulator cannot republish pre-clear states later.
     pub fn clear_dfa(&mut self) {
         self.store = PredictionStore::new(self.atn);
+        if let Some(semantic_provenance) = self.semantic_provenance.as_mut() {
+            **semantic_provenance = PredictionSemanticProvenanceArena::default();
+        }
         // The memo keys entries by ContextId into the store's arena the
         // line above just replaced; stale IDs would alias fresh contexts.
         self.full_context_memo.clear();
@@ -695,11 +748,52 @@ impl<'a> ParserAtnSimulator<'a> {
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
             full_context_memo_gate: None,
+            prediction_semantic_candidates: Vec::new(),
+            track_prediction_rule_calls: false,
+            semantic_provenance: None,
         }
     }
 
     pub fn decision_dfas(&self) -> &[ParserDfa] {
         &self.store.decision_to_dfa
+    }
+
+    pub(crate) fn prediction_semantic_candidates(&self) -> Vec<ParserSemanticCandidate> {
+        self.prediction_semantic_candidates
+            .iter()
+            .map(|candidate| ParserSemanticCandidate {
+                alt: candidate.alt,
+                context: candidate.context.clone(),
+                predicate_calls: self.semantic_provenance.as_deref().map_or_else(
+                    Vec::new,
+                    |arena| {
+                        arena
+                            .predicate_calls(candidate.semantic_provenance)
+                            .to_vec()
+                    },
+                ),
+            })
+            .collect()
+    }
+
+    pub(crate) fn set_track_prediction_rule_calls(&mut self, track: bool) {
+        assert!(
+            self.shared_cache_key.is_none(),
+            "shared prediction simulators use a fixed untracked rule-call mode"
+        );
+        if self.track_prediction_rule_calls != track {
+            assert!(
+                !self.has_trained_decision,
+                "prediction rule-call tracking mode cannot change after DFA construction"
+            );
+        }
+        self.track_prediction_rule_calls = track;
+        if track {
+            self.semantic_provenance
+                .get_or_insert_with(|| Box::new(PredictionSemanticProvenanceArena::default()));
+        } else {
+            self.semantic_provenance = None;
+        }
     }
 
     /// Returns adaptive-call and closure-work counters for stable decisions.
@@ -937,6 +1031,7 @@ impl<'a> ParserAtnSimulator<'a> {
         input: &mut T,
         merge_cache: &mut PredictionWorkspace,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        self.prediction_semantic_candidates.clear();
         let decision = request.decision;
         let learning_revision = self
             .store
@@ -1122,6 +1217,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     .map(|dfa| dfa.configs(state_number).clone())
                     && let Some(alt) = self.alt_that_finished_decision_entry_rule(&configs)
                 {
+                    self.prediction_semantic_candidates = semantic_prediction_candidates(&configs);
                     return Ok(ParserAtnPrediction {
                         alt,
                         requires_full_context: false,
@@ -1155,12 +1251,20 @@ impl<'a> ParserAtnSimulator<'a> {
             && let Some(prediction) =
                 self.non_greedy_exit_prediction(decision, decision_state, state_number)
         {
+            self.record_prediction_semantic_candidates(decision, state_number);
             return Ok(Some(prediction));
         }
         let Some(info) = self.dfa_prediction_info(decision, state_number) else {
             return Ok(None);
         };
         let prediction = info.prediction;
+        let semantic_candidates = self
+            .store
+            .decision_to_dfa
+            .get(decision)
+            .map(|dfa| semantic_prediction_candidates(dfa.configs(state_number)))
+            .unwrap_or_default();
+        self.prediction_semantic_candidates = semantic_candidates;
         // SLL-probe stage: the caller only needs to know that this conflict
         // requires full context; it will re-run with the real outer context.
         // Returning the SLL prediction here (with requires_full_context set)
@@ -1191,7 +1295,7 @@ impl<'a> ParserAtnSimulator<'a> {
             {
                 #[cfg(feature = "perf-counters")]
                 crate::perf::record_full_context_memo_hit(decision);
-                return Ok(Some(Self::full_context_retry_prediction(
+                return Ok(Some(self.full_context_retry_prediction(
                     full_context,
                     info.conflicting_alts,
                     start_index,
@@ -1208,7 +1312,7 @@ impl<'a> ParserAtnSimulator<'a> {
             if memo_allowed {
                 self.record_full_context_memo(memo_key, start_index, input, &full_context);
             }
-            return Ok(Some(Self::full_context_retry_prediction(
+            return Ok(Some(self.full_context_retry_prediction(
                 full_context,
                 info.conflicting_alts,
                 start_index,
@@ -1222,12 +1326,20 @@ impl<'a> ParserAtnSimulator<'a> {
     /// shared by the fresh LL run and the memoized replay so both produce
     /// byte-identical diagnostics.
     fn full_context_retry_prediction(
+        &mut self,
         full_context: FullContextPrediction,
         sll_conflicting_alts: Vec<usize>,
         start_index: usize,
         sll_stop_index: usize,
     ) -> ParserAtnPrediction {
-        let (kind, exact, conflicting_alts) = match full_context.resolution {
+        let FullContextPrediction {
+            mut prediction,
+            stop_index,
+            resolution,
+            semantic_candidates,
+        } = full_context;
+        self.prediction_semantic_candidates = semantic_candidates;
+        let (kind, exact, conflicting_alts) = match resolution {
             FullContextResolution::Ambiguous { exact, ref alts } => (
                 ParserAtnPredictionDiagnosticKind::Ambiguity,
                 exact,
@@ -1242,18 +1354,30 @@ impl<'a> ParserAtnSimulator<'a> {
                 sll_conflicting_alts,
             ),
         };
-        let mut prediction = full_context.prediction;
+        prediction.has_semantic_context = self
+            .prediction_semantic_candidates
+            .iter()
+            .any(|candidate| candidate.alt == prediction.alt && !candidate.context.is_none());
         if conflicting_alts.len() > 1 {
             prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
                 kind,
                 start_index,
                 sll_stop_index,
-                ll_stop_index: full_context.stop_index,
+                ll_stop_index: stop_index,
                 conflicting_alts,
                 exact,
             });
         }
         prediction
+    }
+
+    fn record_prediction_semantic_candidates(&mut self, decision: usize, state_number: DfaStateId) {
+        self.prediction_semantic_candidates = self
+            .store
+            .decision_to_dfa
+            .get(decision)
+            .map(|dfa| semantic_prediction_candidates(dfa.configs(state_number)))
+            .unwrap_or_default();
     }
 
     /// Whether full-context memoization is sound for this ATN.
@@ -1994,7 +2118,14 @@ impl<'a> ParserAtnSimulator<'a> {
                 .contexts
                 .parent(config.context, index)
                 .unwrap_or(EMPTY_CONTEXT);
-            let next = config.moved_to(return_state, parent, &self.store.contexts);
+            let mut next = config.moved_to(return_state, parent, &self.store.contexts);
+            if self.track_prediction_rule_calls {
+                next.exit_prediction_rule(
+                    self.semantic_provenance
+                        .as_deref_mut()
+                        .expect("tracked prediction has a provenance arena"),
+                );
+            }
             stack.push((next, collect_predicates));
         }
         handled_all_paths
@@ -2044,6 +2175,29 @@ impl<'a> ParserAtnSimulator<'a> {
         };
         let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
         target.semantic_context = semantic_context;
+        if self.track_prediction_rule_calls {
+            match transition_kind {
+                ParserTransitionKind::Rule => {
+                    target.enter_prediction_rule(
+                        self.semantic_provenance
+                            .as_deref_mut()
+                            .expect("tracked prediction has a provenance arena"),
+                        config.state,
+                        transition.arg0() as usize,
+                    );
+                }
+                ParserTransitionKind::Predicate if collect_predicates => {
+                    target.record_prediction_predicate(
+                        self.semantic_provenance
+                            .as_deref_mut()
+                            .expect("tracked prediction has a provenance arena"),
+                        transition.arg0() as usize,
+                        transition.arg1() as usize,
+                    );
+                }
+                _ => {}
+            }
+        }
         Some(target)
     }
 
@@ -2212,9 +2366,17 @@ fn dfa_state_display(state: ParserDfaStateView<'_>, deferred: bool) -> String {
 mod tests {
     use super::*;
     use crate::atn::AtnStateKind;
+    use std::mem::size_of;
 
     fn finish_atn(builder: ParserAtnBuilder) -> Atn {
         builder.finish().expect("valid packed parser ATN")
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn parser_prediction_hot_path_layouts_stay_compact() {
+        assert!(size_of::<ClosureConfigKey>() <= 56);
+        assert!(size_of::<CompactParserSemanticCandidate>() <= 48);
     }
 
     #[test]
@@ -2492,6 +2654,27 @@ mod tests {
 
         let simulator = ParserAtnSimulator::new_shared(atn);
         assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
+    }
+
+    #[test]
+    #[should_panic(expected = "shared prediction simulators use a fixed untracked rule-call mode")]
+    fn shared_simulator_rejects_rule_call_tracking_mode_changes() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        let mut simulator = ParserAtnSimulator::new_shared(atn);
+
+        simulator.set_track_prediction_rule_calls(true);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "prediction rule-call tracking mode cannot change after DFA construction"
+    )]
+    fn simulator_rejects_rule_call_tracking_mode_changes_after_learning() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+
+        simulator.set_track_prediction_rule_calls(true);
     }
 
     #[test]
