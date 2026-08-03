@@ -197,12 +197,10 @@ impl Builder {
                 "fixed lookahead must be between 1 and 8",
             ));
         }
-        let semantic_patterns = self
-            .semantic_patterns
-            .map_or_else(
-                || Ok(SemPatternFile::default()),
-                |path| load_sem_patterns(&path),
-            )
+        let semantic_patterns_path = self.semantic_patterns;
+        let semantic_patterns = semantic_patterns_path
+            .as_deref()
+            .map_or_else(|| Ok(SemPatternFile::default()), load_sem_patterns)
             .map_err(Error::generation)?;
         let mut option_hooks = BTreeSet::new();
         for assignment in self.option_hooks {
@@ -221,6 +219,7 @@ impl Builder {
                 UnknownSemanticPolicy::Error => SemUnknownPolicy::Error,
             },
             sem_patterns: semantic_patterns,
+            sem_patterns_path: semantic_patterns_path,
             require_full_semantics: self.require_full_semantics,
             option_hooks,
             generate_listener: self.generate_listener,

@@ -38,6 +38,7 @@ pub(crate) struct CompilerConfig {
     pub(crate) allow_unsupported_lexer_actions: bool,
     pub(crate) sem_unknown: SemUnknownPolicy,
     pub(crate) sem_patterns: SemPatternFile,
+    pub(crate) sem_patterns_path: Option<PathBuf>,
     pub(crate) require_full_semantics: bool,
     pub(crate) option_hooks: BTreeSet<String>,
     pub(crate) generate_listener: bool,
@@ -77,6 +78,7 @@ impl CompilerConfig {
         let mut embedded_actions = false;
         let mut sem_unknown = SemUnknownPolicy::default();
         let mut sem_patterns = SemPatternFile::default();
+        let mut sem_patterns_path = None;
         let mut require_full_semantics = false;
         let mut option_hooks = BTreeSet::new();
         let mut generate_listener = true;
@@ -107,9 +109,10 @@ impl CompilerConfig {
                 "-visitor" | "--visitor" => generate_visitor = true,
                 "-no-visitor" | "--no-visitor" => generate_visitor = false,
                 "--sem-patterns" => {
-                    sem_patterns =
-                        load_sem_patterns(&PathBuf::from(next_arg(&mut iter, "--sem-patterns")?))
-                            .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
+                    let path = PathBuf::from(next_arg(&mut iter, "--sem-patterns")?);
+                    sem_patterns = load_sem_patterns(&path)
+                        .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
+                    sem_patterns_path = Some(path);
                 }
                 "--require-full-semantics" => require_full_semantics = true,
                 "--option-hook" => {
@@ -193,6 +196,7 @@ impl CompilerConfig {
             allow_unsupported_lexer_actions,
             sem_unknown,
             sem_patterns,
+            sem_patterns_path,
             require_full_semantics,
             option_hooks,
             generate_listener,

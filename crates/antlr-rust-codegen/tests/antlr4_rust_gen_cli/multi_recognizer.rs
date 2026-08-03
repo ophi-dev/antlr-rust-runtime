@@ -130,6 +130,43 @@ mod generated_source_without_codegen_dependency {
     }
 }
 
+#[test]
+fn builder_tracks_token_vocabulary_and_semantic_pattern_inputs() {
+    let temp = temporary_directory("builder-external-inputs");
+    let grammar = temp.path().join("ExternalParser.g4");
+    let tokens = temp.path().join("ExternalLexer.tokens");
+    let patterns = temp.path().join("semantics.toml");
+    fs::write(
+        &grammar,
+        "parser grammar ExternalParser;\n\
+         options { tokenVocab=ExternalLexer; }\n\
+         start: ID EOF;\n",
+    )
+    .expect("parser grammar should be writable");
+    fs::write(&tokens, "ID=1\n").expect("token vocabulary should be writable");
+    fs::write(&patterns, "").expect("semantic patterns should be writable");
+
+    let generation = Builder::new()
+        .grammar(&grammar)
+        .semantic_patterns(&patterns)
+        .out_dir(temp.path().join("generated"))
+        .generate()
+        .expect("generation with external inputs should succeed");
+    let canonical_temp = temp.path().canonicalize().expect("temporary directory");
+    let inputs = generation
+        .inputs()
+        .iter()
+        .map(|path| {
+            path.strip_prefix(&canonical_temp)
+                .expect("input should be below the temporary directory")
+                .display()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!("builder_external_inputs", inputs);
+}
+
 fn instantiate_parser_fixture(workspace: &Path, package: &str, grammar: &str, module: &str) {
     let template =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/build-dependency/parser-crate-template");

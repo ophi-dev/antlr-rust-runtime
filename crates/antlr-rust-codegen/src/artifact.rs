@@ -24,7 +24,7 @@ impl Generation {
         }
     }
 
-    /// Canonical paths of every root, import, and token vocabulary read.
+    /// Canonical paths of every grammar, token vocabulary, and semantic-pattern file read.
     pub fn inputs(&self) -> &[PathBuf] {
         &self.inputs
     }

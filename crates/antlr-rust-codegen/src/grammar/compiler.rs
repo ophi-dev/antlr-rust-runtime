@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::action::{ActionReferenceParser, action_references};
 use super::atn::{CompiledLexer, CompiledParser, compile_lexer, compile_parser};
 use super::diagnostic::{CompilationError, Diagnostic};
-use super::integration::{RootOutputs, integrate_loaded};
+use super::integration::{IntegratedVocabularySource, RootOutputs, integrate_loaded};
 use super::loader::{LoadOptions, LoadedSources, load_recovering};
 use super::model::{GrammarId, GrammarKind};
 use super::rule_reachability::EntryRuleConfig;
@@ -21,6 +21,7 @@ pub(crate) struct CompiledRoot {
 #[derive(Debug)]
 pub(crate) struct Compilation {
     pub(crate) sources: SourceSet,
+    non_grammar_inputs: Vec<std::path::PathBuf>,
     pub(crate) roots: Vec<CompiledRoot>,
     pub(crate) lexers: BTreeMap<GrammarId, CompiledLexer>,
     pub(crate) parsers: BTreeMap<GrammarId, CompiledParser>,
@@ -29,6 +30,14 @@ pub(crate) struct Compilation {
 }
 
 impl Compilation {
+    pub(crate) fn input_paths(&self) -> impl Iterator<Item = &std::path::Path> {
+        self.sources.canonical_paths().chain(
+            self.non_grammar_inputs
+                .iter()
+                .map(std::path::PathBuf::as_path),
+        )
+    }
+
     pub(crate) fn lexer(&self, grammar: GrammarId) -> Option<&CompiledLexer> {
         self.lexers.get(&grammar)
     }
@@ -85,6 +94,16 @@ pub(crate) fn compile_with_action_reference_parser(
     let root_order = loaded.grammars.roots.clone();
     let mut integrated =
         integrate_loaded(&loaded).map_err(|error| error.with_sources(&loaded.sources))?;
+    let mut non_grammar_inputs = integrated
+        .vocabularies
+        .iter()
+        .filter_map(|vocabulary| match &vocabulary.source {
+            IntegratedVocabularySource::Grammar(_) => None,
+            IntegratedVocabularySource::TokensFile(path) => Some(path.clone()),
+        })
+        .collect::<Vec<_>>();
+    non_grammar_inputs.sort();
+    non_grammar_inputs.dedup();
     let unknown_entries =
         entry_rules.unknown_names(&integrated.grammar.units, &integrated.grammar.target_units);
     if !unknown_entries.is_empty() {
@@ -153,7 +172,13 @@ pub(crate) fn compile_with_action_reference_parser(
         );
     }
     let LoadedSources { sources, .. } = loaded;
-    compile_semantics(sources, root_order, semantics, transform_report)
+    compile_semantics(
+        sources,
+        non_grammar_inputs,
+        root_order,
+        semantics,
+        transform_report,
+    )
 }
 
 fn merge_diagnostics(
@@ -177,6 +202,7 @@ fn merge_diagnostics(
 
 fn compile_semantics(
     sources: SourceSet,
+    non_grammar_inputs: Vec<std::path::PathBuf>,
     root_order: Vec<GrammarId>,
     semantics: SemanticGrammarSet,
     transform_report: TransformReport,
@@ -223,6 +249,7 @@ fn compile_semantics(
     }
     Ok(Compilation {
         sources,
+        non_grammar_inputs,
         roots,
         lexers,
         parsers,

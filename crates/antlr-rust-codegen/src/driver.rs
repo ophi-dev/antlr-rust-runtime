@@ -40,11 +40,16 @@ pub(crate) fn generate(
         report(message).map_err(Error::generation)?;
     }
     warnings.extend(optimization_messages);
-    let inputs = compilation
-        .sources
-        .canonical_paths()
+    let mut inputs = compilation
+        .input_paths()
         .map(Path::to_path_buf)
         .collect::<Vec<_>>();
+    if let Some(path) = &args.sem_patterns_path {
+        let path = fs::canonicalize(path).map_err(Error::generation)?;
+        if !inputs.contains(&path) {
+            inputs.push(path);
+        }
+    }
     let optimization_manifest = optimizations.render_manifest(&compilation);
     if optimizations.report_only() {
         let mut artifacts = GeneratedArtifacts::default();

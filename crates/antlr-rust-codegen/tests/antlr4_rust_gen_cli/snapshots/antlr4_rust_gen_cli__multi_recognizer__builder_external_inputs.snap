@@ -1,0 +1,10 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/multi_recognizer.rs
+assertion_line: 167
+expression: inputs
+---
+[
+    "ExternalParser.g4",
+    "ExternalLexer.tokens",
+    "semantics.toml",
+]
