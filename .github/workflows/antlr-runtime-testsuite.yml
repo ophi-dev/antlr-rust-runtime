@@ -87,8 +87,21 @@ jobs:
             -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
           # Merge the profraw into a .profdata and grab the exact `llvm-cov export`
           # command report would run (same instr-profile, base objects, ignores).
-          export_cmd="$(cargo llvm-cov report --workspace --lcov -v 2>&1 >/dev/null \
-            | sed -n "s/^ *Running \`\(.*llvm-cov export .*\)\`\$/\1/p")"
+          report_log="${RUNNER_TEMP}/llvm-cov-report.log"
+          if ! cargo llvm-cov report \
+            -p antlr-rust-runtime \
+            -p antlr-rust-g4-parser \
+            -p antlr-rust-rs-parser \
+            -p antlr-rust-codegen \
+            -p antlr-rust-runtime-testsuite \
+            --lcov --color never -v >/dev/null 2>"$report_log"
+          then
+            cat "$report_log" >&2
+            exit 1
+          fi
+          export_cmd="$(sed -n \
+            "s/^ *Running \`\(.*llvm-cov export .*\)\`\$/\1/p" \
+            "$report_log")"
           if [ -z "$export_cmd" ]; then
             echo "::error::could not capture llvm-cov export command from report -v" >&2
             exit 1

@@ -181,7 +181,13 @@ cargo run   -p antlr-rust-runtime-testsuite --bin antlr4-runtime-testsuite
 # `report` sees only the harness + generator (its object list comes from cargo
 # build metadata, not a target/ scan), so fold the subprocess-built smoke
 # binaries in by hand: capture report's own `llvm-cov export` and append them.
-cargo llvm-cov report --lcov --output-path conformance.lcov
+cargo llvm-cov report \
+  -p antlr-rust-runtime \
+  -p antlr-rust-g4-parser \
+  -p antlr-rust-rs-parser \
+  -p antlr-rust-codegen \
+  -p antlr-rust-runtime-testsuite \
+  --lcov --output-path conformance.lcov
 ```
 
 The `%p` (PID) in the profile-file pattern keeps parallel `--jobs` workers from
