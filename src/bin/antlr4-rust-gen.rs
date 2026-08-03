@@ -9071,7 +9071,7 @@ fn build_structural_portable_local_data(
             .coordinate_disposition(
                 SemanticsKind::ParserAction,
                 data.rule_names.get(action.rule_index).map(String::as_str),
-                None,
+                Some(action.action_index),
                 Some(action.state),
             )
             .is_some()
@@ -23005,6 +23005,31 @@ dispose = "hook"
         );
         enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
             .expect("portable coordinates satisfy strict semantics");
+    }
+
+    #[test]
+    fn indexed_action_overrides_precede_portable_boolean_lowering() {
+        let data = portable_bool_parser_data();
+        let action = structural_actions(&data)
+            .expect("portable action inventory should build")
+            .into_iter()
+            .next()
+            .expect("portable fixture has one action");
+
+        for dispose in ["assume-true", "assume-false", "hook"] {
+            let patterns = parse_sem_patterns(&format!(
+                "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\nindex = {}\ndispose = \"{dispose}\"\n",
+                action.action_index
+            ))
+            .expect("indexed action override should parse");
+            let portable = build_structural_portable_local_data(&data, &patterns)
+                .expect("portable local semantics should build");
+
+            assert!(
+                portable.inline_actions.is_empty(),
+                "indexed {dispose} override must suppress portable action lowering"
+            );
+        }
     }
 
     #[test]
