@@ -5246,6 +5246,100 @@ mod named_action_tests {
     );
 }
 
+#[test]
+fn forwarded_parser_rule_arguments_reach_named_actions() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/parser-action-forwarded-args");
+    let temp = temporary_directory("parser-action-forwarded-args");
+    let out = temp.path().join("generated");
+    let output = run_antlr4_rust_gen(&[
+        fixture.join("Forwarded.g4").as_os_str(),
+        OsStr::new("--sem-patterns"),
+        fixture.join("patterns.toml").as_os_str(),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let parser =
+        fs::read_to_string(out.join("forwarded_parser.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("parser_action_hook_with_context_and_local"),
+        "{parser}"
+    );
+    assert!(parser.contains("inherit_local: true"), "{parser}");
+
+    let test_source = r####"
+#[cfg(test)]
+mod forwarded_argument_tests {
+    use super::forwarded_lexer::ForwardedLexer;
+    use super::forwarded_parser::{
+        ForwardedParser, ForwardedParserHooks, ForwardedParserTypedHooks,
+    };
+    use antlr4_runtime::{
+        AntlrError, CommonTokenStream, InputStream, ParserSemCtx, TokenSource,
+    };
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[derive(Default)]
+    struct Hooks {
+        values: Rc<RefCell<Vec<i64>>>,
+    }
+
+    impl ForwardedParserHooks for Hooks {
+        fn observe_argument<L>(&mut self, ctx: &mut ParserSemCtx<'_, L>)
+        where
+            L: TokenSource,
+        {
+            self.values.borrow_mut().push(
+                ctx.local_int_arg()
+                    .expect("forwarded parser argument should be visible"),
+            );
+        }
+    }
+
+    type TestParser =
+        ForwardedParser<ForwardedLexer<InputStream>, ForwardedParserTypedHooks<Hooks>>;
+    type Entry = fn(&mut TestParser) -> Result<antlr4_runtime::ParseTree, AntlrError>;
+
+    fn run(entry: Entry) -> Vec<i64> {
+        let values = Rc::new(RefCell::new(Vec::new()));
+        let lexer = ForwardedLexer::new(InputStream::new(""));
+        let mut parser = ForwardedParser::with_typed_hooks(
+            CommonTokenStream::new(lexer),
+            Hooks {
+                values: Rc::clone(&values),
+            },
+        );
+        entry(&mut parser).expect("fixture input should parse");
+        let result = values.borrow().clone();
+        result
+    }
+
+    #[test]
+    fn generated_and_interpreted_paths_forward_arguments() {
+        assert_eq!(run(TestParser::generated), [29]);
+        assert_eq!(run(TestParser::interpreted), [31]);
+    }
+}
+"####;
+
+    assert_generated_project(
+        temp.path(),
+        &["forwarded_lexer.rs", "forwarded_parser.rs"],
+        test_source,
+    );
+}
+
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn parser_action_hook_signatures_reject_normalized_conflicts() {

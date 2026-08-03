@@ -2610,6 +2610,7 @@ struct StructuralRuleCall {
     target_rule_index: usize,
     state: usize,
     arguments: Option<String>,
+    caller_first_argument: Option<String>,
 }
 
 fn structural_elements<'model>(
@@ -2775,6 +2776,12 @@ fn structural_rule_calls(data: &CodegenData<'_>) -> io::Result<Vec<StructuralRul
                 target_rule_index: rule_index,
                 state: transition.source,
                 arguments: call.arguments.clone(),
+                caller_first_argument: semantic
+                    .bindings
+                    .attributes
+                    .get(&binding.caller)
+                    .and_then(|attributes| attributes.arguments.first())
+                    .map(|argument| argument.name.clone()),
             });
         }
     }
@@ -13977,7 +13984,7 @@ fn parser_action_routing(
     embedded: bool,
     embedded_data: Option<&EmbeddedParserData>,
     portable_local_data: &PortableLocalData,
-    rule_args: &[(usize, usize, RuleArgTemplate)],
+    parameterized_rules: &BTreeSet<usize>,
     noop_states: &BTreeSet<usize>,
 ) -> io::Result<ParserActionRouting> {
     let mut inline_statements = embedded_data.map_or_else(
@@ -13996,10 +14003,6 @@ fn parser_action_routing(
         .iter()
         .map(|action| (action.state, action.rule_index))
         .collect::<BTreeMap<_, _>>();
-    let parameterized_rules = rule_args
-        .iter()
-        .map(|(_, rule_index, _)| *rule_index)
-        .collect::<BTreeSet<_>>();
     let committed_indices = structural_actions
         .iter()
         .filter(|action| {
@@ -14121,6 +14124,11 @@ fn render_parser_with_decision_report(
     } else {
         structural_parser_rule_args(data)?
     };
+    let parameterized_rules = if options.embedded {
+        BTreeSet::new()
+    } else {
+        structural_parameterized_parser_rules(data)?
+    };
     let ParserActionRouting {
         inline_statements: inline_action_statements,
         states: action_states,
@@ -14132,7 +14140,7 @@ fn render_parser_with_decision_report(
         options.embedded,
         embedded_data.as_ref(),
         &portable_local_data,
-        &rule_args,
+        &parameterized_rules,
         &noop_action_states,
     )?;
     let inline_action_states = inline_action_statements
@@ -15392,22 +15400,66 @@ fn empty_parser_action_states(data: &CodegenData<'_>) -> io::Result<BTreeSet<usi
 fn structural_parser_rule_args(
     data: &CodegenData<'_>,
 ) -> io::Result<Vec<(usize, usize, RuleArgTemplate)>> {
-    Ok(structural_rule_calls(data)?
-        .into_iter()
-        .filter_map(|call| {
-            let template = parse_rule_arg_template(call.arguments.as_deref()?)?;
-            Some((call.state, call.target_rule_index, template))
+    let mut args = Vec::new();
+    for call in structural_rule_calls(data)? {
+        let Some(value) = call.arguments.as_deref() else {
+            continue;
+        };
+        let Some(template) = parse_rule_arg_template(value, call.caller_first_argument.as_deref())
+        else {
+            let rule_name = data
+                .rule_names
+                .get(call.target_rule_index)
+                .map_or("<unknown>", String::as_str);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "unsupported parser rule argument expression `{}` for rule `{rule_name}`; use an integer/boolean literal or forward the caller's first declared argument",
+                    value.trim()
+                ),
+            ));
+        };
+        args.push((call.state, call.target_rule_index, template));
+    }
+    Ok(args)
+}
+
+fn structural_parameterized_parser_rules(data: &CodegenData<'_>) -> io::Result<BTreeSet<usize>> {
+    let semantic = data.semantic.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "structural grammar model is unavailable",
+        )
+    })?;
+    Ok(semantic
+        .recognizer
+        .rule_numbers
+        .iter()
+        .filter_map(|(rule, rule_index)| {
+            semantic
+                .bindings
+                .attributes
+                .get(rule)
+                .is_some_and(|attributes| !attributes.arguments.is_empty())
+                .then_some(*rule_index)
         })
         .collect())
 }
 
-fn parse_rule_arg_template(value: &str) -> Option<RuleArgTemplate> {
+fn parse_rule_arg_template(
+    value: &str,
+    caller_first_argument: Option<&str>,
+) -> Option<RuleArgTemplate> {
     let value = value.trim();
     value.parse::<i64>().map_or_else(
         |_| {
             if matches!(value, "true" | "false") {
                 Some(RuleArgTemplate::Literal(i64::from(value == "true")))
-            } else if value == r#"<VarRef("i")>"# {
+            } else if caller_first_argument.is_some_and(|argument| {
+                value == argument
+                    || value.strip_prefix('$') == Some(argument)
+                    || value == format!(r#"<VarRef("{argument}")>"#)
+            }) {
                 Some(RuleArgTemplate::InheritLocal)
             } else {
                 None
@@ -18461,6 +18513,18 @@ mod tests {
                 (1, RuleArgTemplate::Literal(1)),
                 (1, RuleArgTemplate::Literal(0)),
             ]
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_rule_argument_expressions() {
+        let data = parser_fixture_data("unsupported-rule-argument/T.g4");
+        let error = structural_parser_rule_args(&data)
+            .expect_err("unsupported expressions must not be silently omitted");
+
+        insta::assert_snapshot!(
+            error,
+            @"unsupported parser rule argument expression `1 + 2` for rule `child`; use an integer/boolean literal or forward the caller's first declared argument"
         );
     }
 
