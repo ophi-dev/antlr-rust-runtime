@@ -15,11 +15,12 @@ Revision 1. It retains the optimization-pipeline requirements from issues
 ## 1. Decision summary
 
 Introduce the Cargo workspace and complete the source decomposition in one
-atomic PR. Preserve every existing command, generated/runtime API, diagnostic,
-and output behavior while adding the `Builder` library API. Move each
-responsibility directly from its current location to its final package and
-module. Do not create intermediate modules under `src/bin_support/`, merge a
-package-only state, or require follow-up extraction PRs.
+atomic PR. Preserve generator CLI syntax, generated/runtime APIs, diagnostics,
+and output behavior while intentionally replacing package-selection/install
+commands and adding the `Builder` library API. Move each responsibility
+directly from its current location to its final package and module. Do not
+create intermediate modules under `src/bin_support/`, merge a package-only
+state, or require follow-up extraction PRs.
 
 That PR produces:
 
@@ -172,8 +173,8 @@ not make every former `pub(crate)` item an advertised public API.
    stage-specific inputs, legality rules, validation, and reporting.
 10. Keep issue #276 aligned with consumers that link multiple independently
     generated parser crates.
-11. Preserve generated behavior, diagnostics, manifest ordering, and command
-    behavior throughout structural changes.
+11. Preserve generator CLI behavior, generated behavior, diagnostics, and
+    manifest ordering throughout structural changes.
 12. Leave the project fully releasable when the single structural PR merges.
 
 ### 3.2 Non-goals
@@ -459,7 +460,26 @@ cargo run -p antlr-rust-codegen --bin antlr4-rust-gen -- ...
 The CLI and library call the same pipeline and artifact writer. A CLI feature
 must not fork generation behavior from `Builder`.
 
-### 5.3 Version synchronization
+### 5.3 Package migration
+
+The existing installation command is intentionally replaced:
+
+```text
+old: cargo install antlr-rust-runtime --features codegen --bin antlr4-rust-gen
+new: cargo install antlr-rust-codegen --bin antlr4-rust-gen
+```
+
+Repository commands likewise gain explicit `-p` selectors, and projects moving
+generation into `build.rs` add `antlr-rust-codegen` under
+`[build-dependencies]`.
+
+Removing the runtime's `codegen` feature and binary target is a package-level
+breaking change and must be called out in the changelog, README, and migration
+guide. It does not by itself increment `__ANTLR4_RUST_CODEGEN_API`: that
+revision tracks compatibility between generated Rust source and runtime APIs,
+not how the generator executable/library is packaged.
+
+### 5.4 Version synchronization
 
 Use one version for every published workspace package initially. Internal
 package edges use an exact requirement plus a local path:
@@ -1174,6 +1194,7 @@ each mutation implementation stays with the representation it owns.
 | First publish lacks trusted-publisher authorization | recheck names before merge and prepare the initial owner-token/trusted-publisher bootstrap before release |
 | Build-time codegen slows clean builds | keep it opt-in as a build dependency and document committed-source/xtask workflow |
 | Build dependency and target runtime resolve incoherently | lockstep versions, exact internal runtime edge, Cargo.lock, and generated-code API compile check |
+| Existing users invoke the runtime package's `codegen` feature/binary | treat removal as a package-level breaking migration and document the replacement install/build-dependency commands |
 | Runtime regains a codegen feature for convenience | enforce one-way package graph and test runtime package metadata |
 | XPath extraction creates a cycle or API break | keep XPath in runtime until a separately justified runtime-core/API migration |
 | Generated headers change from `env!` package metadata | inject explicit generator identity and approve only the provenance-line change |
@@ -1197,6 +1218,8 @@ The single structural PR is complete when:
 - generator and grammar source have moved directly to final packages;
 - runtime has no codegen feature, generator target, or codegen-only dependency;
 - `antlr-rust-codegen` exposes one pipeline through both `Builder` and the CLI;
+- changelog, README, and migration docs replace the old runtime-package install
+  command and explain the build-dependency workflow;
 - a build-dependency consumer generates and runs a parser;
 - all publishable packages share one version and exact internal edges;
 - release automation publishes all four packages in order and can resume after
