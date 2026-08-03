@@ -8000,9 +8000,16 @@ where
             return Err(error);
         }
         if let Some(error) = semantic_error {
+            if top_level_entry {
+                self.reset_unknown_semantic_hits();
+            }
             return Err(error);
         }
-        result.map(|outcome| (outcome.tree, deferred_actions))
+        let result = result.map(|outcome| (outcome.tree, deferred_actions));
+        if top_level_entry && let Err(error) = &result {
+            self.report_unrecovered_parser_error(error);
+        }
+        result
     }
 
     /// Parses a generated rule with action replay, parser predicate support,
@@ -20426,6 +20433,54 @@ mod tests {
     }
 
     #[test]
+    fn top_level_committed_semantic_error_does_not_poison_reuse() {
+        let atn = committed_action_then_predicate_atn();
+        let predicates = [(0, 0, ParserPredicate::True)];
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("x"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            DecliningActionHooks::default(),
+        );
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(0, 7)],
+                    predicates: &predicates,
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("the declined committed action must fail loud");
+        assert!(
+            error.to_string().contains("unhandled semantic action"),
+            "unexpected error: {error}"
+        );
+
+        parser.input.seek(0);
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    predicates: &predicates,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a clean interpreted reuse must not observe the prior action miss");
+
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
+        assert!(
+            parser.take_unknown_semantic_error().is_none(),
+            "the returned top-level semantic error must drain its recorded hit"
+        );
+    }
+
+    #[test]
     fn committed_walker_runs_handled_rule_init_before_indexed_action() {
         let atn = committed_action_then_predicate_atn();
         let mut parser = mini_parser_with_hooks(
@@ -20515,6 +20570,45 @@ mod tests {
         insta::assert_debug_snapshot!(
             "committed_walker_dispatches_recovery_diagnostics",
             *diagnostics.lock().expect("recorded diagnostics lock")
+        );
+    }
+
+    #[test]
+    fn committed_bail_error_notifies_error_listener() {
+        let atn = noop_action_then_token_then_eof_atn();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        let mut parser = mini_parser(vec![
+            TestToken::new(2)
+                .with_text("y")
+                .with_span(0, 0)
+                .with_byte_span(0, 1)
+                .with_position(3, 5),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.set_bail_on_error(true);
+        parser.remove_error_listeners();
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(0, 5)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("bail mode must return the committed token mismatch");
+        let diagnostics = diagnostics
+            .lock()
+            .expect("recorded diagnostics lock")
+            .clone();
+
+        insta::assert_debug_snapshot!(
+            "committed_bail_error_notifies_error_listener",
+            (error, diagnostics)
         );
     }
 
