@@ -131,6 +131,172 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(FAST_RECOGNIZE_RED_ZONE, FAST_RECOGNIZE_STACK_SIZE, body)
 }
 
+/// Shared lifecycle and recovery shell for generated parser rules.
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API. The binders supplied by generated code keep
+/// grammar-specific locals and steps inline while this macro owns the fixed
+/// dispatch, entry, recovery, and exit state machine.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __antlr4_rust_generated_rule {
+    (
+        dispatch $parser:ident, $rule:expr, $fatal:path;
+        $body:expr
+    ) => {{
+        if let Some(error) = $parser.base.rule_depth_cap_violation() {
+            return Err($fatal(error));
+        }
+        if let Some(error) = $parser.base.parse_listener_enter_rule($rule) {
+            return Err($fatal(error));
+        }
+        let __listener_result = if $parser.base.generated_rule_stack_check_due() {
+            $crate::grow_generated_rule_stack(|| $body)
+        } else {
+            $body
+        };
+        $parser.base.parse_listener_exit_rule($rule);
+        __listener_result
+    }};
+    (
+        ordinary $parser:ident, $state:expr, $rule:expr, $allow_fallback:expr,
+        $atn:expr, $fatal:path;
+        retry [$($retry:tt)*];
+        bind ($ctx:ident, $rule_start:ident, $consumed_eof:ident, $sync_error:ident);
+        setup { $($setup:tt)* }
+        body { $($body:tt)* }
+        success { $($success:tt)* }
+        recovery { $($recovery:tt)* }
+    ) => {
+        $crate::__antlr4_rust_generated_rule! {
+            @body
+            parser $parser;
+            enter $parser.base.enter_rule($state, $rule);
+            finish finish_rule;
+            abort exit_rule;
+            allow_fallback $allow_fallback;
+            atn $atn;
+            fatal $fatal;
+            retry [$($retry)*];
+            bind ($ctx, $rule_start, $consumed_eof, $sync_error);
+            setup { $($setup)* }
+            body { $($body)* }
+            success { $($success)* }
+            recovery { $($recovery)* }
+        }
+    };
+    (
+        recursive $parser:ident, $state:expr, $rule:expr, $precedence:expr,
+        $allow_fallback:expr, $atn:expr, $fatal:path;
+        retry [$($retry:tt)*];
+        bind ($ctx:ident, $rule_start:ident, $consumed_eof:ident, $sync_error:ident);
+        setup { $($setup:tt)* }
+        body { $($body:tt)* }
+        success { $($success:tt)* }
+        recovery { $($recovery:tt)* }
+    ) => {
+        $crate::__antlr4_rust_generated_rule! {
+            @body
+            parser $parser;
+            enter $parser.base.enter_recursion_rule($state, $rule, $precedence);
+            finish finish_recursion_rule;
+            abort unroll_recursion_context;
+            allow_fallback $allow_fallback;
+            atn $atn;
+            fatal $fatal;
+            retry [$($retry)*];
+            bind ($ctx, $rule_start, $consumed_eof, $sync_error);
+            setup { $($setup)* }
+            body { $($body)* }
+            success { $($success)* }
+            recovery { $($recovery)* }
+        }
+    };
+    (
+        @body
+        parser $parser:ident;
+        enter $enter:expr;
+        finish $finish:ident;
+        abort $abort:ident;
+        allow_fallback $allow_fallback:expr;
+        atn $atn:expr;
+        fatal $fatal:path;
+        retry [$($retry:tt)*];
+        bind ($ctx:ident, $rule_start:ident, $consumed_eof:ident, $sync_error:ident);
+        setup { $($setup:tt)* }
+        body { $($body:tt)* }
+        success { $($success:tt)* }
+        recovery { $($recovery:tt)* }
+    ) => {{
+        let __generated_diagnostic_marker =
+            $parser.base.generated_diagnostics_checkpoint();
+        let mut $ctx = $enter;
+        let $rule_start = $crate::IntStream::index($parser.base.input());
+        $($setup)*
+        let mut $consumed_eof = false;
+        let mut $sync_error: Option<$crate::AntlrError> = None;
+        let __result = (|| -> Result<(), $crate::AntlrError> {
+            $($body)*
+            Ok(())
+        })();
+        match __result {
+            Ok(()) => {
+                $($success)*
+                let __tree = $parser.base.$finish($ctx, $consumed_eof);
+                Ok(__tree)
+            }
+            Err(__error) => {
+                $crate::__antlr4_rust_generated_rule! {
+                    @retry
+                    [$($retry)*]
+                    parser $parser;
+                    marker __generated_diagnostic_marker;
+                    abort $abort;
+                }
+                let __error = if let Some(__sync_error) = $sync_error {
+                    if $allow_fallback {
+                        $parser.base.$abort();
+                        $parser
+                            .base
+                            .rollback_generated_tree(__generated_diagnostic_marker);
+                        $parser.base.record_generated_syntax_error();
+                        return Err($fatal(__sync_error));
+                    }
+                    __sync_error
+                } else {
+                    __error
+                };
+                $parser
+                    .base
+                    .recover_generated_rule(&mut $ctx, $atn, __error);
+                $($recovery)*
+                let __tree = $parser.base.$finish($ctx, $consumed_eof);
+                Ok(__tree)
+            }
+        }
+    }};
+    (
+        @retry
+        [none]
+        parser $parser:ident;
+        marker $marker:ident;
+        abort $abort:ident;
+    ) => {};
+    (
+        @retry
+        [$condition:expr => $retry_error:expr]
+        parser $parser:ident;
+        marker $marker:ident;
+        abort $abort:ident;
+    ) => {
+        if $condition {
+            $parser.base.$abort();
+            $parser.base.restore_generated_diagnostics($marker);
+            return Err($retry_error);
+        }
+    };
+}
+
 /// Receives committed rule enter/exit events during recognition, matching
 /// ANTLR's `addParseListener` contract ([`Parser::add_parse_listener`],
 /// also inherent on [`BaseParser`] and generated parsers).

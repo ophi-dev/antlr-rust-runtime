@@ -39,6 +39,14 @@ fn rendered_facade_declaration<'a>(rendered: &'a str, macro_name: &str) -> &'a s
     tail[..end].trim_end()
 }
 
+fn rendered_generated_rule_methods(rendered: &str) -> &str {
+    let marker = "    #[allow(dead_code)]\n    fn parse_generated_rule_0_dispatch";
+    let start = rendered
+        .find(marker)
+        .unwrap_or_else(|| panic!("generated rule dispatch method"));
+    rendered[start..].trim_end()
+}
+
 #[test]
 fn renders_module_level_metadata_helpers() {
     let rendered = render_parser_metadata("TParser", &minimal_parser_data());
@@ -451,8 +459,44 @@ fn compiles_linear_parser_rule_body() {
 
     let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
     assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
-    assert!(rendered.contains("generated_diagnostics_checkpoint()"));
-    assert!(rendered.contains("rollback_generated_tree(__generated_diagnostic_marker)"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_generated_rule!"));
+    assert!(!rendered.contains("generated_diagnostics_checkpoint()"));
+    assert!(!rendered.contains("recover_generated_rule("));
+}
+
+#[test]
+fn renders_compact_ordinary_rule_lifecycle() {
+    let rendered = render_generated_rule_dispatch(
+        &[Some(test_rule(0, vec![mt(1, 2)]))],
+        &[],
+        &BTreeMap::new(),
+        false,
+    );
+
+    insta::assert_snapshot!(
+        "compact_ordinary_rule_lifecycle",
+        rendered_generated_rule_methods(&rendered)
+    );
+}
+
+#[test]
+fn renders_compact_left_recursive_rule_lifecycle() {
+    let rendered = render_generated_rule_dispatch(
+        &[Some(GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: true,
+            steps: vec![mt(1, 2)],
+        })],
+        &[],
+        &BTreeMap::new(),
+        false,
+    );
+
+    insta::assert_snapshot!(
+        "compact_left_recursive_rule_lifecycle",
+        rendered_generated_rule_methods(&rendered)
+    );
 }
 
 #[test]
@@ -979,7 +1023,9 @@ fn renders_adaptive_atn_preference_after_prediction_becomes_expensive() {
     assert!(rendered.contains(
         "self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[0]"
     ));
-    assert!(rendered.contains("return Err(GeneratedRuleError::AdaptiveRetry);"));
+    assert!(rendered.contains(
+        "retry [self.adaptive_atn_retry_slot.is_some() => GeneratedRuleError::AdaptiveRetry];"
+    ));
     assert!(rendered.contains(
             "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Interpreted);"
         ));
@@ -1648,18 +1694,18 @@ fn embedded_init_action_runs_at_rule_entry() {
     )
     .expect("embedded parser should render");
 
-    let start_at = rendered
-        .find("let __rule_start")
-        .expect("generated rule captures rule start");
+    let setup_at = rendered
+        .find("setup {")
+        .expect("generated rule declares setup section");
     let init_at = rendered
         .find("println!(\"init\");")
         .expect("embedded @init body is emitted");
     let body_at = rendered
-        .find("let mut __consumed_eof")
+        .find("body {")
         .expect("generated rule body follows entry setup");
 
     assert!(
-        start_at < init_at && init_at < body_at,
+        setup_at < init_at && init_at < body_at,
         "embedded @init must run after rule entry setup and before the rule body"
     );
 }
@@ -2971,48 +3017,21 @@ fn generated_parser_renames_rule_wrapper_that_collides_with_token_stream_accesso
 }
 
 #[test]
-fn generated_rule_recovers_own_sync_failure_unless_top_level() {
+fn generated_rule_sync_policy_uses_shared_lifecycle_contract() {
     // A rule's own sync failure (`__sync_error`) is fatal only at the top-level
     // public entry (`allow_fallback`); a nested child recovers it locally and
-    // returns a partial subtree (so a parent never recovers the child's failure
-    // on the parent context, losing the child subtree). Assert the generated
-    // catch arm gates the `Fatal` return on `allow_fallback` and otherwise runs
-    // `recover_generated_rule` + `finish_rule` + `Ok`.
+    // returns a partial subtree. The runtime-owned lifecycle macro implements
+    // that policy; generated source only binds the sync-error slot used by
+    // grammar-specific decision steps.
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
-    let sync_arm = rendered
-        .find("if let Some(__error) = __sync_error {")
-        .expect("sync-error catch arm present");
-    let rest = &rendered[sync_arm..];
-    // Inside the sync arm, the Fatal return is guarded by `if allow_fallback`.
-    let guard = rest
-        .find("if allow_fallback {")
-        .expect("fatal return gated on allow_fallback");
-    let fatal = rest
-        .find("return Err(GeneratedRuleError::Fatal(__error));")
-        .expect("fatal return present");
     assert!(
-        guard < fatal,
-        "Fatal return must be inside the allow_fallback guard"
+        rendered.contains(
+            "ordinary self, 0isize, 0, allow_fallback, atn(), GeneratedRuleError::Fatal;"
+        )
     );
-    let count = rest
-        .find("self.base.record_generated_syntax_error();")
-        .expect("fatal sync path records syntax error");
-    let rollback = rest
-        .find("self.base.rollback_generated_tree(__generated_diagnostic_marker);")
-        .expect("fatal sync path rolls back only partial tree state");
-    assert!(
-        guard < rollback && rollback < count && count < fatal,
-        "fatal sync path must preserve diagnostics, roll back the tree, and increment before returning"
-    );
-    // And the nested-child path recovers locally and returns Ok.
-    let recover = rest
-        .find("self.base.recover_generated_rule(&mut __ctx, atn(), __error);")
-        .expect("local recovery present in sync arm");
-    assert!(
-        recover > guard,
-        "recover path follows the guarded fatal return"
-    );
-    assert!(rest[recover..].contains("return Ok(__tree);"));
+    assert!(rendered.contains("bind (__ctx, __rule_start, __consumed_eof, __sync_error);"));
+    assert!(!rendered.contains("if let Some(__error) = __sync_error {"));
+    assert!(!rendered.contains("recover_generated_rule(&mut __ctx"));
 }
 
 #[test]
