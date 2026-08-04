@@ -12,6 +12,27 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.29.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.28.0...v0.29.0) (2026-08-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **codegen:** centralize generated rule lifecycle ([#301](https://github.com/ophi-dev/antlr-rust-runtime/issues/301))
+* **codegen:** centralize recognizer facades ([#300](https://github.com/ophi-dev/antlr-rust-runtime/issues/300))
+* **codegen:** centralize typed context mechanics ([#299](https://github.com/ophi-dev/antlr-rust-runtime/issues/299))
+* **codegen:** parse CLI with clap ([#297](https://github.com/ophi-dev/antlr-rust-runtime/issues/297))
+
+### refactor
+
+* **codegen:** parse CLI with clap ([#297](https://github.com/ophi-dev/antlr-rust-runtime/issues/297)) ([4bdb7e2](https://github.com/ophi-dev/antlr-rust-runtime/commit/4bdb7e2839eb2c11e84a3c6687bb3f51a8601653))
+
+
+### Features
+
+* **codegen:** centralize generated rule lifecycle ([#301](https://github.com/ophi-dev/antlr-rust-runtime/issues/301)) ([2c4b985](https://github.com/ophi-dev/antlr-rust-runtime/commit/2c4b98574570617f5366f9b1a398fe3f7c0d5e5e))
+* **codegen:** centralize recognizer facades ([#300](https://github.com/ophi-dev/antlr-rust-runtime/issues/300)) ([a50acb6](https://github.com/ophi-dev/antlr-rust-runtime/commit/a50acb66791ecafaf2d301bd2061376bbc92c278))
+* **codegen:** centralize typed context mechanics ([#299](https://github.com/ophi-dev/antlr-rust-runtime/issues/299)) ([920bb67](https://github.com/ophi-dev/antlr-rust-runtime/commit/920bb67f41109193a999adc50e000748cf6f06b3))
+
 ## [0.28.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.27.0...v0.28.0) (2026-08-04)
 
 
