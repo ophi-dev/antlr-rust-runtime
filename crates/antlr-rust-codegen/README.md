@@ -28,6 +28,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Successful generations expose structured compiler warnings through
+`Generation::diagnostics()`, including the diagnostic code, severity, source
+path, and exact UTF-8 byte span. `Generation::warnings()` retains the rendered
+CLI messages.
+
 Or install the command:
 
 ```bash

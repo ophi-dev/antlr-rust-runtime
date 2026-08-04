@@ -1,0 +1,30 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/multi_recognizer.rs
+expression: unreachable
+---
+[
+    (
+        "G4S078",
+        Warning,
+        Some(
+            28,
+        ),
+        Some(
+            0,
+        ),
+        183..191,
+        "deadRoot",
+    ),
+    (
+        "G4S078",
+        Warning,
+        Some(
+            32,
+        ),
+        Some(
+            0,
+        ),
+        220..230,
+        "deadHelper",
+    ),
+]

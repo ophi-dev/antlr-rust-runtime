@@ -59,6 +59,7 @@ fn builder_and_cli_share_artifacts_warnings_and_structured_diagnostics() {
         [grammar.canonicalize().expect("grammar")]
     );
     assert!(generation.warnings().is_empty());
+    assert!(generation.diagnostics().is_empty());
     assert_generated_project(
         temp.path(),
         &["parity_lexer.rs", "parity_parser.rs"],
@@ -128,6 +129,75 @@ mod generated_source_without_codegen_dependency {
         assert!(stderr.contains(diagnostic.code()), "{stderr}");
         assert!(stderr.contains(diagnostic.message()), "{stderr}");
     }
+}
+
+#[test]
+fn builder_does_not_fabricate_spans_for_unreadable_later_roots() {
+    let temp = temporary_directory("builder-unlocated-diagnostic");
+    let loaded = temp.path().join("Loaded.g4");
+    let missing = temp.path().join("Missing.g4");
+    fs::write(&loaded, "lexer grammar Loaded;\nA: 'a';\n")
+        .expect("first grammar should be writable");
+
+    let error = Builder::new()
+        .grammar(&loaded)
+        .grammar(&missing)
+        .out_dir(temp.path().join("generated"))
+        .generate()
+        .expect_err("missing grammar root should fail");
+    let diagnostic = error
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code() == "G4L002")
+        .expect("missing root should produce G4L002");
+
+    assert!(
+        diagnostic.byte_span().is_none(),
+        "unlocated diagnostic must not borrow the first grammar's span: {diagnostic:#?}"
+    );
+    assert_eq!(diagnostic.line(), None);
+    assert_eq!(diagnostic.column(), None);
+}
+
+#[test]
+fn builder_exposes_structured_non_fatal_diagnostics_with_exact_spans() {
+    let temp = temporary_directory("builder-structured-diagnostics");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/unreachable-rules/Reachability.g4");
+    let source = fs::read_to_string(&grammar).expect("fixture grammar should be readable");
+    let generation = Builder::new()
+        .grammar(&grammar)
+        .out_dir(temp.path().join("generated"))
+        .generate()
+        .expect("unreachable rules should remain non-fatal");
+
+    let unreachable = generation
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code() == "G4S078")
+        .map(|diagnostic| {
+            assert_eq!(diagnostic.path(), grammar);
+            let span = diagnostic
+                .byte_span()
+                .expect("authored diagnostics should retain their source span");
+            let subject = source
+                .get(span.clone())
+                .expect("diagnostic span should be a valid UTF-8 source range");
+            (
+                diagnostic.code(),
+                diagnostic.severity(),
+                diagnostic.line(),
+                diagnostic.column(),
+                span,
+                subject,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!(
+        "builder_structured_non_fatal_diagnostics_with_exact_spans",
+        unreachable
+    );
 }
 
 #[test]

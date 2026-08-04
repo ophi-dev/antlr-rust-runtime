@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use super::frontend::SourceSpan;
+use super::frontend::{SourceId, SourceSpan};
 use super::source::SourceSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +22,7 @@ pub(crate) struct Diagnostic {
     pub(crate) severity: Severity,
     pub(crate) message: String,
     pub(crate) primary: SourceSpan,
+    primary_is_source_backed: bool,
     pub(crate) related: Vec<RelatedDiagnostic>,
 }
 
@@ -36,7 +37,30 @@ impl Diagnostic {
             severity: Severity::Error,
             message: message.into(),
             primary,
+            primary_is_source_backed: true,
             related: Vec::new(),
+        }
+    }
+
+    pub(crate) fn unlocated_error(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            severity: Severity::Error,
+            message: message.into(),
+            primary: SourceSpan::empty(SourceId::new(0)),
+            primary_is_source_backed: false,
+            related: Vec::new(),
+        }
+    }
+
+    pub(crate) fn error_with_optional_span(
+        code: &'static str,
+        primary: Option<SourceSpan>,
+        message: impl Into<String>,
+    ) -> Self {
+        match primary {
+            Some(primary) => Self::error(code, primary, message),
+            None => Self::unlocated_error(code, message),
         }
     }
 
@@ -50,8 +74,13 @@ impl Diagnostic {
             severity: Severity::Warning,
             message: message.into(),
             primary,
+            primary_is_source_backed: true,
             related: Vec::new(),
         }
+    }
+
+    pub(crate) fn primary_source_span(&self) -> Option<&SourceSpan> {
+        self.primary_is_source_backed.then_some(&self.primary)
     }
 
     #[must_use]

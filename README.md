@@ -82,9 +82,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 `Generation::inputs()` contains every resolved root, import, and token
-vocabulary. `Generation::outputs()` and `Generation::warnings()` expose the
-other build artifacts without process-global CLI state. Projects that commit
-generated source can omit the build dependency and use the command instead.
+vocabulary. `Generation::outputs()` exposes the written artifacts,
+`Generation::diagnostics()` exposes structured compiler warnings with exact
+source byte spans, and `Generation::warnings()` preserves CLI-form compiler and
+generator messages. Projects that commit generated source can omit the build
+dependency and use the command instead.
 
 ### 4. Generate from the command line
 

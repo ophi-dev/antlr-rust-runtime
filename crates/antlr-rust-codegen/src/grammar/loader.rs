@@ -96,9 +96,8 @@ impl Loader {
 
     fn run(&mut self) {
         if self.options.roots.is_empty() {
-            self.diagnostics.push(Diagnostic::error(
+            self.diagnostics.push(Diagnostic::unlocated_error(
                 "G4L001",
-                SourceSpan::empty(SourceId::new(0)),
                 "at least one grammar root is required",
             ));
             return;
@@ -142,9 +141,8 @@ impl Loader {
         let canonical = match fs::canonicalize(path) {
             Ok(path) => path,
             Err(error) => {
-                self.diagnostics.push(Diagnostic::error(
+                self.diagnostics.push(Diagnostic::unlocated_error(
                     "G4L002",
-                    SourceSpan::empty(SourceId::new(0)),
                     format!("cannot open grammar {}: {error}", path.display()),
                 ));
                 return None;
@@ -159,9 +157,8 @@ impl Loader {
         }) {
             Ok(input) => input,
             Err(error) => {
-                self.diagnostics.push(Diagnostic::error(
+                self.diagnostics.push(Diagnostic::unlocated_error(
                     "G4L002",
-                    SourceSpan::empty(SourceId::new(0)),
                     format!("cannot read grammar {}: {error}", canonical.display()),
                 ));
                 return None;

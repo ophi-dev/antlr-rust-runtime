@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use super::diagnostic::Diagnostic;
-use super::frontend::{SourceId, SourceSpan};
+use super::frontend::SourceSpan;
 use super::model::{Block, ElementKind, ModelNodeId};
 use super::transform::TransformGrammar;
 
@@ -84,11 +84,8 @@ pub(crate) fn validate_model(grammar: &TransformGrammar) -> Result<(), Diagnosti
         .iter()
         .find(|node| grammar.provenance.origins(**node).is_empty())
     {
-        let span = grammar.units.first().map_or_else(
-            || SourceSpan::empty(SourceId::new(0)),
-            |unit| unit.span.clone(),
-        );
-        return Err(Diagnostic::error(
+        let span = grammar.units.first().map(|unit| unit.span.clone());
+        return Err(Diagnostic::error_with_optional_span(
             "G4T904",
             span,
             format!("model node {node:?} has no provenance"),

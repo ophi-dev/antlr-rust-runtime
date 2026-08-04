@@ -839,11 +839,11 @@ fn import_dependency(
             if let Some(vocabulary) = compiled.get(grammar) {
                 destination.import(vocabulary);
             } else {
-                let span = dependency.declaration.as_ref().map_or_else(
-                    || SourceSpan::empty(SourceId::new(0)),
-                    |declaration| declaration.span.clone(),
-                );
-                diagnostics.push(Diagnostic::error(
+                let span = dependency
+                    .declaration
+                    .as_ref()
+                    .map(|declaration| declaration.span.clone());
+                diagnostics.push(Diagnostic::error_with_optional_span(
                     "G4S027",
                     span,
                     format!(
@@ -853,14 +853,14 @@ fn import_dependency(
             }
         }
         IntegratedVocabularySource::TokensFile(path) => {
-            let span = dependency.declaration.as_ref().map_or_else(
-                || SourceSpan::empty(SourceId::new(0)),
-                |declaration| declaration.span.clone(),
-            );
+            let span = dependency
+                .declaration
+                .as_ref()
+                .map(|declaration| declaration.span.clone());
             let text = match fs::read_to_string(path) {
                 Ok(text) => text,
                 Err(error) => {
-                    diagnostics.push(Diagnostic::error(
+                    diagnostics.push(Diagnostic::error_with_optional_span(
                         "G4S028",
                         span,
                         format!("cannot read token vocabulary {}: {error}", path.display()),
@@ -879,7 +879,7 @@ fn import_dependency(
                     continue;
                 }
                 let Some((name, number)) = line.rsplit_once('=') else {
-                    diagnostics.push(Diagnostic::error(
+                    diagnostics.push(Diagnostic::error_with_optional_span(
                         "G4S029",
                         span.clone(),
                         format!(
@@ -894,7 +894,7 @@ fn import_dependency(
                 let number = match number.trim().parse::<i32>() {
                     Ok(number) if number > INVALID_TOKEN_TYPE => number,
                     _ => {
-                        diagnostics.push(Diagnostic::error(
+                        diagnostics.push(Diagnostic::error_with_optional_span(
                             "G4S029",
                             span.clone(),
                             format!(
@@ -911,7 +911,7 @@ fn import_dependency(
                 } else if is_identifier(name) {
                     destination.define_name(name, Some(number), None, ids);
                 } else {
-                    diagnostics.push(Diagnostic::error(
+                    diagnostics.push(Diagnostic::error_with_optional_span(
                         "G4S029",
                         span.clone(),
                         format!(

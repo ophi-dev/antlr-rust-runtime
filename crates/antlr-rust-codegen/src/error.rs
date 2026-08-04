@@ -1,5 +1,6 @@
 use std::fmt;
 use std::io;
+use std::ops::Range;
 use std::path::PathBuf;
 
 /// Broad category of a generator failure.
@@ -19,7 +20,7 @@ pub enum Severity {
     Error,
 }
 
-/// A located grammar compiler diagnostic.
+/// A grammar compiler diagnostic.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Diagnostic {
     code: &'static str,
@@ -28,6 +29,7 @@ pub struct Diagnostic {
     path: PathBuf,
     line: Option<usize>,
     column: Option<usize>,
+    byte_span: Option<Range<usize>>,
 }
 
 impl Diagnostic {
@@ -37,6 +39,7 @@ impl Diagnostic {
         message: String,
         path: PathBuf,
         position: Option<(usize, usize)>,
+        byte_span: Option<Range<usize>>,
     ) -> Self {
         Self {
             code,
@@ -45,6 +48,7 @@ impl Diagnostic {
             path,
             line: position.map(|(line, _)| line),
             column: position.map(|(_, column)| column),
+            byte_span,
         }
     }
 
@@ -70,6 +74,13 @@ impl Diagnostic {
 
     pub const fn column(&self) -> Option<usize> {
         self.column
+    }
+
+    /// Half-open UTF-8 byte range of the primary subject within [`Self::path`].
+    ///
+    /// Returns `None` when the diagnostic has no source-backed primary subject.
+    pub fn byte_span(&self) -> Option<Range<usize>> {
+        self.byte_span.clone()
     }
 }
 

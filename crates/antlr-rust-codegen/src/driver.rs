@@ -31,7 +31,11 @@ pub(crate) fn generate(
         action_reference_parser,
     )
     .map_err(|error| compilation_error(&error, &args.roots))?;
-    let mut warnings = compilation_warning_messages(&compilation);
+    let diagnostics = compilation_diagnostics(&compilation);
+    let mut warnings = diagnostics
+        .iter()
+        .map(render_diagnostic)
+        .collect::<Vec<_>>();
     for warning in &warnings {
         report(warning).map_err(Error::generation)?;
     }
@@ -58,7 +62,7 @@ pub(crate) fn generate(
             optimization_manifest.expect("report mode enables the optimization manifest"),
         )?;
         let outputs = artifacts.write_to(&args.out_dir)?;
-        return Ok(Generation::new(inputs, outputs, warnings));
+        return Ok(Generation::new(inputs, outputs, warnings, diagnostics));
     }
 
     let mut grammar_options = Vec::new();
@@ -171,7 +175,7 @@ pub(crate) fn generate(
         artifacts.remove_if_present("optimizations.json")?;
     }
     let outputs = artifacts.write_to(&args.out_dir)?;
-    Ok(Generation::new(inputs, outputs, warnings))
+    Ok(Generation::new(inputs, outputs, warnings, diagnostics))
 }
 
 fn insert_rendered_module(
@@ -227,6 +231,9 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
         let path =
             location.map_or_else(|| fallback.to_path_buf(), |location| location.path.clone());
         let position = location.and_then(|location| location.position);
+        let primary = diagnostic.primary_source_span();
+        let structured_position = primary.and(position);
+        let byte_span = location.and(primary).map(source_byte_span);
         let display_position =
             position.map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
         let _ = writeln!(
@@ -241,31 +248,60 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
             severity,
             diagnostic.message.clone(),
             path,
-            position,
+            structured_position,
+            byte_span,
         ));
     }
     Error::compilation(message, diagnostics)
 }
 
-fn compilation_warning_messages(compilation: &grammar::compiler::Compilation) -> Vec<String> {
-    let mut messages = Vec::new();
-    for diagnostic in compilation
+fn compilation_diagnostics(compilation: &grammar::compiler::Compilation) -> Vec<Diagnostic> {
+    compilation
         .diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.severity == grammar::diagnostic::Severity::Warning)
-    {
-        let source = compilation.sources.get(diagnostic.primary.source);
-        let path = source.map_or_else(
-            || "<grammar>".to_owned(),
-            |source| source.logical_path().display().to_string(),
-        );
-        let position = source
-            .and_then(|source| source.line_column(diagnostic.primary.bytes.start))
-            .map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
-        messages.push(format!(
-            "warning[{}]: {path}{position}: {}",
-            diagnostic.code, diagnostic.message
-        ));
-    }
-    messages
+        .map(|diagnostic| {
+            let primary = diagnostic.primary_source_span();
+            let path = primary
+                .and_then(|span| compilation.sources.logical_path(span.source))
+                .map(Path::to_path_buf);
+            let byte_span = primary.filter(|_| path.is_some()).map(source_byte_span);
+            let path = path.unwrap_or_else(|| PathBuf::from("<grammar>"));
+            let position = primary.and_then(|span| {
+                compilation
+                    .sources
+                    .line_column(span.source, span.bytes.start)
+            });
+            Diagnostic::new(
+                diagnostic.code,
+                Severity::Warning,
+                diagnostic.message.clone(),
+                path,
+                position,
+                byte_span,
+            )
+        })
+        .collect()
+}
+
+fn render_diagnostic(diagnostic: &Diagnostic) -> String {
+    let severity = match diagnostic.severity() {
+        Severity::Warning => "warning",
+        Severity::Error => "error",
+    };
+    let position = diagnostic
+        .line()
+        .zip(diagnostic.column())
+        .map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
+    format!(
+        "{severity}[{}]: {}{position}: {}",
+        diagnostic.code(),
+        diagnostic.path().display(),
+        diagnostic.message()
+    )
+}
+
+fn source_byte_span(span: &SourceSpan) -> std::ops::Range<usize> {
+    usize::try_from(span.bytes.start).expect("source offset exceeds usize")
+        ..usize::try_from(span.bytes.end).expect("source offset exceeds usize")
 }

@@ -3,12 +3,15 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+use crate::error::Diagnostic;
+
 /// Inventory returned by a completed generation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Generation {
     inputs: Vec<PathBuf>,
     outputs: Vec<PathBuf>,
     warnings: Vec<String>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl Generation {
@@ -16,11 +19,13 @@ impl Generation {
         inputs: Vec<PathBuf>,
         outputs: Vec<PathBuf>,
         warnings: Vec<String>,
+        diagnostics: Vec<Diagnostic>,
     ) -> Self {
         Self {
             inputs,
             outputs,
             warnings,
+            diagnostics,
         }
     }
 
@@ -34,9 +39,14 @@ impl Generation {
         &self.outputs
     }
 
-    /// Non-fatal compiler and transform diagnostics in CLI display form.
+    /// Non-fatal compiler and generator messages in CLI display form.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
+    }
+
+    /// Structured non-fatal grammar compiler diagnostics.
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 
     /// Emits Cargo rebuild directives for the complete resolved input graph.
