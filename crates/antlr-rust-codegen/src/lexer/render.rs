@@ -218,12 +218,12 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
         "|_, _| None"
     };
     let lifecycle_next_token_call = format!(
-        "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, sink, atn(), lexer_dfa(), &mut self.hooks, {semantic_action}, {semantic_predicate}, {lexer_unknown_policy}, |_, _, _| {{}})"
+        "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut lexer.base, sink, atn(), lexer_dfa(), &mut lexer.hooks, {semantic_action}, {semantic_predicate}, {lexer_unknown_policy}, |_, _, _| {{}})"
     );
     let next_token_call = if has_semantic_hooks {
         lifecycle_next_token_call.clone()
     } else if !has_action_dispatch && !has_predicate_dispatch && !unknown_predicates_assume_false {
-        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"
+        "antlr4_runtime::atn::lexer::next_token_compiled(&mut lexer.base, sink, atn(), lexer_dfa())"
             .to_owned()
     } else {
         let action = if has_action_dispatch {
@@ -239,7 +239,7 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
             "|_, _| true"
         };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, sink, atn(), lexer_dfa(), {action}, {predicate}, |_, _, _| {{}})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut lexer.base, sink, atn(), lexer_dfa(), {action}, {predicate}, |_, _, _| {{}})"
         )
     };
     let next_token_call = if has_semantic_hooks {
@@ -254,11 +254,10 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
 
     Ok(format!(
         r#"{generated_header}use antlr4_runtime::char_stream::CharStream;
-use antlr4_runtime::token::{{TokenId, TokenSink, TokenSource, TokenStoreError}};
 use antlr4_runtime::atn::LexerAtn;
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
-use antlr4_runtime::{{BaseLexer, GeneratedLexer, GrammarMetadata, Lexer, Recognizer}};
+use antlr4_runtime::{{BaseLexer, GrammarMetadata, Lexer}};
 use std::sync::OnceLock;
 
 {token_constants}
@@ -322,123 +321,21 @@ where
         Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()){lexer_member_inits}, hooks }}
     }}
 
-    pub fn metadata() -> &'static GrammarMetadata {{
-        metadata()
-    }}
-
-    /// Adds a listener for lexer diagnostics.
-    pub fn add_error_listener<T>(&mut self, listener: T)
-    where
-        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
-    {{
-        self.base.add_error_listener(listener);
-    }}
-
-    /// Removes every lexer error listener, including the default console listener.
-    pub fn remove_error_listeners(&mut self) {{
-        self.base.remove_error_listeners();
-    }}
-
-    /// Routes every token through ATN interpretation instead of the compiled
-    /// lexer DFA, so the learned-DFA trace (`lexer_dfa_string`) observes each
-    /// match.
-    pub fn set_force_interpreted(&mut self, force_interpreted: bool) {{
-        self.base.set_force_interpreted(force_interpreted);
-    }}
-
-    /// Resets this lexer and any caller-owned lifecycle state for reuse.
-    pub fn reset(&mut self) {{
-        if H::ENABLES_LEXER_LIFECYCLE {{
-            antlr4_runtime::atn::lexer::reset_with_semantic_hooks(
-                &mut self.base,
-                &mut self.hooks,
-            );
-        }} else {{
-            self.base.reset();
-        }}
-    }}
-
-    /// Replaces the input stream and resets runtime and lifecycle state.
-    pub fn set_input_stream(&mut self, input: I) {{
-        if H::ENABLES_LEXER_LIFECYCLE {{
-            antlr4_runtime::atn::lexer::set_input_stream_with_semantic_hooks(
-                &mut self.base,
-                &mut self.hooks,
-                input,
-            );
-        }} else {{
-            self.base.set_input_stream(input);
-        }}
-    }}
-
-    /// Clears the learned lexer DFA shared by this grammar.
-    pub fn clear_dfa(&self) {{
-        self.base.clear_dfa();
-    }}
-
 {action_method}
 {predicate_method}
 }}
 
 {typed_lexer_constructor}
 
-impl<I, H> GeneratedLexer for {type_name}<I, H>
-where
-    I: CharStream,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn metadata() -> &'static GrammarMetadata {{
-        metadata()
-    }}
-}}
-
-impl<I, H> Recognizer for {type_name}<I, H>
-where
-    I: CharStream,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn data(&self) -> &antlr4_runtime::RecognizerData {{
-        self.base.data()
-    }}
-
-    fn data_mut(&mut self) -> &mut antlr4_runtime::RecognizerData {{
-        self.base.data_mut()
-    }}
-}}
-
-impl<I, H> Lexer for {type_name}<I, H>
-where
-    I: CharStream,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn mode(&self) -> i32 {{ self.base.mode() }}
-    fn set_mode(&mut self, mode: i32) {{ self.base.set_mode(mode); }}
-    fn push_mode(&mut self, mode: i32) {{ self.base.push_mode(mode); }}
-    fn pop_mode(&mut self) -> Option<i32> {{ self.base.pop_mode() }}
-}}
-
-impl<I, H> TokenSource for {type_name}<I, H>
-where
-    I: CharStream,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {{
+antlr4_runtime::__antlr4_rust_lexer_facade! {{
+    type: {type_name}<I, H>,
+    fields: {{
+        base: base,
+        hooks: hooks,
+    }},
+    metadata: metadata,
+    next_token(lexer, sink) {{
         {next_token_call}
-    }}
-
-    fn line(&self) -> usize {{ self.base.line() }}
-    fn column(&self) -> usize {{ self.base.column() }}
-    fn source_name(&self) -> &str {{ self.base.source_name() }}
-    fn source_text(&self) -> Option<std::rc::Rc<str>> {{ self.base.source_text() }}
-    fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
-        self.base.drain_errors()
-    }}
-    fn report_error(&self, source_error: &antlr4_runtime::token::TokenSourceError) -> bool {{
-        antlr4_runtime::Recognizer::notify_error_listeners(self, source_error.into());
-        true
-    }}
-    fn lexer_dfa_string(&self) -> String {{
-        self.base.lexer_dfa_string()
     }}
 }}
 {generated_footer}"#

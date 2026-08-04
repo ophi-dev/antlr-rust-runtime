@@ -1,0 +1,34 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: facades
+---
+Lexer
+antlr4_runtime::__antlr4_rust_lexer_facade! {
+    type: LLexer<I, H>,
+    fields: {
+        base: base,
+        hooks: hooks,
+    },
+    metadata: metadata,
+    next_token(lexer, sink) {
+        if H::ENABLES_LEXER_LIFECYCLE {
+            antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut lexer.base, sink, atn(), lexer_dfa(), &mut lexer.hooks, |_, _| false, |_, _| None, antlr4_runtime::UnknownSemanticPolicy::AssumeTrue, |_, _, _| {})
+        } else {
+            antlr4_runtime::atn::lexer::next_token_compiled(&mut lexer.base, sink, atn(), lexer_dfa())
+        }
+    }
+}
+
+Parser
+antlr4_runtime::__antlr4_rust_parser_facade! {
+    type: TParser<L, H>,
+    fields: {
+        base: base,
+        simulator: simulator,
+        generated_only: generated_only,
+    },
+    metadata: metadata,
+    parser_atn: parser_atn,
+    reset(parser) {
+    }
+}

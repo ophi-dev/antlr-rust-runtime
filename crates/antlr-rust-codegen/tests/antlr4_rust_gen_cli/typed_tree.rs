@@ -886,8 +886,8 @@ fn compile_parse_tree_pattern_matches_and_binds_against_generated_parser() {
     let parser =
         fs::read_to_string(out.join("calculator_parser.rs")).expect("parser should be emitted");
     assert!(
-        parser.contains("pub fn compile_parse_tree_pattern<PL>("),
-        "generated parser must expose compile_parse_tree_pattern\n{parser}"
+        parser.contains("antlr4_runtime::__antlr4_rust_parser_facade!"),
+        "generated parser must install the runtime-owned parser facade\n{parser}"
     );
 
     // End-to-end: compile a pattern rooted at the (left-recursive) `expression`

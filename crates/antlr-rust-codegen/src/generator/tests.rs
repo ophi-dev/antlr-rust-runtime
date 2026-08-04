@@ -27,6 +27,18 @@ fn rendered_context_declaration<'a>(rendered: &'a str, name: &str) -> &'a str {
     &tail[..end + 2]
 }
 
+fn rendered_facade_declaration<'a>(rendered: &'a str, macro_name: &str) -> &'a str {
+    let marker = format!("antlr4_runtime::{macro_name}! {{");
+    let start = rendered
+        .find(&marker)
+        .unwrap_or_else(|| panic!("{macro_name} declaration"));
+    let tail = &rendered[start..];
+    let end = tail
+        .find(GENERATED_MODULE_FOOTER)
+        .unwrap_or_else(|| panic!("{macro_name} declaration end"));
+    tail[..end].trim_end()
+}
+
 #[test]
 fn renders_module_level_metadata_helpers() {
     let rendered = render_parser_metadata("TParser", &minimal_parser_data());
@@ -54,32 +66,28 @@ fn generated_recognizers_reuse_cached_static_metadata() {
         .split_once("    pub fn with_hooks(input: I, hooks: H) -> Self {")
         .expect("lexer should render its constructor")
         .1
-        .split_once("\n\n    pub fn metadata()")
-        .expect("lexer metadata accessor should follow its constructor")
+        .split_once("\n    }\n")
+        .expect("lexer constructor should close")
         .0;
     let parser_constructor = parser
         .split_once("    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {")
         .expect("parser should render its constructor")
         .1
-        .split_once("\n\n    pub fn metadata()")
-        .expect("parser metadata accessor should follow its constructor")
-        .0;
-    let pattern_cache = parser
-        .split_once("        static PATTERN_DATA")
-        .expect("parser should render its pattern recognizer cache")
-        .1
-        .split_once("        matcher.compile(")
-        .expect("pattern cache should precede pattern compilation")
+        .split_once("\n    }\n")
+        .expect("parser constructor should close")
         .0;
     let recognizer_construction = format!(
-        "Lexer::with_hooks\n    pub fn with_hooks(input: I, hooks: H) -> Self {{{lexer_constructor}\n\n\
-             Parser::with_hooks\n    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {{{parser_constructor}\n\n\
-             Pattern recognizer cache\n        static PATTERN_DATA{pattern_cache}"
+        "Lexer::with_hooks\n    pub fn with_hooks(input: I, hooks: H) -> Self {{{lexer_constructor}\n    }}\n\n\
+             Parser::with_hooks\n    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {{{parser_constructor}\n    }}"
     );
 
     insta::assert_snapshot!(
         "generated_recognizers_reuse_cached_static_metadata",
         recognizer_construction
+    );
+    assert!(
+        rendered_facade_declaration(&parser, "__antlr4_rust_parser_facade")
+            .contains("metadata: metadata")
     );
 }
 
@@ -990,6 +998,24 @@ fn renders_adaptive_atn_preference_after_prediction_becomes_expensive() {
     assert!(
         !rendered.contains("if __adaptive_expensive && !__adaptive_outermost"),
         "outermost candidates must not defer routing to parser reuse"
+    );
+}
+
+#[test]
+fn parser_facade_declares_optional_state_reset_once() {
+    let rendered = render_parser(
+        "AdaptiveRoutingParser",
+        &parser_fixture_data("adaptive-atn-routing/AdaptiveRouting.g4"),
+    )
+    .expect("adaptive parser should render");
+    let facade = rendered_facade_declaration(&rendered, "__antlr4_rust_parser_facade");
+
+    insta::assert_snapshot!("generated_parser_optional_state_facade", facade);
+    assert_eq!(
+        facade
+            .matches("parser.adaptive_atn_preferred_rules.fill(false);")
+            .count(),
+        1
     );
 }
 
@@ -2897,40 +2923,35 @@ fn generated_parser_reports_diagnostics_at_outer_boundaries() {
     assert!(rendered.contains("if allow_generated_fallback {"));
     assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
     assert!(rendered.contains("self.base.report_unrecovered_parser_error(&error);"));
-    assert!(rendered.contains("fn number_of_syntax_errors(&self) -> usize"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_facade!"));
     assert!(!rendered.contains("self.base.report_token_source_errors();"));
 }
 
 #[test]
 fn generated_parser_exposes_owned_token_stream() {
-    let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
-
-    assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<L>"));
-    assert!(rendered.contains("self.base.token_stream()"));
-    assert!(
-        rendered.contains("pub const fn token_stream_mut(&mut self) -> &mut CommonTokenStream<L>")
+    let lexer = render_lexer(
+        "LLexer",
+        &lexer_fixture_data("custom-channels/L.g4"),
+        false,
+        SemUnknownPolicy::default(),
+        &SemPatternFile::default(),
+        false,
+    )
+    .expect("lexer should render");
+    let parser = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
+    let facades = format!(
+        "Lexer\n{}\n\nParser\n{}",
+        rendered_facade_declaration(&lexer, "__antlr4_rust_lexer_facade"),
+        rendered_facade_declaration(&parser, "__antlr4_rust_parser_facade")
     );
-    assert!(rendered.contains("self.base.token_stream_mut()"));
-    assert!(rendered.contains("pub fn set_token_stream(&mut self, input: CommonTokenStream<L>)"));
-    assert!(rendered.contains("self.base.set_token_stream(input)"));
-    assert!(rendered.contains("pub fn reset(&mut self)"));
-    assert!(rendered.contains("self.base.reset()"));
-    assert!(rendered.contains("pub fn clear_dfa(&mut self)"));
-    assert!(rendered.contains("simulator.clear_dfa()"));
-    assert!(rendered.contains("ParserAtnSimulator::clear_shared_dfa(atn())"));
-    assert!(rendered.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
-    assert!(rendered.contains(
-            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
-        ));
-    assert!(rendered.contains("self.base.add_error_listener(listener)"));
-    assert!(rendered.contains("pub fn remove_error_listeners(&mut self)"));
-    assert!(rendered.contains("self.base.remove_error_listeners()"));
-    assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<L>"));
-    assert!(rendered.contains("self.base.into_token_stream()"));
-    assert!(rendered.contains("pub const fn token_store(&self) -> &antlr4_runtime::TokenStore"));
-    assert!(rendered.contains("self.base.token_store()"));
-    assert!(rendered.contains("pub fn into_token_store(self) -> antlr4_runtime::TokenStore"));
-    assert!(rendered.contains("self.base.into_token_store()"));
+
+    insta::assert_snapshot!("generated_plain_recognizer_facades", facades);
+    assert!(!lexer.contains("impl<I, H> GeneratedLexer"));
+    assert!(!lexer.contains("impl<I, H> Recognizer"));
+    assert!(!lexer.contains("impl<I, H> TokenSource"));
+    assert!(!parser.contains("impl<L, H> GeneratedParser"));
+    assert!(!parser.contains("impl<L, H> Recognizer"));
+    assert!(!parser.contains("impl<L, H> Parser for"));
 }
 
 #[test]
@@ -2940,7 +2961,7 @@ fn generated_parser_renames_rule_wrapper_that_collides_with_token_stream_accesso
 
     let rendered = render_parser("TParser", &data).expect("parser should render");
 
-    assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<L>"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_facade!"));
     assert!(rendered.contains(
             "pub fn token_stream_rule(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>"
         ));
@@ -6090,7 +6111,7 @@ fn lexer_per_coordinate_assume_false_override_renders_failing_arm() {
         "override renders a failing arm"
     );
     assert!(module.contains("run_predicate"));
-    assert!(!module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
+    assert!(!module.contains("next_token_compiled(&mut lexer.base, sink, atn(), lexer_dfa())"));
 }
 
 #[test]
@@ -6206,35 +6227,14 @@ fn lexer_default_policy_keeps_compiled_token_path() {
     )
     .expect("lexer should render");
 
-    assert!(module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
+    assert!(module.contains("next_token_compiled(&mut lexer.base, sink, atn(), lexer_dfa())"));
     assert!(module.contains("if H::ENABLES_LEXER_LIFECYCLE"));
     assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
-    assert!(module.contains("pub fn reset(&mut self)"));
-    assert!(module.contains("reset_with_semantic_hooks"));
-    assert!(module.contains("pub fn set_input_stream(&mut self, input: I)"));
-    assert!(module.contains("set_input_stream_with_semantic_hooks"));
-    assert!(module.contains("self.base.set_input_stream(input)"));
-    assert!(module.contains("pub fn clear_dfa(&self)"));
-    assert!(module.contains("self.base.clear_dfa()"));
-    assert!(module.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
-    assert!(module.contains(
-            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
-        ));
-    assert!(module.contains("self.base.add_error_listener(listener)"));
-    assert!(module.contains("pub fn remove_error_listeners(&mut self)"));
-    assert!(module.contains("self.base.remove_error_listeners()"));
-    assert!(module.contains(
-        "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
-    ));
-    assert!(
-        module.contains(
-            "fn source_text(&self) -> Option<std::rc::Rc<str>> { self.base.source_text() }"
-        )
+    assert!(module.contains("antlr4_runtime::__antlr4_rust_lexer_facade!"));
+    insta::assert_snapshot!(
+        "generated_lexer_lifecycle_facade",
+        rendered_facade_declaration(&module, "__antlr4_rust_lexer_facade")
     );
-    assert!(module.contains(
-        "fn report_error(&self, source_error: &antlr4_runtime::token::TokenSourceError) -> bool"
-    ));
-    assert!(module.contains("Recognizer::notify_error_listeners(self, source_error.into());"));
     assert!(!module.contains("CommonToken"));
     assert!(!module.contains("TokenFactory"));
 }

@@ -115,6 +115,32 @@ pub(super) fn normalize_current_package_version(value: &str) -> String {
 
 pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
     let mut api = BTreeSet::new();
+    if source.contains("antlr4_runtime::__antlr4_rust_parser_facade!") {
+        api.extend(
+            [
+                "add_error_listener",
+                "add_parse_listener",
+                "clear_dfa",
+                "compile_parse_tree_pattern",
+                "into_parsed_file",
+                "into_token_store",
+                "into_token_stream",
+                "metadata",
+                "node",
+                "parse_tree_storage",
+                "parser_dfa_stats",
+                "prediction_context_stats",
+                "remove_error_listeners",
+                "remove_parse_listeners",
+                "reset",
+                "set_token_stream",
+                "token_store",
+                "token_stream",
+                "token_stream_mut",
+            ]
+            .map(|name| format!("fn {name}")),
+        );
+    }
     let mut context_methods = false;
     for line in source.lines().map(str::trim) {
         if line == "methods: {" {
