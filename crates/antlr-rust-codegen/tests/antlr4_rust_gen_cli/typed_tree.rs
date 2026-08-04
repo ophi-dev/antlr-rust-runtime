@@ -23,10 +23,21 @@ fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     assert!(out.join("shapes_lexer.rs").is_file());
     let parser =
         fs::read_to_string(out.join("shapes_parser.rs")).expect("parser should be emitted");
+    assert_eq!(
+        parser
+            .matches("antlr4_runtime::__antlr4_rust_context!")
+            .count(),
+        5
+    );
+    assert!(parser.contains("context_kind: exact(1)"));
+    assert!(parser.contains("context_kind: exact(2)"));
+    assert!(!parser.contains("fn __from_node("));
+    assert!(!parser.contains("impl<State> std::fmt::Display for"));
+    assert!(!parser.contains("pub struct __RuleAttrs"));
     for expected in [
-        "pub struct StartContext<'a, State = StoredTreeContext>",
-        "pub struct SingleLabelContext<'a, State = StoredTreeContext>",
-        "pub struct ManyLabelContext<'a, State = StoredTreeContext>",
+        "pub struct StartContext {",
+        "pub struct SingleLabelContext {",
+        "pub struct ManyLabelContext {",
         "pub trait ShapesListener<E = std::convert::Infallible>",
         "pub struct ShapesTreeWalker",
         "pub type ParseTreeWalker = ShapesTreeWalker",
@@ -1469,11 +1480,11 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
     );
     let parser = fs::read_to_string(out.join("t.rs")).expect("parser should be emitted");
     for expected in [
-        "pub struct ObjectCreationExpressionContext<'a, State = StoredTreeContext>",
-        "pub struct ObjectCreationExpressionLabelContext<'a, State = StoredTreeContext>",
-        "pub struct ParenthesizedLabelContext<'a, State = StoredTreeContext>",
-        "pub struct StoredTreeRuleContext<'a, State = StoredTreeContext>",
-        "pub struct ValidatedTreeRuleContext<'a, State = StoredTreeContext>",
+        "pub struct ObjectCreationExpressionContext {",
+        "pub struct ObjectCreationExpressionLabelContext {",
+        "pub struct ParenthesizedLabelContext {",
+        "pub struct StoredTreeRuleContext {",
+        "pub struct ValidatedTreeRuleContext {",
         "fn enter_object_creation_expression(&mut self",
         "fn enter_object_creation_expression_label(&mut self",
         "fn enter_parenthesized_label(&mut self",

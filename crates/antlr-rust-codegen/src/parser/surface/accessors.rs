@@ -878,53 +878,6 @@ pub(crate) fn context_common_method_names(
     }
 }
 
-fn render_context_common_accessors(names: &ContextCommonMethodNames) -> String {
-    let ContextCommonMethodNames {
-        child_count,
-        direct_terminals,
-        start,
-        text,
-        ..
-    } = names;
-    format!(
-        r#"    pub fn {child_count}(&self) -> usize {{
-        match &self.__node {{
-            __GeneratedRuleContext::Stored(node) => node.child_count(),
-            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),
-        }}
-    }}
-
-    /// Iterates terminals owned directly by this context without descending
-    /// into nested rule contexts.
-    ///
-    /// Recovered trees expose inserted and deleted recovery tokens as error
-    /// nodes through the same `TerminalNode` surface. Use
-    /// `TerminalNode::is_error()` to identify recovery nodes and
-    /// `TerminalNode::is_missing()` to identify inserted synthetic tokens.
-    pub fn {direct_terminals}(
-        &self,
-    ) -> impl Iterator<Item = TerminalNode<'a>> + 'a + use<'a, State> {{
-        __terminal_children(self.__node).map(TerminalNode::new)
-    }}
-
-    pub fn {start}(&self) -> __GeneratedTokenView {{
-        let token = match &self.__node {{
-            __GeneratedRuleContext::Stored(node) => node.start(),
-            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),
-        }};
-        __GeneratedTokenView {{ text: token.map(|token| token.text_or_empty().to_owned()).unwrap_or_default() }}
-    }}
-
-    pub fn {text}(&self) -> String {{
-        match &self.__node {{
-            __GeneratedRuleContext::Stored(node) => node.text(),
-            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.text(storage, tokens),
-        }}
-    }}
-"#
-    )
-}
-
 #[derive(Clone, Copy)]
 struct RuleLabelAccessorRender<'a> {
     method: &'a str,

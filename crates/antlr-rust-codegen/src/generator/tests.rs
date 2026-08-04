@@ -3,13 +3,28 @@ use super::*;
 use antlr4_runtime::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 
 fn rendered_context_impl<'a>(rendered: &'a str, name: &str) -> &'a str {
-    rendered
-        .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
-        .unwrap_or_else(|| panic!("{name} impl"))
-        .1
-        .split_once(&format!("impl<State> std::fmt::Display for {name}"))
-        .unwrap_or_else(|| panic!("{name} display impl"))
-        .0
+    let marker = format!("impl<'a, State: __RecoveryContextState> {name}<'a, State> {{");
+    let tail = rendered
+        .split_once(&marker)
+        .unwrap_or_else(|| panic!("{name} recovery context impl"))
+        .1;
+    let end = tail
+        .find("\nantlr4_runtime::__antlr4_rust_context!")
+        .or_else(|| tail.find("\n/// Checks generated required-child invariants"))
+        .unwrap_or_else(|| panic!("surface after {name} context"));
+    &tail[..end]
+}
+
+fn rendered_context_declaration<'a>(rendered: &'a str, name: &str) -> &'a str {
+    let marker = format!("antlr4_runtime::__antlr4_rust_context! {{\n    pub struct {name} {{");
+    let start = rendered
+        .find(&marker)
+        .unwrap_or_else(|| panic!("{name} context declaration"));
+    let tail = &rendered[start..];
+    let end = tail
+        .find("\n}\n\n#[allow(dead_code, private_bounds, clippy::all)]")
+        .unwrap_or_else(|| panic!("{name} context declaration end"));
+    &tail[..end + 2]
 }
 
 #[test]
@@ -1656,7 +1671,7 @@ fn embedded_listener_forwards_error_nodes() {
 }
 
 #[test]
-fn embedded_contexts_derive_stored_invocation_states_lazily() {
+fn embedded_contexts_delegate_stored_invocation_states_to_the_runtime_api() {
     let rendered = render_parser_with_options(
         "TParser",
         &parser_fixture_data("left-recursive-labels/T.g4"),
@@ -1668,9 +1683,9 @@ fn embedded_contexts_derive_stored_invocation_states_lazily() {
     .expect("embedded parser should render");
 
     assert!(rendered.contains("invocation_states: Vec<isize>"));
-    assert!(rendered.contains("__invocation_states: Option<Vec<isize>>"));
-    assert!(rendered.contains("__invocation_states: Some(invocation_states)"));
-    assert!(rendered.contains("Self::__from_node_with_invocation_states(node, None)"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_context!"));
+    assert!(!rendered.contains("__invocation_states: Option<Vec<isize>>"));
+    assert!(!rendered.contains("Self::__from_node_with_invocation_states(node, None)"));
     assert!(rendered.contains("::__from_child_node(node, self.__invocation_states.as_deref())"));
     assert!(rendered.contains("::__from_listener_node(context, invocation_states.as_deref())"));
     assert!(rendered.contains("pub fn walk_with_invocation_states"));
@@ -1691,6 +1706,7 @@ fn attrless_contexts_skip_generated_attrs_lookup() {
         !attrless.contains("generated_attrs::<__RuleAttrs0>"),
         "attr-less context construction must not perform an Any downcast"
     );
+    assert!(!attrless.contains("pub struct __RuleAttrs0"));
 
     let attributed = render_parser_with_options(
         "TParser",
@@ -1701,14 +1717,11 @@ fn attrless_contexts_skip_generated_attrs_lookup() {
         },
     )
     .expect("embedded parser should render");
+    assert!(attributed.contains("pub struct __RuleAttrs1"));
     assert!(
-        attributed.contains("generated_attrs::<__RuleAttrs1>"),
-        "rules with declared attributes must still populate public context fields"
+        attributed.contains("attributes: {\n            __RuleAttrs1 {\n                v: i32,")
     );
-    assert!(
-        attributed.contains("live_attrs.downcast_ref::<__RuleAttrs1>()"),
-        "active contexts must populate public fields from live rule attributes"
-    );
+    assert!(!attributed.contains("live_attrs.downcast_ref::<__RuleAttrs1>()"));
     assert!(
         attributed.contains("T::__from_active(context, None, invocation_states, storage, tokens)"),
         "native embedded actions must retain the original active-context helper"
@@ -1917,26 +1930,43 @@ fn typed_context_accessors_are_cardinality_aware_and_rust_shaped() {
         &parser_fixture_data("left-recursive-labels/T.g4"),
     )
     .expect("parser should render");
-    let s_context = rendered
-        .split_once("impl<'a, State> SContext<'a, State> {")
-        .expect("s context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for SContext")
-        .expect("s context display impl")
-        .0;
+    let s_context = rendered_context_impl(&rendered, "SContext");
     // Snapshot the whole sliced impl block: the generated accessor surface is the assertion.
     // This also subsumes the old `!contains(...)` guards — a forbidden method (self-reference,
     // `_all`) would surface as a diff instead of needing to be enumerated by hand.
     insta::assert_snapshot!("typed_context_accessors_s_context", s_context);
 
-    let e_context = rendered
-        .split_once("impl<'a, State> EContext<'a, State> {")
-        .expect("e context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for EContext")
-        .expect("e context display impl")
-        .0;
+    let e_context = rendered_context_impl(&rendered, "EContext");
     insta::assert_snapshot!("typed_context_accessors_e_context", e_context);
+}
+
+#[test]
+fn typed_context_mechanics_use_the_runtime_codegen_api() {
+    let rendered = render_parser(
+        "TParser",
+        &parser_fixture_data("boolean-rule-arguments/T.g4"),
+    )
+    .expect("parser should render");
+
+    assert_eq!(
+        rendered
+            .matches("antlr4_runtime::__antlr4_rust_context!")
+            .count(),
+        2
+    );
+    assert!(!rendered.contains("fn __from_node("));
+    assert!(!rendered.contains("impl<State> std::fmt::Display for"));
+    assert!(!rendered.contains("pub struct __RuleAttrs0"));
+    assert!(rendered.contains("pub struct __RuleAttrs1"));
+
+    insta::assert_snapshot!(
+        "typed_context_runtime_support_declarations",
+        format!(
+            "{}\n\n{}",
+            rendered_context_declaration(&rendered, "SContext"),
+            rendered_context_declaration(&rendered, "FlagContext"),
+        )
+    );
 }
 
 #[test]
@@ -1946,17 +1976,8 @@ fn typed_context_accessors_reserve_direct_terminals() {
         &parser_fixture_data("context-accessor-collision/T.g4"),
     )
     .expect("parser should render");
-    let context_impl = |name: &str| {
-        rendered
-            .split_once(&format!("impl<'a, State> {name}<'a, State> {{"))
-            .unwrap_or_else(|| panic!("{name} impl"))
-            .1
-            .split_once(&format!("impl<State> std::fmt::Display for {name}"))
-            .unwrap_or_else(|| panic!("{name} display impl"))
-            .0
-    };
-    let start_context = context_impl("StartContext");
-    let labeled_context = context_impl("LabeledContext");
+    let start_context = rendered_context_impl(&rendered, "StartContext");
+    let labeled_context = rendered_context_impl(&rendered, "LabeledContext");
     let context_surface = format!("StartContext\n{start_context}LabeledContext\n{labeled_context}");
 
     insta::assert_snapshot!(
@@ -1972,27 +1993,9 @@ fn typed_context_accessors_include_tokens_from_grouped_sets() {
         &parser_fixture_data("grouped-token-accessors/T.g4"),
     )
     .expect("parser should render");
-    let expression_context = rendered
-        .split_once("impl<'a, State> ExpressionContext<'a, State> {")
-        .expect("expression context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for ExpressionContext")
-        .expect("expression context display impl")
-        .0;
-    let sequence_context = rendered
-        .split_once("impl<'a, State> OperatorSequenceContext<'a, State> {")
-        .expect("operator sequence context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for OperatorSequenceContext")
-        .expect("operator sequence context display impl")
-        .0;
-    let eof_choice_context = rendered
-        .split_once("impl<'a, State> EofChoiceContext<'a, State> {")
-        .expect("EOF choice context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for EofChoiceContext")
-        .expect("EOF choice context display impl")
-        .0;
+    let expression_context = rendered_context_impl(&rendered, "ExpressionContext");
+    let sequence_context = rendered_context_impl(&rendered, "OperatorSequenceContext");
+    let eof_choice_context = rendered_context_impl(&rendered, "EofChoiceContext");
     let context_surface = format!(
         "ExpressionContext\n{expression_context}OperatorSequenceContext\n{sequence_context}EofChoiceContext\n{eof_choice_context}"
     );
@@ -2086,23 +2089,11 @@ fn typed_context_accessors_preserve_ebnf_list_and_single_labels() {
     );
 
     let rendered = render_parser("ShapesParser", &data).expect("parser should render");
-    let many_context = rendered
-        .split_once("impl<'a, State> ManyLabelContext<'a, State> {")
-        .expect("many context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for ManyLabelContext")
-        .expect("many context display impl")
-        .0;
+    let many_context = rendered_context_impl(&rendered, "ManyLabelContext");
     // The EBNF-list accessor (iterator over repeated `rest`) is captured whole.
     insta::assert_snapshot!("typed_context_accessors_many_context", many_context);
 
-    let latest_context = rendered
-        .split_once("impl<'a, State> LatestContext<'a, State> {")
-        .expect("latest context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for LatestContext")
-        .expect("latest context display impl")
-        .0;
+    let latest_context = rendered_context_impl(&rendered, "LatestContext");
     // The single-label accessor (`.skip(0).last()` selecting the latest occurrence) is captured
     // whole rather than probed for two substrings.
     insta::assert_snapshot!("typed_context_accessors_latest_context", latest_context);
@@ -2115,24 +2106,12 @@ fn token_group_label_across_alternatives_unions_sets_and_guards_shadowing() {
 
     // The `op` label spans two alternatives with different token groups;
     // the accessor must match the union of both sets.
-    let calc_context = rendered
-        .split_once("impl<'a, State> CalcContext<'a, State> {")
-        .expect("calc context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for CalcContext")
-        .expect("calc context display impl")
-        .0;
+    let calc_context = rendered_context_impl(&rendered, "CalcContext");
     insta::assert_snapshot!("multi_alternative_label_calc_context", calc_context);
 
     // `lead = PLUS? PLUS unary`: with `lead` absent the unlabeled PLUS
     // slides into `.nth(0)`, so no accessor may be emitted at all.
-    let shadowed_context = rendered
-        .split_once("impl<'a, State> ShadowedContext<'a, State> {")
-        .expect("shadowed context impl")
-        .1
-        .split_once("impl<State> std::fmt::Display for ShadowedContext")
-        .expect("shadowed context display impl")
-        .0;
+    let shadowed_context = rendered_context_impl(&rendered, "ShadowedContext");
     assert!(
         !shadowed_context.contains("pub fn lead("),
         "optional labeled token shadowed by a following union match must drop its accessor\n{shadowed_context}"

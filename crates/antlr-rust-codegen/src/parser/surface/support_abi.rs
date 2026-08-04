@@ -342,9 +342,11 @@ pub(crate) fn build_embedded_parser_data(
         }
     }
 
-    // Per-rule attrs structs — emitted for every rule (context views
-    // reference them uniformly; attr-less rules get an empty struct).
+    // Per-rule attrs structs exist only when generated actions need a payload.
     for (rule_index, rule) in model.rules.iter().enumerate() {
+        if !rule.has_attrs() {
+            continue;
+        }
         let struct_name = embedded::attrs_struct_name(rule_index);
         let mut fields = String::new();
         for attr in &rule.attrs {
