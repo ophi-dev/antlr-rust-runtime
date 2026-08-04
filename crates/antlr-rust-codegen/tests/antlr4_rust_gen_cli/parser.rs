@@ -154,12 +154,12 @@ fn deeply_nested_input_parses_without_native_stack_overflow() {
         utf8(&output.stderr)
     );
 
-    // Every generated dispatch method must carry the stack guard; the rule
-    // chain here multiplies each `[` into ~6 native rule frames (issue #193).
+    // Every generated dispatch method must use the shared lifecycle contract;
+    // the 10,000-level parse below proves its segmented-stack guard is active.
     let parser = fs::read_to_string(out.join("nest_parser.rs")).expect("parser should be emitted");
     assert!(
-        parser.contains("antlr4_runtime::grow_generated_rule_stack("),
-        "generated dispatch must guard native stack growth\n{parser}"
+        parser.contains("antlr4_runtime::__antlr4_rust_generated_rule! { dispatch self,"),
+        "generated dispatch must use the shared lifecycle dispatch form\n{parser}"
     );
 
     assert_generated_project(

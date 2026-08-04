@@ -1,0 +1,30 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: rendered_generated_rule_methods(&rendered)
+---
+    #[allow(dead_code)]
+    fn parse_generated_rule_0_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
+        antlr4_runtime::__antlr4_rust_generated_rule! { dispatch self, 0, GeneratedRuleError::Fatal; self.parse_generated_rule_0_precedence(precedence, allow_fallback) }
+    }
+
+    #[allow(dead_code)]
+    fn parse_generated_rule_0(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
+        self.parse_generated_rule_0_precedence(0, allow_fallback)
+    }
+
+    #[allow(dead_code)]
+    fn parse_generated_rule_0_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
+        antlr4_runtime::__antlr4_rust_generated_rule! {
+            recursive self, 0isize, 0, __precedence, allow_fallback, atn(), GeneratedRuleError::Fatal;
+            retry [none];
+            bind (__ctx, __rule_start, __consumed_eof, __sync_error);
+            setup {}
+            body {
+                let __match = self.base.match_token_recovering(1, 2, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+            }
+            success {}
+            recovery {}
+        }
+    }

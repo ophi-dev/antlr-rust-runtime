@@ -121,10 +121,7 @@ pub(crate) fn adaptive_atn_parser_render_slots(
     }
 }
 
-pub(crate) fn render_generated_rule_error(
-    retry_variant: &str,
-    retry_into_error: &str,
-) -> String {
+pub(crate) fn render_generated_rule_error(retry_variant: &str, retry_into_error: &str) -> String {
     format!(
         r#"#[allow(dead_code)]
 #[derive(Debug)]
@@ -352,30 +349,9 @@ pub(crate) fn render_routing_plan(
             writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
             format!("self.parse_generated_rule_{index}(precedence, allow_fallback)")
         };
-        // Rule nesting maps onto native call depth; sample remaining stack
-        // capacity at the shared dispatch boundary so deeply nested input
-        // grows onto a segmented stack instead of aborting the process. The
-        // optional depth-cap and parse-listener probes stay inline-cheap
-        // (one `Option`/emptiness check each when unused) and their errors,
-        // while absorbed by rule-level recovery like any rule failure, stay
-        // sticky until the top-level entry drains them — that pairing is
-        // what actually enforces the abort. The matching listener exit event
-        // fires from the rule body's exit paths (`finish_rule`/recovery), so
-        // enter/exit stay balanced. Plain `if let` keeps generated output
-        // edition-2021 compatible.
         writeln!(
             out,
-            "        if let Some(error) = self.base.rule_depth_cap_violation() {{\n            \
-             return Err(GeneratedRuleError::Fatal(error));\n        \
-             }}\n        \
-             if let Some(error) = self.base.parse_listener_enter_rule({index}) {{\n            \
-             return Err(GeneratedRuleError::Fatal(error));\n        \
-             }}\n        \
-             let __listener_result = if self.base.generated_rule_stack_check_due() {{\n            \
-             antlr4_runtime::grow_generated_rule_stack(|| {target_call})\n        \
-             }} else {{\n            {target_call}\n        }};\n        \
-             self.base.parse_listener_exit_rule({index});\n        \
-             __listener_result"
+            "        antlr4_runtime::__antlr4_rust_generated_rule! {{ dispatch self, {index}, GeneratedRuleError::Fatal; {target_call} }}"
         )
         .expect("writing to a string cannot fail");
         writeln!(out, "    }}").expect("writing to a string cannot fail");
@@ -428,6 +404,7 @@ pub(crate) fn render_portable_local_declarations(
     out: &mut String,
     rule_index: usize,
     step_render_context: GeneratedStepRenderContext<'_>,
+    indent: usize,
 ) {
     let Some(portable) = step_render_context.portable_locals else {
         return;
@@ -435,8 +412,9 @@ pub(crate) fn render_portable_local_declarations(
     let Some(declarations) = portable.declarations.get(rule_index) else {
         return;
     };
+    let pad = "    ".repeat(indent);
     for declaration in declarations {
-        writeln!(out, "        #[allow(unused_mut)]\n        {declaration}")
+        writeln!(out, "{pad}#[allow(unused_mut)]\n{pad}{declaration}")
             .expect("writing to a string cannot fail");
     }
 }
@@ -446,6 +424,7 @@ pub(crate) fn render_embedded_attrs_local(
     out: &mut String,
     rule_index: usize,
     step_render_context: GeneratedStepRenderContext<'_>,
+    indent: usize,
 ) {
     let Some(embedded) = step_render_context.embedded else {
         return;
@@ -458,10 +437,11 @@ pub(crate) fn render_embedded_attrs_local(
     {
         return;
     }
+    let pad = "    ".repeat(indent);
     let attrs_struct = embedded::attrs_struct_name(rule_index);
     writeln!(
         out,
-        "        #[allow(unused_mut)]\n        let mut __attrs = {attrs_struct}::default();"
+        "{pad}#[allow(unused_mut)]\n{pad}let mut __attrs = {attrs_struct}::default();"
     )
     .expect("writing to a string cannot fail");
     if let Some(arg0) = embedded
@@ -471,7 +451,7 @@ pub(crate) fn render_embedded_attrs_local(
     {
         writeln!(
             out,
-            "        if let Some(__arg) = self.__embedded_pending_arg.take() {{ __attrs.{arg0} = __arg as _; }}"
+            "{pad}if let Some(__arg) = self.__embedded_pending_arg.take() {{ __attrs.{arg0} = __arg as _; }}"
         )
         .expect("writing to a string cannot fail");
     }
@@ -483,12 +463,14 @@ pub(crate) fn render_embedded_init_entry(
     out: &mut String,
     rule_index: usize,
     step_render_context: GeneratedStepRenderContext<'_>,
+    indent: usize,
 ) {
     let Some(embedded) = step_render_context.embedded else {
         return;
     };
     if let Some(init) = embedded.init_entry.get(&rule_index) {
-        writeln!(out, "        {init}").expect("writing to a string cannot fail");
+        let pad = "    ".repeat(indent);
+        writeln!(out, "{pad}{init}").expect("writing to a string cannot fail");
     }
 }
 
@@ -499,13 +481,15 @@ pub(crate) fn render_embedded_after_and_seal(
     rule_index: usize,
     step_render_context: GeneratedStepRenderContext<'_>,
     run_after: bool,
+    indent: usize,
 ) {
     let Some(embedded) = step_render_context.embedded else {
         return;
     };
+    let pad = "    ".repeat(indent);
     if run_after {
         if let Some(after) = embedded.after.get(&rule_index) {
-            writeln!(out, "                {after}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
         }
     }
     if embedded
@@ -516,36 +500,8 @@ pub(crate) fn render_embedded_after_and_seal(
     {
         writeln!(
             out,
-            "                __ctx.set_generated_attrs(antlr4_runtime::GeneratedAttrs::new(__attrs.clone()));"
+            "{pad}__ctx.set_generated_attrs(antlr4_runtime::GeneratedAttrs::new(__attrs.clone()));"
         )
         .expect("writing to a string cannot fail");
     }
-}
-
-pub(crate) fn render_generated_adaptive_retry_unwind(
-    out: &mut String,
-    step_render_context: GeneratedStepRenderContext<'_>,
-    left_recursive: bool,
-) {
-    if !step_render_context
-        .adaptive_atn_preferred_rule_slots
-        .iter()
-        .any(Option::is_some)
-    {
-        return;
-    }
-    let exit_rule = if left_recursive {
-        "self.base.unroll_recursion_context();"
-    } else {
-        "self.base.exit_rule();"
-    };
-    writeln!(
-        out,
-        "                if self.adaptive_atn_retry_slot.is_some() {{\n                    \
-         {exit_rule}\n                    \
-         self.base.restore_generated_diagnostics(__generated_diagnostic_marker);\n                    \
-         return Err(GeneratedRuleError::AdaptiveRetry);\n                \
-         }}"
-    )
-    .expect("writing to a string cannot fail");
 }

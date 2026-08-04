@@ -3,133 +3,37 @@ pub(crate) fn render_generated_rule_method(
     rule: &GeneratedParserRule,
     step_render_context: GeneratedStepRenderContext<'_>,
 ) {
-    if rule.left_recursive {
-        render_generated_left_recursive_rule_method(out, rule, step_render_context);
-        return;
-    }
     let index = rule.rule_index;
-    let entry_state = rule.entry_state;
-    writeln!(
-        out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "        let _ = __precedence;").expect("writing to a string cannot fail");
-    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
-    )
-    .expect("writing to a string cannot fail");
-    // Capture the rule start AFTER `enter_rule`, which advances the cursor past any
-    // leading hidden-channel tokens to the first visible token. Capturing before
-    // would make `$start`/`$text` in generated actions include a leading hidden
-    // prefix (e.g. whitespace), diverging from ANTLR and the rule context start.
-    writeln!(
-        out,
-        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
-    )
-    .expect("writing to a string cannot fail");
-    render_portable_local_declarations(out, index, step_render_context);
-    render_embedded_attrs_local(out, index, step_render_context);
-    render_embedded_init_entry(out, index, step_render_context);
-    writeln!(out, "        let mut __consumed_eof = false;")
+    if rule.left_recursive {
+        writeln!(
+            out,
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
-    )
-    .expect("writing to a string cannot fail");
-    render_generated_steps(out, &rule.steps, 3, step_render_context);
-    writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
-    writeln!(out, "        }})();").expect("writing to a string cannot fail");
-    writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
-    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, true);
-    writeln!(
-        out,
-        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
-    writeln!(out, "            }}").expect("writing to a string cannot fail");
-    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
-    render_generated_adaptive_retry_unwind(out, step_render_context, false);
-    // A rule's own `sync_decision` failure (`__sync_error`) is fatal ONLY at the
-    // top-level public entry (`allow_fallback`). When this rule is a nested child
-    // (`!allow_fallback`), ANTLR recovers the mismatch INSIDE the child and returns
-    // a partial subtree to the parent — it never propagates the sync failure up. So
-    // for a nested child, recover locally like any other body error (a `Fatal`
-    // escaping here would make the parent recover on ITS context, dropping the
-    // child subtree). Only the true top-level keeps the `Fatal` abort (preserving
-    // antlr#6 `InvalidEmptyInput`-style start-rule errors).
-    writeln!(
-        out,
-        "                if let Some(__error) = __sync_error {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    if allow_fallback {{")
+        writeln!(
+            out,
+            "        self.parse_generated_rule_{index}_precedence(0, allow_fallback)"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(out, "                        self.base.exit_rule();")
+        writeln!(out, "    }}").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        self.base.rollback_generated_tree(__generated_diagnostic_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        self.base.record_generated_syntax_error();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        return Err(GeneratedRuleError::Fatal(__error));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
-    )
-    .expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, false);
-    writeln!(
-        out,
-        "                    let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    return Ok(__tree);")
+    } else {
+        writeln!(
+            out,
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(out, "                }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
-    )
-    .expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, false);
-    writeln!(
-        out,
-        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
-    writeln!(out, "            }}").expect("writing to a string cannot fail");
-    writeln!(out, "        }}").expect("writing to a string cannot fail");
+        writeln!(out, "        let _ = __precedence;").expect("writing to a string cannot fail");
+    }
+    render_generated_rule_lifecycle(out, rule, step_render_context);
     writeln!(out, "    }}").expect("writing to a string cannot fail");
 }
 
-fn render_generated_left_recursive_rule_method(
+fn render_generated_rule_lifecycle(
     out: &mut String,
     rule: &GeneratedParserRule,
     step_render_context: GeneratedStepRenderContext<'_>,
@@ -138,132 +42,65 @@ fn render_generated_left_recursive_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        "        antlr4_runtime::__antlr4_rust_generated_rule! {{"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        self.parse_generated_rule_{index}_precedence(0, allow_fallback)"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "    }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let mut __ctx = self.base.enter_recursion_rule({entry_state}isize, {index}, __precedence);"
-    )
-    .expect("writing to a string cannot fail");
-    // Capture the rule start AFTER `enter_recursion_rule`, which (via `enter_rule`)
-    // advances the cursor past any leading hidden-channel tokens to the first
-    // visible token. Capturing before would make `$start`/`$text` in generated
-    // actions include a leading hidden prefix, diverging from ANTLR.
-    writeln!(
-        out,
-        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
-    )
-    .expect("writing to a string cannot fail");
-    render_portable_local_declarations(out, index, step_render_context);
-    render_embedded_attrs_local(out, index, step_render_context);
-    render_embedded_init_entry(out, index, step_render_context);
-    writeln!(out, "        let mut __consumed_eof = false;")
+    if rule.left_recursive {
+        writeln!(
+            out,
+            "            recursive self, {entry_state}isize, {index}, __precedence, allow_fallback, atn(), GeneratedRuleError::Fatal;"
+        )
         .expect("writing to a string cannot fail");
+    } else {
+        writeln!(
+            out,
+            "            ordinary self, {entry_state}isize, {index}, allow_fallback, atn(), GeneratedRuleError::Fatal;"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    if step_render_context
+        .adaptive_atn_preferred_rule_slots
+        .iter()
+        .any(Option::is_some)
+    {
+        writeln!(
+            out,
+            "            retry [self.adaptive_atn_retry_slot.is_some() => GeneratedRuleError::AdaptiveRetry];"
+        )
+        .expect("writing to a string cannot fail");
+    } else {
+        writeln!(out, "            retry [none];").expect("writing to a string cannot fail");
+    }
     writeln!(
         out,
-        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
+        "            bind (__ctx, __rule_start, __consumed_eof, __sync_error);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
-    )
-    .expect("writing to a string cannot fail");
-    render_generated_steps(out, &rule.steps, 3, step_render_context);
-    writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
-    writeln!(out, "        }})();").expect("writing to a string cannot fail");
-    writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
-    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, true);
-    writeln!(
-        out,
-        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    let mut setup = String::new();
+    render_portable_local_declarations(&mut setup, index, step_render_context, 4);
+    render_embedded_attrs_local(&mut setup, index, step_render_context, 4);
+    render_embedded_init_entry(&mut setup, index, step_render_context, 4);
+    render_generated_rule_section(out, "setup", &setup);
+    writeln!(out, "            body {{").expect("writing to a string cannot fail");
+    render_generated_steps(out, &rule.steps, 4, step_render_context);
     writeln!(out, "            }}").expect("writing to a string cannot fail");
-    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
-    render_generated_adaptive_retry_unwind(out, step_render_context, true);
-    // Same as the non-left-recursive case: a nested child (`!allow_fallback`)
-    // recovers its own sync failure internally and returns a partial subtree; only
-    // the top-level entry propagates `Fatal`. Use `finish_recursion_rule` (which
-    // unrolls the recursion context) in the recover branch — do NOT also call
-    // `unroll_recursion_context` (that would double-unroll).
-    writeln!(
-        out,
-        "                if let Some(__error) = __sync_error {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    if allow_fallback {{")
-        .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        self.base.unroll_recursion_context();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        self.base.rollback_generated_tree(__generated_diagnostic_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        self.base.record_generated_syntax_error();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                        return Err(GeneratedRuleError::Fatal(__error));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
-    )
-    .expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, false);
-    writeln!(
-        out,
-        "                    let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    return Ok(__tree);")
-        .expect("writing to a string cannot fail");
-    writeln!(out, "                }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
-    )
-    .expect("writing to a string cannot fail");
-    render_embedded_after_and_seal(out, index, step_render_context, false);
-    writeln!(
-        out,
-        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
-    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    let mut success = String::new();
+    render_embedded_after_and_seal(&mut success, index, step_render_context, true, 4);
+    render_generated_rule_section(out, "success", &success);
+    let mut recovery = String::new();
+    render_embedded_after_and_seal(&mut recovery, index, step_render_context, false, 4);
+    render_generated_rule_section(out, "recovery", &recovery);
     writeln!(out, "        }}").expect("writing to a string cannot fail");
-    writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_rule_section(out: &mut String, name: &str, body: &str) {
+    if body.is_empty() {
+        writeln!(out, "            {name} {{}}").expect("writing to a string cannot fail");
+        return;
+    }
+    writeln!(out, "            {name} {{").expect("writing to a string cannot fail");
+    out.push_str(body);
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
 }
 
 fn render_generated_steps(
