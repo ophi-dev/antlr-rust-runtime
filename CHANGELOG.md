@@ -9,6 +9,13 @@
   as a build dependency and use `Builder`; generated/runtime API revision 3 is
   unchanged.
 
+## [0.28.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.27.0...v0.28.0) (2026-08-04)
+
+
+### Features
+
+* **codegen:** expose structured generation diagnostics ([#294](https://github.com/ophi-dev/antlr-rust-runtime/issues/294)) ([ef1bdd0](https://github.com/ophi-dev/antlr-rust-runtime/commit/ef1bdd025fdb5fbcfdd6296dce329e9ab65859b3))
+
 ## [0.27.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.26.0...v0.27.0) (2026-08-03)
 
 
