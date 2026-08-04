@@ -35,10 +35,10 @@ For Rust projects, add the runtime crate:
 
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.27.0"
+antlr-rust-runtime = "0.28.0"
 
 [build-dependencies]
-antlr-rust-codegen = "0.27.0"
+antlr-rust-codegen = "0.28.0"
 ```
 
 <!-- x-release-please-end -->
