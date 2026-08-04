@@ -1,0 +1,21 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: facade
+---
+antlr4_runtime::__antlr4_rust_parser_facade! {
+    type: AdaptiveRoutingParser<L, H>,
+    fields: {
+        base: base,
+        simulator: simulator,
+        generated_only: generated_only,
+    },
+    metadata: metadata,
+    parser_atn: parser_atn,
+    reset(parser) {
+        parser.adaptive_atn_preferred_rules.fill(false);
+        parser.adaptive_atn_preference_depths.fill(0);
+        parser.adaptive_atn_preference_starts.fill((0, 0));
+        parser.adaptive_atn_syntax_error_starts.fill(0);
+        parser.adaptive_atn_retry_slot = None;
+    }
+}

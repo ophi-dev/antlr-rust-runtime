@@ -115,7 +115,7 @@ pub(crate) fn adaptive_atn_parser_render_slots(
         field_init: format!(
             "            adaptive_atn_preferred_rules: [false; {preferred_rule_count}],\n            adaptive_atn_preference_depths: [0; {preferred_rule_count}],\n            adaptive_atn_preference_starts: [(0, 0); {preferred_rule_count}],\n            adaptive_atn_syntax_error_starts: [0; {preferred_rule_count}],\n            adaptive_atn_retry_slot: None,\n"
         ),
-        reset: "        self.adaptive_atn_preferred_rules.fill(false);\n        self.adaptive_atn_preference_depths.fill(0);\n        self.adaptive_atn_preference_starts.fill((0, 0));\n        self.adaptive_atn_syntax_error_starts.fill(0);\n        self.adaptive_atn_retry_slot = None;\n",
+        reset: "        parser.adaptive_atn_preferred_rules.fill(false);\n        parser.adaptive_atn_preference_depths.fill(0);\n        parser.adaptive_atn_preference_starts.fill((0, 0));\n        parser.adaptive_atn_syntax_error_starts.fill(0);\n        parser.adaptive_atn_retry_slot = None;\n",
         retry_variant: "    AdaptiveRetry,\n",
         retry_into_error: "            Self::AdaptiveRetry => antlr4_runtime::AntlrError::Unsupported(\"internal adaptive ATN retry escaped its routing boundary\".to_owned()),\n",
     }

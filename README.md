@@ -126,10 +126,10 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 4, which moves typed parser
-context mechanics behind a runtime support macro. The runtime also accepts
-revisions 1, 2, and 3 because their older generated recognizers use API
-surfaces that remain available.
+The bundled generator currently emits revision 5, which moves generated
+recognizer facades and trait delegation behind runtime support macros. The
+runtime also accepts revisions 1 through 4 because their older generated
+recognizers use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

@@ -21,8 +21,6 @@ pub(crate) fn render_parser_with_decision_report(
     let empty_patterns = SemPatternFile::default();
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
-    let compile_pattern_method = render_compile_parse_tree_pattern_method();
-    let parse_listener_facade = render_parse_listener_facade();
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn();
     let parser_atn_data = render_u32_slice(parser_atn.packed_words());
@@ -273,9 +271,7 @@ pub(crate) fn render_parser_with_decision_report(
         adaptive_atn_preference_field_init,
         embedded_struct_fields,
         embedded_field_inits,
-        parse_listener_facade,
         adaptive_atn_preference_reset,
-        compile_pattern_method,
         adaptive_direct_allowed,
         parse_rule_fallback,
         generated_rule_dispatch,
@@ -312,9 +308,7 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         adaptive_atn_preference_field_init,
         embedded_struct_fields,
         embedded_field_inits,
-        parse_listener_facade,
         adaptive_atn_preference_reset,
-        compile_pattern_method,
         adaptive_direct_allowed,
         parse_rule_fallback,
         generated_rule_dispatch,
@@ -325,11 +319,10 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         ..
     } = model;
     format!(
-        r#"{generated_header}use antlr4_runtime::recognizer::RecognizerData;
-use antlr4_runtime::token::TokenSource;
+        r#"{generated_header}use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
 use antlr4_runtime::atn::parser_atn::ParserAtn;
-use antlr4_runtime::{{BaseParser, GeneratedParser, GrammarMetadata, Parser, Recognizer}};
+use antlr4_runtime::{{BaseParser, GrammarMetadata, Parser, Recognizer}};
 use std::sync::OnceLock;
 {embedded_imports}
 
@@ -394,116 +387,6 @@ where
             simulator: None,
             generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
 {adaptive_atn_preference_field_init}{embedded_field_inits}        }}
-    }}
-
-    pub fn metadata() -> &'static GrammarMetadata {{
-        metadata()
-    }}
-
-    /// Adds a listener for parser diagnostics.
-    pub fn add_error_listener<T>(&mut self, listener: T)
-    where
-        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
-    {{
-        self.base.add_error_listener(listener);
-    }}
-
-    /// Removes every parser error listener, including the default console listener.
-    pub fn remove_error_listeners(&mut self) {{
-        self.base.remove_error_listeners();
-    }}
-
-{parse_listener_facade}
-    /// Fully resets parser-owned state and rewinds the current token stream.
-    pub fn reset(&mut self) {{
-        self.base.reset();
-        if let Some(simulator) = self.simulator.as_mut() {{
-            simulator.reset();
-        }}
-{adaptive_atn_preference_reset}    }}
-
-    /// Replaces the token stream and fully resets parser-owned state.
-    pub fn set_token_stream(&mut self, input: CommonTokenStream<L>) {{
-        self.base.set_token_stream(input);
-        if let Some(simulator) = self.simulator.as_mut() {{
-            simulator.reset();
-        }}
-{adaptive_atn_preference_reset}    }}
-
-    #[must_use]
-    pub const fn token_stream(&self) -> &CommonTokenStream<L> {{
-        self.base.token_stream()
-    }}
-
-    #[must_use]
-    pub const fn token_stream_mut(&mut self) -> &mut CommonTokenStream<L> {{
-        self.base.token_stream_mut()
-    }}
-
-    #[must_use]
-    pub const fn token_store(&self) -> &antlr4_runtime::TokenStore {{
-        self.base.token_store()
-    }}
-
-    #[must_use]
-    pub const fn parse_tree_storage(&self) -> &antlr4_runtime::ParseTreeStorage {{
-        self.base.parse_tree_storage()
-    }}
-
-    #[must_use]
-    pub fn prediction_context_stats(&self) -> antlr4_runtime::PredictionContextStats {{
-        self.simulator.as_ref().map_or_else(
-            antlr4_runtime::PredictionContextStats::default,
-            antlr4_runtime::ParserAtnSimulator::prediction_context_stats,
-        )
-    }}
-
-    #[must_use]
-    pub fn parser_dfa_stats(&self) -> antlr4_runtime::ParserDfaStats {{
-        self.simulator.as_ref().map_or_else(
-            antlr4_runtime::ParserDfaStats::default,
-            antlr4_runtime::ParserAtnSimulator::parser_dfa_stats,
-        )
-    }}
-
-    /// Clears this grammar's learned parser decision DFAs.
-    pub fn clear_dfa(&mut self) {{
-        if let Some(simulator) = self.simulator.as_mut() {{
-            simulator.clear_dfa();
-        }} else {{
-            antlr4_runtime::ParserAtnSimulator::clear_shared_dfa(atn());
-        }}
-{adaptive_atn_preference_reset}    }}
-
-    #[must_use]
-    pub fn node(&self, id: antlr4_runtime::NodeId) -> antlr4_runtime::Node<'_> {{
-        self.base.node(id)
-    }}
-
-    #[must_use]
-    pub fn into_token_stream(self) -> CommonTokenStream<L> {{
-        self.base.into_token_stream()
-    }}
-
-    #[must_use]
-    pub fn into_token_store(self) -> antlr4_runtime::TokenStore {{
-        self.base.into_token_store()
-    }}
-
-    #[must_use]
-    pub fn into_parsed_file(self, root: antlr4_runtime::NodeId) -> antlr4_runtime::ParsedFile {{
-        self.base.into_parsed_file(root)
-    }}
-{compile_pattern_method}
-    #[allow(dead_code)]
-    fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
-        self.simulator
-            .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()))
-    }}
-
-    #[allow(dead_code)]
-    fn generated_only(&self) -> bool {{
-        self.generated_only
     }}
 
     #[allow(dead_code)]
@@ -627,52 +510,17 @@ where
 
 {typed_parser_constructor}
 
-impl<L, H> GeneratedParser for {type_name}<L, H>
-where
-    L: TokenSource,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn metadata() -> &'static GrammarMetadata {{
-        metadata()
-    }}
-
-    fn parser_atn() -> &'static ParserAtn {{
-        parser_atn()
-    }}
-}}
-
-impl<L, H> Recognizer for {type_name}<L, H>
-where
-    L: TokenSource,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn data(&self) -> &antlr4_runtime::RecognizerData {{
-        self.base.data()
-    }}
-
-    fn data_mut(&mut self) -> &mut antlr4_runtime::RecognizerData {{
-        self.base.data_mut()
-    }}
-}}
-
-impl<L, H> Parser for {type_name}<L, H>
-where
-    L: TokenSource,
-    H: antlr4_runtime::SemanticHooks,
-{{
-    fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
-    fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
-    fn number_of_syntax_errors(&self) -> usize {{ self.base.number_of_syntax_errors() }}
-    fn report_diagnostic_errors(&self) -> bool {{ self.base.report_diagnostic_errors() }}
-    fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
-    fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
-    fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
-    fn max_rule_depth(&self) -> Option<usize> {{ self.base.max_rule_depth() }}
-    fn set_max_rule_depth(&mut self, depth: Option<usize>) {{ self.base.set_max_rule_depth(depth); }}
-    // Route through the trait impl: BaseParser's inherent generic method
-    // would re-box the already-boxed listener.
-    fn add_parse_listener(&mut self, listener: Box<dyn antlr4_runtime::ParseListener>) {{ antlr4_runtime::Parser::add_parse_listener(&mut self.base, listener); }}
-    fn remove_parse_listeners(&mut self) -> Vec<Box<dyn antlr4_runtime::ParseListener>> {{ self.base.remove_parse_listeners() }}
+antlr4_runtime::__antlr4_rust_parser_facade! {{
+    type: {type_name}<L, H>,
+    fields: {{
+        base: base,
+        simulator: simulator,
+        generated_only: generated_only,
+    }},
+    metadata: metadata,
+    parser_atn: parser_atn,
+    reset(parser) {{
+{adaptive_atn_preference_reset}    }}
 }}
 {generated_footer}"#
     )
