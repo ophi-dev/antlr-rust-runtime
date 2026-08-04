@@ -1,0 +1,38 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: "format!(\"{}\\n\\n{}\", rendered_context_declaration(&rendered, \"SContext\"),\nrendered_context_declaration(&rendered, \"FlagContext\"),)"
+---
+antlr4_runtime::__antlr4_rust_context! {
+    pub struct SContext {
+        rule_index: 0,
+        context_kind: any,
+        attributes: {
+        },
+        methods: {
+            rule_node: rule_node,
+            child_count: child_count,
+            direct_terminals: direct_terminals,
+            start: start,
+            text: text,
+        }
+    }
+}
+
+antlr4_runtime::__antlr4_rust_context! {
+    pub struct FlagContext {
+        rule_index: 1,
+        context_kind: any,
+        attributes: {
+            __RuleAttrs1 {
+                enabled: bool,
+            }
+        },
+        methods: {
+            rule_node: rule_node,
+            child_count: child_count,
+            direct_terminals: direct_terminals,
+            start: start,
+            text: text,
+        }
+    }
+}

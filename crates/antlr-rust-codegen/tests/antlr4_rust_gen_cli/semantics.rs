@@ -114,11 +114,10 @@ lower = "hook"
         .expect("typed hook adapter should be emitted");
     let (adapter, _) = adapter
         .split_once(
-            "\n\n#[derive(Clone, Debug, Default)]\n\
-             #[allow(non_snake_case, dead_code)]\n\
-             pub struct __RuleAttrs",
+            "\n\n#[allow(dead_code)]\n\
+             pub struct __GeneratedInput",
         )
-        .expect("generated rule attributes should follow the typed hook adapter");
+        .expect("the generated input facade should follow the typed hook adapter");
     insta::assert_snapshot!(
         "recog_receiver_typed_hook_adapter",
         format!("pub trait RecogPredicateParserHooks{adapter}")

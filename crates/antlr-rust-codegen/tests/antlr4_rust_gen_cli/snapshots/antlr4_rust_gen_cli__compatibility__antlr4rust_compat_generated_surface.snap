@@ -1,5 +1,5 @@
 ---
-source: tests/antlr4_rust_gen_cli/compatibility.rs
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/compatibility.rs
 expression: "format!(\"=== C ===\\n{}\\n=== Java ===\\n{}\\n=== Alias only ===\\n{}\\n=== Alias collision ===\\n{}\",\nexcerpt(&c_parser), excerpt(&java_parser), excerpt(&alias_parser),\nexcerpt(&alias_collision_parser))"
 ---
 === C ===
@@ -39,11 +39,6 @@ pub fn ELLIPSIS(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self, index: usize) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER_all(&self) -> Vec<TerminalNode<'a>> {
-pub fn context_rule_node(&self) -> RuleNodeView<'a> {
-pub fn context_child_count(&self) -> usize {
-pub fn context_start(&self) -> __GeneratedTokenView {
-pub fn context_text(&self) -> String {
-pub fn context_rule_node(&self) -> RuleNodeView<'a> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn r#type(&self) -> Result<TypeContext<'a>, MissingChildError> {

@@ -13,6 +13,9 @@ pub(crate) fn build_structural_parser_surface(
         ..ParserSurfaceBindings::default()
     };
     for (rule_index, rule) in model.rules.iter().enumerate() {
+        if !rule.has_attrs() {
+            continue;
+        }
         let struct_name = embedded::attrs_struct_name(rule_index);
         let mut fields = String::new();
         for attr in &rule.attrs {

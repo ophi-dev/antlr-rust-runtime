@@ -423,13 +423,15 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                 .contains("pub fn self_(&self) -> Result<SelfContext<'a>, MissingChildError>"),
         "keyword compatibility getters must coexist with the native fallible surface"
     );
-    let unrelated_context = java_parser
+    let unrelated_context_tail = java_parser
         .split_once("pub struct UnrelatedContext")
         .expect("unrelated context should be emitted")
-        .1
-        .split_once("impl<State> std::fmt::Display for UnrelatedContext")
-        .expect("unrelated context display impl should delimit its surface")
-        .0;
+        .1;
+    let unrelated_context_end = unrelated_context_tail
+        .find("\nantlr4_runtime::__antlr4_rust_context!")
+        .or_else(|| unrelated_context_tail.find("\n/// Checks generated required-child invariants"))
+        .expect("the next generated surface should delimit the unrelated context");
+    let unrelated_context = &unrelated_context_tail[..unrelated_context_end];
     insta::assert_snapshot!(
         "antlr4rust_unrelated_context_surface",
         unrelated_context

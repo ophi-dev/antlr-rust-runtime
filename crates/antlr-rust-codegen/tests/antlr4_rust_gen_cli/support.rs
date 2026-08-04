@@ -115,7 +115,26 @@ pub(super) fn normalize_current_package_version(value: &str) -> String {
 
 pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
     let mut api = BTreeSet::new();
+    let mut context_methods = false;
     for line in source.lines().map(str::trim) {
+        if line == "methods: {" {
+            context_methods = true;
+            continue;
+        }
+        if context_methods {
+            if line == "}" {
+                context_methods = false;
+                continue;
+            }
+            let name = line
+                .split_once(':')
+                .map(|(_, name)| name.trim_end_matches(',').trim())
+                .unwrap_or_default();
+            if !name.is_empty() {
+                api.insert(format!("fn {name}"));
+            }
+            continue;
+        }
         for (prefix, kind) in [
             ("pub const fn ", "fn"),
             ("pub const ", "const"),

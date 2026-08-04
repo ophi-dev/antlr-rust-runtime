@@ -1,5 +1,5 @@
 ---
-source: tests/antlr4_rust_gen_cli/transforms.rs
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
 expression: generated_parser_api(&parser)
 ---
 [
@@ -110,12 +110,6 @@ expression: generated_parser_api(&parser)
     "struct ValidatedTreeContext",
     "struct __GeneratedInput",
     "struct __GeneratedTokenView",
-    "struct __RuleAttrs0",
-    "struct __RuleAttrs1",
-    "struct __RuleAttrs2",
-    "struct __RuleAttrs3",
-    "struct __RuleAttrs4",
-    "struct __RuleAttrs5",
     "trait FromValidatedRuleNode",
     "trait ReachabilityListener",
     "trait ReachabilityValidatedListener",

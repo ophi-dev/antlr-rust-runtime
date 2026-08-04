@@ -1,5 +1,5 @@
 ---
-source: tests/antlr4_rust_gen_cli/transforms.rs
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
 expression: api
 ---
 [
@@ -95,9 +95,6 @@ expression: api
     "struct ValidatedTreeContext",
     "struct __GeneratedInput",
     "struct __GeneratedTokenView",
-    "struct __RuleAttrs0",
-    "struct __RuleAttrs1",
-    "struct __RuleAttrs2",
     "trait FromValidatedRuleNode",
     "trait RecursiveEntriesListener",
     "trait RecursiveEntriesValidatedListener",

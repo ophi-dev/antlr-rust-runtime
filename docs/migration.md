@@ -7,9 +7,10 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 3 so generated parser-action hooks can
-observe parameterized rule arguments. This runtime continues to accept revision
-1 and 2 generated modules because their required APIs remain supported.
+The current generator emits revision 4 so generated typed parser contexts can
+use the runtime-owned context support macro. This runtime continues to accept
+revision 1, 2, and 3 generated modules because their required APIs remain
+supported.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when
@@ -49,7 +50,7 @@ Generate only into Cargo's `OUT_DIR` with `antlr_rust_codegen::Builder`, then
 call `Generation::emit_rerun_if_changed()` to track the resolved roots,
 imports, and token vocabularies. Projects that commit generated modules need
 only the runtime dependency and can keep generation in an `xtask` or the CLI.
-This package move does not change generated-code API revision 3.
+The earlier package move did not change generated-code API revision 3.
 
 ## Structured Syntax Error Events and Byte Spans
 

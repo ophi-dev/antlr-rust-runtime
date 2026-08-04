@@ -294,12 +294,9 @@ fn __write_invocation_states(
         let view_name = &surface.context_type;
         let rule = &model.rules[*rule_index];
         let context_kind = context_names.kind_id(*rule_index, alternative_label.as_deref());
-        let stored_kind_guard = alternative_label.as_ref().map_or(String::new(), |_| {
-            format!(" || __context_kind(node) != {context_kind}")
-        });
-        let active_kind_guard = alternative_label.as_ref().map_or(String::new(), |_| {
-            format!(" || __active_context_kind(context, storage, tokens) != {context_kind}")
-        });
+        let context_kind_match = alternative_label
+            .as_ref()
+            .map_or_else(|| "any".to_owned(), |_| format!("exact({context_kind})"));
         let child_cardinalities = context_child_cardinalities(rule, alternative_label.as_deref());
         let label_accessors = context_label_accessors(rule, alternative_label.as_deref());
         let antlr4rust_compat =
@@ -313,54 +310,24 @@ fn __write_invocation_states(
             BTreeSet::new()
         };
         let common_methods = context_common_method_names(&compatibility_methods);
-        let common_accessors = render_context_common_accessors(&common_methods);
         let rule_node_method = &common_methods.rule_node;
         let attrs_struct = embedded::attrs_struct_name(*rule_index);
-        let mut fields = String::new();
-        let mut field_inits = String::new();
-        for attr in &rule.attrs {
-            let name = embedded::escape_keyword(&attr.name);
-            let _ = writeln!(fields, "    pub {name}: {ty},", ty = attr.ty);
-            let _ = writeln!(field_inits, "            {name}: __attrs.{name}.clone(),");
-        }
-        let attrs_bindings = |source: &str| {
-            if rule.attrs.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "        let __default = {attrs_struct}::default();\n        let __attrs = {source}.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n"
-                )
+        let mut attributes = String::new();
+        if !rule.attrs.is_empty() {
+            let _ = writeln!(attributes, "            {attrs_struct} {{");
+            for attr in &rule.attrs {
+                let name = embedded::escape_keyword(&attr.name);
+                let _ = writeln!(attributes, "                {name}: {},", attr.ty);
             }
-        };
-        let active_attrs_bindings = if rule.attrs.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "        let __default = {attrs_struct}::default();\n        let __attrs = match live_attrs {{\n            Some(live_attrs) => live_attrs.downcast_ref::<{attrs_struct}>().expect(\"active context attributes match the parser rule\"),\n            None => context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default),\n        }};\n"
-            )
-        };
-        let stored_attrs_bindings = attrs_bindings("node");
+            attributes.push_str("            }\n");
+        }
         let _ = writeln!(
             out,
-            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a, State = StoredTreeContext> {{\n    __node: __GeneratedRuleContext<'a>,\n    __invocation_states: Option<Vec<isize>>,\n    __state: std::marker::PhantomData<State>,\n{fields}}}\n"
-        );
-        let _ = writeln!(
-            out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.{rule_node_method}() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn {rule_node_method}(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        live_attrs: Option<&dyn std::any::Any>,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n{active_attrs_bindings}        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: Some(invocation_states),\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
-        );
-        let _ = writeln!(
-            out,
-            "impl<'a> FromValidatedRuleNode<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self> {{\n        let node = node.rule_node();\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_validated_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.{rule_node_method}() }}\n}}\n"
-        );
-        let mut accessors = String::new();
-        let _ = writeln!(
-            accessors,
-            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        Self::__from_node_with_invocation_states(node, None)\n    }}\n\n    fn __from_child_node(\n        node: RuleNodeView<'a>,\n        parent_invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        let invocation_states = parent_invocation_states.map(|states| {{\n            let mut invocation_states = Vec::with_capacity(states.len() + 1);\n            invocation_states.push(node.invoking_state());\n            invocation_states.extend_from_slice(states);\n            invocation_states\n        }});\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        Self::__from_node_with_invocation_states(\n            node,\n            invocation_states.map(|states| states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<Vec<isize>>,\n    ) -> Self {{\n{stored_attrs_bindings}        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n"
-        );
-        let mut validated_constructors = String::new();
-        let _ = writeln!(
-            validated_constructors,
-            "    fn __from_validated_node(node: RuleNodeView<'a>) -> Self {{\n        Self::__from_validated_node_with_invocation_states(node, None)\n    }}\n\n    fn __from_validated_child_node(\n        node: RuleNodeView<'a>,\n        parent_invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        let invocation_states = parent_invocation_states.map(|states| {{\n            let mut invocation_states = Vec::with_capacity(states.len() + 1);\n            invocation_states.push(node.invoking_state());\n            invocation_states.extend_from_slice(states);\n            invocation_states\n        }});\n        Self::__from_validated_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_validated_listener_node(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<&[isize]>,\n    ) -> Self {{\n        Self::__from_validated_node_with_invocation_states(\n            node,\n            invocation_states.map(|states| states.to_vec()),\n        )\n    }}\n\n    fn __from_validated_node_with_invocation_states(\n        node: RuleNodeView<'a>,\n        invocation_states: Option<Vec<isize>>,\n    ) -> Self {{\n{stored_attrs_bindings}        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n\n    pub fn {rule_node_method}(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"validated context contains an active parser context\"),\n        }}\n    }}\n"
+            "antlr4_runtime::__antlr4_rust_context! {{\n    pub struct {view_name} {{\n        rule_index: {rule_index},\n        context_kind: {context_kind_match},\n        attributes: {{\n{attributes}        }},\n        methods: {{\n            rule_node: {rule_node_method},\n            child_count: {child_count},\n            direct_terminals: {direct_terminals},\n            start: {start},\n            text: {text},\n        }}\n    }}\n}}\n",
+            child_count = common_methods.child_count,
+            direct_terminals = common_methods.direct_terminals,
+            start = common_methods.start,
+            text = common_methods.text,
         );
         let rendered_accessors = render_context_child_accessors(ContextAccessorsRender {
             view_name,
@@ -382,7 +349,7 @@ fn __write_invocation_states(
         });
         let _ = writeln!(
             out,
-            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{common_accessors}}}\n\n#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated_constructors}{validated}}}\n{compatibility_impl}",
+            "#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated}}}\n{compatibility_impl}",
             recovered = rendered_accessors.recovered,
             validated = rendered_accessors.validated,
             compatibility_impl = compatibility_impl.unwrap_or_default(),
@@ -409,12 +376,6 @@ fn __write_invocation_states(
                 "impl<'a> {validated_visitable_trait}<'a> for {view_name}<'a, ValidatedTreeContext> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.{rule_node_method}().node() }}\n}}\n\nimpl<'a> {validated_visitable_trait}<'a> for &{view_name}<'a, ValidatedTreeContext> {{\n    fn into_validated_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.{rule_node_method}().node() }}\n}}\n"
             );
         }
-        // Java's RuleContext.toString(): bracketed invoking-state chain from
-        // this context to the root, the root's sentinel excluded.
-        let _ = writeln!(
-            out,
-            "impl<State> std::fmt::Display for {view_name}<'_, State> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match &self.__invocation_states {{\n            Some(states) => __write_invocation_states(f, states.iter().copied()),\n            None => match self.__node {{\n                __GeneratedRuleContext::Stored(node) => {{\n                    __write_invocation_states(f, node.invocation_states())\n                }}\n                __GeneratedRuleContext::Active {{ .. }} => {{\n                    unreachable!(\"active context is missing invocation states\")\n                }}\n            }},\n        }}\n    }}\n}}\n"
-        );
     }
 
     let _ = writeln!(
