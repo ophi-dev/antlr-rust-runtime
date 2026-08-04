@@ -116,14 +116,11 @@ pub(crate) fn compile_with_action_reference_parser(
                     && unit.kind == GrammarKind::Parser
             })
             .or_else(|| integrated.grammar.units.first())
-            .map_or_else(
-                || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),
-                |unit| unit.span.clone(),
-            );
+            .map(|unit| unit.span.clone());
         let diagnostics = unknown_entries
             .into_iter()
             .map(|entry| {
-                Diagnostic::error(
+                Diagnostic::error_with_optional_span(
                     "G4S079",
                     span.clone(),
                     format!("configured parser entry rule {entry} is not defined"),

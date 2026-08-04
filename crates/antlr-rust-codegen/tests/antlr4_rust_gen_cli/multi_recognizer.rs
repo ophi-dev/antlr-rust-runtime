@@ -132,6 +132,34 @@ mod generated_source_without_codegen_dependency {
 }
 
 #[test]
+fn builder_does_not_fabricate_spans_for_unreadable_later_roots() {
+    let temp = temporary_directory("builder-unlocated-diagnostic");
+    let loaded = temp.path().join("Loaded.g4");
+    let missing = temp.path().join("Missing.g4");
+    fs::write(&loaded, "lexer grammar Loaded;\nA: 'a';\n")
+        .expect("first grammar should be writable");
+
+    let error = Builder::new()
+        .grammar(&loaded)
+        .grammar(&missing)
+        .out_dir(temp.path().join("generated"))
+        .generate()
+        .expect_err("missing grammar root should fail");
+    let diagnostic = error
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code() == "G4L002")
+        .expect("missing root should produce G4L002");
+
+    assert!(
+        diagnostic.byte_span().is_none(),
+        "unlocated diagnostic must not borrow the first grammar's span: {diagnostic:#?}"
+    );
+    assert_eq!(diagnostic.line(), None);
+    assert_eq!(diagnostic.column(), None);
+}
+
+#[test]
 fn builder_exposes_structured_non_fatal_diagnostics_with_exact_spans() {
     let temp = temporary_directory("builder-structured-diagnostics");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))

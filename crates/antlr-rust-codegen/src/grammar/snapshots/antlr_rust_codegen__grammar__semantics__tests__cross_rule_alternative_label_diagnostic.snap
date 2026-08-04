@@ -1,6 +1,5 @@
 ---
 source: crates/antlr-rust-codegen/src/grammar/semantics.rs
-assertion_line: 3282
 expression: error.diagnostics()
 ---
 [
@@ -14,6 +13,7 @@ expression: error.diagnostics()
             ),
             bytes: 95..101,
         },
+        primary_is_source_backed: true,
         related: [
             RelatedDiagnostic {
                 span: SourceSpan {

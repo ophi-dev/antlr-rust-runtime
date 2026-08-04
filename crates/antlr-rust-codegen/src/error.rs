@@ -20,7 +20,7 @@ pub enum Severity {
     Error,
 }
 
-/// A located grammar compiler diagnostic.
+/// A grammar compiler diagnostic.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Diagnostic {
     code: &'static str,
@@ -77,6 +77,8 @@ impl Diagnostic {
     }
 
     /// Half-open UTF-8 byte range of the primary subject within [`Self::path`].
+    ///
+    /// Returns `None` when the diagnostic has no source-backed primary subject.
     pub fn byte_span(&self) -> Option<Range<usize>> {
         self.byte_span.clone()
     }

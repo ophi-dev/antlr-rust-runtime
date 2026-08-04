@@ -231,6 +231,9 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
         let path =
             location.map_or_else(|| fallback.to_path_buf(), |location| location.path.clone());
         let position = location.and_then(|location| location.position);
+        let primary = diagnostic.primary_source_span();
+        let structured_position = primary.and(position);
+        let byte_span = location.and(primary).map(source_byte_span);
         let display_position =
             position.map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
         let _ = writeln!(
@@ -245,8 +248,8 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
             severity,
             diagnostic.message.clone(),
             path,
-            position,
-            location.map(|_| source_byte_span(&diagnostic.primary)),
+            structured_position,
+            byte_span,
         ));
     }
     Error::compilation(message, diagnostics)
@@ -258,15 +261,17 @@ fn compilation_diagnostics(compilation: &grammar::compiler::Compilation) -> Vec<
         .iter()
         .filter(|diagnostic| diagnostic.severity == grammar::diagnostic::Severity::Warning)
         .map(|diagnostic| {
-            let path = compilation
-                .sources
-                .logical_path(diagnostic.primary.source)
+            let primary = diagnostic.primary_source_span();
+            let path = primary
+                .and_then(|span| compilation.sources.logical_path(span.source))
                 .map(Path::to_path_buf);
-            let byte_span = path.as_ref().map(|_| source_byte_span(&diagnostic.primary));
+            let byte_span = primary.filter(|_| path.is_some()).map(source_byte_span);
             let path = path.unwrap_or_else(|| PathBuf::from("<grammar>"));
-            let position = compilation
-                .sources
-                .line_column(diagnostic.primary.source, diagnostic.primary.bytes.start);
+            let position = primary.and_then(|span| {
+                compilation
+                    .sources
+                    .line_column(span.source, span.bytes.start)
+            });
             Diagnostic::new(
                 diagnostic.code,
                 Severity::Warning,
