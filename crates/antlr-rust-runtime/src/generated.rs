@@ -905,12 +905,15 @@ mod tests {
         &[4, 1, 1, 0, 0, 0],
     );
 
+    // Compile-only fixture: successful expansion of both facade macros with
+    // invocation-site prelude names shadowed is the assertion.
     #[allow(dead_code, unreachable_pub)]
     mod facade_hygiene {
         struct Box;
         struct FnMut;
         struct None;
         struct Option;
+        struct Rc;
         struct Result;
         struct Send;
         struct Some;
@@ -958,11 +961,6 @@ mod tests {
             metadata: metadata,
             parser_atn: parser_atn,
             reset(_parser) {}
-        }
-
-        #[test]
-        fn invocation_site_prelude_shadows_do_not_affect_facades() {
-            assert_eq!(::core::mem::size_of::<Option>(), 0);
         }
     }
 
