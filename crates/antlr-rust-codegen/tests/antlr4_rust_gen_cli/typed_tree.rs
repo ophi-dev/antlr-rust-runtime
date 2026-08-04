@@ -1410,8 +1410,8 @@ fn listener_and_visitor_generation_can_be_disabled_independently() {
 
     let output = run_antlr4_rust_gen(&[
         grammar.as_os_str(),
-        OsStr::new("-no-listener"),
-        OsStr::new("-visitor"),
+        OsStr::new("--no-listener"),
+        OsStr::new("--visitor"),
         OsStr::new("--out-dir"),
         visitor_only.as_os_str(),
     ]);

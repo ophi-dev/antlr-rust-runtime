@@ -176,10 +176,7 @@ pub(crate) fn enforce_require_full_options(
 
 pub(crate) fn normalize_option_hook(value: &str) -> Result<String, String> {
     let Some((key, option_value)) = value.split_once('=') else {
-        return Err(format!(
-            "--option-hook requires KEY=VALUE; got {value:?}\n\n{}",
-            usage()
-        ));
+        return Err(format!("--option-hook requires KEY=VALUE; got {value:?}"));
     };
     let key = key.trim();
     let option_value = option_value.trim();
@@ -190,10 +187,7 @@ pub(crate) fn normalize_option_hook(value: &str) -> Result<String, String> {
         || !key_chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
         || option_value.is_empty()
     {
-        return Err(format!(
-            "--option-hook requires KEY=VALUE; got {value:?}\n\n{}",
-            usage()
-        ));
+        return Err(format!("--option-hook requires KEY=VALUE; got {value:?}"));
     }
     Ok(format!("{key}={option_value}"))
 }
@@ -631,8 +625,7 @@ pub(crate) fn collect_structural_grammar_options(
 /// Reads the lexer ATN to locate serialized custom action coordinates.
 pub(crate) fn lexer_custom_actions(data: &LexerCodegenData<'_>) -> Vec<(i32, i32)> {
     let atn = data.lexer_atn();
-    atn
-        .lexer_actions()
+    atn.lexer_actions()
         .iter()
         .filter_map(|action| match action {
             LexerAction::Custom {

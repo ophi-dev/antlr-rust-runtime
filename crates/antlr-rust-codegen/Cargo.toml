@@ -26,14 +26,24 @@ path = "src/bin/antlr4-rust-gen.rs"
 antlr-rust-runtime.workspace = true
 antlr-rust-g4-parser.workspace = true
 antlr-rust-rs-parser.workspace = true
-icu_casemap.workspace = true
+clap = { version = "4.6.5", default-features = false, features = [
+    "cargo",
+    "derive",
+    "env",
+    "error-context",
+    "help",
+    "std",
+    "suggestions",
+    "usage",
+] }
+icu_casemap = "2.2.0"
 icu_properties.workspace = true
-intl.workspace = true
-petgraph.workspace = true
+intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
+petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 thiserror.workspace = true
 
 [dev-dependencies]
-hmac-sha256.workspace = true
+hmac-sha256 = "1"
 insta.workspace = true
 memchr.workspace = true
 

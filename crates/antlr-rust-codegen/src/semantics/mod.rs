@@ -1,4 +1,3 @@
-use crate::cli::usage;
 use crate::generator::prelude::*;
 use crate::parser::{
     DecisionReportRow, DecisionTierReport, LexerTypedHookKind, LexerTypedHookMapping,

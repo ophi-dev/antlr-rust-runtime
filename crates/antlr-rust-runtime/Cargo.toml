@@ -25,7 +25,7 @@ perf-counters = []
 
 [dependencies]
 memchr.workspace = true
-stacker.workspace = true
+stacker = "0.1.24"
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -23,19 +23,6 @@ pub(crate) enum SemUnknownPolicy {
 }
 
 impl SemUnknownPolicy {
-    pub(crate) fn parse_flag(value: &str) -> Result<Self, String> {
-        match value {
-            "error" => Ok(Self::Error),
-            "hook" => Ok(Self::Hook),
-            "assume-true" => Ok(Self::AssumeTrue),
-            "assume-false" => Ok(Self::AssumeFalse),
-            other => Err(format!(
-                "--sem-unknown accepts error, hook, assume-true, or assume-false; got {other}\n\n{}",
-                usage()
-            )),
-        }
-    }
-
     const fn manifest_name(self) -> &'static str {
         match self {
             Self::AssumeTrue => "assume-true",

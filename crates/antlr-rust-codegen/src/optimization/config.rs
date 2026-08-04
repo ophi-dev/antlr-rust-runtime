@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::cli::CompilerConfig;
+use crate::config::CompilerConfig;
 use crate::error::Error;
 use crate::grammar::compiler::Compilation;
 use crate::grammar::rule_reachability::EntryRuleConfig;

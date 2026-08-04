@@ -13,7 +13,7 @@ struct DecisionAltLook {
 /// Upper bound accepted by `--fixed-lookahead`. Dispatch-table size and
 /// analysis cost grow with depth; beyond a few tokens the tier stops paying
 /// for itself, so cap the flag rather than let a typo explode generation.
-pub(crate) const MAX_FIXED_LOOKAHEAD_FLAG: usize = 8;
+pub(crate) const MAX_FIXED_LOOKAHEAD_FLAG: u8 = 8;
 /// Per-alternative cap on lookahead rectangles gathered by the fixed-LL(k)
 /// walk. This is an *analysis* budget: generous enough that ordinary
 /// decisions get an honest disjoint / not-disjoint verdict (fan-outy

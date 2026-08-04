@@ -14,24 +14,7 @@ fn long_help_describes_source_only_cli() {
     );
     assert_eq!(utf8(&output.stderr), "");
 
-    let stdout = utf8(&output.stdout);
-    assert!(
-        stdout.starts_with("Usage: antlr4-rust-gen [OPTIONS] ROOT.g4...\n"),
-        "{stdout}"
-    );
-    assert!(stdout.contains("  -I, --lib DIR"), "{stdout}");
-    assert!(stdout.contains("  --option-hook KEY=VALUE"), "{stdout}");
-    assert!(stdout.contains("  --entry-rule NAME"), "{stdout}");
-    assert!(stdout.contains("  --prune-unreachable"), "{stdout}");
-    assert!(stdout.contains("  -listener, --listener"), "{stdout}");
-    assert!(stdout.contains("  -no-listener, --no-listener"), "{stdout}");
-    assert!(stdout.contains("  -visitor, --visitor"), "{stdout}");
-    assert!(stdout.contains("  -no-visitor, --no-visitor"), "{stdout}");
-    assert!(!stdout.contains("--lexer "), "{stdout}");
-    assert!(!stdout.contains("--parser "), "{stdout}");
-    assert!(!stdout.contains("--grammar "), "{stdout}");
-    assert!(stdout.contains("  -V, --version"), "{stdout}");
-    assert!(stdout.contains("  -h, --help"), "{stdout}");
+    insta::assert_snapshot!("antlr4_rust_gen_help", utf8(&output.stdout));
 }
 
 #[test]
@@ -164,7 +147,7 @@ fn help_flag_as_option_value_is_not_intercepted() {
 
     let stderr = utf8(&output.stderr);
     assert!(stderr.contains("--option-hook requires KEY=VALUE"));
-    assert!(stderr.contains("Usage: antlr4-rust-gen"));
+    assert!(stderr.contains("For more information, try '--help'."));
 }
 
 #[test]
@@ -177,7 +160,7 @@ fn version_flags_as_option_values_are_not_intercepted() {
 
         let stderr = utf8(&output.stderr);
         assert!(stderr.contains("--option-hook requires KEY=VALUE"));
-        assert!(stderr.contains("Usage: antlr4-rust-gen"));
+        assert!(stderr.contains("For more information, try '--help'."));
     }
 }
 
@@ -190,7 +173,8 @@ fn missing_roots_report_usage_on_stderr() {
     assert_eq!(utf8(&output.stdout), "");
 
     let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("at least one grammar root is required"));
+    assert!(stderr.contains("required arguments were not provided"));
+    assert!(stderr.contains("<ROOT.g4>..."));
     assert!(stderr.contains("Usage: antlr4-rust-gen"));
 }
 
@@ -202,7 +186,7 @@ fn unknown_arguments_report_usage_on_stderr() {
     assert_eq!(utf8(&output.stdout), "");
 
     let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("unknown argument --bogus"));
+    assert!(stderr.contains("unexpected argument '--bogus'"));
     assert!(stderr.contains("Usage: antlr4-rust-gen"));
 }
 
@@ -219,9 +203,21 @@ fn legacy_interp_flags_are_rejected() {
         assert!(!output.status.success(), "{flag} unexpectedly succeeded");
         let stderr = utf8(&output.stderr);
         assert!(
-            stderr.contains(&format!("unknown argument {flag}")),
+            stderr.contains(&format!("unexpected argument '{flag}'")),
             "{stderr}"
         );
+    }
+}
+
+#[test]
+fn antlr_single_dash_generation_flags_are_rejected() {
+    for flag in ["-listener", "-no-listener", "-visitor", "-no-visitor"] {
+        let output = run_antlr4_rust_gen(&[flag, "T.g4"]);
+
+        assert!(!output.status.success(), "{flag} unexpectedly succeeded");
+        let stderr = utf8(&output.stderr);
+        assert!(stderr.contains("unexpected argument"), "{stderr}");
+        assert!(stderr.contains("Usage: antlr4-rust-gen"), "{stderr}");
     }
 }
 
@@ -233,5 +229,5 @@ fn option_hook_requires_a_key_value_assignment() {
     assert_eq!(utf8(&output.stdout), "");
     let stderr = utf8(&output.stderr);
     assert!(stderr.contains("--option-hook requires KEY=VALUE"));
-    assert!(stderr.contains("Usage: antlr4-rust-gen"));
+    assert!(stderr.contains("For more information, try '--help'."));
 }

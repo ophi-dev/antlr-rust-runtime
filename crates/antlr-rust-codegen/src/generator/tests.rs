@@ -4854,27 +4854,6 @@ fn runtime_channel_names_are_dense_by_value() {
 }
 
 #[test]
-fn sem_unknown_flag_values_parse() {
-    assert_eq!(
-        SemUnknownPolicy::parse_flag("error").expect("error parses"),
-        SemUnknownPolicy::Error
-    );
-    assert_eq!(
-        SemUnknownPolicy::parse_flag("assume-true").expect("assume-true parses"),
-        SemUnknownPolicy::AssumeTrue
-    );
-    assert_eq!(
-        SemUnknownPolicy::parse_flag("assume-false").expect("assume-false parses"),
-        SemUnknownPolicy::AssumeFalse
-    );
-    assert_eq!(
-        SemUnknownPolicy::parse_flag("hook").expect("hook parses"),
-        SemUnknownPolicy::Hook
-    );
-    assert!(SemUnknownPolicy::parse_flag("bogus").is_err());
-}
-
-#[test]
 fn set_lexer_predicate_template_replaces_or_appends() {
     // A per-coordinate override must WIN over a built-in translation, so
     // setting a covered coordinate replaces its template rather than adding
