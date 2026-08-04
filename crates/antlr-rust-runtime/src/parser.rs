@@ -235,6 +235,8 @@ macro_rules! __antlr4_rust_generated_rule {
         $($setup)*
         let mut $consumed_eof = false;
         let mut $sync_error: Option<$crate::AntlrError> = None;
+        // The body has its own Result boundary: `?` and `return` exit only this
+        // closure, with errors entering recovery. Parser borrows must not escape it.
         let __result = (|| -> Result<(), $crate::AntlrError> {
             $($body)*
             Ok(())

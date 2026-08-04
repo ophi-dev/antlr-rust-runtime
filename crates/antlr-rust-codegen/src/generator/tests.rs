@@ -1694,15 +1694,16 @@ fn embedded_init_action_runs_at_rule_entry() {
     )
     .expect("embedded parser should render");
 
-    let setup_at = rendered
-        .find("setup {")
-        .expect("generated rule declares setup section");
     let init_at = rendered
         .find("println!(\"init\");")
         .expect("embedded @init body is emitted");
-    let body_at = rendered
-        .find("body {")
-        .expect("generated rule body follows entry setup");
+    let setup_at = rendered[..init_at]
+        .rfind("setup {")
+        .expect("generated rule declares setup section");
+    let body_at = init_at
+        + rendered[init_at..]
+            .find("body {")
+            .expect("generated rule body follows entry setup");
 
     assert!(
         setup_at < init_at && init_at < body_at,

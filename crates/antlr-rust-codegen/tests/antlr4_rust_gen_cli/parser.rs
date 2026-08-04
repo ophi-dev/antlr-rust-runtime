@@ -158,8 +158,8 @@ fn deeply_nested_input_parses_without_native_stack_overflow() {
     // the 10,000-level parse below proves its segmented-stack guard is active.
     let parser = fs::read_to_string(out.join("nest_parser.rs")).expect("parser should be emitted");
     assert!(
-        parser.contains("antlr4_runtime::__antlr4_rust_generated_rule!"),
-        "generated dispatch must use the shared rule lifecycle\n{parser}"
+        parser.contains("antlr4_runtime::__antlr4_rust_generated_rule! { dispatch self,"),
+        "generated dispatch must use the shared lifecycle dispatch form\n{parser}"
     );
 
     assert_generated_project(
