@@ -1,4 +1,4 @@
-use crate::cli::CompilerConfig;
+use crate::config::CompilerConfig;
 use crate::generator::prelude::*;
 use crate::lexer::{LexerRenderModel, render_lexer_model};
 use crate::optimization::OptimizationPlan;

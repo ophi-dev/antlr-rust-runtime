@@ -31,14 +31,9 @@ antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.28.
 antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.28.0" }
 antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.28.0" }
 # x-release-please-end
-hmac-sha256 = "1"
-icu_casemap = "2.2.0"
 icu_properties = { version = "2.2.0", features = ["alloc"] }
 insta = { version = "1", default-features = false }
-intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
 memchr = "2"
-petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
-stacker = "0.1.24"
 thiserror = "2"
 
 [workspace.lints.rust]

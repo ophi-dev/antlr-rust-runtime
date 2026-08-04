@@ -8,6 +8,9 @@
   `antlr-rust-codegen` package. Install the binary from that package or add it
   as a build dependency and use `Builder`; generated/runtime API revision 3 is
   unchanged.
+* Replace `antlr4-rust-gen`'s handwritten argument parser with `clap` and remove
+  the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
+  spellings. Use the corresponding double-dash options.
 
 ## [0.28.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.27.0...v0.28.0) (2026-08-04)
 

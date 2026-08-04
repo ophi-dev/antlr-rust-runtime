@@ -1,16 +1,19 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use clap::ValueEnum;
+
 use crate::artifact::Generation;
-use crate::cli::CompilerConfig;
+use crate::config::CompilerConfig;
 use crate::driver;
 use crate::error::Error;
+use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
 use crate::semantics::{
     SemPatternFile, SemUnknownPolicy, load_sem_patterns, normalize_option_hook,
 };
 
 /// How grammar action and predicate bodies are interpreted.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 pub enum ActionMode {
     #[default]
     Templates,
@@ -18,13 +21,24 @@ pub enum ActionMode {
 }
 
 /// Runtime policy for semantic coordinates that cannot be translated.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 pub enum UnknownSemanticPolicy {
     #[default]
     AssumeTrue,
     AssumeFalse,
     Hook,
     Error,
+}
+
+impl UnknownSemanticPolicy {
+    pub(crate) const fn into_internal(self) -> SemUnknownPolicy {
+        match self {
+            Self::AssumeTrue => SemUnknownPolicy::AssumeTrue,
+            Self::AssumeFalse => SemUnknownPolicy::AssumeFalse,
+            Self::Hook => SemUnknownPolicy::Hook,
+            Self::Error => SemUnknownPolicy::Error,
+        }
+    }
 }
 
 /// Configures grammar compilation and Rust source generation.
@@ -191,7 +205,7 @@ impl Builder {
         }
         if self
             .fixed_lookahead
-            .is_some_and(|depth| !(1..=8).contains(&depth))
+            .is_some_and(|depth| !(1..=usize::from(MAX_FIXED_LOOKAHEAD_FLAG)).contains(&depth))
         {
             return Err(Error::configuration(
                 "fixed lookahead must be between 1 and 8",
@@ -212,12 +226,7 @@ impl Builder {
             out_dir: output_directory,
             require_generated_parser: self.require_generated_parser,
             allow_unsupported_lexer_actions: self.allow_unsupported_lexer_actions,
-            sem_unknown: match self.semantic_policy {
-                UnknownSemanticPolicy::AssumeTrue => SemUnknownPolicy::AssumeTrue,
-                UnknownSemanticPolicy::AssumeFalse => SemUnknownPolicy::AssumeFalse,
-                UnknownSemanticPolicy::Hook => SemUnknownPolicy::Hook,
-                UnknownSemanticPolicy::Error => SemUnknownPolicy::Error,
-            },
+            sem_unknown: self.semantic_policy.into_internal(),
             sem_patterns: semantic_patterns,
             sem_patterns_path: semantic_patterns_path,
             require_full_semantics: self.require_full_semantics,

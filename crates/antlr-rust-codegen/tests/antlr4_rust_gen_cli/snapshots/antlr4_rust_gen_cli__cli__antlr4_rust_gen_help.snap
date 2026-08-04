@@ -1,0 +1,52 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/cli.rs
+expression: utf8(&output.stdout)
+---
+ANTLR v4 grammar compiler and Rust source generator
+
+Usage: antlr4-rust-gen [OPTIONS] <ROOT.g4>...
+
+Arguments:
+  <ROOT.g4>...  ANTLR grammar roots to compile
+
+Options:
+  -I, --lib <DIR>
+          Add an import/token-vocabulary lookup directory
+      --out-dir <DIR>
+          Write generated Rust files to this directory [default: .]
+      --require-generated-parser
+          Require generated bodies for every parser rule
+      --allow-unsupported-lexer-actions
+          Ignore unsupported lexer actions
+      --listener
+          Generate the typed listener and walker (default)
+      --no-listener
+          Do not generate the typed listener or walker
+      --visitor
+          Generate the typed visitor
+      --no-visitor
+          Do not generate the typed visitor (default)
+      --actions <ACTIONS>
+          Choose how grammar action and predicate bodies are interpreted [default: templates] [possible values: templates, embedded]
+      --sem-unknown <SEM_UNKNOWN>
+          Choose the unsupported semantic predicate policy [default: assume-true] [possible values: assume-true, assume-false, hook, error]
+      --sem-patterns <FILE>
+          Load semantic helper patterns
+      --option-hook <KEY=VALUE>
+          Acknowledge an option implemented by caller hooks
+      --require-full-semantics
+          Fail if any semantic coordinate or option is unsupported
+      --fixed-lookahead <K>
+          Compile decisions provable within K tokens into static dispatch tables
+      --entry-rule <NAME>
+          Declare a parser entry rule by bare name (repeatable)
+      --prune-unreachable
+          Remove parser rules unreachable from every entry rule
+      --optimize-precedence-ladders
+          Collapse proven linear precedence ladders (changes tree/API)
+      --report-precedence-ladders
+          Dry-run precedence-ladder analysis and emit only optimizations.json
+  -h, --help
+          Print help
+  -V, --version
+          Print version

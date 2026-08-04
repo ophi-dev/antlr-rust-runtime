@@ -240,9 +240,7 @@ with `--visitor`, `<Grammar>ValidatedVisitor` traits traverse this surface
 without `MissingChildError` plumbing. The original listener, visitor, and
 `ParsedFile` context APIs remain recovery-oriented and fallible.
 
-`--no-visitor` disables visitor generation. The generator also accepts ANTLR's
-single-dash spellings (`-listener`, `-no-listener`, `-visitor`,
-`-no-visitor`).
+`--no-visitor` disables visitor generation.
 
 Call the generated parser helper for the compact path:
 

@@ -3,6 +3,7 @@
 mod artifact;
 mod builder;
 mod cli;
+mod config;
 mod driver;
 pub(crate) mod embedded;
 mod error;
