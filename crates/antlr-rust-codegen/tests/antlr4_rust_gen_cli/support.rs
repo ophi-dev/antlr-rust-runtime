@@ -42,7 +42,7 @@ pub(super) fn run_antlr4_rust_testrig_with_stdin(
         .expect("antlr4-rust-testrig should finish")
 }
 
-fn cli_command(binary: &str) -> Command {
+pub(super) fn cli_command(binary: &str) -> Command {
     let mut command = Command::new(binary);
     command
         .env("NO_COLOR", "1")
@@ -115,6 +115,11 @@ pub(super) fn run_generated_project(
         fs::copy(temp_dir.join("generated").join(module), source.join(module))
             .expect("generated module should be copied into the check crate");
     }
+    let generated_support = temp_dir.join("generated").join("antlr-rust-support");
+    if generated_support.is_dir() {
+        copy_directory(&generated_support, &source.join("antlr-rust-support"))
+            .expect("generated Rust support should be copied into the check crate");
+    }
 
     Command::new(env!("CARGO"))
         .args([
@@ -135,6 +140,21 @@ pub(super) fn run_generated_project(
         .env("CARGO_TERM_COLOR", "never")
         .output()
         .expect("cargo check should run")
+}
+
+fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_directory(&source_path, &destination_path)?;
+        } else {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn utf8(bytes: &[u8]) -> &str {

@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+use crate::rust_support::RustSupportOptions;
 use crate::semantics::{SemPatternFile, SemUnknownPolicy};
 
 #[derive(Debug)]
@@ -38,4 +39,6 @@ pub(crate) struct CompilerConfig {
     pub(crate) report_precedence_ladders: bool,
     /// Emit a temporary-crate entry point for `antlr4-rust-testrig`.
     pub(crate) test_rig: Option<TestRigConfig>,
+    /// Trusted sibling `Rust/transformGrammar.py` execution.
+    pub(crate) rust_support: RustSupportOptions,
 }

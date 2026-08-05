@@ -3,9 +3,10 @@ use crate::generator::prelude::*;
 use crate::lexer::{LexerRenderModel, render_lexer_model};
 use crate::optimization::OptimizationPlan;
 use crate::parser::{ParserRenderOptions, render_parser_with_decision_report};
+use crate::rust_support::{self, PreparedRustSupport};
 use crate::semantics::{
-    DecisionReportGrammar, GrammarOptionEntry, SemanticsEntry, collect_lexer_semantics,
-    collect_parser_semantics_for_mode, collect_structural_grammar_options,
+    DecisionReportGrammar, GrammarOptionEntry, SemUnknownPolicy, SemanticsEntry,
+    collect_lexer_semantics, collect_parser_semantics_for_mode, collect_structural_grammar_options,
     enforce_require_full_options, enforce_require_full_semantics, enforce_sem_unknown,
     grammar_option_warning_messages, render_decisions_manifest, render_semantics_manifest,
 };
@@ -17,24 +18,26 @@ pub(crate) fn generate(
     args: &CompilerConfig,
     mut report: impl FnMut(&str) -> io::Result<()>,
 ) -> Result<Generation, Error> {
+    let prepared_support = rust_support::prepare(args)?;
     let optimizations = OptimizationPlan::from_compiler_config(args)?;
-    let action_reference_parser: grammar::action::ActionReferenceParser = if args.embedded_actions {
-        embedded::action_references
-    } else {
-        grammar::action::action_references
-    };
+    let action_reference_parser: grammar::action::ActionReferenceParser =
+        if args.embedded_actions || prepared_support.has_bundles() {
+            embedded::action_references
+        } else {
+            grammar::action::action_references
+        };
     let compilation = grammar::compiler::compile_with_action_reference_parser(
         LoadOptions {
-            roots: args.roots.clone(),
-            library_directories: args.library_directories.clone(),
+            roots: prepared_support.roots().to_vec(),
+            library_directories: prepared_support.library_directories().to_vec(),
         },
         optimizations.transforms(),
         optimizations.report_only(),
         optimizations.entry_rules(),
         action_reference_parser,
     )
-    .map_err(|error| compilation_error(&error, &args.roots))?;
-    let diagnostics = compilation_diagnostics(&compilation);
+    .map_err(|error| compilation_error(&error, &args.roots, &prepared_support))?;
+    let diagnostics = compilation_diagnostics(&compilation, &prepared_support);
     let mut warnings = diagnostics
         .iter()
         .map(render_diagnostic)
@@ -49,14 +52,17 @@ pub(crate) fn generate(
     warnings.extend(optimization_messages);
     let mut inputs = compilation
         .input_paths()
-        .map(Path::to_path_buf)
+        .map(|path| prepared_support.original_path(path))
         .collect::<Vec<_>>();
+    inputs.extend(prepared_support.additional_inputs());
     if let Some(path) = &args.sem_patterns_path {
         let path = fs::canonicalize(path).map_err(Error::generation)?;
         if !inputs.contains(&path) {
             inputs.push(path);
         }
     }
+    let mut seen_inputs = BTreeSet::new();
+    inputs.retain(|path| seen_inputs.insert(path.clone()));
     let optimization_manifest = optimizations.render_manifest(&compilation);
     if optimizations.report_only() {
         let mut artifacts = GeneratedArtifacts::default();
@@ -85,29 +91,41 @@ pub(crate) fn generate(
                 .lexer(grammar)
                 .expect("compiled root lexer artifact exists");
             let data = LexerCodegenData::from_compiled(compiled, &compilation.sources);
-            grammar_options.extend(collect_structural_grammar_options(
-                &data,
-                &args.option_hooks,
-            )?);
+            let support_enabled =
+                source_uses_rust_support(&data, &compilation.sources, &prepared_support);
+            let option_hooks = option_hooks(args, &data, support_enabled);
+            let options = collect_structural_grammar_options(&data, &option_hooks)?;
+            if support_enabled {
+                enforce_require_full_options(true, &options)?;
+            }
+            grammar_options.extend(options);
+            let embedded_actions = args.embedded_actions || support_enabled;
+            let sem_unknown = if support_enabled {
+                SemUnknownPolicy::Error
+            } else {
+                args.sem_unknown
+            };
+            let require_full_semantics = args.require_full_semantics || support_enabled;
             let entries = collect_lexer_semantics(
                 &data,
-                args.embedded_actions,
+                embedded_actions,
                 args.allow_unsupported_lexer_actions,
-                args.sem_unknown,
+                sem_unknown,
                 &args.sem_patterns,
             )?;
-            enforce_sem_unknown(args.sem_unknown, &entries)?;
-            enforce_require_full_semantics(args.require_full_semantics, &entries)?;
+            enforce_sem_unknown(sem_unknown, &entries)?;
+            enforce_require_full_semantics(require_full_semantics, &entries)?;
             let grammar_name = compiled.semantic.recognizer.name.clone();
             let render_model = LexerRenderModel::new(
                 &grammar_name,
                 &data,
                 args.allow_unsupported_lexer_actions,
-                args.sem_unknown,
+                sem_unknown,
                 &args.sem_patterns,
-                args.embedded_actions,
+                embedded_actions,
             );
-            let module = render_lexer_model(&render_model)?;
+            let mut module = render_lexer_model(&render_model)?;
+            prepared_support.decorate_rendered_module(&mut module);
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
             if args.test_rig.is_some() {
                 test_rig_lexers.push(TestRigLexer::new(grammar_name.clone()));
@@ -122,32 +140,44 @@ pub(crate) fn generate(
                 .parser(grammar)
                 .expect("compiled root parser artifact exists");
             let data = ParserCodegenData::from_compiled(compiled, &compilation.sources);
-            grammar_options.extend(collect_structural_grammar_options(
-                &data,
-                &args.option_hooks,
-            )?);
+            let support_enabled =
+                source_uses_rust_support(&data, &compilation.sources, &prepared_support);
+            let option_hooks = option_hooks(args, &data, support_enabled);
+            let options = collect_structural_grammar_options(&data, &option_hooks)?;
+            if support_enabled {
+                enforce_require_full_options(true, &options)?;
+            }
+            grammar_options.extend(options);
+            let embedded_actions = args.embedded_actions || support_enabled;
+            let sem_unknown = if support_enabled {
+                SemUnknownPolicy::Error
+            } else {
+                args.sem_unknown
+            };
+            let require_full_semantics = args.require_full_semantics || support_enabled;
             let entries = collect_parser_semantics_for_mode(
                 &data,
-                args.embedded_actions,
-                args.sem_unknown,
+                embedded_actions,
+                sem_unknown,
                 &args.sem_patterns,
             )?;
-            enforce_sem_unknown(args.sem_unknown, &entries)?;
-            enforce_require_full_semantics(args.require_full_semantics, &entries)?;
+            enforce_sem_unknown(sem_unknown, &entries)?;
+            enforce_require_full_semantics(require_full_semantics, &entries)?;
             let grammar_name = compiled.semantic.recognizer.name.clone();
-            let (module, decision_report_rows) = render_parser_with_decision_report(
+            let (mut module, decision_report_rows) = render_parser_with_decision_report(
                 &grammar_name,
                 &data,
                 ParserRenderOptions {
-                    require_generated_parser: args.require_generated_parser,
-                    embedded: args.embedded_actions,
+                    require_generated_parser: args.require_generated_parser || support_enabled,
+                    embedded: embedded_actions,
                     generate_listener: args.generate_listener,
                     generate_visitor: args.generate_visitor,
-                    sem_unknown: args.sem_unknown,
+                    sem_unknown,
                     patterns: Some(&args.sem_patterns),
                     fixed_lookahead: args.fixed_lookahead,
                 },
             )?;
+            prepared_support.decorate_rendered_module(&mut module);
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
             if args.test_rig.is_some() {
                 test_rig_parsers.push(TestRigParser::new(
@@ -171,8 +201,12 @@ pub(crate) fn generate(
     }
     warnings.extend(option_warnings);
     enforce_require_full_options(args.require_full_semantics, &grammar_options)?;
-    let manifest =
-        render_semantics_manifest(args.sem_unknown, &grammar_options, &manifest_grammars);
+    let manifest_policy = if prepared_support.all_roots_supported() {
+        SemUnknownPolicy::Error
+    } else {
+        args.sem_unknown
+    };
+    let manifest = render_semantics_manifest(manifest_policy, &grammar_options, &manifest_grammars);
 
     let mut artifacts = GeneratedArtifacts::default();
     for (path, module) in rendered_modules {
@@ -194,8 +228,38 @@ pub(crate) fn generate(
             render_test_rig(&test_rig.start_rule, &test_rig_lexers, &test_rig_parsers)?,
         )?;
     }
+    prepared_support.add_artifacts(&mut artifacts)?;
     let outputs = artifacts.write_to(&args.out_dir)?;
     Ok(Generation::new(inputs, outputs, warnings, diagnostics))
+}
+
+fn source_uses_rust_support(
+    data: &RecognizerCodegenData<'_>,
+    sources: &SourceSet,
+    prepared_support: &PreparedRustSupport,
+) -> bool {
+    data.semantic
+        .and_then(|semantic| sources.canonical_path(semantic.unit.source))
+        .is_some_and(|source| prepared_support.supports_source(source))
+}
+
+fn option_hooks(
+    args: &CompilerConfig,
+    data: &RecognizerCodegenData<'_>,
+    support_enabled: bool,
+) -> BTreeSet<String> {
+    let mut hooks = args.option_hooks.clone();
+    if support_enabled && let Some(semantic) = data.semantic {
+        hooks.extend(
+            semantic
+                .unit
+                .options
+                .iter()
+                .filter(|option| option.name.value == "superClass")
+                .map(|option| format!("{}={}", option.name.value, option.value.value)),
+        );
+    }
+    hooks
 }
 
 fn insert_rendered_module(
@@ -236,7 +300,11 @@ fn deduplicate_grammar_options(options: &mut Vec<GrammarOptionEntry>) {
     });
 }
 
-fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[PathBuf]) -> Error {
+fn compilation_error(
+    error: &grammar::diagnostic::CompilationError,
+    roots: &[PathBuf],
+    prepared_support: &PreparedRustSupport,
+) -> Error {
     let fallback = roots
         .first()
         .map_or_else(|| Path::new("<grammar>"), PathBuf::as_path);
@@ -248,12 +316,19 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
             grammar::diagnostic::Severity::Error => ("error", Severity::Error),
         };
         let location = error.location(index);
-        let path =
-            location.map_or_else(|| fallback.to_path_buf(), |location| location.path.clone());
-        let position = location.and_then(|location| location.position);
+        let path = location.map_or_else(
+            || fallback.to_path_buf(),
+            |location| prepared_support.original_path(&location.path),
+        );
         let primary = diagnostic.primary_source_span();
+        let remapped = location.is_some_and(|location| location.path != path);
+        let position = (!remapped)
+            .then(|| location.and_then(|location| location.position))
+            .flatten();
         let structured_position = primary.and(position);
-        let byte_span = location.and(primary).map(source_byte_span);
+        let byte_span = (!remapped)
+            .then(|| location.and(primary).map(source_byte_span))
+            .flatten();
         let display_position =
             position.map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
         let _ = writeln!(
@@ -275,22 +350,38 @@ fn compilation_error(error: &grammar::diagnostic::CompilationError, roots: &[Pat
     Error::compilation(message, diagnostics)
 }
 
-fn compilation_diagnostics(compilation: &grammar::compiler::Compilation) -> Vec<Diagnostic> {
+fn compilation_diagnostics(
+    compilation: &grammar::compiler::Compilation,
+    prepared_support: &PreparedRustSupport,
+) -> Vec<Diagnostic> {
     compilation
         .diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.severity == grammar::diagnostic::Severity::Warning)
         .map(|diagnostic| {
             let primary = diagnostic.primary_source_span();
-            let path = primary
+            let source_path = primary
                 .and_then(|span| compilation.sources.logical_path(span.source))
                 .map(Path::to_path_buf);
-            let byte_span = primary.filter(|_| path.is_some()).map(source_byte_span);
+            let path = source_path
+                .as_deref()
+                .map(|path| prepared_support.original_path(path));
+            let remapped = source_path
+                .as_ref()
+                .zip(path.as_ref())
+                .is_some_and(|(source, original)| source != original);
+            let byte_span = primary
+                .filter(|_| path.is_some() && !remapped)
+                .map(source_byte_span);
             let path = path.unwrap_or_else(|| PathBuf::from("<grammar>"));
             let position = primary.and_then(|span| {
-                compilation
-                    .sources
-                    .line_column(span.source, span.bytes.start)
+                (!remapped)
+                    .then(|| {
+                        compilation
+                            .sources
+                            .line_column(span.source, span.bytes.start)
+                    })
+                    .flatten()
             });
             Diagnostic::new(
                 diagnostic.code,

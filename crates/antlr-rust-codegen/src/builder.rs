@@ -8,6 +8,7 @@ use crate::config::CompilerConfig;
 use crate::driver;
 use crate::error::Error;
 use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
+use crate::rust_support::RustSupportOptions;
 use crate::semantics::{
     SemPatternFile, SemUnknownPolicy, load_sem_patterns, normalize_option_hook,
 };
@@ -240,6 +241,7 @@ impl Builder {
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
             test_rig: None,
+            rust_support: RustSupportOptions::disabled(),
         })
     }
 }

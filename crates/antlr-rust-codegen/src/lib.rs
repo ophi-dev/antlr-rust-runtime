@@ -16,6 +16,7 @@ mod lexer;
 mod optimization;
 mod parser;
 mod rust_output;
+mod rust_support;
 mod semantics;
 mod structural;
 mod test_rig;

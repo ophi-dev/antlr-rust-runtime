@@ -39,6 +39,46 @@ Or install the command:
 cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
+## Trusted grammars-v4 Rust support
+
+`antlr4-rust-gen` recognizes a sibling `Rust/transformGrammar.py` for the
+current C and Java target-support folders in `antlr/grammars-v4`. Before
+executing one, an interactive terminal shows its repository, revision, and
+content fingerprint and offers four choices: trust once, trust the exact
+revision, trust the repository, or abort.
+
+The approved transform runs with bundled RustPython in a child process over a
+disposable copy of the complete grammar directory. This is a trusted-source
+workflow, not a security sandbox. The original checkout is never modified.
+The child has a 30-second deadline and bounded output capture; use
+`--rust-support-timeout SECONDS` for a slower trusted transform.
+Transformed grammars, shipped `.rs` support files, and `rust-support.json` are
+emitted with the generated sources so the inputs remain inspectable. Embedded
+actions, strict semantics, generated-only parser coverage, and `superClass`
+acknowledgement are selected automatically for those staged sources.
+Shipped helpers are available through the generated recognizer module's stable
+`rust_support` re-export, for example
+`c_parser::rust_support::c_parser_base::reset_symbol_table()`.
+
+Non-interactive use fails before execution and prints the exact opt-in:
+
+```bash
+antlr4-rust-gen JavaLexer.g4 JavaParser.g4 \
+    --trust-rust-support sha256:<fingerprint> \
+    --out-dir src/generated
+```
+
+Persisted choices live in
+`$XDG_CONFIG_HOME/antlr4-rust/trusted-support.toml` (or the platform config
+directory). Set `ANTLR4_RUST_TRUST_STORE` to use a different file. Automatic
+transform execution is currently an `antlr4-rust-gen` CLI feature; the
+`Builder` API does not execute sibling scripts.
+
+The bundled Python compatibility target is deliberately limited to the imports
+and filesystem operations used by the two existing grammars-v4 transforms
+(`c/Rust` and `java/java/Rust`). A future transform with additional Python
+requirements is a new compatibility decision, not implicitly supported.
+
 The package also provides `antlr4-rust-testrig` for running a grammar directly
 against UTF-8 files or stdin. A grammar-only project needs no `Cargo.toml`,
 generated Rust sources, or runtime dependency; only a Rust toolchain is

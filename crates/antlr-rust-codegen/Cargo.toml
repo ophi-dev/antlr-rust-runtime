@@ -27,6 +27,8 @@ name = "antlr4-rust-testrig"
 path = "src/bin/antlr4-rust-testrig.rs"
 
 [dependencies]
+anstream = "1"
+anstyle = "1"
 antlr-rust-g4-parser.workspace = true
 antlr-rust-rs-parser.workspace = true
 antlr-rust-runtime.workspace = true
@@ -46,7 +48,19 @@ icu_properties.workspace = true
 intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
 miette = { version = "7.6.0", default-features = false, features = ["fancy"] }
 petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
+rustpython-pylib = { version = "0.5.0", features = ["freeze-stdlib"] }
+rustpython-vm = { version = "0.5.0", default-features = false, features = [
+    "compiler",
+    "freeze-stdlib",
+    "gc",
+    "host_env",
+    "stdio",
+] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tempfile = "3"
 thiserror.workspace = true
+toml = "0.9"
 
 [dev-dependencies]
 hmac-sha256      = "1"

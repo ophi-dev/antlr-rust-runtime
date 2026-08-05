@@ -789,6 +789,21 @@ its source spelling and a colliding native helper is exposed as `context_*`.
 Labeled alternatives currently materialize `_localctx` through the base rule
 context, so alternative-only children remain outside this compatibility surface.
 
+The CLI also discovers the current grammars-v4 C and Java
+`Rust/transformGrammar.py` files next to grammar roots. It fingerprints the
+`Rust/` folder and requires explicit trust before running the transform with
+bundled RustPython in a child over a disposable grammar-tree copy. Interactive
+choices can trust once, the exact revision, or the repository; non-interactive
+invocations fail with the exact `--trust-rust-support sha256:...` argument.
+This trusted-source path does not claim to sandbox the host. It stages inputs
+to preserve the checkout and automatically emits transformed grammars and
+shipped Rust support modules under `antlr-rust-support/`, plus a
+`rust-support.json` audit manifest.
+
+Python compatibility is intentionally pinned to the imports and filesystem
+operations used by those two transforms. Other or future sibling scripts must
+be evaluated explicitly before they are considered supported.
+
 ### Decision Tiers and `--fixed-lookahead`
 
 ANTLR always generates an adaptive `ALL(*)` recognizer: every decision point
