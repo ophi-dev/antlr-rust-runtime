@@ -1,0 +1,6 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: utf8(&valid_output.stderr)
+---
+enter   start, LT(1)=[@0,0:4='hello',<1>,1:0]
+exit    start

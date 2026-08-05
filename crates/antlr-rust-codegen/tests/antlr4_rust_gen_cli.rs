@@ -16,6 +16,8 @@ mod parser;
 mod semantics;
 #[path = "antlr4_rust_gen_cli/support.rs"]
 mod support;
+#[path = "antlr4_rust_gen_cli/testrig.rs"]
+mod testrig;
 #[path = "antlr4_rust_gen_cli/transforms.rs"]
 mod transforms;
 #[path = "antlr4_rust_gen_cli/typed_tree.rs"]

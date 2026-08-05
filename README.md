@@ -107,6 +107,38 @@ antlr4-rust-gen \
 Use multiple roots when a build should emit several independent recognizers in
 one deterministic source-set compilation.
 
+### Run a grammar with TestRig
+
+Install the companion TestRig command from the codegen package:
+
+```bash
+cargo install antlr-rust-codegen --bin antlr4-rust-testrig
+```
+
+Pass a combined grammar, its parser start rule, and zero or more UTF-8 inputs.
+With no input files the command reads stdin:
+
+```bash
+antlr4-rust-testrig JSON.g4 json --tokens --tree examples/*.json
+echo '{"ok":true}' | antlr4-rust-testrig JSON json --tree
+```
+
+For a lexer grammar, use the special start rule `tokens`. Pair split grammars
+with `--lexer-grammar` and the same import directories used for generation:
+
+```bash
+antlr4-rust-testrig MyGrammarParser.g4 start \
+  --lexer-grammar MyGrammarLexer.g4 \
+  --lib grammar \
+  tests/valid/*.txt
+```
+
+`--trace`, `--diagnostics`, and `--sll` expose the corresponding parser modes.
+TestRig processes every named input and returns a non-zero status when grammar
+generation, temporary runner compilation, input reading, lexing, or parsing
+fails. Recovered lexer and parser syntax errors therefore fail CI even when a
+parse tree was produced.
+
 ### Generated-source/runtime compatibility
 
 Every newly generated lexer and parser contains a compile-time generated-code

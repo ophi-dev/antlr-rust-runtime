@@ -4,6 +4,11 @@ use std::path::PathBuf;
 use crate::semantics::{SemPatternFile, SemUnknownPolicy};
 
 #[derive(Debug)]
+pub(crate) struct TestRigConfig {
+    pub(crate) start_rule: String,
+}
+
+#[derive(Debug)]
 pub(crate) struct CompilerConfig {
     pub(crate) roots: Vec<PathBuf>,
     pub(crate) library_directories: Vec<PathBuf>,
@@ -31,4 +36,6 @@ pub(crate) struct CompilerConfig {
     pub(crate) optimize_precedence_ladders: bool,
     /// Analyze the same pass on a shadow model and emit only its manifest.
     pub(crate) report_precedence_ladders: bool,
+    /// Emit a temporary-crate entry point for `antlr4-rust-testrig`.
+    pub(crate) test_rig: Option<TestRigConfig>,
 }

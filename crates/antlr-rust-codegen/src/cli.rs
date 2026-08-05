@@ -154,6 +154,7 @@ impl CliArgs {
             prune_unreachable: self.prune_unreachable,
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
+            test_rig: None,
         })
     }
 }

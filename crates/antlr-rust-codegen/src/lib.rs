@@ -17,6 +17,8 @@ mod parser;
 mod rust_output;
 mod semantics;
 mod structural;
+mod test_rig;
+mod testrig_cli;
 
 pub use artifact::Generation;
 pub use builder::{ActionMode, Builder, UnknownSemanticPolicy};
@@ -46,4 +48,10 @@ pub(crate) use structural::{structural_embedded_model, structural_predicates};
 #[doc(hidden)]
 pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     cli::run_cli()
+}
+
+/// Runs the `antlr4-rust-testrig` command using the process arguments.
+#[doc(hidden)]
+pub fn run_testrig_cli() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
+    testrig_cli::run_cli()
 }

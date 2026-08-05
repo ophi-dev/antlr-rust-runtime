@@ -39,6 +39,28 @@ Or install the command:
 cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
+The package also provides `antlr4-rust-testrig` for running a grammar directly
+against UTF-8 files or stdin:
+
+```bash
+cargo install antlr-rust-codegen --bin antlr4-rust-testrig
+antlr4-rust-testrig JSON.g4 json --tokens --tree example.json
+```
+
+Use `tokens` as the start rule for a lexer grammar. For split grammars, pass
+the parser grammar first and pair it with `--lexer-grammar`:
+
+```bash
+antlr4-rust-testrig MyParser.g4 start \
+    --lexer-grammar MyLexer.g4 --lib grammar inputs/*.txt
+```
+
+The command generates and compiles a temporary grammar-specific runner because
+Rust cannot reflectively load recognizer types or call a rule by name. It
+processes every input and exits non-zero if generation, compilation, input
+reading, lexing, or parsing reports an error, so the same command can be used
+as a test runner.
+
 The runtime, codegen, and internal parser packages are released in lockstep.
 
 ## Internal module ownership

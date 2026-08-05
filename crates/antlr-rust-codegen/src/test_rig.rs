@@ -1,0 +1,489 @@
+use std::io;
+
+use crate::parser::parser_public_rule_method_names;
+use crate::rust_output::{module_name, replace_all, rust_type_name};
+
+pub(crate) const LEXER_START_RULE: &str = "tokens";
+pub(crate) const MAIN_PATH: &str = "__antlr4_rust_testrig/main.rs";
+
+#[derive(Debug)]
+pub(crate) struct TestRigLexer {
+    grammar_name: String,
+}
+
+impl TestRigLexer {
+    pub(crate) const fn new(grammar_name: String) -> Self {
+        Self { grammar_name }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct TestRigParser {
+    grammar_name: String,
+    rule_names: Vec<String>,
+    rule_methods: Vec<String>,
+}
+
+impl TestRigParser {
+    pub(crate) fn new(grammar_name: String, rule_names: Vec<String>) -> Self {
+        let rule_methods = parser_public_rule_method_names(&rule_names);
+        Self {
+            grammar_name,
+            rule_names,
+            rule_methods,
+        }
+    }
+}
+
+pub(crate) fn render_test_rig(
+    start_rule: &str,
+    lexers: &[TestRigLexer],
+    parsers: &[TestRigParser],
+) -> io::Result<String> {
+    if start_rule == LEXER_START_RULE {
+        let lexer = select_lexer(lexers, None)?;
+        return Ok(render_lexer_runner(lexer));
+    }
+
+    let (parser, rule_index) = select_parser(parsers, start_rule)?;
+    let lexer = select_lexer(lexers, Some(parser))?;
+    let rule_method = parser
+        .rule_methods
+        .get(rule_index)
+        .expect("parser rule names and rendered methods have equal lengths");
+    Ok(render_parser_runner(lexer, parser, rule_method))
+}
+
+fn select_parser<'a>(
+    parsers: &'a [TestRigParser],
+    start_rule: &str,
+) -> io::Result<(&'a TestRigParser, usize)> {
+    let matches = parsers
+        .iter()
+        .filter_map(|parser| {
+            parser
+                .rule_names
+                .iter()
+                .position(|rule| rule == start_rule)
+                .map(|index| (parser, index))
+        })
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [selected] => Ok(*selected),
+        [] => {
+            let available = parsers
+                .iter()
+                .flat_map(|parser| {
+                    parser
+                        .rule_names
+                        .iter()
+                        .map(|rule| format!("{}.{}", parser.grammar_name, rule))
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let suffix = if available.is_empty() {
+                "no parser was generated".to_owned()
+            } else {
+                format!("available rules: {available}")
+            };
+            Err(invalid_input(format!(
+                "test rig start rule `{start_rule}` was not found; {suffix}"
+            )))
+        }
+        _ => {
+            let owners = matches
+                .iter()
+                .map(|(parser, _)| parser.grammar_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(invalid_input(format!(
+                "test rig start rule `{start_rule}` is ambiguous across parsers: {owners}"
+            )))
+        }
+    }
+}
+
+fn select_lexer<'a>(
+    lexers: &'a [TestRigLexer],
+    parser: Option<&TestRigParser>,
+) -> io::Result<&'a TestRigLexer> {
+    match lexers {
+        [lexer] => return Ok(lexer),
+        [] => {
+            return Err(invalid_input(
+                "test rig requires a generated lexer; use a combined grammar or pass \
+                 --lexer-grammar for a split grammar",
+            ));
+        }
+        _ => {}
+    }
+
+    if let Some(parser) = parser {
+        let parser_stem = parser
+            .grammar_name
+            .strip_suffix("Parser")
+            .unwrap_or(&parser.grammar_name);
+        let matches = lexers
+            .iter()
+            .filter(|lexer| {
+                lexer
+                    .grammar_name
+                    .strip_suffix("Lexer")
+                    .unwrap_or(&lexer.grammar_name)
+                    == parser_stem
+            })
+            .collect::<Vec<_>>();
+        if let [lexer] = matches.as_slice() {
+            return Ok(*lexer);
+        }
+    }
+
+    let names = lexers
+        .iter()
+        .map(|lexer| lexer.grammar_name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(invalid_input(format!(
+        "test rig cannot choose a lexer from multiple generated lexers: {names}"
+    )))
+}
+
+fn invalid_input(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+fn render_lexer_runner(lexer: &TestRigLexer) -> String {
+    let mut rendered = assemble_runner(LEXER_RUNNER_TEMPLATE);
+    for (placeholder, value) in [
+        ("__LEXER_MODULE__", module_name(&lexer.grammar_name)),
+        ("__LEXER_TYPE__", rust_type_name(&lexer.grammar_name)),
+    ] {
+        rendered = replace_all(&rendered, placeholder, &value);
+    }
+    rendered
+}
+
+fn render_parser_runner(lexer: &TestRigLexer, parser: &TestRigParser, rule_method: &str) -> String {
+    let mut rendered = assemble_runner(PARSER_RUNNER_TEMPLATE);
+    for (placeholder, value) in [
+        ("__LEXER_MODULE__", module_name(&lexer.grammar_name)),
+        ("__LEXER_TYPE__", rust_type_name(&lexer.grammar_name)),
+        ("__PARSER_MODULE__", module_name(&parser.grammar_name)),
+        ("__PARSER_TYPE__", rust_type_name(&parser.grammar_name)),
+        ("__RULE_METHOD__", rule_method.to_owned()),
+    ] {
+        rendered = replace_all(&rendered, placeholder, &value);
+    }
+    rendered
+}
+
+const RUNNER_PREAMBLE: &str = r#"use std::ffi::OsString;
+use std::fs::File;
+use std::io;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use antlr4_runtime::{CommonTokenStream, InputStream};
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Options {
+    tokens: bool,
+    tree: bool,
+    trace: bool,
+    diagnostics: bool,
+    sll: bool,
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<bool, Box<dyn std::error::Error>> {
+    let (options, input_files) = options_and_inputs()?;
+    if input_files.is_empty() {
+        let stdin = io::stdin();
+        let input = InputStream::from_reader(stdin.lock())?;
+        return process(input, options);
+    }
+
+    let show_names = input_files.len() > 1;
+    let mut success = true;
+    for input_file in input_files {
+        let path = PathBuf::from(input_file);
+        if show_names {
+            eprintln!("{}", path.display());
+        }
+        match process_file(&path, options) {
+            Ok(input_success) => success &= input_success,
+            Err(error) => {
+                eprintln!("error: {}: {error}", path.display());
+                success = false;
+            }
+        }
+    }
+    Ok(success)
+}
+
+fn process_file(
+    path: &std::path::Path,
+    options: Options,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let input = InputStream::from_reader_with_source_name(
+        File::open(path)?,
+        path.display().to_string(),
+    )?;
+    process(input, options)
+}
+
+fn options_and_inputs() -> io::Result<(Options, Vec<OsString>)> {
+    let mut options = Options::default();
+    let mut inputs = Vec::new();
+    let mut arguments = std::env::args_os().skip(1);
+    while let Some(argument) = arguments.next() {
+        match argument.to_str() {
+            Some("--tokens") => options.tokens = true,
+            Some("--tree") => options.tree = true,
+            Some("--trace") => options.trace = true,
+            Some("--diagnostics") => options.diagnostics = true,
+            Some("--sll") => options.sll = true,
+            Some("--") => {
+                inputs.extend(arguments);
+                break;
+            }
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unexpected runner argument {}", argument.to_string_lossy()),
+                ));
+            }
+        }
+    }
+    Ok((options, inputs))
+}
+
+fn report_lexer_errors<L: antlr4_runtime::TokenSource>(
+    tokens: &mut CommonTokenStream<L>,
+) -> usize {
+    tokens.fill();
+    let count = tokens.number_of_source_errors();
+    for error in tokens.drain_source_errors() {
+        if !tokens.token_source().report_error(&error) {
+            eprintln!("line {}:{} {}", error.line, error.column, error.message);
+        }
+    }
+    count
+}
+"#;
+
+const LEXER_RUNNER_TEMPLATE: &str = r#"#![allow(clippy::print_stderr, clippy::print_stdout)]
+
+#[path = "../__LEXER_MODULE__.rs"]
+mod generated_lexer;
+
+use generated_lexer::__LEXER_TYPE__;
+
+__RUNNER_PREAMBLE__
+
+fn process(
+    input: InputStream,
+    options: Options,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let lexer = __LEXER_TYPE__::new(input);
+    let mut tokens = CommonTokenStream::try_new(lexer)?;
+    let lexer_errors = report_lexer_errors(&mut tokens);
+    if options.tokens {
+        for token in tokens.tokens() {
+            println!("{token}");
+        }
+    }
+    let _ = (
+        options.tree,
+        options.trace,
+        options.diagnostics,
+        options.sll,
+    );
+    Ok(lexer_errors == 0)
+}
+"#;
+
+const PARSER_RUNNER_TEMPLATE: &str = r#"#![allow(clippy::print_stderr, clippy::print_stdout)]
+
+#[path = "../__LEXER_MODULE__.rs"]
+mod generated_lexer;
+#[path = "../__PARSER_MODULE__.rs"]
+mod generated_parser;
+
+use antlr4_runtime::{
+    AntlrError, EnterRuleEvent, ParseListener, Parser as _, PredictionMode,
+};
+use generated_lexer::__LEXER_TYPE__;
+use generated_parser::__PARSER_TYPE__;
+
+__RUNNER_PREAMBLE__
+
+#[derive(Debug)]
+struct TraceListener {
+    rule_names: &'static [&'static str],
+    depth: usize,
+}
+
+impl TraceListener {
+    const fn new(rule_names: &'static [&'static str]) -> Self {
+        Self {
+            rule_names,
+            depth: 0,
+        }
+    }
+
+    fn rule_name(&self, rule_index: usize) -> &str {
+        self.rule_names
+            .get(rule_index)
+            .copied()
+            .unwrap_or("<unknown>")
+    }
+}
+
+impl ParseListener for TraceListener {
+    fn enter_every_rule(&mut self, event: &EnterRuleEvent<'_>) -> Result<(), AntlrError> {
+        let lookahead = event
+            .current
+            .map_or_else(|| "<EOF>".to_owned(), |token| token.to_string());
+        eprintln!(
+            "{}enter   {}, LT(1)={lookahead}",
+            "  ".repeat(self.depth),
+            self.rule_name(event.rule_index),
+        );
+        self.depth += 1;
+        Ok(())
+    }
+
+    fn exit_every_rule(&mut self, rule_index: usize) {
+        self.depth = self.depth.saturating_sub(1);
+        eprintln!(
+            "{}exit    {}",
+            "  ".repeat(self.depth),
+            self.rule_name(rule_index),
+        );
+    }
+}
+
+fn process(
+    input: InputStream,
+    options: Options,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let lexer = __LEXER_TYPE__::new(input);
+    let mut tokens = CommonTokenStream::try_new(lexer)?;
+    let lexer_errors = report_lexer_errors(&mut tokens);
+    if options.tokens {
+        for token in tokens.tokens() {
+            println!("{token}");
+        }
+    }
+
+    let mut parser = __PARSER_TYPE__::new(tokens);
+    if options.tree {
+        parser.set_build_parse_trees(true);
+    }
+    if options.diagnostics {
+        parser.set_report_diagnostic_errors(true);
+        parser.set_prediction_mode(PredictionMode::LlExactAmbigDetection);
+    }
+    if options.sll {
+        parser.set_prediction_mode(PredictionMode::Sll);
+    }
+    if options.trace {
+        parser.add_parse_listener(TraceListener::new(
+            generated_parser::rule_names(),
+        ));
+    }
+
+    let result = parser.__RULE_METHOD__();
+    let parser_errors = parser.number_of_syntax_errors();
+    let root = match result {
+        Ok(root) => Some(root),
+        Err(error) => {
+            if !matches!(error, AntlrError::ParserError { .. }) {
+                eprintln!("error: {error}");
+            }
+            None
+        }
+    };
+    if options.tree && let Some(root) = root {
+        println!(
+            "{}",
+            parser
+                .node(root)
+                .to_string_tree(Some(&parser), parser.token_store()),
+        );
+    }
+    Ok(lexer_errors == 0 && parser_errors == 0 && root.is_some())
+}
+
+"#;
+
+fn assemble_runner(template: &str) -> String {
+    replace_all(template, "__RUNNER_PREAMBLE__", RUNNER_PREAMBLE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lexer(name: &str) -> TestRigLexer {
+        TestRigLexer::new(name.to_owned())
+    }
+
+    fn parser(name: &str, rules: &[&str]) -> TestRigParser {
+        TestRigParser::new(
+            name.to_owned(),
+            rules.iter().map(|rule| (*rule).to_owned()).collect(),
+        )
+    }
+
+    #[test]
+    fn renders_rule_dispatch_with_generated_method_name() {
+        let rendered = render_test_rig(
+            "reset",
+            &[lexer("DemoLexer")],
+            &[parser("DemoParser", &["start", "reset"])],
+        )
+        .expect("test rig should render");
+
+        assert!(rendered.contains("parser.reset_rule()"));
+        assert!(rendered.contains(r#"#[path = "../demo_lexer.rs"]"#));
+        assert!(rendered.contains(r#"#[path = "../demo_parser.rs"]"#));
+    }
+
+    #[test]
+    fn rejects_unknown_and_ambiguous_rules() {
+        let missing = render_test_rig(
+            "missing",
+            &[lexer("DemoLexer")],
+            &[parser("DemoParser", &["start"])],
+        )
+        .expect_err("missing start rule should fail");
+        assert!(
+            missing
+                .to_string()
+                .contains("available rules: DemoParser.start")
+        );
+
+        let ambiguous = render_test_rig(
+            "start",
+            &[lexer("DemoLexer")],
+            &[
+                parser("FirstParser", &["start"]),
+                parser("SecondParser", &["start"]),
+            ],
+        )
+        .expect_err("ambiguous start rule should fail");
+        assert!(ambiguous.to_string().contains("FirstParser, SecondParser"));
+    }
+}

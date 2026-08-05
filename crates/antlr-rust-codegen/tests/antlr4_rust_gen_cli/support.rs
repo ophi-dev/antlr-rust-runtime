@@ -1,8 +1,9 @@
 pub(super) use std::collections::BTreeSet;
 pub(super) use std::ffi::OsStr;
 pub(super) use std::fs;
+use std::io::Write as _;
 pub(super) use std::path::{Path, PathBuf};
-pub(super) use std::process::{Command, Output};
+pub(super) use std::process::{Command, Output, Stdio};
 pub(super) use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
@@ -10,6 +11,35 @@ pub(super) fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
         .args(args)
         .output()
         .expect("antlr4-rust-gen should run")
+}
+
+pub(super) fn run_antlr4_rust_testrig(args: &[impl AsRef<OsStr>]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_antlr4-rust-testrig"))
+        .args(args)
+        .output()
+        .expect("antlr4-rust-testrig should run")
+}
+
+pub(super) fn run_antlr4_rust_testrig_with_stdin(
+    args: &[impl AsRef<OsStr>],
+    input: &[u8],
+) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_antlr4-rust-testrig"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("antlr4-rust-testrig should start");
+    child
+        .stdin
+        .take()
+        .expect("testrig stdin should be piped")
+        .write_all(input)
+        .expect("testrig input should be writable");
+    child
+        .wait_with_output()
+        .expect("antlr4-rust-testrig should finish")
 }
 
 pub(super) fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
