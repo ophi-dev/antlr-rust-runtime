@@ -358,10 +358,12 @@ fn default_trust_store_path() -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
+    use std::fs;
     use std::sync::{Arc, Barrier};
 
-    use super::{BundleIdentity, TrustStore, normalize_repository};
+    use super::{BundleIdentity, TrustStore, fingerprint_directory, normalize_repository};
 
     #[test]
     fn repository_identity_strips_remote_credentials() {
@@ -464,5 +466,28 @@ mod tests {
         };
 
         assert_ne!(first.artifact_id(), second.artifact_id());
+    }
+
+    #[test]
+    fn identity_hashes_match_legacy_sha2_values() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let nested = temporary.path().join("nested");
+        fs::create_dir(&nested).expect("nested support directory");
+        fs::write(temporary.path().join("Grammar.g4"), "grammar Example;\n")
+            .expect("root support file");
+        fs::write(nested.join("support.rs"), "pub struct Support;\n").expect("nested support file");
+
+        let identity = BundleIdentity {
+            repository: "https://example.test/grammars".to_owned(),
+            revision: Some("0123456789abcdef".to_owned()),
+            bundle_path: "example/Rust".to_owned(),
+            fingerprint: fingerprint_directory(temporary.path())
+                .expect("support directory fingerprint"),
+        };
+
+        insta::assert_debug_snapshot!(
+            "legacy_sha2_identity_values",
+            (&identity.fingerprint, identity.artifact_id())
+        );
     }
 }
