@@ -60,6 +60,25 @@ fn noninteractive_bundle_requires_its_exact_fingerprint() {
 }
 
 #[test]
+fn noninteractive_bundle_rejects_a_different_fingerprint() {
+    let temp = temporary_directory("rust-support-mismatched-trust");
+    let grammar = fixture("java/JavaParser.g4");
+    let generated = temp.path().join("generated");
+    let trust_store = temp.path().join("trust.toml");
+    let fingerprint = format!("sha256:{}", "0".repeat(64));
+
+    let output = run_with_trust_store(&[&grammar], &generated, &trust_store, Some(&fingerprint));
+
+    assert!(
+        !output.status.success(),
+        "mismatched support fingerprint unexpectedly ran"
+    );
+    let stderr = normalize_cli_snapshot(utf8(&output.stderr));
+    assert!(stderr.contains("Rust target support is not trusted"));
+    assert!(!generated.exists());
+}
+
+#[test]
 fn current_java_transform_runs_from_the_staged_tree() {
     let temp = temporary_directory("rust-support-java");
     let grammar = fixture("java/JavaParser.g4");
@@ -69,7 +88,9 @@ fn current_java_transform_runs_from_the_staged_tree() {
     let trust_store = temp.path().join("trust.toml");
 
     let untrusted = run_with_trust_store(&[&lexer, &grammar], &generated, &trust_store, None);
-    let fingerprint = untrusted_fingerprint(utf8(&untrusted.stderr)).to_owned();
+    assert!(!untrusted.status.success());
+    let untrusted_stderr = normalize_cli_snapshot(utf8(&untrusted.stderr));
+    let fingerprint = untrusted_fingerprint(&untrusted_stderr).to_owned();
     let output = run_with_trust_store(
         &[&lexer, &grammar],
         &generated,
@@ -136,7 +157,9 @@ fn current_c_transform_wires_its_rust_support_module() {
     let trust_store = temp.path().join("trust.toml");
 
     let untrusted = run_with_trust_store(&[&grammar], &generated, &trust_store, None);
-    let fingerprint = untrusted_fingerprint(utf8(&untrusted.stderr)).to_owned();
+    assert!(!untrusted.status.success());
+    let untrusted_stderr = normalize_cli_snapshot(utf8(&untrusted.stderr));
+    let fingerprint = untrusted_fingerprint(&untrusted_stderr).to_owned();
     let output = run_with_trust_store(&[&grammar], &generated, &trust_store, Some(&fingerprint));
 
     assert!(

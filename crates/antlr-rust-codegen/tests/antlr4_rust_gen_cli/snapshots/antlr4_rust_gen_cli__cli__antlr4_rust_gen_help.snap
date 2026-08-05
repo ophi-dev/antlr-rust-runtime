@@ -48,6 +48,8 @@ Options:
           Dry-run precedence-ladder analysis and emit only optimizations.json
       --trust-rust-support <SHA256>
           Trust one exact sibling Rust support bundle fingerprint
+      --rust-support-timeout <SECONDS>
+          Maximum time allowed for a trusted Rust support transform [default: 30]
   -h, --help
           Print help
   -V, --version

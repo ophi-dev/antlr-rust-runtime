@@ -1,5 +1,6 @@
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use clap::{ArgAction, Parser};
 use miette::{Context as _, IntoDiagnostic as _};
@@ -155,6 +156,15 @@ struct CliArgs {
         value_parser = parse_trust_fingerprint
     )]
     trusted_rust_support: Vec<String>,
+
+    /// Maximum time allowed for a trusted Rust support transform.
+    #[arg(
+        long = "rust-support-timeout",
+        value_name = "SECONDS",
+        default_value_t = 30,
+        value_parser = clap::value_parser!(u64).range(1..=3600)
+    )]
+    rust_support_timeout: u64,
 }
 
 impl CliArgs {
@@ -192,6 +202,7 @@ impl CliArgs {
                 interactive: io::stdin().is_terminal() && io::stderr().is_terminal(),
                 child_executable: Some(std::env::current_exe().into_diagnostic()?),
                 trust_store_path: std::env::var_os("ANTLR4_RUST_TRUST_STORE").map(PathBuf::from),
+                transform_timeout: Duration::from_secs(self.rust_support_timeout),
             },
         })
     }

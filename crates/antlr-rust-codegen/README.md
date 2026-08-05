@@ -50,6 +50,8 @@ revision, trust the repository, or abort.
 The approved transform runs with bundled RustPython in a child process over a
 disposable copy of the complete grammar directory. This is a trusted-source
 workflow, not a security sandbox. The original checkout is never modified.
+The child has a 30-second deadline and bounded output capture; use
+`--rust-support-timeout SECONDS` for a slower trusted transform.
 Transformed grammars, shipped `.rs` support files, and `rust-support.json` are
 emitted with the generated sources so the inputs remain inspectable. Embedded
 actions, strict semantics, generated-only parser coverage, and `superClass`

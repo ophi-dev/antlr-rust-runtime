@@ -315,10 +315,12 @@ fn compilation_error(
             || fallback.to_path_buf(),
             |location| prepared_support.original_path(&location.path),
         );
-        let position = location.and_then(|location| location.position);
         let primary = diagnostic.primary_source_span();
-        let structured_position = primary.and(position);
         let remapped = location.is_some_and(|location| location.path != path);
+        let position = (!remapped)
+            .then(|| location.and_then(|location| location.position))
+            .flatten();
+        let structured_position = primary.and(position);
         let byte_span = (!remapped)
             .then(|| location.and(primary).map(source_byte_span))
             .flatten();
@@ -368,9 +370,13 @@ fn compilation_diagnostics(
                 .map(source_byte_span);
             let path = path.unwrap_or_else(|| PathBuf::from("<grammar>"));
             let position = primary.and_then(|span| {
-                compilation
-                    .sources
-                    .line_column(span.source, span.bytes.start)
+                (!remapped)
+                    .then(|| {
+                        compilation
+                            .sources
+                            .line_column(span.source, span.bytes.start)
+                    })
+                    .flatten()
             });
             Diagnostic::new(
                 diagnostic.code,

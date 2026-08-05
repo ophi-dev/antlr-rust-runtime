@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::artifact::GeneratedArtifacts;
 use crate::config::CompilerConfig;
@@ -27,6 +28,7 @@ pub(crate) struct RustSupportOptions {
     pub(crate) interactive: bool,
     pub(crate) child_executable: Option<PathBuf>,
     pub(crate) trust_store_path: Option<PathBuf>,
+    pub(crate) transform_timeout: Duration,
 }
 
 impl RustSupportOptions {
@@ -146,7 +148,7 @@ impl PreparedRustSupport {
             }
         }
         if !self.bundles.is_empty() {
-            artifacts.insert("rust-support.json", self.render_manifest())?;
+            artifacts.insert("rust-support.json", self.render_manifest()?)?;
         }
         Ok(())
     }
@@ -159,7 +161,9 @@ impl PreparedRustSupport {
                     bundle
                         .support_files
                         .iter()
-                        .map(|support| support.source.clone()),
+                        .filter_map(|support| support.source.file_name())
+                        .map(|name| bundle.original_directory.join("Rust").join(name))
+                        .filter(|path| path.is_file()),
                 )
                 .chain(
                     bundle
@@ -172,7 +176,7 @@ impl PreparedRustSupport {
         })
     }
 
-    fn render_manifest(&self) -> String {
+    fn render_manifest(&self) -> io::Result<String> {
         let mut output = String::from("{\n  \"version\": 1,\n  \"bundles\": [\n");
         for (index, bundle) in self.bundles.iter().enumerate() {
             let comma = if index + 1 == self.bundles.len() {
@@ -212,18 +216,18 @@ impl PreparedRustSupport {
                     .support_files
                     .iter()
                     .map(|support| support.source.as_path()),
-            );
+            )?;
             output.push_str(",\n");
             write_file_name_array(
                 &mut output,
                 "transformedGrammars",
                 bundle.transformed_grammars.iter().map(PathBuf::as_path),
-            );
+            )?;
             output.push('\n');
             let _ = writeln!(output, "    }}{comma}");
         }
         output.push_str("  ]\n}\n");
-        output
+        Ok(output)
     }
 }
 
@@ -260,13 +264,20 @@ pub(crate) fn prepare(config: &CompilerConfig) -> Result<PreparedRustSupport, Er
 
     for (directory, root_indexes) in candidates {
         let support_directory = directory.join("Rust");
-        let identity = identify(&directory, &support_directory).map_err(Error::generation)?;
-        ensure_trusted(&config.rust_support, &identity, &mut trust_store)?;
         let (temporary, staged_directory) =
             stage::copy_grammar_directory(&directory).map_err(Error::generation)?;
-        stage::execute_transform(executable, &staged_directory).map_err(Error::generation)?;
+        let staged_support_directory = staged_directory.join("Rust");
+        let identity = identify(&directory, &support_directory, &staged_support_directory)
+            .map_err(Error::generation)?;
+        ensure_trusted(&config.rust_support, &identity, &mut trust_store)?;
+        stage::execute_transform(
+            executable,
+            &staged_directory,
+            config.rust_support.transform_timeout,
+        )
+        .map_err(Error::generation)?;
 
-        let support_paths = stage::top_level_files_with_extension(&support_directory, "rs")
+        let support_paths = stage::top_level_files_with_extension(&staged_support_directory, "rs")
             .map_err(Error::generation)?;
         let fingerprint = identity
             .fingerprint
@@ -479,7 +490,7 @@ fn write_file_name_array<'a>(
     output: &mut String,
     name: &str,
     paths: impl Iterator<Item = &'a Path>,
-) {
+) -> io::Result<()> {
     let _ = write!(output, "      {}: [", json_string(name));
     for (index, path) in paths.enumerate() {
         if index > 0 {
@@ -488,10 +499,16 @@ fn write_file_name_array<'a>(
         let file_name = path
             .file_name()
             .and_then(|value| value.to_str())
-            .expect("validated support paths are UTF-8");
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Rust support output path is not UTF-8: {}", path.display()),
+                )
+            })?;
         output.push_str(&json_string(file_name));
     }
     output.push(']');
+    Ok(())
 }
 
 #[cfg(test)]

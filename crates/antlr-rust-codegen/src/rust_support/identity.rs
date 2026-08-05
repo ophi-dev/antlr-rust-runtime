@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -38,8 +38,9 @@ impl BundleIdentity {
 pub(crate) fn identify(
     grammar_directory: &Path,
     support_directory: &Path,
+    fingerprint_root: &Path,
 ) -> io::Result<BundleIdentity> {
-    let fingerprint = fingerprint_directory(support_directory)?;
+    let fingerprint = fingerprint_directory(fingerprint_root)?;
     let git_root = git_output(grammar_directory, ["rev-parse", "--show-toplevel"])
         .map(PathBuf::from)
         .filter(|path| path.is_absolute());
@@ -190,32 +191,7 @@ pub(crate) struct TrustStore {
 impl TrustStore {
     pub(crate) fn load(path: Option<PathBuf>) -> io::Result<Self> {
         let path = path.or_else(default_trust_store_path);
-        let contents = match path.as_deref().map(fs::read_to_string).transpose() {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error),
-        };
-        let file = match contents {
-            Some(contents) => toml::from_str::<TrustFile>(&contents).map_err(|error| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("invalid Rust support trust store: {error}"),
-                )
-            })?,
-            None => TrustFile {
-                version: 1,
-                ..TrustFile::default()
-            },
-        };
-        if file.version != 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "unsupported Rust support trust store version {}",
-                    file.version
-                ),
-            ));
-        }
+        let file = read_trust_file(path.as_deref())?;
         Ok(Self { path, file })
     }
 
@@ -251,7 +227,22 @@ impl TrustStore {
             )
         })?;
         fs::create_dir_all(parent)?;
-        let contents = toml::to_string_pretty(&self.file).map_err(io::Error::other)?;
+        let mut lock_path = path.as_os_str().to_os_string();
+        lock_path.push(".lock");
+        let lock = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .truncate(false)
+            .write(true)
+            .open(PathBuf::from(lock_path))?;
+        lock.lock()?;
+
+        let mut merged = read_trust_file(Some(path))?;
+        merged
+            .repositories
+            .extend(self.file.repositories.iter().cloned());
+        merged.revisions.extend(self.file.revisions.iter().cloned());
+        let contents = toml::to_string_pretty(&merged).map_err(io::Error::other)?;
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         temporary.write_all(contents.as_bytes())?;
         temporary
@@ -259,6 +250,36 @@ impl TrustStore {
             .map_err(|error| error.error)
             .map(drop)
     }
+}
+
+fn read_trust_file(path: Option<&Path>) -> io::Result<TrustFile> {
+    let contents = match path.map(fs::read_to_string).transpose() {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let file = match contents {
+        Some(contents) => toml::from_str::<TrustFile>(&contents).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid Rust support trust store: {error}"),
+            )
+        })?,
+        None => TrustFile {
+            version: 1,
+            ..TrustFile::default()
+        },
+    };
+    if file.version != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "unsupported Rust support trust store version {}",
+                file.version
+            ),
+        ));
+    }
+    Ok(file)
 }
 
 fn default_trust_store_path() -> Option<PathBuf> {
@@ -277,6 +298,11 @@ fn default_trust_store_path() -> Option<PathBuf> {
                 .join("trusted-support.toml"),
         );
     }
+    #[cfg(target_os = "windows")]
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)?;
+    #[cfg(not(target_os = "windows"))]
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
     #[cfg(target_os = "macos")]
     return Some(
@@ -302,6 +328,8 @@ fn default_trust_store_path() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Barrier};
+
     use super::{BundleIdentity, TrustStore};
 
     #[test]
@@ -331,5 +359,44 @@ mod tests {
             .expect("repository trust should persist");
         let store = TrustStore::load(Some(path)).expect("repository store should reload");
         assert!(store.trusts_repository(&identity));
+    }
+
+    #[test]
+    fn concurrent_writers_merge_trust_decisions() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let path = temporary.path().join("trusted-support.toml");
+        let barrier = Arc::new(Barrier::new(2));
+        let mut handles = Vec::new();
+        for repository in ["https://example.test/first", "https://example.test/second"] {
+            let path = path.clone();
+            let barrier = Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                let identity = BundleIdentity {
+                    repository: repository.to_owned(),
+                    revision: Some("0123456789abcdef".to_owned()),
+                    bundle_path: "grammar/Rust".to_owned(),
+                    fingerprint: format!("sha256:{}", "a".repeat(64)),
+                };
+                let mut store = TrustStore::load(Some(path)).expect("concurrent store should load");
+                barrier.wait();
+                store
+                    .trust_repository(&identity)
+                    .expect("concurrent trust should persist");
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("trust writer should not panic");
+        }
+
+        let store = TrustStore::load(Some(path)).expect("merged store should load");
+        for repository in ["https://example.test/first", "https://example.test/second"] {
+            let identity = BundleIdentity {
+                repository: repository.to_owned(),
+                revision: Some("0123456789abcdef".to_owned()),
+                bundle_path: "grammar/Rust".to_owned(),
+                fingerprint: format!("sha256:{}", "a".repeat(64)),
+            };
+            assert!(store.trusts_repository(&identity));
+        }
     }
 }
