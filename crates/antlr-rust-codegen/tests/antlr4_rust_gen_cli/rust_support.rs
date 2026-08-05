@@ -155,8 +155,16 @@ fn current_java_transform_runs_from_the_staged_tree() {
     assert!(transformed.contains("recog.input.la(1)"));
     let semantics =
         fs::read_to_string(generated.join("semantics.json")).expect("semantics manifest");
-    assert!(semantics.contains(r#""policy": "error""#));
-    assert!(semantics.contains(r#""disposition": "hooked""#));
+    let manifest: serde_json::Value =
+        serde_json::from_str(&semantics).expect("semantics manifest should be valid JSON");
+    assert_eq!(manifest["policy"], "error");
+    assert!(
+        manifest["options"]
+            .as_array()
+            .expect("manifest options should be an array")
+            .iter()
+            .any(|option| option["disposition"] == "hooked")
+    );
     assert_generated_project(
         temp.path(),
         &["java_lexer.rs", "java_parser.rs"],
@@ -225,24 +233,18 @@ fn support_strictness_does_not_leak_to_an_unrelated_root() {
     );
     let semantics =
         fs::read_to_string(generated.join("semantics.json")).expect("semantics manifest");
-    assert!(semantics.contains(r#""policy": "assume-true""#));
     let manifest: serde_json::Value =
         serde_json::from_str(&semantics).expect("semantics manifest should be valid JSON");
+    assert_eq!(manifest["policy"], "assume-true");
     let option = manifest["options"]
         .as_array()
         .expect("manifest options should be an array")
         .iter()
         .find(|option| option["name"] == "superClass" && option["value"] == "UnrelatedBase")
         .expect("unrelated superClass option should be reported");
-    assert_eq!(
-        option,
-        &serde_json::json!({
-            "name": "superClass",
-            "value": "UnrelatedBase",
-            "line": 2,
-            "column": 10,
-            "disposition": "unsupported",
-        })
+    insta::assert_snapshot!(
+        "unrelated_super_class_option",
+        serde_json::to_string_pretty(option).expect("option should serialize")
     );
 }
 

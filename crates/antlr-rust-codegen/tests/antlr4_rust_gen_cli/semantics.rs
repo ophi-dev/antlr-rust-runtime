@@ -101,6 +101,7 @@ lower = "hook"
 
     let manifest =
         fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    insta::assert_snapshot!("recog_receiver_semantics_manifest", manifest);
     let manifest: serde_json::Value =
         serde_json::from_str(&manifest).expect("manifest should contain valid JSON");
     let predicate = manifest["grammars"]
@@ -114,10 +115,8 @@ lower = "hook"
         })
         .find(|coordinate| coordinate["kind"] == "parser-predicate" && coordinate["rule"] == "shl")
         .expect("parser predicate should be inventoried");
-    insta::assert_snapshot!(
-        "recog_receiver_semantics_manifest",
-        serde_json::to_string_pretty(predicate).expect("predicate should serialize")
-    );
+    assert_eq!(predicate["body"], "recog.IsOk()");
+    assert_eq!(predicate["template"], "Hook");
 
     let parser = fs::read_to_string(out.join("recog_predicate_parser.rs"))
         .expect("parser should be emitted");

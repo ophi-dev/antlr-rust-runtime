@@ -4,7 +4,7 @@ use miette::{IntoDiagnostic as _, WrapErr as _};
 use rustpython_vm::common::rc::PyRc;
 use rustpython_vm::{Interpreter, Settings};
 
-const TRANSFORM_PATH: &str = "Rust/transformGrammar.py";
+use super::TRANSFORM_PATH;
 
 pub(crate) fn run_transform_child(staging_directory: &Path) -> miette::Result<()> {
     let staging_directory = std::fs::canonicalize(staging_directory)

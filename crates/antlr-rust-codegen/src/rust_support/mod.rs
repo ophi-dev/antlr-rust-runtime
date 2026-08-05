@@ -22,7 +22,7 @@ use prompt::TrustDecision;
 
 pub(crate) use python::run_transform_child;
 
-const TRANSFORM_FILE: &str = "transformGrammar.py";
+const TRANSFORM_PATH: &str = "Rust/transformGrammar.py";
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RustSupportOptions {
@@ -181,7 +181,7 @@ impl PreparedRustSupport {
 
     pub(crate) fn additional_inputs(&self) -> impl Iterator<Item = PathBuf> + '_ {
         self.bundles.iter().flat_map(|bundle| {
-            let script = bundle.original_directory.join("Rust").join(TRANSFORM_FILE);
+            let script = bundle.original_directory.join(TRANSFORM_PATH);
             std::iter::once(script)
                 .chain(
                     bundle
@@ -211,7 +211,7 @@ impl PreparedRustSupport {
                     source: bundle.identity.source_label(),
                     revision: bundle.identity.revision.as_deref(),
                     fingerprint: &bundle.identity.fingerprint,
-                    transform: "Rust/transformGrammar.py",
+                    transform: TRANSFORM_PATH,
                     rust_modules: file_names(
                         bundle
                             .support_files
@@ -354,7 +354,7 @@ fn discover(roots: &[PathBuf]) -> BTreeMap<PathBuf, Vec<usize>> {
         let Some(directory) = canonical.parent() else {
             continue;
         };
-        if directory.join("Rust").join(TRANSFORM_FILE).is_file() {
+        if directory.join(TRANSFORM_PATH).is_file() {
             candidates
                 .entry(directory.to_path_buf())
                 .or_default()
