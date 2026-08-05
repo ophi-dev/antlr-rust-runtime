@@ -5,8 +5,8 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BundleIdentity {
@@ -39,7 +39,7 @@ impl BundleIdentity {
             .fingerprint
             .strip_prefix("sha256:")
             .expect("fingerprints are normalized");
-        let mut digest = Sha256::new();
+        let mut digest = Hash::new();
         digest.update(self.repository.as_bytes());
         digest.update(b"\0");
         digest.update(self.revision.as_deref().unwrap_or("unversioned").as_bytes());
@@ -89,7 +89,7 @@ pub(crate) fn fingerprint_directory(directory: &Path) -> io::Result<String> {
     collect_files(directory, directory, &mut files)?;
     files.sort_by(|left, right| left.0.cmp(&right.0));
 
-    let mut digest = Sha256::new();
+    let mut digest = Hash::new();
     digest.update(b"antlr-rust-support-v1\0");
     for (relative, path) in files {
         let contents = fs::read(path)?;
