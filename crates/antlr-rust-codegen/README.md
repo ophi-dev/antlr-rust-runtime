@@ -40,7 +40,9 @@ cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
 The package also provides `antlr4-rust-testrig` for running a grammar directly
-against UTF-8 files or stdin:
+against UTF-8 files or stdin. A grammar-only project needs no `Cargo.toml`,
+generated Rust sources, or runtime dependency; only a Rust toolchain is
+required because TestRig invokes Cargo internally:
 
 ```bash
 cargo install antlr-rust-codegen --bin antlr4-rust-testrig
@@ -55,11 +57,12 @@ antlr4-rust-testrig MyParser.g4 start \
     --lexer-grammar MyLexer.g4 --lib grammar inputs/*.txt
 ```
 
-The command generates and compiles a temporary grammar-specific runner because
-Rust cannot reflectively load recognizer types or call a rule by name. It
-processes every input and exits non-zero if generation, compilation, input
-reading, lexing, or parsing reports an error, so the same command can be used
-as a test runner.
+The command generates and compiles a temporary grammar-specific runner with the
+matching runtime because Rust cannot reflectively load recognizer types or call
+a rule by name. It removes the temporary package afterward while retaining
+Cargo build artifacts for subsequent invocations. It processes every input and
+exits non-zero if generation, compilation, input reading, lexing, or parsing
+reports an error, so the same command can be used as a test runner.
 
 The runtime, codegen, and internal parser packages are released in lockstep.
 

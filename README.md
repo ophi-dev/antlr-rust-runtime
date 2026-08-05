@@ -109,14 +109,17 @@ one deterministic source-set compilation.
 
 ### Run a grammar with TestRig
 
-Install the companion TestRig command from the codegen package:
+TestRig can run directly from a grammar-only project. The project does not need
+a `Cargo.toml`, generated Rust sources, or a runtime dependency; it only needs a
+Rust toolchain because TestRig invokes Cargo internally. Install the companion
+command from the codegen package:
 
 ```bash
 cargo install antlr-rust-codegen --bin antlr4-rust-testrig
 ```
 
-Pass a combined grammar, its parser start rule, and zero or more UTF-8 inputs.
-With no input files the command reads stdin:
+From the grammar project, pass a combined grammar, its parser start rule, and
+zero or more UTF-8 inputs. With no input files the command reads stdin:
 
 ```bash
 antlr4-rust-testrig JSON.g4 json --tokens --tree examples/*.json
@@ -134,7 +137,12 @@ antlr4-rust-testrig MyGrammarParser.g4 start \
 ```
 
 `--trace`, `--diagnostics`, and `--sll` expose the corresponding parser modes.
-TestRig processes every named input and returns a non-zero status when grammar
+Each invocation generates the recognizer and a grammar-specific runner in a
+temporary Cargo package, selects the matching `antlr-rust-runtime` release, and
+removes the generated package afterward. Cargo build artifacts are reused, so
+the first invocation can take longer while dependencies and the runner compile.
+
+TestRig processes every named input and returns a non-zero status when
 generation, temporary runner compilation, input reading, lexing, or parsing
 fails. Recovered lexer and parser syntax errors therefore fail CI even when a
 parse tree was produced.
