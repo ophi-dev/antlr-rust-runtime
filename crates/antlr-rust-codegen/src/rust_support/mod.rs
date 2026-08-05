@@ -114,10 +114,11 @@ impl PreparedRustSupport {
             if !module.contains(&reference) {
                 continue;
             }
+            let module_path = portable_generated_path(&bundle.artifact_directory.join("mod.rs"));
             let declaration = format!(
                 "#[doc(hidden)]\n#[path = {path:?}]\npub mod {module_name};\n\
                  #[allow(unused_imports)]\npub use self::{module_name} as rust_support;\n\n",
-                path = bundle.artifact_directory.join("mod.rs").to_string_lossy(),
+                path = module_path,
                 module_name = bundle.generated_module,
             );
             module.insert_str(0, &declaration);
@@ -484,6 +485,19 @@ fn valid_rust_identifier(value: &str) -> bool {
         .next()
         .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
         && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+fn portable_generated_path(path: &Path) -> String {
+    path.to_string_lossy()
+        .chars()
+        .map(|character| {
+            if character == std::path::MAIN_SEPARATOR {
+                '/'
+            } else {
+                character
+            }
+        })
+        .collect()
 }
 
 fn remap_library_directory(library: &Path, bundles: &[PreparedBundle]) -> PathBuf {

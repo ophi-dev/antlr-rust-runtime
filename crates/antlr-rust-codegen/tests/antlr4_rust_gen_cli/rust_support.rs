@@ -251,13 +251,7 @@ fn current_c_transform_wires_its_rust_support_module() {
         utf8(&output.stderr)
     );
     let parser = fs::read_to_string(generated.join("c_parser_parser.rs")).expect("C parser module");
-    let separator = if std::path::MAIN_SEPARATOR == '\\' {
-        "\\\\"
-    } else {
-        "/"
-    };
-    let support_path_prefix = format!("#[doc(hidden)]\n#[path = \"antlr-rust-support{separator}");
-    assert!(parser.starts_with(&support_path_prefix));
+    assert!(parser.starts_with("#[doc(hidden)]\n#[path = \"antlr-rust-support/"));
     assert!(parser.contains("super::__antlr_rust_support_"));
     assert!(parser.contains("pub use self::__antlr_rust_support_"));
     assert!(parser.contains(" as rust_support;"));
