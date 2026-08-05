@@ -321,6 +321,31 @@ Opt-in counters compiled out by default; useful for "where did the new ms come
 from?" investigations. Disabled in default builds so they don't tax the inner
 loop.
 
+## CodSpeed micro-benchmarks
+
+`divan` benchmarks (the `divan` dependency is `codspeed-divan-compat`, renamed)
+live next to the crate they measure:
+
+- `crates/antlr-rust-runtime/benches/char_stream.rs` — `InputStream`
+  construction, the lookahead/consume loop, token-text extraction, and
+  line/column accounting, each for ASCII and non-ASCII input.
+- `crates/antlr-rust-g4-parser/benches/grammar_frontend.rs` — end-to-end `.g4`
+  parses of the checked-in bootstrap grammars (lexer DFA, token buffering,
+  adaptive prediction, tree building), the error-recovery path, and CST/token
+  traversal.
+
+```bash
+# plain walltime numbers while iterating
+cargo bench -p antlr-rust-runtime -p antlr-rust-g4-parser
+
+# instrumented run, same as CI (uploads a report)
+cargo codspeed build -m simulation -p antlr-rust-runtime -p antlr-rust-g4-parser
+codspeed run --mode simulation -- cargo codspeed run
+```
+
+`.github/workflows/codspeed.yml` runs the instrumented pass on every PR and on
+pushes to `main`, so regressions surface as a CodSpeed report on the PR.
+
 ## CI parity
 
 CI runs `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing —

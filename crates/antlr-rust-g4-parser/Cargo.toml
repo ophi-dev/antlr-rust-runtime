@@ -18,7 +18,12 @@ include = ["/Cargo.toml", "/README.md", "/src/**"]
 antlr-rust-runtime.workspace = true
 
 [dev-dependencies]
+divan.workspace = true
 insta.workspace = true
+
+[[bench]]
+name = "grammar_frontend"
+harness = false
 
 [lints]
 workspace = true

@@ -31,6 +31,7 @@ antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.30.
 antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.30.0" }
 antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.30.0" }
 # x-release-please-end
+divan = { version = "5.0.1", package = "codspeed-divan-compat" }
 icu_properties = { version = "2.2.0", features = ["alloc"] }
 insta = { version = "1", default-features = false }
 memchr = "2"
