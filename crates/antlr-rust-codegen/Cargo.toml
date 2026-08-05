@@ -60,7 +60,7 @@ serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3"
 thiserror.workspace = true
-toml = "0.9"
+toml = "1.0"
 
 [dev-dependencies]
 hmac-sha256      = "1"
