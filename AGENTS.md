@@ -243,23 +243,28 @@ only for small, stable values. Project specifics:
 
 ## CodSpeed micro-benchmarks
 
-`divan` benchmarks (the `divan` dependency is `codspeed-divan-compat`, renamed)
-live next to the crate they measure:
+`benches/` is a `divan` benchmark package (the `divan` dependency is
+`codspeed-divan-compat`, renamed) that depends on the runtime through its public
+API. It is **excluded from the root workspace** on purpose: the harness pulls in
+`clap` with `wrap_help`, and feature unification would otherwise change the
+`antlr4-rust-gen` help output that the CLI snapshot tests assert on. Keep it
+excluded, and only use public API from the benches.
 
-- `crates/antlr-rust-runtime/benches/char_stream.rs` — `InputStream`
-  construction, the lookahead/consume loop, token-text extraction, and
-  line/column accounting, each for ASCII and non-ASCII input.
-- `crates/antlr-rust-g4-parser/benches/grammar_frontend.rs` — end-to-end `.g4`
-  parses of the checked-in bootstrap grammars (lexer DFA, token buffering,
-  adaptive prediction, tree building), the error-recovery path, and CST/token
-  traversal.
+- `benches/benches/char_stream.rs` — `InputStream` construction, the
+  lookahead/consume loop, token-text extraction, and line/column accounting,
+  each for ASCII and non-ASCII input.
+- `benches/benches/grammar_frontend.rs` — end-to-end `.g4` parses of the
+  checked-in bootstrap grammars (lexer DFA, token buffering, adaptive
+  prediction, tree building), the error-recovery path, and CST/token traversal.
 
 ```bash
+cd benches
+
 # plain walltime numbers while iterating
-cargo bench -p antlr-rust-runtime -p antlr-rust-g4-parser
+cargo bench
 
 # instrumented run, same as CI (uploads a report)
-cargo codspeed build -m simulation -p antlr-rust-runtime -p antlr-rust-g4-parser
+cargo codspeed build -m simulation
 codspeed run --mode simulation -- cargo codspeed run
 ```
 

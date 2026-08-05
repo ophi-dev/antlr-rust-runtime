@@ -34,11 +34,15 @@ jobs:
       - name: Install cargo-codspeed
         run: cargo install cargo-codspeed --locked
 
+      # The benchmark package is excluded from the workspace, so it is built
+      # from its own directory with its own lockfile.
       - name: Build the benchmark targets
-        run: cargo codspeed build --locked -m simulation -p antlr-rust-runtime -p antlr-rust-g4-parser
+        run: cargo codspeed build --locked -m simulation
+        working-directory: benches
 
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
+          working-directory: benches
           run: cargo codspeed run

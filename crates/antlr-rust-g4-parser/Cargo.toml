@@ -18,13 +18,8 @@ version.workspace      = true
 antlr-rust-runtime.workspace = true
 
 [dev-dependencies]
-divan.workspace = true
 insta.workspace = true
 serde_json      = "1"
-
-[[bench]]
-name = "grammar_frontend"
-harness = false
 
 [lints]
 workspace = true

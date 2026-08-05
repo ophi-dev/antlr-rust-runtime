@@ -29,12 +29,7 @@ stacker = "0.1.24"
 thiserror.workspace = true
 
 [dev-dependencies]
-divan.workspace = true
 insta.workspace = true
-
-[[bench]]
-name = "char_stream"
-harness = false
 
 [lints]
 workspace = true
