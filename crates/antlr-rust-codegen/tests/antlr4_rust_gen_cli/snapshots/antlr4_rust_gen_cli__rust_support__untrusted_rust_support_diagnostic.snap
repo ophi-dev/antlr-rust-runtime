@@ -1,0 +1,12 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/rust_support.rs
+expression: stderr
+---
+Error: antlr4_rust_codegen::configuration
+
+  × Rust target support is not trusted
+  │
+  │ source: https://github.com/ophi-dev/antlr-rust-runtime/crates/antlr-rust-codegen/tests/fixtures/antlr4-rust-gen/rust-support/java/Rust
+  │ fingerprint: sha256:38f5f9c34534a5e2efc56bb2389af15fc0e5f62497a87d511e72e645b9f0d597
+  │
+  │ rerun with --trust-rust-support sha256:38f5f9c34534a5e2efc56bb2389af15fc0e5f62497a87d511e72e645b9f0d597

@@ -1,4 +1,4 @@
-use std::io::{self, Write as _};
+use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
 
 use clap::{ArgAction, Parser};
@@ -8,14 +8,34 @@ use crate::builder::{ActionMode, UnknownSemanticPolicy};
 use crate::config::CompilerConfig;
 use crate::driver::generate;
 use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
+use crate::rust_support::{RustSupportOptions, parse_trust_fingerprint, run_transform_child};
 use crate::semantics::{SemPatternFile, load_sem_patterns, normalize_option_hook};
 
 pub(crate) fn run_cli() -> miette::Result<()> {
-    let args = CliArgs::parse().into_config()?;
-    let mut stderr = io::stderr().lock();
-    generate(&args, |message| writeln!(stderr, "{message}"))
+    if let Some(staging_directory) = transform_child_argument()? {
+        return run_transform_child(&staging_directory);
+    }
+    let args = CliArgs::parse();
+    let config = args.into_config()?;
+    generate(&config, |message| writeln!(io::stderr(), "{message}"))
         .map_err(crate::cli_report::codegen_error)?;
     Ok(())
+}
+
+fn transform_child_argument() -> miette::Result<Option<PathBuf>> {
+    let mut arguments = std::env::args_os().skip(1);
+    if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--__antlr-rust-transform")) {
+        return Ok(None);
+    }
+    let directory = arguments.next().map(PathBuf::from).ok_or_else(|| {
+        miette::miette!("--__antlr-rust-transform requires a staged grammar directory")
+    })?;
+    if arguments.next().is_some() {
+        return Err(miette::miette!(
+            "--__antlr-rust-transform accepts exactly one staged grammar directory"
+        ));
+    }
+    Ok(Some(directory))
 }
 
 #[derive(Debug, Parser)]
@@ -127,6 +147,14 @@ struct CliArgs {
     /// Dry-run precedence-ladder analysis and emit only optimizations.json.
     #[arg(long, conflicts_with = "optimize_precedence_ladders")]
     report_precedence_ladders: bool,
+
+    /// Trust one exact sibling Rust support bundle fingerprint.
+    #[arg(
+        long = "trust-rust-support",
+        value_name = "SHA256",
+        value_parser = parse_trust_fingerprint
+    )]
+    trusted_rust_support: Vec<String>,
 }
 
 impl CliArgs {
@@ -158,6 +186,13 @@ impl CliArgs {
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
             test_rig: None,
+            rust_support: RustSupportOptions {
+                enabled: true,
+                trusted_fingerprints: self.trusted_rust_support.into_iter().collect(),
+                interactive: io::stdin().is_terminal() && io::stderr().is_terminal(),
+                child_executable: Some(std::env::current_exe().into_diagnostic()?),
+                trust_store_path: std::env::var_os("ANTLR4_RUST_TRUST_STORE").map(PathBuf::from),
+            },
         })
     }
 }

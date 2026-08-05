@@ -46,6 +46,8 @@ Options:
           Collapse proven linear precedence ladders (changes tree/API)
       --report-precedence-ladders
           Dry-run precedence-ladder analysis and emit only optimizations.json
+      --trust-rust-support <SHA256>
+          Trust one exact sibling Rust support bundle fingerprint
   -h, --help
           Print help
   -V, --version

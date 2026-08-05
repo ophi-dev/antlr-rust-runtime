@@ -12,6 +12,8 @@ mod multi_recognizer;
 mod optimizations;
 #[path = "antlr4_rust_gen_cli/parser.rs"]
 mod parser;
+#[path = "antlr4_rust_gen_cli/rust_support.rs"]
+mod rust_support;
 #[path = "antlr4_rust_gen_cli/semantics.rs"]
 mod semantics;
 #[path = "antlr4_rust_gen_cli/support.rs"]

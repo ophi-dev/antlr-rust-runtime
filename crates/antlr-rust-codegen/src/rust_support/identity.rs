@@ -1,0 +1,335 @@
+use std::collections::BTreeSet;
+use std::ffi::OsStr;
+use std::fs;
+use std::io::{self, Write as _};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BundleIdentity {
+    pub(crate) repository: String,
+    pub(crate) revision: Option<String>,
+    pub(crate) bundle_path: String,
+    pub(crate) fingerprint: String,
+}
+
+impl BundleIdentity {
+    pub(crate) fn revision_key(&self) -> String {
+        format!(
+            "{}@{}#{}",
+            self.repository,
+            self.revision.as_deref().unwrap_or("unversioned"),
+            self.fingerprint
+        )
+    }
+
+    pub(crate) fn source_label(&self) -> String {
+        if self.bundle_path.is_empty() {
+            self.repository.clone()
+        } else {
+            format!("{}/{}", self.repository, self.bundle_path)
+        }
+    }
+}
+
+pub(crate) fn identify(
+    grammar_directory: &Path,
+    support_directory: &Path,
+) -> io::Result<BundleIdentity> {
+    let fingerprint = fingerprint_directory(support_directory)?;
+    let git_root = git_output(grammar_directory, ["rev-parse", "--show-toplevel"])
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute());
+    let repository = git_output(grammar_directory, ["config", "--get", "remote.origin.url"])
+        .map(|remote| normalize_repository(&remote))
+        .or_else(|| git_root.as_ref().map(|path| path.display().to_string()))
+        .unwrap_or_else(|| grammar_directory.display().to_string());
+    let revision = git_output(grammar_directory, ["rev-parse", "HEAD"]);
+    let bundle_path = git_root
+        .as_deref()
+        .and_then(|root| support_directory.strip_prefix(root).ok())
+        .map(path_key)
+        .transpose()?
+        .unwrap_or_else(|| {
+            support_directory
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or("Rust")
+                .to_owned()
+        });
+    Ok(BundleIdentity {
+        repository,
+        revision,
+        bundle_path,
+        fingerprint,
+    })
+}
+
+pub(crate) fn fingerprint_directory(directory: &Path) -> io::Result<String> {
+    let mut files = Vec::new();
+    collect_files(directory, directory, &mut files)?;
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut digest = Sha256::new();
+    digest.update(b"antlr-rust-support-v1\0");
+    for (relative, path) in files {
+        let contents = fs::read(path)?;
+        digest.update(relative.len().to_be_bytes());
+        digest.update(relative.as_bytes());
+        digest.update(contents.len().to_be_bytes());
+        digest.update(contents);
+    }
+    Ok(format!("sha256:{}", hex_lower(&digest.finalize())))
+}
+
+fn collect_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<(String, PathBuf)>,
+) -> io::Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let path = entry.path();
+        if file_type.is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Rust target-support bundles may not contain symlinks: {}",
+                    path.display()
+                ),
+            ));
+        }
+        if file_type.is_dir() {
+            collect_files(root, &path, files)?;
+        } else if file_type.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .expect("collected path stays below support root");
+            files.push((path_key(relative)?, path));
+        }
+    }
+    Ok(())
+}
+
+fn path_key(path: &Path) -> io::Result<String> {
+    let text = path.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Rust target-support path is not UTF-8: {}", path.display()),
+        )
+    })?;
+    Ok(text
+        .chars()
+        .map(|character| {
+            if character == std::path::MAIN_SEPARATOR {
+                '/'
+            } else {
+                character
+            }
+        })
+        .collect())
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        output.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    output
+}
+
+fn git_output<const N: usize>(directory: &Path, args: [&str; N]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = std::str::from_utf8(&output.stdout).ok()?.trim();
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn normalize_repository(remote: &str) -> String {
+    let remote = remote.trim().trim_end_matches(".git");
+    if let Some((host, path)) = remote
+        .strip_prefix("git@")
+        .and_then(|value| value.split_once(':'))
+    {
+        return format!("https://{host}/{path}");
+    }
+    if let Some(value) = remote.strip_prefix("ssh://git@")
+        && let Some((host, path)) = value.split_once('/')
+    {
+        return format!("https://{host}/{path}");
+    }
+    remote.to_owned()
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct TrustFile {
+    version: u32,
+    repositories: BTreeSet<String>,
+    revisions: BTreeSet<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct TrustStore {
+    path: Option<PathBuf>,
+    file: TrustFile,
+}
+
+impl TrustStore {
+    pub(crate) fn load(path: Option<PathBuf>) -> io::Result<Self> {
+        let path = path.or_else(default_trust_store_path);
+        let contents = match path.as_deref().map(fs::read_to_string).transpose() {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        let file = match contents {
+            Some(contents) => toml::from_str::<TrustFile>(&contents).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid Rust support trust store: {error}"),
+                )
+            })?,
+            None => TrustFile {
+                version: 1,
+                ..TrustFile::default()
+            },
+        };
+        if file.version != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "unsupported Rust support trust store version {}",
+                    file.version
+                ),
+            ));
+        }
+        Ok(Self { path, file })
+    }
+
+    pub(crate) fn trusts_revision(&self, identity: &BundleIdentity) -> bool {
+        self.file.revisions.contains(&identity.revision_key())
+    }
+
+    pub(crate) fn trusts_repository(&self, identity: &BundleIdentity) -> bool {
+        self.file.repositories.contains(&identity.repository)
+    }
+
+    pub(crate) fn trust_revision(&mut self, identity: &BundleIdentity) -> io::Result<()> {
+        self.file.revisions.insert(identity.revision_key());
+        self.save()
+    }
+
+    pub(crate) fn trust_repository(&mut self, identity: &BundleIdentity) -> io::Result<()> {
+        self.file.repositories.insert(identity.repository.clone());
+        self.save()
+    }
+
+    fn save(&self) -> io::Result<()> {
+        let path = self.path.as_deref().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "cannot persist Rust support trust without a home/config directory",
+            )
+        })?;
+        let parent = path.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("trust store has no parent directory: {}", path.display()),
+            )
+        })?;
+        fs::create_dir_all(parent)?;
+        let contents = toml::to_string_pretty(&self.file).map_err(io::Error::other)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        temporary.write_all(contents.as_bytes())?;
+        temporary
+            .persist(path)
+            .map_err(|error| error.error)
+            .map(drop)
+    }
+}
+
+fn default_trust_store_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Some(
+            PathBuf::from(path)
+                .join("antlr4-rust")
+                .join("trusted-support.toml"),
+        );
+    }
+    #[cfg(target_os = "windows")]
+    if let Some(path) = std::env::var_os("APPDATA") {
+        return Some(
+            PathBuf::from(path)
+                .join("antlr4-rust")
+                .join("trusted-support.toml"),
+        );
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    #[cfg(target_os = "macos")]
+    return Some(
+        home.join("Library")
+            .join("Application Support")
+            .join("antlr4-rust")
+            .join("trusted-support.toml"),
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return Some(
+        home.join(".config")
+            .join("antlr4-rust")
+            .join("trusted-support.toml"),
+    );
+    #[cfg(target_os = "windows")]
+    Some(
+        home.join("AppData")
+            .join("Roaming")
+            .join("antlr4-rust")
+            .join("trusted-support.toml"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BundleIdentity, TrustStore};
+
+    #[test]
+    fn persisted_scopes_round_trip() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let path = temporary.path().join("trusted-support.toml");
+        let identity = BundleIdentity {
+            repository: "https://example.test/grammars".to_owned(),
+            revision: Some("0123456789abcdef".to_owned()),
+            bundle_path: "grammar/Rust".to_owned(),
+            fingerprint: format!("sha256:{}", "a".repeat(64)),
+        };
+        let mut store = TrustStore::load(Some(path.clone())).expect("empty store should load");
+        assert!(!store.trusts_revision(&identity));
+        assert!(!store.trusts_repository(&identity));
+
+        store
+            .trust_revision(&identity)
+            .expect("revision trust should persist");
+        let store = TrustStore::load(Some(path.clone())).expect("revision store should reload");
+        assert!(store.trusts_revision(&identity));
+        assert!(!store.trusts_repository(&identity));
+
+        let mut store = store;
+        store
+            .trust_repository(&identity)
+            .expect("repository trust should persist");
+        let store = TrustStore::load(Some(path)).expect("repository store should reload");
+        assert!(store.trusts_repository(&identity));
+    }
+}

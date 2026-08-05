@@ -1,0 +1,21 @@
+lexer grammar JavaLexer;
+
+ASSIGN: '=';
+MODULE: 'module';
+OPEN: 'open';
+REQUIRES: 'requires';
+EXPORTS: 'exports';
+OPENS: 'opens';
+TO: 'to';
+USES: 'uses';
+PROVIDES: 'provides';
+WHEN: 'when';
+WITH: 'with';
+TRANSITIVE: 'transitive';
+YIELD: 'yield';
+SEALED: 'sealed';
+PERMITS: 'permits';
+RECORD: 'record';
+VAR: 'var';
+IDENTIFIER: [a-z]+;
+WS: [ \t\r\n]+ -> skip;

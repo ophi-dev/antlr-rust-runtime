@@ -13,6 +13,7 @@ use crate::builder::{ActionMode, UnknownSemanticPolicy};
 use crate::config::{CompilerConfig, TestRigConfig};
 use crate::driver::generate;
 use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
+use crate::rust_support::RustSupportOptions;
 use crate::semantics::{SemPatternFile, load_sem_patterns, normalize_option_hook};
 
 const TARGET_DIR_ENV: &str = "ANTLR4_RUST_TESTRIG_TARGET_DIR";
@@ -166,6 +167,7 @@ impl CliArgs {
             test_rig: Some(TestRigConfig {
                 start_rule: self.start_rule.clone(),
             }),
+            rust_support: RustSupportOptions::disabled(),
         })
     }
 
