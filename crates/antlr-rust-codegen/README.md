@@ -69,7 +69,7 @@ antlr4-rust-gen JavaLexer.g4 JavaParser.g4 \
 ```
 
 Persisted choices live in
-`$XDG_CONFIG_HOME/antlr4-rust/trusted-support.toml` (or the platform config
+`$XDG_CONFIG_HOME/antlr4-rust/trusted-support.json` (or the platform config
 directory). Set `ANTLR4_RUST_TRUST_STORE` to use a different file. Automatic
 transform execution is currently an `antlr4-rust-gen` CLI feature; the
 `Builder` API does not execute sibling scripts.

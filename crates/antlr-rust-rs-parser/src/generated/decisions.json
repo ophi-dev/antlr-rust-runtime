@@ -4,547 +4,4286 @@
   "grammars": [
     {
       "name": "RustParser",
-      "summary": {"total": 539, "ll1": 289, "fixed": 0, "adaptive": 250},
+      "summary": {
+        "total": 539,
+        "ll1": 289,
+        "fixed": 0,
+        "adaptive": 250
+      },
       "decisions": [
-        {"decision": 0, "rule": "mod_body", "state": 436, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 1, "rule": "mod_body", "state": 442, "canDefer": false, "tier": "ll1"},
-        {"decision": 2, "rule": "visibility", "state": 447, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 3, "rule": "visibility", "state": 450, "canDefer": false, "tier": "ll1"},
-        {"decision": 4, "rule": "visibility_restriction", "state": 466, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 5, "rule": "item", "state": 471, "canDefer": false, "tier": "ll1"},
-        {"decision": 6, "rule": "item", "state": 475, "canDefer": false, "tier": "ll1"},
-        {"decision": 7, "rule": "item", "state": 481, "canDefer": false, "tier": "ll1"},
-        {"decision": 8, "rule": "item", "state": 488, "canDefer": false, "tier": "ll1"},
-        {"decision": 9, "rule": "item", "state": 495, "canDefer": false, "tier": "ll1"},
-        {"decision": 10, "rule": "item", "state": 502, "canDefer": false, "tier": "ll1"},
-        {"decision": 11, "rule": "item", "state": 506, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 12, "rule": "pub_item", "state": 524, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 13, "rule": "extern_crate", "state": 530, "canDefer": false, "tier": "ll1"},
-        {"decision": 14, "rule": "extern_crate", "state": 533, "canDefer": false, "tier": "ll1"},
-        {"decision": 15, "rule": "use_path", "state": 542, "canDefer": false, "tier": "ll1"},
-        {"decision": 16, "rule": "use_path", "state": 546, "canDefer": false, "tier": "ll1"},
-        {"decision": 17, "rule": "use_path", "state": 550, "canDefer": false, "tier": "ll1"},
-        {"decision": 18, "rule": "use_path", "state": 554, "canDefer": false, "tier": "ll1"},
-        {"decision": 19, "rule": "use_path", "state": 560, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 20, "rule": "use_path", "state": 564, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 21, "rule": "use_path", "state": 566, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 22, "rule": "use_suffix", "state": 573, "canDefer": false, "tier": "ll1"},
-        {"decision": 23, "rule": "use_suffix", "state": 577, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 24, "rule": "use_item", "state": 582, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 25, "rule": "use_item", "state": 585, "canDefer": false, "tier": "ll1"},
-        {"decision": 26, "rule": "use_item_list", "state": 592, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 27, "rule": "use_item_list", "state": 596, "canDefer": false, "tier": "ll1"},
-        {"decision": 28, "rule": "rename", "state": 601, "canDefer": false, "tier": "ll1"},
-        {"decision": 29, "rule": "extern_mod", "state": 614, "canDefer": false, "tier": "ll1"},
-        {"decision": 30, "rule": "extern_mod", "state": 621, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 31, "rule": "extern_mod", "state": 627, "canDefer": false, "tier": "ll1"},
-        {"decision": 32, "rule": "foreign_item", "state": 635, "canDefer": false, "tier": "ll1"},
-        {"decision": 33, "rule": "foreign_item", "state": 639, "canDefer": false, "tier": "ll1"},
-        {"decision": 34, "rule": "foreign_item", "state": 645, "canDefer": false, "tier": "ll1"},
-        {"decision": 35, "rule": "foreign_item", "state": 649, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 36, "rule": "foreign_item_tail", "state": 652, "canDefer": false, "tier": "ll1"},
-        {"decision": 37, "rule": "foreign_item_tail", "state": 656, "canDefer": false, "tier": "ll1"},
-        {"decision": 38, "rule": "foreign_item_tail", "state": 663, "canDefer": false, "tier": "ll1"},
-        {"decision": 39, "rule": "foreign_item_tail", "state": 670, "canDefer": false, "tier": "ll1"},
-        {"decision": 40, "rule": "foreign_item_tail", "state": 673, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 41, "rule": "foreign_item_tail", "state": 676, "canDefer": false, "tier": "ll1"},
-        {"decision": 42, "rule": "foreign_item_tail", "state": 680, "canDefer": false, "tier": "ll1"},
-        {"decision": 43, "rule": "foreign_item_tail", "state": 684, "canDefer": false, "tier": "ll1"},
-        {"decision": 44, "rule": "foreign_item_tail", "state": 689, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 45, "rule": "static_decl", "state": 693, "canDefer": false, "tier": "ll1"},
-        {"decision": 46, "rule": "associated_static_decl", "state": 704, "canDefer": false, "tier": "ll1"},
-        {"decision": 47, "rule": "const_decl", "state": 712, "canDefer": false, "tier": "ll1"},
-        {"decision": 48, "rule": "const_decl", "state": 717, "canDefer": false, "tier": "ll1"},
-        {"decision": 49, "rule": "associated_const_decl", "state": 729, "canDefer": false, "tier": "ll1"},
-        {"decision": 50, "rule": "fn_decl", "state": 736, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 51, "rule": "fn_decl", "state": 740, "canDefer": false, "tier": "ll1"},
-        {"decision": 52, "rule": "fn_decl", "state": 743, "canDefer": false, "tier": "ll1"},
-        {"decision": 53, "rule": "fn_decl", "state": 747, "canDefer": false, "tier": "ll1"},
-        {"decision": 54, "rule": "method_decl", "state": 752, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 55, "rule": "method_decl", "state": 756, "canDefer": false, "tier": "ll1"},
-        {"decision": 56, "rule": "method_decl", "state": 759, "canDefer": false, "tier": "ll1"},
-        {"decision": 57, "rule": "method_decl", "state": 763, "canDefer": false, "tier": "ll1"},
-        {"decision": 58, "rule": "trait_method_decl", "state": 768, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 59, "rule": "trait_method_decl", "state": 772, "canDefer": false, "tier": "ll1"},
-        {"decision": 60, "rule": "trait_method_decl", "state": 775, "canDefer": false, "tier": "ll1"},
-        {"decision": 61, "rule": "trait_method_decl", "state": 779, "canDefer": false, "tier": "ll1"},
-        {"decision": 62, "rule": "foreign_fn_decl", "state": 782, "canDefer": false, "tier": "ll1"},
-        {"decision": 63, "rule": "foreign_fn_decl", "state": 787, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 64, "rule": "foreign_fn_decl", "state": 791, "canDefer": false, "tier": "ll1"},
-        {"decision": 65, "rule": "foreign_fn_decl", "state": 794, "canDefer": false, "tier": "ll1"},
-        {"decision": 66, "rule": "foreign_fn_decl", "state": 798, "canDefer": false, "tier": "ll1"},
-        {"decision": 67, "rule": "macro_decl", "state": 805, "canDefer": false, "tier": "ll1"},
-        {"decision": 68, "rule": "macro_decl", "state": 809, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 69, "rule": "macro_decl", "state": 812, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 70, "rule": "macro_decl", "state": 815, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 71, "rule": "macro_head", "state": 822, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 72, "rule": "fn_head", "state": 827, "canDefer": false, "tier": "ll1"},
-        {"decision": 73, "rule": "fn_head", "state": 831, "canDefer": false, "tier": "ll1"},
-        {"decision": 74, "rule": "fn_head", "state": 836, "canDefer": false, "tier": "ll1"},
-        {"decision": 75, "rule": "param", "state": 841, "canDefer": false, "tier": "ll1"},
-        {"decision": 76, "rule": "param", "state": 848, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 77, "rule": "param", "state": 852, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 78, "rule": "param", "state": 855, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 79, "rule": "param", "state": 861, "canDefer": false, "tier": "ll1"},
-        {"decision": 80, "rule": "param", "state": 866, "canDefer": false, "tier": "ll1"},
-        {"decision": 81, "rule": "param", "state": 870, "canDefer": false, "tier": "ll1"},
-        {"decision": 82, "rule": "param", "state": 873, "canDefer": false, "tier": "ll1"},
-        {"decision": 83, "rule": "param", "state": 876, "canDefer": false, "tier": "ll1"},
-        {"decision": 84, "rule": "param", "state": 881, "canDefer": false, "tier": "ll1"},
-        {"decision": 85, "rule": "param", "state": 883, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 86, "rule": "param_ty", "state": 888, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 87, "rule": "param_list", "state": 895, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 88, "rule": "param_list", "state": 902, "canDefer": false, "tier": "ll1"},
-        {"decision": 89, "rule": "param_list", "state": 910, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 90, "rule": "param_list", "state": 913, "canDefer": false, "tier": "ll1"},
-        {"decision": 91, "rule": "variadic_param_list", "state": 920, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 92, "rule": "variadic_param_list", "state": 927, "canDefer": false, "tier": "ll1"},
-        {"decision": 93, "rule": "variadic_param_list", "state": 931, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 94, "rule": "variadic_param_list", "state": 934, "canDefer": false, "tier": "ll1"},
-        {"decision": 95, "rule": "variadic_param_list_names_optional", "state": 941, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 96, "rule": "variadic_param_list_names_optional", "state": 948, "canDefer": false, "tier": "ll1"},
-        {"decision": 97, "rule": "variadic_param_list_names_optional", "state": 952, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 98, "rule": "variadic_param_list_names_optional", "state": 955, "canDefer": false, "tier": "ll1"},
-        {"decision": 99, "rule": "self_param", "state": 958, "canDefer": false, "tier": "ll1"},
-        {"decision": 100, "rule": "self_param", "state": 963, "canDefer": false, "tier": "ll1"},
-        {"decision": 101, "rule": "self_param", "state": 967, "canDefer": false, "tier": "ll1"},
-        {"decision": 102, "rule": "self_param", "state": 970, "canDefer": false, "tier": "ll1"},
-        {"decision": 103, "rule": "self_param", "state": 973, "canDefer": false, "tier": "ll1"},
-        {"decision": 104, "rule": "method_param_list", "state": 977, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 105, "rule": "method_param_list", "state": 983, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 106, "rule": "method_param_list", "state": 987, "canDefer": false, "tier": "ll1"},
-        {"decision": 107, "rule": "trait_method_param", "state": 992, "canDefer": false, "tier": "ll1"},
-        {"decision": 108, "rule": "trait_method_param", "state": 999, "canDefer": false, "tier": "ll1"},
-        {"decision": 109, "rule": "trait_method_param", "state": 1008, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 110, "rule": "trait_method_param", "state": 1015, "canDefer": false, "tier": "ll1"},
-        {"decision": 111, "rule": "trait_method_param", "state": 1021, "canDefer": false, "tier": "ll1"},
-        {"decision": 112, "rule": "trait_method_param", "state": 1029, "canDefer": false, "tier": "ll1"},
-        {"decision": 113, "rule": "trait_method_param", "state": 1033, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 114, "rule": "restricted_pat", "state": 1036, "canDefer": false, "tier": "ll1"},
-        {"decision": 115, "rule": "restricted_pat", "state": 1039, "canDefer": false, "tier": "ll1"},
-        {"decision": 116, "rule": "restricted_pat", "state": 1043, "canDefer": false, "tier": "ll1"},
-        {"decision": 117, "rule": "trait_method_param_list", "state": 1048, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 118, "rule": "trait_method_param_list", "state": 1053, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 119, "rule": "trait_method_param_list", "state": 1059, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 120, "rule": "trait_method_param_list", "state": 1063, "canDefer": false, "tier": "ll1"},
-        {"decision": 121, "rule": "fn_rtype", "state": 1072, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 122, "rule": "type_decl", "state": 1077, "canDefer": false, "tier": "ll1"},
-        {"decision": 123, "rule": "type_decl", "state": 1080, "canDefer": false, "tier": "ll1"},
-        {"decision": 124, "rule": "type_decl", "state": 1089, "canDefer": false, "tier": "ll1"},
-        {"decision": 125, "rule": "type_decl", "state": 1092, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 126, "rule": "type_decl", "state": 1095, "canDefer": false, "tier": "ll1"},
-        {"decision": 127, "rule": "type_decl", "state": 1099, "canDefer": false, "tier": "ll1"},
-        {"decision": 128, "rule": "type_decl", "state": 1103, "canDefer": false, "tier": "ll1"},
-        {"decision": 129, "rule": "type_decl", "state": 1107, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 130, "rule": "struct_decl", "state": 1112, "canDefer": false, "tier": "ll1"},
-        {"decision": 131, "rule": "struct_tail", "state": 1117, "canDefer": false, "tier": "ll1"},
-        {"decision": 132, "rule": "struct_tail", "state": 1122, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 133, "rule": "struct_tail", "state": 1126, "canDefer": false, "tier": "ll1"},
-        {"decision": 134, "rule": "struct_tail", "state": 1130, "canDefer": false, "tier": "ll1"},
-        {"decision": 135, "rule": "struct_tail", "state": 1134, "canDefer": false, "tier": "ll1"},
-        {"decision": 136, "rule": "struct_tail", "state": 1137, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 137, "rule": "tuple_struct_field", "state": 1142, "canDefer": false, "tier": "ll1"},
-        {"decision": 138, "rule": "tuple_struct_field", "state": 1146, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 139, "rule": "tuple_struct_field_list", "state": 1155, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 140, "rule": "tuple_struct_field_list", "state": 1159, "canDefer": false, "tier": "ll1"},
-        {"decision": 141, "rule": "field_decl", "state": 1164, "canDefer": false, "tier": "ll1"},
-        {"decision": 142, "rule": "field_decl", "state": 1168, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 143, "rule": "field_decl_list", "state": 1179, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 144, "rule": "field_decl_list", "state": 1183, "canDefer": false, "tier": "ll1"},
-        {"decision": 145, "rule": "enum_decl", "state": 1188, "canDefer": false, "tier": "ll1"},
-        {"decision": 146, "rule": "enum_decl", "state": 1191, "canDefer": false, "tier": "ll1"},
-        {"decision": 147, "rule": "enum_decl", "state": 1195, "canDefer": false, "tier": "ll1"},
-        {"decision": 148, "rule": "enum_variant", "state": 1202, "canDefer": false, "tier": "ll1"},
-        {"decision": 149, "rule": "enum_variant", "state": 1206, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 150, "rule": "enum_variant", "state": 1211, "canDefer": false, "tier": "ll1"},
-        {"decision": 151, "rule": "enum_variant_list", "state": 1218, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 152, "rule": "enum_variant_list", "state": 1222, "canDefer": false, "tier": "ll1"},
-        {"decision": 153, "rule": "enum_variant_main", "state": 1227, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 154, "rule": "enum_variant_main", "state": 1234, "canDefer": false, "tier": "ll1"},
-        {"decision": 155, "rule": "enum_variant_main", "state": 1243, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 156, "rule": "enum_tuple_field", "state": 1248, "canDefer": false, "tier": "ll1"},
-        {"decision": 157, "rule": "enum_tuple_field_list", "state": 1258, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 158, "rule": "enum_tuple_field_list", "state": 1262, "canDefer": false, "tier": "ll1"},
-        {"decision": 159, "rule": "enum_field_decl", "state": 1267, "canDefer": false, "tier": "ll1"},
-        {"decision": 160, "rule": "enum_field_decl", "state": 1271, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 161, "rule": "enum_field_decl_list", "state": 1282, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 162, "rule": "enum_field_decl_list", "state": 1286, "canDefer": false, "tier": "ll1"},
-        {"decision": 163, "rule": "union_decl", "state": 1291, "canDefer": false, "tier": "ll1"},
-        {"decision": 164, "rule": "union_decl", "state": 1294, "canDefer": false, "tier": "ll1"},
-        {"decision": 165, "rule": "trait_decl", "state": 1301, "canDefer": false, "tier": "ll1"},
-        {"decision": 166, "rule": "trait_decl", "state": 1304, "canDefer": false, "tier": "ll1"},
-        {"decision": 167, "rule": "trait_decl", "state": 1309, "canDefer": false, "tier": "ll1"},
-        {"decision": 168, "rule": "trait_decl", "state": 1312, "canDefer": false, "tier": "ll1"},
-        {"decision": 169, "rule": "trait_decl", "state": 1315, "canDefer": false, "tier": "ll1"},
-        {"decision": 170, "rule": "trait_decl", "state": 1321, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 171, "rule": "trait_decl", "state": 1327, "canDefer": false, "tier": "ll1"},
-        {"decision": 172, "rule": "trait_alias", "state": 1335, "canDefer": false, "tier": "ll1"},
-        {"decision": 173, "rule": "trait_alias", "state": 1340, "canDefer": false, "tier": "ll1"},
-        {"decision": 174, "rule": "trait_alias", "state": 1343, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 175, "rule": "trait_item", "state": 1350, "canDefer": false, "tier": "ll1"},
-        {"decision": 176, "rule": "trait_item", "state": 1354, "canDefer": false, "tier": "ll1"},
-        {"decision": 177, "rule": "trait_item", "state": 1357, "canDefer": false, "tier": "ll1"},
-        {"decision": 178, "rule": "trait_item", "state": 1362, "canDefer": false, "tier": "ll1"},
-        {"decision": 179, "rule": "trait_item", "state": 1365, "canDefer": false, "tier": "ll1"},
-        {"decision": 180, "rule": "trait_item", "state": 1368, "canDefer": false, "tier": "ll1"},
-        {"decision": 181, "rule": "trait_item", "state": 1371, "canDefer": false, "tier": "ll1"},
-        {"decision": 182, "rule": "trait_item", "state": 1378, "canDefer": false, "tier": "ll1"},
-        {"decision": 183, "rule": "trait_item", "state": 1382, "canDefer": false, "tier": "ll1"},
-        {"decision": 184, "rule": "trait_item", "state": 1389, "canDefer": false, "tier": "ll1"},
-        {"decision": 185, "rule": "trait_item", "state": 1396, "canDefer": false, "tier": "ll1"},
-        {"decision": 186, "rule": "trait_item", "state": 1400, "canDefer": false, "tier": "ll1"},
-        {"decision": 187, "rule": "trait_item", "state": 1403, "canDefer": false, "tier": "ll1"},
-        {"decision": 188, "rule": "trait_item", "state": 1409, "canDefer": false, "tier": "ll1"},
-        {"decision": 189, "rule": "trait_item", "state": 1413, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 190, "rule": "trait_item", "state": 1416, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 191, "rule": "trait_item", "state": 1420, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 192, "rule": "trait_item", "state": 1423, "canDefer": false, "tier": "ll1"},
-        {"decision": 193, "rule": "trait_item", "state": 1427, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 194, "rule": "trait_item", "state": 1429, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 195, "rule": "impl_block", "state": 1438, "canDefer": false, "tier": "ll1"},
-        {"decision": 196, "rule": "impl_block", "state": 1441, "canDefer": false, "tier": "ll1"},
-        {"decision": 197, "rule": "impl_block", "state": 1445, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 198, "rule": "impl_block", "state": 1448, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 199, "rule": "impl_block", "state": 1451, "canDefer": false, "tier": "ll1"},
-        {"decision": 200, "rule": "impl_block", "state": 1455, "canDefer": false, "tier": "ll1"},
-        {"decision": 201, "rule": "impl_block", "state": 1461, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 202, "rule": "impl_block", "state": 1467, "canDefer": false, "tier": "ll1"},
-        {"decision": 203, "rule": "impl_what", "state": 1489, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 204, "rule": "impl_item", "state": 1493, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 205, "rule": "impl_item", "state": 1495, "canDefer": false, "tier": "ll1"},
-        {"decision": 206, "rule": "impl_item", "state": 1499, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 207, "rule": "impl_item_tail", "state": 1504, "canDefer": false, "tier": "ll1"},
-        {"decision": 208, "rule": "impl_item_tail", "state": 1508, "canDefer": false, "tier": "ll1"},
-        {"decision": 209, "rule": "impl_item_tail", "state": 1513, "canDefer": false, "tier": "ll1"},
-        {"decision": 210, "rule": "impl_item_tail", "state": 1516, "canDefer": false, "tier": "ll1"},
-        {"decision": 211, "rule": "impl_item_tail", "state": 1524, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 212, "rule": "impl_item_tail", "state": 1529, "canDefer": false, "tier": "ll1"},
-        {"decision": 213, "rule": "impl_item_tail", "state": 1532, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 214, "rule": "impl_item_tail", "state": 1535, "canDefer": false, "tier": "ll1"},
-        {"decision": 215, "rule": "impl_item_tail", "state": 1539, "canDefer": false, "tier": "ll1"},
-        {"decision": 216, "rule": "impl_item_tail", "state": 1545, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 217, "rule": "impl_item_tail", "state": 1548, "canDefer": false, "tier": "ll1"},
-        {"decision": 218, "rule": "impl_item_tail", "state": 1553, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 219, "rule": "attr", "state": 1560, "canDefer": false, "tier": "ll1"},
-        {"decision": 220, "rule": "inner_attr", "state": 1571, "canDefer": false, "tier": "ll1"},
-        {"decision": 221, "rule": "tt", "state": 1578, "canDefer": false, "tier": "ll1"},
-        {"decision": 222, "rule": "tt_delimited", "state": 1583, "canDefer": false, "tier": "ll1"},
-        {"decision": 223, "rule": "tt_parens", "state": 1589, "canDefer": false, "tier": "ll1"},
-        {"decision": 224, "rule": "tt_brackets", "state": 1598, "canDefer": false, "tier": "ll1"},
-        {"decision": 225, "rule": "tt_block", "state": 1607, "canDefer": false, "tier": "ll1"},
-        {"decision": 226, "rule": "path", "state": 1617, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 227, "rule": "path", "state": 1621, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 228, "rule": "path_parent", "state": 1628, "canDefer": false, "tier": "ll1"},
-        {"decision": 229, "rule": "path_parent", "state": 1635, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 230, "rule": "path_parent", "state": 1642, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 231, "rule": "path_segment", "state": 1650, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 232, "rule": "path_segment_no_super", "state": 1655, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 233, "rule": "simple_path", "state": 1658, "canDefer": false, "tier": "ll1"},
-        {"decision": 234, "rule": "simple_path", "state": 1665, "canDefer": false, "tier": "ll1"},
-        {"decision": 235, "rule": "simple_path_segment", "state": 1674, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 236, "rule": "for_lifetimes", "state": 1679, "canDefer": false, "tier": "ll1"},
-        {"decision": 237, "rule": "lifetime_def_list", "state": 1688, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 238, "rule": "lifetime_def_list", "state": 1692, "canDefer": false, "tier": "ll1"},
-        {"decision": 239, "rule": "lifetime_def", "state": 1697, "canDefer": false, "tier": "ll1"},
-        {"decision": 240, "rule": "lifetime_def", "state": 1703, "canDefer": false, "tier": "ll1"},
-        {"decision": 241, "rule": "lifetime_bound", "state": 1713, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 242, "rule": "type_path_main", "state": 1718, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 243, "rule": "type_path_main", "state": 1722, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 244, "rule": "ty_path_tail", "state": 1726, "canDefer": false, "tier": "ll1"},
-        {"decision": 245, "rule": "ty_path_tail", "state": 1730, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 246, "rule": "ty_path_tail", "state": 1734, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 247, "rule": "ty_path_tail", "state": 1737, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 248, "rule": "ty_path_parent", "state": 1744, "canDefer": false, "tier": "ll1"},
-        {"decision": 249, "rule": "ty_path_parent", "state": 1751, "canDefer": false, "tier": "ll1"},
-        {"decision": 250, "rule": "ty_path_parent", "state": 1758, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 251, "rule": "type_path_segment", "state": 1763, "canDefer": false, "tier": "ll1"},
-        {"decision": 252, "rule": "ty_path_segment_no_super", "state": 1768, "canDefer": false, "tier": "ll1"},
-        {"decision": 253, "rule": "ty_path_segment_no_super", "state": 1772, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 254, "rule": "ty_path_segment_no_super", "state": 1778, "canDefer": false, "tier": "ll1"},
-        {"decision": 255, "rule": "ty_path_segment_no_super", "state": 1781, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 256, "rule": "ty_path_segment_no_super", "state": 1783, "canDefer": false, "tier": "ll1"},
-        {"decision": 257, "rule": "where_clause", "state": 1787, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 258, "rule": "where_bound_list", "state": 1794, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 259, "rule": "where_bound_list", "state": 1798, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 260, "rule": "where_bound", "state": 1805, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 261, "rule": "where_bound", "state": 1809, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 262, "rule": "where_bound", "state": 1811, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 263, "rule": "empty_ok_colon_bound", "state": 1815, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 264, "rule": "bound", "state": 1833, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 265, "rule": "bound", "state": 1839, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 266, "rule": "bound", "state": 1841, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 267, "rule": "prim_bound", "state": 1846, "canDefer": false, "tier": "ll1"},
-        {"decision": 268, "rule": "prim_bound", "state": 1849, "canDefer": false, "tier": "ll1"},
-        {"decision": 269, "rule": "prim_bound", "state": 1852, "canDefer": false, "tier": "ll1"},
-        {"decision": 270, "rule": "prim_bound", "state": 1856, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 271, "rule": "type", "state": 1861, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 272, "rule": "type", "state": 1864, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 273, "rule": "type", "state": 1873, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 274, "rule": "type_no_bounds", "state": 1889, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 275, "rule": "array_or_slice_type", "state": 1897, "canDefer": false, "tier": "ll1"},
-        {"decision": 276, "rule": "reference_type", "state": 1903, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 277, "rule": "reference_type", "state": 1906, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 278, "rule": "tuple_type", "state": 1922, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 279, "rule": "tuple_type", "state": 1926, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 280, "rule": "trait_object_type_one_bound", "state": 1935, "canDefer": false, "tier": "ll1"},
-        {"decision": 281, "rule": "type_param_bounds", "state": 1944, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 282, "rule": "type_param_bounds", "state": 1948, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 283, "rule": "type_param_bound", "state": 1957, "canDefer": false, "tier": "ll1"},
-        {"decision": 284, "rule": "type_param_bound", "state": 1963, "canDefer": false, "tier": "ll1"},
-        {"decision": 285, "rule": "type_param_bound", "state": 1967, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 286, "rule": "type_param_bound", "state": 1971, "canDefer": false, "tier": "ll1"},
-        {"decision": 287, "rule": "type_param_bound", "state": 1973, "canDefer": false, "tier": "ll1"},
-        {"decision": 288, "rule": "type_param_bound", "state": 1976, "canDefer": false, "tier": "ll1"},
-        {"decision": 289, "rule": "trait_object_type", "state": 1979, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 290, "rule": "trait_object_type", "state": 1982, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 291, "rule": "trait_bound", "state": 1985, "canDefer": false, "tier": "ll1"},
-        {"decision": 292, "rule": "trait_bound", "state": 1988, "canDefer": false, "tier": "ll1"},
-        {"decision": 293, "rule": "trait_bound", "state": 1993, "canDefer": false, "tier": "ll1"},
-        {"decision": 294, "rule": "trait_bound", "state": 1996, "canDefer": false, "tier": "ll1"},
-        {"decision": 295, "rule": "trait_bound", "state": 2001, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 296, "rule": "bare_function_type", "state": 2004, "canDefer": false, "tier": "ll1"},
-        {"decision": 297, "rule": "bare_function_type", "state": 2007, "canDefer": false, "tier": "ll1"},
-        {"decision": 298, "rule": "bare_function_type", "state": 2010, "canDefer": false, "tier": "ll1"},
-        {"decision": 299, "rule": "bare_function_type", "state": 2015, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 300, "rule": "bare_function_type", "state": 2019, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 301, "rule": "extern_abi", "state": 2025, "canDefer": false, "tier": "ll1"},
-        {"decision": 302, "rule": "type_arguments", "state": 2034, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 303, "rule": "type_arguments", "state": 2038, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 304, "rule": "type_arguments", "state": 2042, "canDefer": false, "tier": "ll1"},
-        {"decision": 305, "rule": "type_arguments", "state": 2052, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 306, "rule": "type_arguments", "state": 2060, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 307, "rule": "type_arguments", "state": 2064, "canDefer": false, "tier": "ll1"},
-        {"decision": 308, "rule": "type_arguments", "state": 2068, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 309, "rule": "type_argument", "state": 2085, "canDefer": false, "tier": "ll1"},
-        {"decision": 310, "rule": "type_argument", "state": 2093, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 311, "rule": "ty_sum", "state": 2096, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 312, "rule": "ty_sum", "state": 2101, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 313, "rule": "ty_sum_list", "state": 2108, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 314, "rule": "ty_sum_list", "state": 2112, "canDefer": false, "tier": "ll1"},
-        {"decision": 315, "rule": "type_parameters", "state": 2124, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 316, "rule": "type_parameters", "state": 2128, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 317, "rule": "type_parameters", "state": 2131, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 318, "rule": "lifetime_param", "state": 2136, "canDefer": false, "tier": "ll1"},
-        {"decision": 319, "rule": "lifetime_param", "state": 2140, "canDefer": false, "tier": "ll1"},
-        {"decision": 320, "rule": "lifetime_param", "state": 2145, "canDefer": false, "tier": "ll1"},
-        {"decision": 321, "rule": "lifetime_param_list", "state": 2152, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 322, "rule": "lifetime_param_list", "state": 2156, "canDefer": false, "tier": "ll1"},
-        {"decision": 323, "rule": "type_parameter", "state": 2161, "canDefer": false, "tier": "ll1"},
-        {"decision": 324, "rule": "type_parameter", "state": 2169, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 325, "rule": "type_parameter", "state": 2174, "canDefer": false, "tier": "ll1"},
-        {"decision": 326, "rule": "type_parameter", "state": 2179, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 327, "rule": "type_parameter", "state": 2182, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 328, "rule": "type_parameter", "state": 2185, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 329, "rule": "type_parameter_list", "state": 2192, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 330, "rule": "type_parameter_list", "state": 2196, "canDefer": false, "tier": "ll1"},
-        {"decision": 331, "rule": "pattern", "state": 2199, "canDefer": false, "tier": "ll1"},
-        {"decision": 332, "rule": "pattern", "state": 2206, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 333, "rule": "pattern_no_top_alt", "state": 2214, "canDefer": false, "tier": "ll1"},
-        {"decision": 334, "rule": "pattern_no_top_alt", "state": 2216, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 335, "rule": "pat_ident", "state": 2221, "canDefer": false, "tier": "ll1"},
-        {"decision": 336, "rule": "pattern_without_mut", "state": 2230, "canDefer": false, "tier": "ll1"},
-        {"decision": 337, "rule": "pattern_without_mut", "state": 2262, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 338, "rule": "pattern_without_mut", "state": 2268, "canDefer": false, "tier": "ll1"},
-        {"decision": 339, "rule": "pattern_without_mut", "state": 2271, "canDefer": false, "tier": "ll1"},
-        {"decision": 340, "rule": "pattern_without_mut", "state": 2274, "canDefer": false, "tier": "ll1"},
-        {"decision": 341, "rule": "pattern_without_mut", "state": 2279, "canDefer": false, "tier": "ll1"},
-        {"decision": 342, "rule": "pattern_without_mut", "state": 2284, "canDefer": false, "tier": "ll1"},
-        {"decision": 343, "rule": "pattern_without_mut", "state": 2291, "canDefer": false, "tier": "ll1"},
-        {"decision": 344, "rule": "pattern_without_mut", "state": 2298, "canDefer": false, "tier": "ll1"},
-        {"decision": 345, "rule": "pattern_without_mut", "state": 2307, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 346, "rule": "pattern_without_mut", "state": 2311, "canDefer": false, "tier": "ll1"},
-        {"decision": 347, "rule": "pattern_without_mut", "state": 2331, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 348, "rule": "pat_range_end", "state": 2335, "canDefer": false, "tier": "ll1"},
-        {"decision": 349, "rule": "pat_lit", "state": 2338, "canDefer": false, "tier": "ll1"},
-        {"decision": 350, "rule": "pat_list", "state": 2347, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 351, "rule": "pat_list", "state": 2351, "canDefer": false, "tier": "ll1"},
-        {"decision": 352, "rule": "pat_list_with_dots", "state": 2359, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 353, "rule": "pat_list_with_dots", "state": 2364, "canDefer": false, "tier": "ll1"},
-        {"decision": 354, "rule": "pat_list_with_dots", "state": 2366, "canDefer": false, "tier": "ll1"},
-        {"decision": 355, "rule": "pat_list_with_dots", "state": 2368, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 356, "rule": "pat_list_dots_tail", "state": 2373, "canDefer": false, "tier": "ll1"},
-        {"decision": 357, "rule": "pat_fields_left", "state": 2378, "canDefer": false, "tier": "ll1"},
-        {"decision": 358, "rule": "pat_fields", "state": 2391, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 359, "rule": "pat_fields", "state": 2397, "canDefer": false, "tier": "ll1"},
-        {"decision": 360, "rule": "pat_fields", "state": 2399, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 361, "rule": "pat_fields", "state": 2406, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 362, "rule": "pat_fields", "state": 2412, "canDefer": false, "tier": "ll1"},
-        {"decision": 363, "rule": "pat_fields", "state": 2414, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 364, "rule": "pat_fields", "state": 2416, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 365, "rule": "pat_field", "state": 2421, "canDefer": false, "tier": "ll1"},
-        {"decision": 366, "rule": "pat_field", "state": 2425, "canDefer": false, "tier": "ll1"},
-        {"decision": 367, "rule": "pat_field", "state": 2428, "canDefer": false, "tier": "ll1"},
-        {"decision": 368, "rule": "pat_field", "state": 2431, "canDefer": false, "tier": "ll1"},
-        {"decision": 369, "rule": "pat_field", "state": 2437, "canDefer": false, "tier": "ll1"},
-        {"decision": 370, "rule": "pat_field", "state": 2444, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 371, "rule": "expr", "state": 2448, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 372, "rule": "expr", "state": 2451, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 373, "rule": "expr_no_struct", "state": 2457, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 374, "rule": "expr_no_struct", "state": 2460, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 375, "rule": "expr_list", "state": 2469, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 376, "rule": "expr_list", "state": 2473, "canDefer": false, "tier": "ll1"},
-        {"decision": 377, "rule": "block", "state": 2479, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 378, "rule": "block", "state": 2483, "canDefer": false, "tier": "ll1"},
-        {"decision": 379, "rule": "block_with_inner_attrs", "state": 2491, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 380, "rule": "block_with_inner_attrs", "state": 2497, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 381, "rule": "block_with_inner_attrs", "state": 2501, "canDefer": false, "tier": "ll1"},
-        {"decision": 382, "rule": "stmt", "state": 2510, "canDefer": false, "tier": "ll1"},
-        {"decision": 383, "rule": "stmt", "state": 2517, "canDefer": false, "tier": "ll1"},
-        {"decision": 384, "rule": "stmt", "state": 2528, "canDefer": false, "tier": "ll1"},
-        {"decision": 385, "rule": "stmt", "state": 2535, "canDefer": false, "tier": "ll1"},
-        {"decision": 386, "rule": "stmt", "state": 2539, "canDefer": false, "tier": "ll1"},
-        {"decision": 387, "rule": "stmt", "state": 2546, "canDefer": false, "tier": "ll1"},
-        {"decision": 388, "rule": "stmt", "state": 2554, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 389, "rule": "blocky_expr", "state": 2565, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 390, "rule": "blocky_expr", "state": 2570, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 391, "rule": "blocky_expr", "state": 2578, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 392, "rule": "blocky_expr", "state": 2582, "canDefer": false, "tier": "ll1"},
-        {"decision": 393, "rule": "blocky_expr", "state": 2587, "canDefer": false, "tier": "ll1"},
-        {"decision": 394, "rule": "blocky_expr", "state": 2593, "canDefer": false, "tier": "ll1"},
-        {"decision": 395, "rule": "blocky_expr", "state": 2602, "canDefer": false, "tier": "ll1"},
-        {"decision": 396, "rule": "blocky_expr", "state": 2607, "canDefer": false, "tier": "ll1"},
-        {"decision": 397, "rule": "blocky_expr", "state": 2618, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 398, "rule": "if_cond_or_pat", "state": 2630, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 399, "rule": "while_cond_or_pat", "state": 2642, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 400, "rule": "let_chain", "state": 2649, "canDefer": false, "tier": "ll1"},
-        {"decision": 401, "rule": "let_chain", "state": 2656, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 402, "rule": "let_chain", "state": 2665, "canDefer": false, "tier": "ll1"},
-        {"decision": 403, "rule": "let_chain", "state": 2668, "canDefer": false, "tier": "ll1"},
-        {"decision": 404, "rule": "let_chain_operand", "state": 2672, "canDefer": false, "tier": "ll1"},
-        {"decision": 405, "rule": "match_arms", "state": 2685, "canDefer": false, "tier": "ll1"},
-        {"decision": 406, "rule": "match_arms", "state": 2688, "canDefer": false, "tier": "ll1"},
-        {"decision": 407, "rule": "match_arms", "state": 2694, "canDefer": false, "tier": "ll1"},
-        {"decision": 408, "rule": "match_arms", "state": 2696, "canDefer": false, "tier": "ll1"},
-        {"decision": 409, "rule": "match_arms", "state": 2698, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 410, "rule": "match_arm_intro", "state": 2703, "canDefer": false, "tier": "ll1"},
-        {"decision": 411, "rule": "match_arm_intro", "state": 2708, "canDefer": false, "tier": "ll1"},
-        {"decision": 412, "rule": "match_pattern", "state": 2713, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 413, "rule": "match_pattern", "state": 2720, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 414, "rule": "expr_attrs", "state": 2730, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 415, "rule": "expr_inner_attrs", "state": 2737, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 416, "rule": "prim_expr", "state": 2744, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 417, "rule": "prim_expr", "state": 2747, "canDefer": false, "tier": "ll1"},
-        {"decision": 418, "rule": "prim_expr", "state": 2751, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 419, "rule": "prim_expr_no_struct", "state": 2757, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 420, "rule": "prim_expr_no_struct", "state": 2761, "canDefer": false, "tier": "ll1"},
-        {"decision": 421, "rule": "prim_expr_no_struct", "state": 2766, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 422, "rule": "prim_expr_no_struct", "state": 2773, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 423, "rule": "prim_expr_no_struct", "state": 2778, "canDefer": false, "tier": "ll1"},
-        {"decision": 424, "rule": "prim_expr_no_struct", "state": 2784, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 425, "rule": "prim_expr_no_struct", "state": 2787, "canDefer": false, "tier": "ll1"},
-        {"decision": 426, "rule": "prim_expr_no_struct", "state": 2792, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 427, "rule": "prim_expr_no_struct", "state": 2800, "canDefer": false, "tier": "ll1"},
-        {"decision": 428, "rule": "prim_expr_no_struct", "state": 2803, "canDefer": false, "tier": "ll1"},
-        {"decision": 429, "rule": "prim_expr_no_struct", "state": 2810, "canDefer": false, "tier": "ll1"},
-        {"decision": 430, "rule": "prim_expr_no_struct", "state": 2816, "canDefer": false, "tier": "ll1"},
-        {"decision": 431, "rule": "prim_expr_no_struct", "state": 2821, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 432, "rule": "prim_expr_no_struct", "state": 2824, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 433, "rule": "prim_expr_no_struct", "state": 2827, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 434, "rule": "prim_expr_no_struct", "state": 2830, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 435, "rule": "prim_expr_no_struct", "state": 2834, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 436, "rule": "prim_expr_no_struct", "state": 2838, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 437, "rule": "prim_expr_no_struct", "state": 2842, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 438, "rule": "prim_expr_no_struct", "state": 2844, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 439, "rule": "lit", "state": 2858, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 440, "rule": "closure_params", "state": 2866, "canDefer": false, "tier": "ll1"},
-        {"decision": 441, "rule": "closure_params", "state": 2869, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 442, "rule": "closure_param", "state": 2874, "canDefer": false, "tier": "ll1"},
-        {"decision": 443, "rule": "closure_param", "state": 2880, "canDefer": false, "tier": "ll1"},
-        {"decision": 444, "rule": "closure_param_list", "state": 2887, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 445, "rule": "closure_param_list", "state": 2891, "canDefer": false, "tier": "ll1"},
-        {"decision": 446, "rule": "closure_tail", "state": 2894, "canDefer": false, "tier": "ll1"},
-        {"decision": 447, "rule": "closure_tail", "state": 2898, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 448, "rule": "lifetime_or_expr", "state": 2902, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 449, "rule": "fields", "state": 2910, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 450, "rule": "fields", "state": 2916, "canDefer": false, "tier": "ll1"},
-        {"decision": 451, "rule": "fields", "state": 2918, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 452, "rule": "fields", "state": 2920, "canDefer": false, "tier": "ll1"},
-        {"decision": 453, "rule": "field", "state": 2928, "canDefer": false, "tier": "ll1"},
-        {"decision": 454, "rule": "field", "state": 2935, "canDefer": false, "tier": "ll1"},
-        {"decision": 455, "rule": "field", "state": 2942, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 456, "rule": "field_name", "state": 2946, "canDefer": false, "tier": "ll1"},
-        {"decision": 457, "rule": "post_expr", "state": 2955, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 458, "rule": "post_expr_tail", "state": 2967, "canDefer": false, "tier": "ll1"},
-        {"decision": 459, "rule": "post_expr_tail", "state": 2971, "canDefer": false, "tier": "ll1"},
-        {"decision": 460, "rule": "post_expr_tail", "state": 2974, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 461, "rule": "post_expr_tail", "state": 2981, "canDefer": false, "tier": "ll1"},
-        {"decision": 462, "rule": "post_expr_tail", "state": 2984, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 463, "rule": "pre_expr", "state": 3001, "canDefer": false, "tier": "ll1"},
-        {"decision": 464, "rule": "pre_expr", "state": 3006, "canDefer": false, "tier": "ll1"},
-        {"decision": 465, "rule": "pre_expr", "state": 3017, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 466, "rule": "cast_expr", "state": 3028, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 467, "rule": "cast_expr", "state": 3030, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 468, "rule": "mul_expr", "state": 3045, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 469, "rule": "mul_expr", "state": 3047, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 470, "rule": "add_expr", "state": 3059, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 471, "rule": "add_expr", "state": 3061, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 472, "rule": "shift_expr", "state": 3075, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 473, "rule": "shift_expr", "state": 3077, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 474, "rule": "bit_and_expr", "state": 3088, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 475, "rule": "bit_xor_expr", "state": 3099, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 476, "rule": "bit_or_expr", "state": 3110, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 477, "rule": "cmp_expr", "state": 3118, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 478, "rule": "and_expr", "state": 3128, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 479, "rule": "or_expr", "state": 3139, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 480, "rule": "range_expr", "state": 3146, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 481, "rule": "range_expr", "state": 3151, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 482, "rule": "range_expr", "state": 3155, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 483, "rule": "range_expr", "state": 3159, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 484, "rule": "range_expr", "state": 3161, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 485, "rule": "assign_expr", "state": 3171, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 486, "rule": "post_expr_no_struct", "state": 3180, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 487, "rule": "pre_expr_no_struct", "state": 3198, "canDefer": false, "tier": "ll1"},
-        {"decision": 488, "rule": "pre_expr_no_struct", "state": 3203, "canDefer": false, "tier": "ll1"},
-        {"decision": 489, "rule": "pre_expr_no_struct", "state": 3210, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 490, "rule": "cast_expr_no_struct", "state": 3221, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 491, "rule": "cast_expr_no_struct", "state": 3223, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 492, "rule": "mul_expr_no_struct", "state": 3238, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 493, "rule": "mul_expr_no_struct", "state": 3240, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 494, "rule": "add_expr_no_struct", "state": 3252, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 495, "rule": "add_expr_no_struct", "state": 3254, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 496, "rule": "shift_expr_no_struct", "state": 3268, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 497, "rule": "shift_expr_no_struct", "state": 3270, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 498, "rule": "bit_and_expr_no_struct", "state": 3281, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 499, "rule": "bit_xor_expr_no_struct", "state": 3292, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 500, "rule": "bit_or_expr_no_struct", "state": 3303, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 501, "rule": "cmp_expr_no_struct", "state": 3309, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 502, "rule": "cmp_expr_no_struct", "state": 3312, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 503, "rule": "cmp_expr_no_struct", "state": 3318, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 504, "rule": "cmp_expr_no_struct", "state": 3321, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 505, "rule": "cmp_expr_no_struct", "state": 3325, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 506, "rule": "and_expr_no_struct", "state": 3335, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 507, "rule": "or_expr_no_struct", "state": 3346, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0},
-        {"decision": 508, "rule": "range_expr_no_struct", "state": 3353, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 509, "rule": "range_expr_no_struct", "state": 3358, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 510, "rule": "range_expr_no_struct", "state": 3362, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 511, "rule": "range_expr_no_struct", "state": 3366, "canDefer": true, "tier": "adaptive", "reason": "predicate", "probedLookahead": 1},
-        {"decision": 512, "rule": "range_expr_no_struct", "state": 3368, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 513, "rule": "assign_expr_no_struct", "state": 3390, "canDefer": false, "tier": "ll1"},
-        {"decision": 514, "rule": "assign_expr_no_struct", "state": 3394, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 515, "rule": "any_ident", "state": 3404, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 516, "rule": "macro_iterm", "state": 3412, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 517, "rule": "macro_rules_definition", "state": 3417, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 518, "rule": "macro_rules_def", "state": 3423, "canDefer": false, "tier": "ll1"},
-        {"decision": 519, "rule": "macro_rules_def", "state": 3429, "canDefer": false, "tier": "ll1"},
-        {"decision": 520, "rule": "macro_rules_def", "state": 3435, "canDefer": false, "tier": "ll1"},
-        {"decision": 521, "rule": "macro_rules_def", "state": 3438, "canDefer": false, "tier": "ll1"},
-        {"decision": 522, "rule": "macro_rules", "state": 3445, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 523, "rule": "macro_rules", "state": 3449, "canDefer": false, "tier": "ll1"},
-        {"decision": 524, "rule": "macro_matcher", "state": 3459, "canDefer": false, "tier": "ll1"},
-        {"decision": 525, "rule": "macro_matcher", "state": 3467, "canDefer": false, "tier": "ll1"},
-        {"decision": 526, "rule": "macro_matcher", "state": 3475, "canDefer": false, "tier": "ll1"},
-        {"decision": 527, "rule": "macro_matcher", "state": 3479, "canDefer": false, "tier": "ll1"},
-        {"decision": 528, "rule": "macro_match", "state": 3492, "canDefer": false, "tier": "ll1"},
-        {"decision": 529, "rule": "macro_match", "state": 3496, "canDefer": false, "tier": "ll1"},
-        {"decision": 530, "rule": "macro_match", "state": 3500, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1},
-        {"decision": 531, "rule": "delim_token_tree", "state": 3514, "canDefer": false, "tier": "ll1"},
-        {"decision": 532, "rule": "delim_token_tree", "state": 3522, "canDefer": false, "tier": "ll1"},
-        {"decision": 533, "rule": "delim_token_tree", "state": 3530, "canDefer": false, "tier": "ll1"},
-        {"decision": 534, "rule": "delim_token_tree", "state": 3534, "canDefer": false, "tier": "ll1"},
-        {"decision": 535, "rule": "macro_invocation_semi", "state": 3542, "canDefer": false, "tier": "ll1"},
-        {"decision": 536, "rule": "macro_invocation_semi", "state": 3554, "canDefer": false, "tier": "ll1"},
-        {"decision": 537, "rule": "macro_invocation_semi", "state": 3566, "canDefer": false, "tier": "ll1"},
-        {"decision": 538, "rule": "macro_invocation_semi", "state": 3571, "canDefer": true, "tier": "adaptive", "reason": "not-disjoint", "probedLookahead": 1}
+        {
+          "decision": 0,
+          "rule": "mod_body",
+          "state": 436,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 1,
+          "rule": "mod_body",
+          "state": 442,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 2,
+          "rule": "visibility",
+          "state": 447,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 3,
+          "rule": "visibility",
+          "state": 450,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 4,
+          "rule": "visibility_restriction",
+          "state": 466,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 5,
+          "rule": "item",
+          "state": 471,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 6,
+          "rule": "item",
+          "state": 475,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 7,
+          "rule": "item",
+          "state": 481,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 8,
+          "rule": "item",
+          "state": 488,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 9,
+          "rule": "item",
+          "state": 495,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 10,
+          "rule": "item",
+          "state": 502,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 11,
+          "rule": "item",
+          "state": 506,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 12,
+          "rule": "pub_item",
+          "state": 524,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 13,
+          "rule": "extern_crate",
+          "state": 530,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 14,
+          "rule": "extern_crate",
+          "state": 533,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 15,
+          "rule": "use_path",
+          "state": 542,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 16,
+          "rule": "use_path",
+          "state": 546,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 17,
+          "rule": "use_path",
+          "state": 550,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 18,
+          "rule": "use_path",
+          "state": 554,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 19,
+          "rule": "use_path",
+          "state": 560,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 20,
+          "rule": "use_path",
+          "state": 564,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 21,
+          "rule": "use_path",
+          "state": 566,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 22,
+          "rule": "use_suffix",
+          "state": 573,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 23,
+          "rule": "use_suffix",
+          "state": 577,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 24,
+          "rule": "use_item",
+          "state": 582,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 25,
+          "rule": "use_item",
+          "state": 585,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 26,
+          "rule": "use_item_list",
+          "state": 592,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 27,
+          "rule": "use_item_list",
+          "state": 596,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 28,
+          "rule": "rename",
+          "state": 601,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 29,
+          "rule": "extern_mod",
+          "state": 614,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 30,
+          "rule": "extern_mod",
+          "state": 621,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 31,
+          "rule": "extern_mod",
+          "state": 627,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 32,
+          "rule": "foreign_item",
+          "state": 635,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 33,
+          "rule": "foreign_item",
+          "state": 639,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 34,
+          "rule": "foreign_item",
+          "state": 645,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 35,
+          "rule": "foreign_item",
+          "state": 649,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 36,
+          "rule": "foreign_item_tail",
+          "state": 652,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 37,
+          "rule": "foreign_item_tail",
+          "state": 656,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 38,
+          "rule": "foreign_item_tail",
+          "state": 663,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 39,
+          "rule": "foreign_item_tail",
+          "state": 670,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 40,
+          "rule": "foreign_item_tail",
+          "state": 673,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 41,
+          "rule": "foreign_item_tail",
+          "state": 676,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 42,
+          "rule": "foreign_item_tail",
+          "state": 680,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 43,
+          "rule": "foreign_item_tail",
+          "state": 684,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 44,
+          "rule": "foreign_item_tail",
+          "state": 689,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 45,
+          "rule": "static_decl",
+          "state": 693,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 46,
+          "rule": "associated_static_decl",
+          "state": 704,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 47,
+          "rule": "const_decl",
+          "state": 712,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 48,
+          "rule": "const_decl",
+          "state": 717,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 49,
+          "rule": "associated_const_decl",
+          "state": 729,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 50,
+          "rule": "fn_decl",
+          "state": 736,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 51,
+          "rule": "fn_decl",
+          "state": 740,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 52,
+          "rule": "fn_decl",
+          "state": 743,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 53,
+          "rule": "fn_decl",
+          "state": 747,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 54,
+          "rule": "method_decl",
+          "state": 752,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 55,
+          "rule": "method_decl",
+          "state": 756,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 56,
+          "rule": "method_decl",
+          "state": 759,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 57,
+          "rule": "method_decl",
+          "state": 763,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 58,
+          "rule": "trait_method_decl",
+          "state": 768,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 59,
+          "rule": "trait_method_decl",
+          "state": 772,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 60,
+          "rule": "trait_method_decl",
+          "state": 775,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 61,
+          "rule": "trait_method_decl",
+          "state": 779,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 62,
+          "rule": "foreign_fn_decl",
+          "state": 782,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 63,
+          "rule": "foreign_fn_decl",
+          "state": 787,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 64,
+          "rule": "foreign_fn_decl",
+          "state": 791,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 65,
+          "rule": "foreign_fn_decl",
+          "state": 794,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 66,
+          "rule": "foreign_fn_decl",
+          "state": 798,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 67,
+          "rule": "macro_decl",
+          "state": 805,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 68,
+          "rule": "macro_decl",
+          "state": 809,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 69,
+          "rule": "macro_decl",
+          "state": 812,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 70,
+          "rule": "macro_decl",
+          "state": 815,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 71,
+          "rule": "macro_head",
+          "state": 822,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 72,
+          "rule": "fn_head",
+          "state": 827,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 73,
+          "rule": "fn_head",
+          "state": 831,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 74,
+          "rule": "fn_head",
+          "state": 836,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 75,
+          "rule": "param",
+          "state": 841,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 76,
+          "rule": "param",
+          "state": 848,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 77,
+          "rule": "param",
+          "state": 852,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 78,
+          "rule": "param",
+          "state": 855,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 79,
+          "rule": "param",
+          "state": 861,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 80,
+          "rule": "param",
+          "state": 866,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 81,
+          "rule": "param",
+          "state": 870,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 82,
+          "rule": "param",
+          "state": 873,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 83,
+          "rule": "param",
+          "state": 876,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 84,
+          "rule": "param",
+          "state": 881,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 85,
+          "rule": "param",
+          "state": 883,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 86,
+          "rule": "param_ty",
+          "state": 888,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 87,
+          "rule": "param_list",
+          "state": 895,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 88,
+          "rule": "param_list",
+          "state": 902,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 89,
+          "rule": "param_list",
+          "state": 910,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 90,
+          "rule": "param_list",
+          "state": 913,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 91,
+          "rule": "variadic_param_list",
+          "state": 920,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 92,
+          "rule": "variadic_param_list",
+          "state": 927,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 93,
+          "rule": "variadic_param_list",
+          "state": 931,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 94,
+          "rule": "variadic_param_list",
+          "state": 934,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 95,
+          "rule": "variadic_param_list_names_optional",
+          "state": 941,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 96,
+          "rule": "variadic_param_list_names_optional",
+          "state": 948,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 97,
+          "rule": "variadic_param_list_names_optional",
+          "state": 952,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 98,
+          "rule": "variadic_param_list_names_optional",
+          "state": 955,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 99,
+          "rule": "self_param",
+          "state": 958,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 100,
+          "rule": "self_param",
+          "state": 963,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 101,
+          "rule": "self_param",
+          "state": 967,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 102,
+          "rule": "self_param",
+          "state": 970,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 103,
+          "rule": "self_param",
+          "state": 973,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 104,
+          "rule": "method_param_list",
+          "state": 977,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 105,
+          "rule": "method_param_list",
+          "state": 983,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 106,
+          "rule": "method_param_list",
+          "state": 987,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 107,
+          "rule": "trait_method_param",
+          "state": 992,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 108,
+          "rule": "trait_method_param",
+          "state": 999,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 109,
+          "rule": "trait_method_param",
+          "state": 1008,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 110,
+          "rule": "trait_method_param",
+          "state": 1015,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 111,
+          "rule": "trait_method_param",
+          "state": 1021,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 112,
+          "rule": "trait_method_param",
+          "state": 1029,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 113,
+          "rule": "trait_method_param",
+          "state": 1033,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 114,
+          "rule": "restricted_pat",
+          "state": 1036,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 115,
+          "rule": "restricted_pat",
+          "state": 1039,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 116,
+          "rule": "restricted_pat",
+          "state": 1043,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 117,
+          "rule": "trait_method_param_list",
+          "state": 1048,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 118,
+          "rule": "trait_method_param_list",
+          "state": 1053,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 119,
+          "rule": "trait_method_param_list",
+          "state": 1059,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 120,
+          "rule": "trait_method_param_list",
+          "state": 1063,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 121,
+          "rule": "fn_rtype",
+          "state": 1072,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 122,
+          "rule": "type_decl",
+          "state": 1077,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 123,
+          "rule": "type_decl",
+          "state": 1080,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 124,
+          "rule": "type_decl",
+          "state": 1089,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 125,
+          "rule": "type_decl",
+          "state": 1092,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 126,
+          "rule": "type_decl",
+          "state": 1095,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 127,
+          "rule": "type_decl",
+          "state": 1099,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 128,
+          "rule": "type_decl",
+          "state": 1103,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 129,
+          "rule": "type_decl",
+          "state": 1107,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 130,
+          "rule": "struct_decl",
+          "state": 1112,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 131,
+          "rule": "struct_tail",
+          "state": 1117,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 132,
+          "rule": "struct_tail",
+          "state": 1122,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 133,
+          "rule": "struct_tail",
+          "state": 1126,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 134,
+          "rule": "struct_tail",
+          "state": 1130,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 135,
+          "rule": "struct_tail",
+          "state": 1134,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 136,
+          "rule": "struct_tail",
+          "state": 1137,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 137,
+          "rule": "tuple_struct_field",
+          "state": 1142,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 138,
+          "rule": "tuple_struct_field",
+          "state": 1146,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 139,
+          "rule": "tuple_struct_field_list",
+          "state": 1155,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 140,
+          "rule": "tuple_struct_field_list",
+          "state": 1159,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 141,
+          "rule": "field_decl",
+          "state": 1164,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 142,
+          "rule": "field_decl",
+          "state": 1168,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 143,
+          "rule": "field_decl_list",
+          "state": 1179,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 144,
+          "rule": "field_decl_list",
+          "state": 1183,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 145,
+          "rule": "enum_decl",
+          "state": 1188,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 146,
+          "rule": "enum_decl",
+          "state": 1191,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 147,
+          "rule": "enum_decl",
+          "state": 1195,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 148,
+          "rule": "enum_variant",
+          "state": 1202,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 149,
+          "rule": "enum_variant",
+          "state": 1206,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 150,
+          "rule": "enum_variant",
+          "state": 1211,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 151,
+          "rule": "enum_variant_list",
+          "state": 1218,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 152,
+          "rule": "enum_variant_list",
+          "state": 1222,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 153,
+          "rule": "enum_variant_main",
+          "state": 1227,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 154,
+          "rule": "enum_variant_main",
+          "state": 1234,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 155,
+          "rule": "enum_variant_main",
+          "state": 1243,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 156,
+          "rule": "enum_tuple_field",
+          "state": 1248,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 157,
+          "rule": "enum_tuple_field_list",
+          "state": 1258,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 158,
+          "rule": "enum_tuple_field_list",
+          "state": 1262,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 159,
+          "rule": "enum_field_decl",
+          "state": 1267,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 160,
+          "rule": "enum_field_decl",
+          "state": 1271,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 161,
+          "rule": "enum_field_decl_list",
+          "state": 1282,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 162,
+          "rule": "enum_field_decl_list",
+          "state": 1286,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 163,
+          "rule": "union_decl",
+          "state": 1291,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 164,
+          "rule": "union_decl",
+          "state": 1294,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 165,
+          "rule": "trait_decl",
+          "state": 1301,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 166,
+          "rule": "trait_decl",
+          "state": 1304,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 167,
+          "rule": "trait_decl",
+          "state": 1309,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 168,
+          "rule": "trait_decl",
+          "state": 1312,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 169,
+          "rule": "trait_decl",
+          "state": 1315,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 170,
+          "rule": "trait_decl",
+          "state": 1321,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 171,
+          "rule": "trait_decl",
+          "state": 1327,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 172,
+          "rule": "trait_alias",
+          "state": 1335,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 173,
+          "rule": "trait_alias",
+          "state": 1340,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 174,
+          "rule": "trait_alias",
+          "state": 1343,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 175,
+          "rule": "trait_item",
+          "state": 1350,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 176,
+          "rule": "trait_item",
+          "state": 1354,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 177,
+          "rule": "trait_item",
+          "state": 1357,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 178,
+          "rule": "trait_item",
+          "state": 1362,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 179,
+          "rule": "trait_item",
+          "state": 1365,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 180,
+          "rule": "trait_item",
+          "state": 1368,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 181,
+          "rule": "trait_item",
+          "state": 1371,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 182,
+          "rule": "trait_item",
+          "state": 1378,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 183,
+          "rule": "trait_item",
+          "state": 1382,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 184,
+          "rule": "trait_item",
+          "state": 1389,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 185,
+          "rule": "trait_item",
+          "state": 1396,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 186,
+          "rule": "trait_item",
+          "state": 1400,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 187,
+          "rule": "trait_item",
+          "state": 1403,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 188,
+          "rule": "trait_item",
+          "state": 1409,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 189,
+          "rule": "trait_item",
+          "state": 1413,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 190,
+          "rule": "trait_item",
+          "state": 1416,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 191,
+          "rule": "trait_item",
+          "state": 1420,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 192,
+          "rule": "trait_item",
+          "state": 1423,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 193,
+          "rule": "trait_item",
+          "state": 1427,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 194,
+          "rule": "trait_item",
+          "state": 1429,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 195,
+          "rule": "impl_block",
+          "state": 1438,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 196,
+          "rule": "impl_block",
+          "state": 1441,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 197,
+          "rule": "impl_block",
+          "state": 1445,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 198,
+          "rule": "impl_block",
+          "state": 1448,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 199,
+          "rule": "impl_block",
+          "state": 1451,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 200,
+          "rule": "impl_block",
+          "state": 1455,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 201,
+          "rule": "impl_block",
+          "state": 1461,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 202,
+          "rule": "impl_block",
+          "state": 1467,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 203,
+          "rule": "impl_what",
+          "state": 1489,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 204,
+          "rule": "impl_item",
+          "state": 1493,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 205,
+          "rule": "impl_item",
+          "state": 1495,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 206,
+          "rule": "impl_item",
+          "state": 1499,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 207,
+          "rule": "impl_item_tail",
+          "state": 1504,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 208,
+          "rule": "impl_item_tail",
+          "state": 1508,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 209,
+          "rule": "impl_item_tail",
+          "state": 1513,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 210,
+          "rule": "impl_item_tail",
+          "state": 1516,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 211,
+          "rule": "impl_item_tail",
+          "state": 1524,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 212,
+          "rule": "impl_item_tail",
+          "state": 1529,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 213,
+          "rule": "impl_item_tail",
+          "state": 1532,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 214,
+          "rule": "impl_item_tail",
+          "state": 1535,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 215,
+          "rule": "impl_item_tail",
+          "state": 1539,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 216,
+          "rule": "impl_item_tail",
+          "state": 1545,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 217,
+          "rule": "impl_item_tail",
+          "state": 1548,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 218,
+          "rule": "impl_item_tail",
+          "state": 1553,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 219,
+          "rule": "attr",
+          "state": 1560,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 220,
+          "rule": "inner_attr",
+          "state": 1571,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 221,
+          "rule": "tt",
+          "state": 1578,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 222,
+          "rule": "tt_delimited",
+          "state": 1583,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 223,
+          "rule": "tt_parens",
+          "state": 1589,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 224,
+          "rule": "tt_brackets",
+          "state": 1598,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 225,
+          "rule": "tt_block",
+          "state": 1607,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 226,
+          "rule": "path",
+          "state": 1617,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 227,
+          "rule": "path",
+          "state": 1621,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 228,
+          "rule": "path_parent",
+          "state": 1628,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 229,
+          "rule": "path_parent",
+          "state": 1635,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 230,
+          "rule": "path_parent",
+          "state": 1642,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 231,
+          "rule": "path_segment",
+          "state": 1650,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 232,
+          "rule": "path_segment_no_super",
+          "state": 1655,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 233,
+          "rule": "simple_path",
+          "state": 1658,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 234,
+          "rule": "simple_path",
+          "state": 1665,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 235,
+          "rule": "simple_path_segment",
+          "state": 1674,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 236,
+          "rule": "for_lifetimes",
+          "state": 1679,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 237,
+          "rule": "lifetime_def_list",
+          "state": 1688,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 238,
+          "rule": "lifetime_def_list",
+          "state": 1692,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 239,
+          "rule": "lifetime_def",
+          "state": 1697,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 240,
+          "rule": "lifetime_def",
+          "state": 1703,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 241,
+          "rule": "lifetime_bound",
+          "state": 1713,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 242,
+          "rule": "type_path_main",
+          "state": 1718,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 243,
+          "rule": "type_path_main",
+          "state": 1722,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 244,
+          "rule": "ty_path_tail",
+          "state": 1726,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 245,
+          "rule": "ty_path_tail",
+          "state": 1730,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 246,
+          "rule": "ty_path_tail",
+          "state": 1734,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 247,
+          "rule": "ty_path_tail",
+          "state": 1737,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 248,
+          "rule": "ty_path_parent",
+          "state": 1744,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 249,
+          "rule": "ty_path_parent",
+          "state": 1751,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 250,
+          "rule": "ty_path_parent",
+          "state": 1758,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 251,
+          "rule": "type_path_segment",
+          "state": 1763,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 252,
+          "rule": "ty_path_segment_no_super",
+          "state": 1768,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 253,
+          "rule": "ty_path_segment_no_super",
+          "state": 1772,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 254,
+          "rule": "ty_path_segment_no_super",
+          "state": 1778,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 255,
+          "rule": "ty_path_segment_no_super",
+          "state": 1781,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 256,
+          "rule": "ty_path_segment_no_super",
+          "state": 1783,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 257,
+          "rule": "where_clause",
+          "state": 1787,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 258,
+          "rule": "where_bound_list",
+          "state": 1794,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 259,
+          "rule": "where_bound_list",
+          "state": 1798,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 260,
+          "rule": "where_bound",
+          "state": 1805,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 261,
+          "rule": "where_bound",
+          "state": 1809,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 262,
+          "rule": "where_bound",
+          "state": 1811,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 263,
+          "rule": "empty_ok_colon_bound",
+          "state": 1815,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 264,
+          "rule": "bound",
+          "state": 1833,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 265,
+          "rule": "bound",
+          "state": 1839,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 266,
+          "rule": "bound",
+          "state": 1841,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 267,
+          "rule": "prim_bound",
+          "state": 1846,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 268,
+          "rule": "prim_bound",
+          "state": 1849,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 269,
+          "rule": "prim_bound",
+          "state": 1852,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 270,
+          "rule": "prim_bound",
+          "state": 1856,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 271,
+          "rule": "type",
+          "state": 1861,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 272,
+          "rule": "type",
+          "state": 1864,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 273,
+          "rule": "type",
+          "state": 1873,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 274,
+          "rule": "type_no_bounds",
+          "state": 1889,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 275,
+          "rule": "array_or_slice_type",
+          "state": 1897,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 276,
+          "rule": "reference_type",
+          "state": 1903,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 277,
+          "rule": "reference_type",
+          "state": 1906,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 278,
+          "rule": "tuple_type",
+          "state": 1922,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 279,
+          "rule": "tuple_type",
+          "state": 1926,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 280,
+          "rule": "trait_object_type_one_bound",
+          "state": 1935,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 281,
+          "rule": "type_param_bounds",
+          "state": 1944,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 282,
+          "rule": "type_param_bounds",
+          "state": 1948,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 283,
+          "rule": "type_param_bound",
+          "state": 1957,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 284,
+          "rule": "type_param_bound",
+          "state": 1963,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 285,
+          "rule": "type_param_bound",
+          "state": 1967,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 286,
+          "rule": "type_param_bound",
+          "state": 1971,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 287,
+          "rule": "type_param_bound",
+          "state": 1973,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 288,
+          "rule": "type_param_bound",
+          "state": 1976,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 289,
+          "rule": "trait_object_type",
+          "state": 1979,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 290,
+          "rule": "trait_object_type",
+          "state": 1982,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 291,
+          "rule": "trait_bound",
+          "state": 1985,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 292,
+          "rule": "trait_bound",
+          "state": 1988,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 293,
+          "rule": "trait_bound",
+          "state": 1993,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 294,
+          "rule": "trait_bound",
+          "state": 1996,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 295,
+          "rule": "trait_bound",
+          "state": 2001,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 296,
+          "rule": "bare_function_type",
+          "state": 2004,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 297,
+          "rule": "bare_function_type",
+          "state": 2007,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 298,
+          "rule": "bare_function_type",
+          "state": 2010,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 299,
+          "rule": "bare_function_type",
+          "state": 2015,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 300,
+          "rule": "bare_function_type",
+          "state": 2019,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 301,
+          "rule": "extern_abi",
+          "state": 2025,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 302,
+          "rule": "type_arguments",
+          "state": 2034,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 303,
+          "rule": "type_arguments",
+          "state": 2038,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 304,
+          "rule": "type_arguments",
+          "state": 2042,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 305,
+          "rule": "type_arguments",
+          "state": 2052,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 306,
+          "rule": "type_arguments",
+          "state": 2060,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 307,
+          "rule": "type_arguments",
+          "state": 2064,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 308,
+          "rule": "type_arguments",
+          "state": 2068,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 309,
+          "rule": "type_argument",
+          "state": 2085,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 310,
+          "rule": "type_argument",
+          "state": 2093,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 311,
+          "rule": "ty_sum",
+          "state": 2096,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 312,
+          "rule": "ty_sum",
+          "state": 2101,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 313,
+          "rule": "ty_sum_list",
+          "state": 2108,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 314,
+          "rule": "ty_sum_list",
+          "state": 2112,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 315,
+          "rule": "type_parameters",
+          "state": 2124,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 316,
+          "rule": "type_parameters",
+          "state": 2128,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 317,
+          "rule": "type_parameters",
+          "state": 2131,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 318,
+          "rule": "lifetime_param",
+          "state": 2136,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 319,
+          "rule": "lifetime_param",
+          "state": 2140,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 320,
+          "rule": "lifetime_param",
+          "state": 2145,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 321,
+          "rule": "lifetime_param_list",
+          "state": 2152,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 322,
+          "rule": "lifetime_param_list",
+          "state": 2156,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 323,
+          "rule": "type_parameter",
+          "state": 2161,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 324,
+          "rule": "type_parameter",
+          "state": 2169,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 325,
+          "rule": "type_parameter",
+          "state": 2174,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 326,
+          "rule": "type_parameter",
+          "state": 2179,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 327,
+          "rule": "type_parameter",
+          "state": 2182,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 328,
+          "rule": "type_parameter",
+          "state": 2185,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 329,
+          "rule": "type_parameter_list",
+          "state": 2192,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 330,
+          "rule": "type_parameter_list",
+          "state": 2196,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 331,
+          "rule": "pattern",
+          "state": 2199,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 332,
+          "rule": "pattern",
+          "state": 2206,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 333,
+          "rule": "pattern_no_top_alt",
+          "state": 2214,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 334,
+          "rule": "pattern_no_top_alt",
+          "state": 2216,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 335,
+          "rule": "pat_ident",
+          "state": 2221,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 336,
+          "rule": "pattern_without_mut",
+          "state": 2230,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 337,
+          "rule": "pattern_without_mut",
+          "state": 2262,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 338,
+          "rule": "pattern_without_mut",
+          "state": 2268,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 339,
+          "rule": "pattern_without_mut",
+          "state": 2271,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 340,
+          "rule": "pattern_without_mut",
+          "state": 2274,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 341,
+          "rule": "pattern_without_mut",
+          "state": 2279,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 342,
+          "rule": "pattern_without_mut",
+          "state": 2284,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 343,
+          "rule": "pattern_without_mut",
+          "state": 2291,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 344,
+          "rule": "pattern_without_mut",
+          "state": 2298,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 345,
+          "rule": "pattern_without_mut",
+          "state": 2307,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 346,
+          "rule": "pattern_without_mut",
+          "state": 2311,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 347,
+          "rule": "pattern_without_mut",
+          "state": 2331,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 348,
+          "rule": "pat_range_end",
+          "state": 2335,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 349,
+          "rule": "pat_lit",
+          "state": 2338,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 350,
+          "rule": "pat_list",
+          "state": 2347,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 351,
+          "rule": "pat_list",
+          "state": 2351,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 352,
+          "rule": "pat_list_with_dots",
+          "state": 2359,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 353,
+          "rule": "pat_list_with_dots",
+          "state": 2364,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 354,
+          "rule": "pat_list_with_dots",
+          "state": 2366,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 355,
+          "rule": "pat_list_with_dots",
+          "state": 2368,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 356,
+          "rule": "pat_list_dots_tail",
+          "state": 2373,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 357,
+          "rule": "pat_fields_left",
+          "state": 2378,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 358,
+          "rule": "pat_fields",
+          "state": 2391,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 359,
+          "rule": "pat_fields",
+          "state": 2397,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 360,
+          "rule": "pat_fields",
+          "state": 2399,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 361,
+          "rule": "pat_fields",
+          "state": 2406,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 362,
+          "rule": "pat_fields",
+          "state": 2412,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 363,
+          "rule": "pat_fields",
+          "state": 2414,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 364,
+          "rule": "pat_fields",
+          "state": 2416,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 365,
+          "rule": "pat_field",
+          "state": 2421,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 366,
+          "rule": "pat_field",
+          "state": 2425,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 367,
+          "rule": "pat_field",
+          "state": 2428,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 368,
+          "rule": "pat_field",
+          "state": 2431,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 369,
+          "rule": "pat_field",
+          "state": 2437,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 370,
+          "rule": "pat_field",
+          "state": 2444,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 371,
+          "rule": "expr",
+          "state": 2448,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 372,
+          "rule": "expr",
+          "state": 2451,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 373,
+          "rule": "expr_no_struct",
+          "state": 2457,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 374,
+          "rule": "expr_no_struct",
+          "state": 2460,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 375,
+          "rule": "expr_list",
+          "state": 2469,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 376,
+          "rule": "expr_list",
+          "state": 2473,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 377,
+          "rule": "block",
+          "state": 2479,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 378,
+          "rule": "block",
+          "state": 2483,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 379,
+          "rule": "block_with_inner_attrs",
+          "state": 2491,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 380,
+          "rule": "block_with_inner_attrs",
+          "state": 2497,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 381,
+          "rule": "block_with_inner_attrs",
+          "state": 2501,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 382,
+          "rule": "stmt",
+          "state": 2510,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 383,
+          "rule": "stmt",
+          "state": 2517,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 384,
+          "rule": "stmt",
+          "state": 2528,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 385,
+          "rule": "stmt",
+          "state": 2535,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 386,
+          "rule": "stmt",
+          "state": 2539,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 387,
+          "rule": "stmt",
+          "state": 2546,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 388,
+          "rule": "stmt",
+          "state": 2554,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 389,
+          "rule": "blocky_expr",
+          "state": 2565,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 390,
+          "rule": "blocky_expr",
+          "state": 2570,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 391,
+          "rule": "blocky_expr",
+          "state": 2578,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 392,
+          "rule": "blocky_expr",
+          "state": 2582,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 393,
+          "rule": "blocky_expr",
+          "state": 2587,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 394,
+          "rule": "blocky_expr",
+          "state": 2593,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 395,
+          "rule": "blocky_expr",
+          "state": 2602,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 396,
+          "rule": "blocky_expr",
+          "state": 2607,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 397,
+          "rule": "blocky_expr",
+          "state": 2618,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 398,
+          "rule": "if_cond_or_pat",
+          "state": 2630,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 399,
+          "rule": "while_cond_or_pat",
+          "state": 2642,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 400,
+          "rule": "let_chain",
+          "state": 2649,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 401,
+          "rule": "let_chain",
+          "state": 2656,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 402,
+          "rule": "let_chain",
+          "state": 2665,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 403,
+          "rule": "let_chain",
+          "state": 2668,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 404,
+          "rule": "let_chain_operand",
+          "state": 2672,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 405,
+          "rule": "match_arms",
+          "state": 2685,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 406,
+          "rule": "match_arms",
+          "state": 2688,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 407,
+          "rule": "match_arms",
+          "state": 2694,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 408,
+          "rule": "match_arms",
+          "state": 2696,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 409,
+          "rule": "match_arms",
+          "state": 2698,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 410,
+          "rule": "match_arm_intro",
+          "state": 2703,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 411,
+          "rule": "match_arm_intro",
+          "state": 2708,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 412,
+          "rule": "match_pattern",
+          "state": 2713,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 413,
+          "rule": "match_pattern",
+          "state": 2720,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 414,
+          "rule": "expr_attrs",
+          "state": 2730,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 415,
+          "rule": "expr_inner_attrs",
+          "state": 2737,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 416,
+          "rule": "prim_expr",
+          "state": 2744,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 417,
+          "rule": "prim_expr",
+          "state": 2747,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 418,
+          "rule": "prim_expr",
+          "state": 2751,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 419,
+          "rule": "prim_expr_no_struct",
+          "state": 2757,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 420,
+          "rule": "prim_expr_no_struct",
+          "state": 2761,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 421,
+          "rule": "prim_expr_no_struct",
+          "state": 2766,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 422,
+          "rule": "prim_expr_no_struct",
+          "state": 2773,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 423,
+          "rule": "prim_expr_no_struct",
+          "state": 2778,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 424,
+          "rule": "prim_expr_no_struct",
+          "state": 2784,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 425,
+          "rule": "prim_expr_no_struct",
+          "state": 2787,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 426,
+          "rule": "prim_expr_no_struct",
+          "state": 2792,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 427,
+          "rule": "prim_expr_no_struct",
+          "state": 2800,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 428,
+          "rule": "prim_expr_no_struct",
+          "state": 2803,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 429,
+          "rule": "prim_expr_no_struct",
+          "state": 2810,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 430,
+          "rule": "prim_expr_no_struct",
+          "state": 2816,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 431,
+          "rule": "prim_expr_no_struct",
+          "state": 2821,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 432,
+          "rule": "prim_expr_no_struct",
+          "state": 2824,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 433,
+          "rule": "prim_expr_no_struct",
+          "state": 2827,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 434,
+          "rule": "prim_expr_no_struct",
+          "state": 2830,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 435,
+          "rule": "prim_expr_no_struct",
+          "state": 2834,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 436,
+          "rule": "prim_expr_no_struct",
+          "state": 2838,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 437,
+          "rule": "prim_expr_no_struct",
+          "state": 2842,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 438,
+          "rule": "prim_expr_no_struct",
+          "state": 2844,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 439,
+          "rule": "lit",
+          "state": 2858,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 440,
+          "rule": "closure_params",
+          "state": 2866,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 441,
+          "rule": "closure_params",
+          "state": 2869,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 442,
+          "rule": "closure_param",
+          "state": 2874,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 443,
+          "rule": "closure_param",
+          "state": 2880,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 444,
+          "rule": "closure_param_list",
+          "state": 2887,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 445,
+          "rule": "closure_param_list",
+          "state": 2891,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 446,
+          "rule": "closure_tail",
+          "state": 2894,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 447,
+          "rule": "closure_tail",
+          "state": 2898,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 448,
+          "rule": "lifetime_or_expr",
+          "state": 2902,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 449,
+          "rule": "fields",
+          "state": 2910,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 450,
+          "rule": "fields",
+          "state": 2916,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 451,
+          "rule": "fields",
+          "state": 2918,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 452,
+          "rule": "fields",
+          "state": 2920,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 453,
+          "rule": "field",
+          "state": 2928,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 454,
+          "rule": "field",
+          "state": 2935,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 455,
+          "rule": "field",
+          "state": 2942,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 456,
+          "rule": "field_name",
+          "state": 2946,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 457,
+          "rule": "post_expr",
+          "state": 2955,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 458,
+          "rule": "post_expr_tail",
+          "state": 2967,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 459,
+          "rule": "post_expr_tail",
+          "state": 2971,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 460,
+          "rule": "post_expr_tail",
+          "state": 2974,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 461,
+          "rule": "post_expr_tail",
+          "state": 2981,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 462,
+          "rule": "post_expr_tail",
+          "state": 2984,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 463,
+          "rule": "pre_expr",
+          "state": 3001,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 464,
+          "rule": "pre_expr",
+          "state": 3006,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 465,
+          "rule": "pre_expr",
+          "state": 3017,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 466,
+          "rule": "cast_expr",
+          "state": 3028,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 467,
+          "rule": "cast_expr",
+          "state": 3030,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 468,
+          "rule": "mul_expr",
+          "state": 3045,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 469,
+          "rule": "mul_expr",
+          "state": 3047,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 470,
+          "rule": "add_expr",
+          "state": 3059,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 471,
+          "rule": "add_expr",
+          "state": 3061,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 472,
+          "rule": "shift_expr",
+          "state": 3075,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 473,
+          "rule": "shift_expr",
+          "state": 3077,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 474,
+          "rule": "bit_and_expr",
+          "state": 3088,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 475,
+          "rule": "bit_xor_expr",
+          "state": 3099,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 476,
+          "rule": "bit_or_expr",
+          "state": 3110,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 477,
+          "rule": "cmp_expr",
+          "state": 3118,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 478,
+          "rule": "and_expr",
+          "state": 3128,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 479,
+          "rule": "or_expr",
+          "state": 3139,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 480,
+          "rule": "range_expr",
+          "state": 3146,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 481,
+          "rule": "range_expr",
+          "state": 3151,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 482,
+          "rule": "range_expr",
+          "state": 3155,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 483,
+          "rule": "range_expr",
+          "state": 3159,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 484,
+          "rule": "range_expr",
+          "state": 3161,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 485,
+          "rule": "assign_expr",
+          "state": 3171,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 486,
+          "rule": "post_expr_no_struct",
+          "state": 3180,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 487,
+          "rule": "pre_expr_no_struct",
+          "state": 3198,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 488,
+          "rule": "pre_expr_no_struct",
+          "state": 3203,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 489,
+          "rule": "pre_expr_no_struct",
+          "state": 3210,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 490,
+          "rule": "cast_expr_no_struct",
+          "state": 3221,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 491,
+          "rule": "cast_expr_no_struct",
+          "state": 3223,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 492,
+          "rule": "mul_expr_no_struct",
+          "state": 3238,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 493,
+          "rule": "mul_expr_no_struct",
+          "state": 3240,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 494,
+          "rule": "add_expr_no_struct",
+          "state": 3252,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 495,
+          "rule": "add_expr_no_struct",
+          "state": 3254,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 496,
+          "rule": "shift_expr_no_struct",
+          "state": 3268,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 497,
+          "rule": "shift_expr_no_struct",
+          "state": 3270,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 498,
+          "rule": "bit_and_expr_no_struct",
+          "state": 3281,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 499,
+          "rule": "bit_xor_expr_no_struct",
+          "state": 3292,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 500,
+          "rule": "bit_or_expr_no_struct",
+          "state": 3303,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 501,
+          "rule": "cmp_expr_no_struct",
+          "state": 3309,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 502,
+          "rule": "cmp_expr_no_struct",
+          "state": 3312,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 503,
+          "rule": "cmp_expr_no_struct",
+          "state": 3318,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 504,
+          "rule": "cmp_expr_no_struct",
+          "state": 3321,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 505,
+          "rule": "cmp_expr_no_struct",
+          "state": 3325,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 506,
+          "rule": "and_expr_no_struct",
+          "state": 3335,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 507,
+          "rule": "or_expr_no_struct",
+          "state": 3346,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 508,
+          "rule": "range_expr_no_struct",
+          "state": 3353,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 509,
+          "rule": "range_expr_no_struct",
+          "state": 3358,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 510,
+          "rule": "range_expr_no_struct",
+          "state": 3362,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 511,
+          "rule": "range_expr_no_struct",
+          "state": 3366,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 512,
+          "rule": "range_expr_no_struct",
+          "state": 3368,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 513,
+          "rule": "assign_expr_no_struct",
+          "state": 3390,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 514,
+          "rule": "assign_expr_no_struct",
+          "state": 3394,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 515,
+          "rule": "any_ident",
+          "state": 3404,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 516,
+          "rule": "macro_iterm",
+          "state": 3412,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 517,
+          "rule": "macro_rules_definition",
+          "state": 3417,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 518,
+          "rule": "macro_rules_def",
+          "state": 3423,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 519,
+          "rule": "macro_rules_def",
+          "state": 3429,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 520,
+          "rule": "macro_rules_def",
+          "state": 3435,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 521,
+          "rule": "macro_rules_def",
+          "state": 3438,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 522,
+          "rule": "macro_rules",
+          "state": 3445,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 523,
+          "rule": "macro_rules",
+          "state": 3449,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 524,
+          "rule": "macro_matcher",
+          "state": 3459,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 525,
+          "rule": "macro_matcher",
+          "state": 3467,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 526,
+          "rule": "macro_matcher",
+          "state": 3475,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 527,
+          "rule": "macro_matcher",
+          "state": 3479,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 528,
+          "rule": "macro_match",
+          "state": 3492,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 529,
+          "rule": "macro_match",
+          "state": 3496,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 530,
+          "rule": "macro_match",
+          "state": 3500,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 531,
+          "rule": "delim_token_tree",
+          "state": 3514,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 532,
+          "rule": "delim_token_tree",
+          "state": 3522,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 533,
+          "rule": "delim_token_tree",
+          "state": 3530,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 534,
+          "rule": "delim_token_tree",
+          "state": 3534,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 535,
+          "rule": "macro_invocation_semi",
+          "state": 3542,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 536,
+          "rule": "macro_invocation_semi",
+          "state": 3554,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 537,
+          "rule": "macro_invocation_semi",
+          "state": 3566,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 538,
+          "rule": "macro_invocation_semi",
+          "state": 3571,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1
+        }
       ]
     }
   ]

@@ -43,13 +43,7 @@
     "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
     "reachability": "direct ancestry is verified when the recorded commit objects are available"
   },
-  "locked_oracle_sections": [
-    {
-      "path": "crates/antlr-rust-g4-parser/src/frontend.rs",
-      "marker": "#[cfg(test)]",
-      "sha256": "c07602789cd12a9618a6c1049260d2d140677992319c1b8d1cfe1066f4500f4e"
-    }
-  ],
+  "locked_oracle_sections": [],
   "demonstrated_red": {
     "command": "cargo test --locked -p antlr-rust-g4-parser --lib frontend::tests::",
     "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",

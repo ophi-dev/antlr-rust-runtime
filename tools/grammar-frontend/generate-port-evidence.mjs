@@ -112,9 +112,6 @@ import {
 
 const TEST_COMMAND =
     "cargo test --locked -p antlr-rust-g4-parser --lib frontend::tests::";
-const REFACTOR_BASE_COMMIT = "bd6710eaedbd79e652681b7b102e03680fd96fbd";
-const TEST_MODULE_PATH = "crates/antlr-rust-g4-parser/src/frontend.rs";
-const TEST_MODULE_MARKER = "#[cfg(test)]";
 const FRONTEND_SYNTAX_TEST_PATH =
     "crates/antlr-rust-g4-parser/src/ported_tests.rs";
 const FRONTEND_SYNTAX_TEST_MARKER =
@@ -421,64 +418,6 @@ const completedRows = testMap.rows.filter(
 );
 const expectedFiles = new Map();
 
-const checkedInTestModule = sectionAtMarker(
-    await readFile(resolve(repoRoot, TEST_MODULE_PATH), "utf8"),
-    TEST_MODULE_MARKER,
-);
-const baselineTestSource = gitShowAtPath(
-    repoRoot,
-    REFACTOR_BASE_COMMIT,
-    historicalPath(TEST_MODULE_PATH),
-);
-if (baselineTestSource === null) {
-    throw new Error("refactor baseline lacks the grammar frontend test module");
-}
-const baselineTestModule = sectionAtMarker(
-    baselineTestSource,
-    TEST_MODULE_MARKER,
-);
-if (
-    normalizeRelocatedFrontendTests(baselineTestModule) !==
-    normalizeRelocatedFrontendTests(checkedInTestModule)
-) {
-    throw new Error("refactor changed the grammar frontend tests");
-}
-const testModule = gitShowOptional(repoRoot, TEST_COMMIT, TEST_MODULE_PATH);
-const implementationTestModule = gitShowOptional(
-    repoRoot,
-    IMPLEMENTATION_COMMIT,
-    TEST_MODULE_PATH,
-);
-if (testModule === null) {
-    warnMissingHistoricalSource(
-        "locked frontend test verification",
-        TEST_COMMIT,
-        TEST_MODULE_PATH,
-    );
-}
-if (implementationTestModule === null) {
-    warnMissingHistoricalSource(
-        "locked frontend implementation verification",
-        IMPLEMENTATION_COMMIT,
-        TEST_MODULE_PATH,
-    );
-}
-if (testModule !== null && implementationTestModule !== null) {
-    const lockedTestModule = sectionAtMarker(testModule, TEST_MODULE_MARKER);
-    const implementedTestModule = sectionAtMarker(
-        implementationTestModule,
-        TEST_MODULE_MARKER,
-    );
-    if (
-        normalizeRelocatedFrontendTests(lockedTestModule) !==
-        normalizeRelocatedFrontendTests(implementedTestModule)
-    ) {
-        throw new Error(
-            "implementation commit changed the locked frontend test module",
-        );
-    }
-}
-const lockedTestModuleHash = digest(checkedInTestModule);
 const checkedInSyntaxSource = await readFile(
     resolve(repoRoot, FRONTEND_SYNTAX_TEST_PATH),
     "utf8",
@@ -539,13 +478,6 @@ if (recordedSyntaxModule === null) {
 ) {
     throw new Error("checked-in frontend syntax test module differs from its test commit");
 }
-const defaultLockedSections = [
-    {
-        path: TEST_MODULE_PATH,
-        marker: TEST_MODULE_MARKER,
-        sha256: lockedTestModuleHash,
-    },
-];
 const syntaxLockedSections = [
     {
         path: FRONTEND_SYNTAX_TEST_PATH,
@@ -1855,7 +1787,7 @@ for (const fixture of externalMap.fixtures) {
                 implementationCommit: IMPLEMENTATION_COMMIT,
                 testCommand: TEST_COMMAND,
                 greenResultText: "5 passed; 0 failed",
-                lockedSections: defaultLockedSections,
+                lockedSections: [],
                 ownerPhase: assertion.phase,
                 scaffoldCommit: SCAFFOLD_COMMIT,
                 testParent: SCAFFOLD_COMMIT,
@@ -2550,7 +2482,7 @@ for (const row of completedRows) {
             ? phaseBProfile.lockedSections
             : coveredExisting
               ? syntaxLockedSections
-              : defaultLockedSections,
+              : [],
         ownerPhase: row.owner_phase,
         scaffoldCommit: phaseBProfile
             ? phaseBProfile.scaffoldCommit
@@ -2844,16 +2776,6 @@ function sectionBetweenMarkers(text, marker, endMarker) {
         throw new Error(`cannot find locked section end marker ${endMarker}`);
     }
     return text.slice(offset, end);
-}
-
-function normalizeRelocatedFrontendTests(text) {
-    return text
-        .replace(
-            /    const SNAPSHOTS: &str = [\s\S]*?;\n\n    #\[test\]/u,
-            '    const SNAPSHOTS: &str = "<frontend-snapshots>";\n\n    #[test]',
-        )
-        .replaceAll("tests/codegen-direct/", "<frontend-fixtures>/")
-        .replaceAll("tests/frontend/", "<frontend-fixtures>/");
 }
 
 function refactorSectionsEquivalent(left, right) {

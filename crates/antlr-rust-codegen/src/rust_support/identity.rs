@@ -8,6 +8,8 @@ use std::process::Command;
 use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
 
+use crate::json::to_pretty_json;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BundleIdentity {
     pub(crate) repository: String,
@@ -273,7 +275,7 @@ impl TrustStore {
             .repositories
             .extend(self.file.repositories.iter().cloned());
         merged.revisions.extend(self.file.revisions.iter().cloned());
-        let contents = toml::to_string_pretty(&merged).map_err(io::Error::other)?;
+        let contents = to_pretty_json(&merged);
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         temporary.write_all(contents.as_bytes())?;
         temporary
@@ -290,7 +292,7 @@ fn read_trust_file(path: Option<&Path>) -> io::Result<TrustFile> {
         Err(error) => return Err(error),
     };
     let file = match contents {
-        Some(contents) => toml::from_str::<TrustFile>(&contents).map_err(|error| {
+        Some(contents) => serde_json::from_str::<TrustFile>(&contents).map_err(|error| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("invalid Rust support trust store: {error}"),
@@ -318,7 +320,7 @@ fn default_trust_store_path() -> Option<PathBuf> {
         return Some(
             PathBuf::from(path)
                 .join("antlr4-rust")
-                .join("trusted-support.toml"),
+                .join("trusted-support.json"),
         );
     }
     #[cfg(target_os = "windows")]
@@ -326,7 +328,7 @@ fn default_trust_store_path() -> Option<PathBuf> {
         return Some(
             PathBuf::from(path)
                 .join("antlr4-rust")
-                .join("trusted-support.toml"),
+                .join("trusted-support.json"),
         );
     }
     #[cfg(target_os = "windows")]
@@ -340,20 +342,20 @@ fn default_trust_store_path() -> Option<PathBuf> {
         home.join("Library")
             .join("Application Support")
             .join("antlr4-rust")
-            .join("trusted-support.toml"),
+            .join("trusted-support.json"),
     );
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     return Some(
         home.join(".config")
             .join("antlr4-rust")
-            .join("trusted-support.toml"),
+            .join("trusted-support.json"),
     );
     #[cfg(target_os = "windows")]
     Some(
         home.join("AppData")
             .join("Roaming")
             .join("antlr4-rust")
-            .join("trusted-support.toml"),
+            .join("trusted-support.json"),
     )
 }
 
@@ -384,7 +386,7 @@ mod tests {
     #[test]
     fn persisted_scopes_round_trip() {
         let temporary = tempfile::tempdir().expect("temporary directory");
-        let path = temporary.path().join("trusted-support.toml");
+        let path = temporary.path().join("trusted-support.json");
         let identity = BundleIdentity {
             repository: "https://example.test/grammars".to_owned(),
             revision: Some("0123456789abcdef".to_owned()),
@@ -406,14 +408,18 @@ mod tests {
         store
             .trust_repository(&identity)
             .expect("repository trust should persist");
-        let store = TrustStore::load(Some(path)).expect("repository store should reload");
+        let store = TrustStore::load(Some(path.clone())).expect("repository store should reload");
         assert!(store.trusts_repository(&identity));
+        insta::assert_snapshot!(
+            "persisted_trust_store",
+            fs::read_to_string(path).expect("trust store should remain readable")
+        );
     }
 
     #[test]
     fn concurrent_writers_merge_trust_decisions() {
         let temporary = tempfile::tempdir().expect("temporary directory");
-        let path = temporary.path().join("trusted-support.toml");
+        let path = temporary.path().join("trusted-support.json");
         let barrier = Arc::new(Barrier::new(2));
         let mut handles = Vec::new();
         for repository in ["https://example.test/first", "https://example.test/second"] {

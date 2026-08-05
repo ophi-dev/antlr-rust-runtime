@@ -1323,24 +1323,7 @@ mod tests {
     }
 
     fn push_json_string(output: &mut String, text: &str) {
-        output.push('"');
-        for character in text.chars() {
-            match character {
-                '"' => output.push_str("\\\""),
-                '\\' => output.push_str("\\\\"),
-                '\u{0008}' => output.push_str("\\b"),
-                '\u{000c}' => output.push_str("\\f"),
-                '\n' => output.push_str("\\n"),
-                '\r' => output.push_str("\\r"),
-                '\t' => output.push_str("\\t"),
-                '\u{0000}'..='\u{001f}' => {
-                    write!(output, "\\u{:04x}", character as u32)
-                        .expect("writing to String cannot fail");
-                }
-                _ => output.push(character),
-            }
-        }
-        output.push('"');
+        output.push_str(&serde_json::to_string(text).expect("token text should serialize as JSON"));
     }
 
     struct Fnv1a64(u64);

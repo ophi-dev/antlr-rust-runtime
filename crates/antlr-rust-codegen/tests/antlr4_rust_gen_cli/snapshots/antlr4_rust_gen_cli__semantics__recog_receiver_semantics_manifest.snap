@@ -1,5 +1,43 @@
 ---
-source: tests/antlr4_rust_gen_cli/semantics.rs
-expression: predicate
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/semantics.rs
+expression: manifest
 ---
-        {"kind": "parser-predicate", "rule": "shl", "rule_index": 0, "index": 0, "atn_state": null, "line": 8, "column": 6, "body": "recog.IsOk()", "disposition": "hooked", "template": "Hook"}
+{
+  "version": 2,
+  "policy": "error",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [
+    {
+      "name": "superClass",
+      "value": "ParserBase",
+      "line": 4,
+      "column": 4,
+      "disposition": "hooked"
+    }
+  ],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "RecogPredicateLexer",
+      "coordinates": []
+    },
+    {
+      "kind": "parser",
+      "name": "RecogPredicateParser",
+      "coordinates": [
+        {
+          "kind": "parser-predicate",
+          "rule": "shl",
+          "rule_index": 0,
+          "index": 0,
+          "atn_state": null,
+          "line": 8,
+          "column": 6,
+          "body": "recog.IsOk()",
+          "disposition": "hooked",
+          "template": "Hook"
+        }
+      ]
+    }
+  ]
+}

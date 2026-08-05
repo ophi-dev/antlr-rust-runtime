@@ -1,0 +1,11 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/rust_support.rs
+expression: "serde_json::to_string_pretty(option).expect(\"option should serialize\")"
+---
+{
+  "column": 10,
+  "disposition": "unsupported",
+  "line": 2,
+  "name": "superClass",
+  "value": "UnrelatedBase"
+}

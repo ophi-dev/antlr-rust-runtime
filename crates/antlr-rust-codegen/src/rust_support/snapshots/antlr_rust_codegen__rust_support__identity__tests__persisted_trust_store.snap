@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-codegen/src/rust_support/identity.rs
+expression: "fs::read_to_string(path).expect(\"trust store should remain readable\")"
+---
+{
+  "version": 1,
+  "repositories": [
+    "https://example.test/grammars"
+  ],
+  "revisions": [
+    "https://example.test/grammars@0123456789abcdef#sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}
