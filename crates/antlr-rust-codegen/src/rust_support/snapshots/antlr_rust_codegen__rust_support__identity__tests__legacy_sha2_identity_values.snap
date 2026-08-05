@@ -1,0 +1,8 @@
+---
+source: crates/antlr-rust-codegen/src/rust_support/identity.rs
+expression: "(&identity.fingerprint, identity.artifact_id())"
+---
+(
+    "sha256:4598f85710c4e40754704f4c2e70120c3763e70c2911a3c5f0c57d068d911013",
+    "4598f85710c4-772b681a",
+)

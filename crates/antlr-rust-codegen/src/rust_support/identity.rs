@@ -5,8 +5,8 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use hmac_sha256::Hash;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BundleIdentity {
@@ -39,7 +39,7 @@ impl BundleIdentity {
             .fingerprint
             .strip_prefix("sha256:")
             .expect("fingerprints are normalized");
-        let mut digest = Sha256::new();
+        let mut digest = Hash::new();
         digest.update(self.repository.as_bytes());
         digest.update(b"\0");
         digest.update(self.revision.as_deref().unwrap_or("unversioned").as_bytes());
@@ -89,7 +89,7 @@ pub(crate) fn fingerprint_directory(directory: &Path) -> io::Result<String> {
     collect_files(directory, directory, &mut files)?;
     files.sort_by(|left, right| left.0.cmp(&right.0));
 
-    let mut digest = Sha256::new();
+    let mut digest = Hash::new();
     digest.update(b"antlr-rust-support-v1\0");
     for (relative, path) in files {
         let contents = fs::read(path)?;
@@ -358,10 +358,12 @@ fn default_trust_store_path() -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
+    use std::fs;
     use std::sync::{Arc, Barrier};
 
-    use super::{BundleIdentity, TrustStore, normalize_repository};
+    use super::{BundleIdentity, TrustStore, fingerprint_directory, normalize_repository};
 
     #[test]
     fn repository_identity_strips_remote_credentials() {
@@ -464,5 +466,28 @@ mod tests {
         };
 
         assert_ne!(first.artifact_id(), second.artifact_id());
+    }
+
+    #[test]
+    fn identity_hashes_match_legacy_sha2_values() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let nested = temporary.path().join("nested");
+        fs::create_dir(&nested).expect("nested support directory");
+        fs::write(temporary.path().join("Grammar.g4"), "grammar Example;\n")
+            .expect("root support file");
+        fs::write(nested.join("support.rs"), "pub struct Support;\n").expect("nested support file");
+
+        let identity = BundleIdentity {
+            repository: "https://example.test/grammars".to_owned(),
+            revision: Some("0123456789abcdef".to_owned()),
+            bundle_path: "example/Rust".to_owned(),
+            fingerprint: fingerprint_directory(temporary.path())
+                .expect("support directory fingerprint"),
+        };
+
+        insta::assert_debug_snapshot!(
+            "legacy_sha2_identity_values",
+            (&identity.fingerprint, identity.artifact_id())
+        );
     }
 }
