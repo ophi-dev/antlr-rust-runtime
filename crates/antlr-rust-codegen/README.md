@@ -60,9 +60,12 @@ antlr4-rust-testrig MyParser.g4 start \
 The command generates and compiles a temporary grammar-specific runner with the
 matching runtime because Rust cannot reflectively load recognizer types or call
 a rule by name. It removes the temporary package afterward while retaining
-Cargo build artifacts for subsequent invocations. It processes every input and
-exits non-zero if generation, compilation, input reading, lexing, or parsing
-reports an error, so the same command can be used as a test runner.
+Cargo build artifacts in the current user's cache for subsequent invocations;
+set `ANTLR4_RUST_TESTRIG_TARGET_DIR` to override that location. Parser
+`--diagnostics` and `--sll` modes are mutually exclusive. The command processes
+every input and exits non-zero if generation, compilation, input reading,
+lexing, or parsing reports an error, so the same command can be used as a test
+runner.
 
 The runtime, codegen, and internal parser packages are released in lockstep.
 

@@ -83,7 +83,7 @@ struct CliArgs {
     trace: bool,
 
     /// Report exact-ambiguity prediction diagnostics.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "sll")]
     diagnostics: bool,
 
     /// Use SLL prediction mode instead of LL.
@@ -181,7 +181,7 @@ impl CliArgs {
             .arg("--manifest-path")
             .arg(project.manifest())
             .arg("--target-dir")
-            .arg(target_directory())
+            .arg(target_directory(project))
             .arg("--");
         for (enabled, flag) in [
             (self.tokens, "--tokens"),
@@ -337,16 +337,50 @@ fn toml_string(path: &Path) -> io::Result<String> {
     Ok(escaped)
 }
 
-fn target_directory() -> PathBuf {
-    std::env::var_os(TARGET_DIR_ENV).map_or_else(
-        || {
-            std::env::temp_dir().join(format!(
-                "antlr4-rust-testrig-target-{}",
-                env!("CARGO_PKG_VERSION")
-            ))
-        },
-        PathBuf::from,
+fn target_directory(project: &TemporaryProject) -> PathBuf {
+    select_target_directory(
+        std::env::var_os(TARGET_DIR_ENV).map(PathBuf::from),
+        user_cache_directory(),
+        &project.root,
     )
+}
+
+fn select_target_directory(
+    configured: Option<PathBuf>,
+    user_cache: Option<PathBuf>,
+    project_root: &Path,
+) -> PathBuf {
+    configured.unwrap_or_else(|| {
+        user_cache.map_or_else(
+            || project_root.join("target"),
+            |cache| {
+                cache
+                    .join("antlr4-rust-testrig")
+                    .join(env!("CARGO_PKG_VERSION"))
+                    .join("target")
+            },
+        )
+    })
+}
+
+fn user_cache_directory() -> Option<PathBuf> {
+    if let Some(cache) = std::env::var_os("XDG_CACHE_HOME").filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(cache));
+    }
+    if cfg!(target_os = "windows")
+        && let Some(cache) = std::env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty())
+    {
+        return Some(PathBuf::from(cache));
+    }
+    let home = std::env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()))?;
+    let home = PathBuf::from(home);
+    Some(if cfg!(target_os = "macos") {
+        home.join("Library").join("Caches")
+    } else {
+        home.join(".cache")
+    })
 }
 
 #[cfg(test)]
@@ -365,6 +399,28 @@ mod tests {
         assert_eq!(
             toml_string(path).expect("path should escape"),
             r#""a\\b\"c""#
+        );
+    }
+
+    #[test]
+    fn target_directory_prefers_override_then_user_cache_then_project() {
+        let configured = PathBuf::from("configured");
+        let cache = PathBuf::from("cache");
+        let project = Path::new("project");
+        assert_eq!(
+            select_target_directory(Some(configured.clone()), Some(cache.clone()), project),
+            configured
+        );
+        assert_eq!(
+            select_target_directory(None, Some(cache), project),
+            PathBuf::from("cache")
+                .join("antlr4-rust-testrig")
+                .join(env!("CARGO_PKG_VERSION"))
+                .join("target")
+        );
+        assert_eq!(
+            select_target_directory(None, None, project),
+            project.join("target")
         );
     }
 }

@@ -136,11 +136,14 @@ antlr4-rust-testrig MyGrammarParser.g4 start \
   tests/valid/*.txt
 ```
 
-`--trace`, `--diagnostics`, and `--sll` expose the corresponding parser modes.
+`--trace`, `--diagnostics`, and `--sll` expose the corresponding parser modes;
+exact-ambiguity diagnostics and SLL prediction are mutually exclusive.
 Each invocation generates the recognizer and a grammar-specific runner in a
 temporary Cargo package, selects the matching `antlr-rust-runtime` release, and
 removes the generated package afterward. Cargo build artifacts are reused, so
 the first invocation can take longer while dependencies and the runner compile.
+The shared target directory lives in the current user's cache directory; set
+`ANTLR4_RUST_TESTRIG_TARGET_DIR` to override it.
 
 TestRig processes every named input and returns a non-zero status when
 generation, temporary runner compilation, input reading, lexing, or parsing

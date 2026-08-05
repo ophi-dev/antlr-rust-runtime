@@ -47,7 +47,6 @@ fn parser_runner_prints_requested_views_and_fails_on_each_error_source() {
         OsStr::new("--tree"),
         OsStr::new("--trace"),
         OsStr::new("--diagnostics"),
-        OsStr::new("--sll"),
         valid.as_os_str(),
     ]);
     assert!(
@@ -128,6 +127,60 @@ fn stdin_and_split_grammars_are_supported() {
         utf8(&output.stderr)
     );
     insta::assert_snapshot!("split_parser_tree", utf8(&output.stdout));
+    assert_eq!(utf8(&output.stderr), "");
+}
+
+#[test]
+fn prediction_modes_are_mutually_exclusive() {
+    let output = run_antlr4_rust_testrig(&["TestRig.g4", "start", "--diagnostics", "--sll"]);
+
+    assert!(!output.status.success());
+    insta::assert_snapshot!(
+        "conflicting_prediction_modes",
+        normalize_cli_snapshot(utf8(&output.stderr))
+    );
+}
+
+#[test]
+fn generated_recognizer_names_do_not_collide_with_runner_imports() {
+    let directory = temporary_directory("testrig-colliding-imports");
+    let lexer = directory.path().join("InputStream.g4");
+    let parser = directory.path().join("AntlrError.g4");
+    fs::write(
+        &lexer,
+        "lexer grammar InputStream;\n\
+         ID : [a-z]+ ;\n\
+         WS : [ \\t\\r\\n]+ -> skip ;\n",
+    )
+    .expect("lexer grammar should be writable");
+    fs::write(
+        &parser,
+        "parser grammar AntlrError;\n\
+         options { tokenVocab = InputStream; }\n\
+         start : ID EOF ;\n",
+    )
+    .expect("parser grammar should be writable");
+
+    let output = run_antlr4_rust_testrig_with_stdin(
+        &[
+            parser.as_os_str(),
+            OsStr::new("start"),
+            OsStr::new("--lexer-grammar"),
+            lexer.as_os_str(),
+            OsStr::new("--lib"),
+            directory.path().as_os_str(),
+            OsStr::new("--tree"),
+        ],
+        b"collision\n",
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    insta::assert_snapshot!("colliding_recognizer_names_tree", utf8(&output.stdout));
     assert_eq!(utf8(&output.stderr), "");
 }
 

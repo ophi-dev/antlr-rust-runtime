@@ -279,6 +279,12 @@ fn options_and_inputs() -> io::Result<(Options, Vec<OsString>)> {
             }
         }
     }
+    if options.diagnostics && options.sll {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--diagnostics cannot be used with --sll",
+        ));
+    }
     Ok((options, inputs))
 }
 
@@ -407,7 +413,7 @@ const LEXER_RUNNER_TEMPLATE: &str = r#"#![allow(clippy::print_stderr, clippy::pr
 #[path = "../__LEXER_MODULE__.rs"]
 mod generated_lexer;
 
-use generated_lexer::__LEXER_TYPE__;
+use generated_lexer::__LEXER_TYPE__ as TestRigGeneratedLexer;
 
 __RUNNER_PREAMBLE__
 
@@ -416,7 +422,7 @@ fn process(
     options: Options,
 ) -> miette::Result<bool> {
     let source = diagnostic_source(&input);
-    let lexer = __LEXER_TYPE__::new(input);
+    let lexer = TestRigGeneratedLexer::new(input);
     let mut tokens = CommonTokenStream::try_new(lexer)
         .into_diagnostic()
         .wrap_err("failed to buffer lexer tokens")?;
@@ -441,9 +447,9 @@ use antlr4_runtime::{
     AntlrError, EnterRuleEvent, ErrorListener, ParseListener, Parser as _, PredictionMode,
     Recognizer, SyntaxErrorEvent,
 };
+use generated_lexer::__LEXER_TYPE__ as TestRigGeneratedLexer;
+use generated_parser::__PARSER_TYPE__ as TestRigGeneratedParser;
 use std::sync::Mutex;
-use generated_lexer::__LEXER_TYPE__;
-use generated_parser::__PARSER_TYPE__;
 
 __RUNNER_PREAMBLE__
 
@@ -549,7 +555,7 @@ fn process(
     options: Options,
 ) -> miette::Result<bool> {
     let source = diagnostic_source(&input);
-    let lexer = __LEXER_TYPE__::new(input);
+    let lexer = TestRigGeneratedLexer::new(input);
     let mut tokens = CommonTokenStream::try_new(lexer)
         .into_diagnostic()
         .wrap_err("failed to buffer lexer tokens")?;
@@ -560,19 +566,16 @@ fn process(
         }
     }
 
-    let mut parser = __PARSER_TYPE__::new(tokens);
+    let mut parser = TestRigGeneratedParser::new(tokens);
     let parser_diagnostics =
         DiagnosticCollector::new(PARSER_DIAGNOSTIC_CODE, Arc::clone(&source));
     parser.remove_error_listeners();
     parser.add_error_listener(parser_diagnostics.clone());
-    if options.tree {
-        parser.set_build_parse_trees(true);
-    }
+    parser.set_build_parse_trees(options.tree);
     if options.diagnostics {
         parser.set_report_diagnostic_errors(true);
         parser.set_prediction_mode(PredictionMode::LlExactAmbigDetection);
-    }
-    if options.sll {
+    } else if options.sll {
         parser.set_prediction_mode(PredictionMode::Sll);
     }
     if options.trace {

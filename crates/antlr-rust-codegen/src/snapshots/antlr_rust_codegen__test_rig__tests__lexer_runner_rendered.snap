@@ -7,7 +7,7 @@ expression: rendered
 #[path = "../demo_lexer.rs"]
 mod generated_lexer;
 
-use generated_lexer::DemoLexer;
+use generated_lexer::DemoLexer as TestRigGeneratedLexer;
 
 use std::ffi::OsString;
 use std::fmt;
@@ -110,6 +110,12 @@ fn options_and_inputs() -> io::Result<(Options, Vec<OsString>)> {
                 ));
             }
         }
+    }
+    if options.diagnostics && options.sll {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--diagnostics cannot be used with --sll",
+        ));
     }
     Ok((options, inputs))
 }
@@ -239,7 +245,7 @@ fn process(
     options: Options,
 ) -> miette::Result<bool> {
     let source = diagnostic_source(&input);
-    let lexer = DemoLexer::new(input);
+    let lexer = TestRigGeneratedLexer::new(input);
     let mut tokens = CommonTokenStream::try_new(lexer)
         .into_diagnostic()
         .wrap_err("failed to buffer lexer tokens")?;
