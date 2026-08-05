@@ -1,0 +1,15 @@
+antlr-rust-toml-parser
+
+The generated TOML recognizers in this package are derived from TomlLexer.g4
+and TomlParser.g4 in antlr/grammars-v4 at commit
+42b1ea521705c126d84331186b221c9819db1058:
+
+https://github.com/antlr/grammars-v4/tree/42b1ea521705c126d84331186b221c9819db1058/toml
+
+The upstream source files state that they are licensed to the Apache Software
+Foundation (ASF) under one or more contributor license agreements and are
+distributed under the Apache License, Version 2.0. The package LICENSE file
+contains that license.
+
+The repository copy includes documented corrections for TOML multiline basic
+strings and forbidden control characters in comments.

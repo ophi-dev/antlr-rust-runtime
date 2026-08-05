@@ -25,7 +25,7 @@ lexer grammar TomlLexer;
 
 WS               : [ \t]+ -> skip;
 NL               : ('\r'? '\n')+;
-COMMENT          : '#' (~[\n])*;
+COMMENT          : '#' (~[\u0000-\u0008\u000A-\u001F\u007F])*;
 L_BRACKET        : '[';
 DOUBLE_L_BRACKET : '[[';
 R_BRACKET        : ']';
@@ -62,7 +62,7 @@ BOOLEAN: ('true' | 'false') -> popMode;
 // strings
 fragment ML_ESC      : '\\' '\r'? '\n' | ESC;
 VALUE_BASIC_STRING   : BASIC_STRING                    -> type(BASIC_STRING), popMode;
-ML_BASIC_STRING      : '"""' (ML_ESC | ~["\\])*? '"""' -> popMode;
+ML_BASIC_STRING      : '"""' (ML_ESC | ~[\\])*? '"""' -> popMode;
 VALUE_LITERAL_STRING : LITERAL_STRING                  -> type(LITERAL_STRING), popMode;
 ML_LITERAL_STRING    : '\'\'\'' (.)*? '\'\'\''         -> popMode;
 

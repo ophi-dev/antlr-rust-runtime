@@ -114,6 +114,18 @@ Document {
             Assignment {
                 key: Key {
                     segments: [
+                        "multiline",
+                    ],
+                },
+                value: String(
+                    "call(\"x\")",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
                         "owner",
                         "name",
                     ],

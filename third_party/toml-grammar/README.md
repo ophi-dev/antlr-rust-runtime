@@ -5,6 +5,13 @@
 at commit `42b1ea521705c126d84331186b221c9819db1058`. The grammar is
 licensed under Apache-2.0; its upstream license and source notices are retained.
 
+Local corrections:
+
+- multiline basic strings permit raw single and paired quote characters while
+  the non-greedy lexer loop still terminates at the closing triple quote;
+- comments reject TOML-forbidden C0 control characters and DEL while retaining
+  horizontal tab.
+
 The smaller `benkonz/TOML-Grammar` candidate generated 309,019 bytes of Rust
 with version 0.30.0, versus 436,379 bytes for this grammar. It was not selected
 because the repository carries no license and its grammar omits the required

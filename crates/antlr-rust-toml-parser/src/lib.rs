@@ -33,6 +33,7 @@ answer = 0x2a
 enabled = true
 when = 1979-05-27T07:32:00Z
 values = [1, "two", false, { first = "a", second = 2 }]
+multiline = """call("x")"""
 owner.name = "Ada"
 
 [standard.table]
@@ -68,9 +69,23 @@ name = "two"
 
     #[test]
     fn drained_lexer_error_still_fails_validated_parse() {
-        let error = parse("value = @\n")
+        // The lexer skips `@`; without the retained source-error count, the
+        // remaining tokens would form a valid document and validation could
+        // incorrectly succeed.
+        let error = parse("version = 1\n@\n")
             .expect_err("draining a lexer diagnostic must not make validation succeed");
 
         insta::assert_snapshot!("invalid_toml_lexer_diagnostic", error);
+    }
+
+    #[test]
+    fn forbidden_control_character_in_comment_is_rejected() {
+        let error = parse("version = 1 # bad\u{0000}\n")
+            .expect_err("TOML comments must reject forbidden control characters");
+
+        assert!(
+            error.to_string().contains("token recognition error"),
+            "unexpected diagnostic: {error}"
+        );
     }
 }

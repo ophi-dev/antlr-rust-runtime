@@ -74,7 +74,7 @@ fn decode_escape(
         }
         other => {
             return Err(Error::invalid(format!(
-                "unsupported TOML escape sequence \\\\{other}"
+                "unsupported TOML escape sequence \\{other}"
             )));
         }
     }
