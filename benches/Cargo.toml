@@ -1,0 +1,23 @@
+[package]
+name = "antlr-rust-benches"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+# Kept out of the root workspace on purpose: the CodSpeed harness pulls in
+# `clap` with `wrap_help`, and feature unification would then change the
+# `antlr4-rust-gen` help output that the CLI snapshot tests assert on.
+
+[dependencies]
+antlr-rust-g4-parser = { path = "../crates/antlr-rust-g4-parser" }
+antlr4_runtime = { package = "antlr-rust-runtime", path = "../crates/antlr-rust-runtime" }
+divan = { version = "5.0.1", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "char_stream"
+harness = false
+
+[[bench]]
+name = "grammar_frontend"
+harness = false

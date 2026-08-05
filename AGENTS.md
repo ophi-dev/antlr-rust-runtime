@@ -241,6 +241,36 @@ only for small, stable values. Project specifics:
   review each, then `cargo insta accept` (do not pass `--all-features` — it is
   rejected). `cargo-insta` 1.48+ is available.
 
+## CodSpeed micro-benchmarks
+
+`benches/` is a `divan` benchmark package (the `divan` dependency is
+`codspeed-divan-compat`, renamed) that depends on the runtime through its public
+API. It is **excluded from the root workspace** on purpose: the harness pulls in
+`clap` with `wrap_help`, and feature unification would otherwise change the
+`antlr4-rust-gen` help output that the CLI snapshot tests assert on. Keep it
+excluded, and only use public API from the benches.
+
+- `benches/benches/char_stream.rs` — `InputStream` construction, the
+  lookahead/consume loop, token-text extraction, and line/column accounting,
+  each for ASCII and non-ASCII input.
+- `benches/benches/grammar_frontend.rs` — end-to-end `.g4` parses of the
+  checked-in bootstrap grammars (lexer DFA, token buffering, adaptive
+  prediction, tree building), the error-recovery path, and CST/token traversal.
+
+```bash
+cd benches
+
+# plain walltime numbers while iterating
+cargo bench
+
+# instrumented run, same as CI (uploads a report)
+cargo codspeed build -m simulation
+codspeed run --mode simulation -- cargo codspeed run
+```
+
+`.github/workflows/codspeed.yml` runs the instrumented pass on every PR and on
+pushes to `main`, so regressions surface as a CodSpeed report on the PR.
+
 ## CI parity
 
 CI runs `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing —

@@ -7,6 +7,9 @@ members = [
     "tests/antlr-rust-runtime-testsuite",
 ]
 exclude = [
+    # Benchmarks live outside the workspace so that the CodSpeed harness'
+    # dependencies never unify features into the published crates.
+    "benches",
     "tests/javascript-parity/dumper",
     "tests/kotlin-parity/dumper",
     "tests/typescript-parity/dumper",
