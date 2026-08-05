@@ -207,7 +207,21 @@ struct Options {
     sll: bool,
 }
 
+fn install_miette_handler() {
+    let Some(width) = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+    else {
+        return;
+    };
+    let _ = miette::set_hook(Box::new(move |_| {
+        Box::new(miette::MietteHandlerOpts::new().width(width).build())
+    }));
+}
+
 fn main() -> miette::Result<ExitCode> {
+    install_miette_handler();
     Ok(if run()? {
         ExitCode::SUCCESS
     } else {

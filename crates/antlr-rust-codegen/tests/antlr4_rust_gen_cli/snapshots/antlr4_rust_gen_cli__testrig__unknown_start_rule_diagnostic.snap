@@ -1,8 +1,7 @@
 ---
 source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
-expression: utf8(&rule_output.stderr)
+expression: normalize_cli_snapshot(utf8(&rule_output.stderr))
 ---
 Error: antlr4_rust_codegen::generation
 
-  × test rig start rule `missing` was not found; available rules:
-  │ TestRigParser.start
+  × test rig start rule `missing` was not found; available rules: TestRigParser.start

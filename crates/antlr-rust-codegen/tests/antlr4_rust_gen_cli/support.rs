@@ -48,7 +48,8 @@ fn cli_command(binary: &str) -> Command {
         .env("NO_COLOR", "1")
         .env("CLICOLOR", "0")
         .env("CLICOLOR_FORCE", "0")
-        .env("NO_GRAPHICS", "0");
+        .env("NO_GRAPHICS", "0")
+        .env("COLUMNS", "4096");
     command
 }
 

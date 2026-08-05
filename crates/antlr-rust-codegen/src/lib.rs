@@ -48,11 +48,13 @@ pub(crate) use structural::{structural_embedded_model, structural_predicates};
 /// scripts. This function exists for the package's binary adapter.
 #[doc(hidden)]
 pub fn run_cli() -> miette::Result<()> {
+    cli_report::install_handler_from_env();
     cli::run_cli()
 }
 
 /// Runs the `antlr4-rust-testrig` command using the process arguments.
 #[doc(hidden)]
 pub fn run_testrig_cli() -> miette::Result<std::process::ExitCode> {
+    cli_report::install_handler_from_env();
     testrig_cli::run_cli()
 }

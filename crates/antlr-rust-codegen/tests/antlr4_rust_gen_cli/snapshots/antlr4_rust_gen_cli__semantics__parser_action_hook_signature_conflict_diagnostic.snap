@@ -4,5 +4,4 @@ expression: normalize_current_package_version(stderr)
 ---
 Error: antlr4_rust_codegen::generation
 
-  × typed semantic helper Mark has conflicting literal signatures [String] and
-  │ [Integer]
+  × typed semantic helper Mark has conflicting literal signatures [String] and [Integer]

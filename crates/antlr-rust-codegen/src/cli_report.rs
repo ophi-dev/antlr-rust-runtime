@@ -13,6 +13,19 @@ pub(crate) fn codegen_error(error: CodegenError) -> miette::Report {
     miette::Report::new(CodegenErrorReport::new(error))
 }
 
+pub(crate) fn install_handler_from_env() {
+    let Some(width) = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+    else {
+        return;
+    };
+    let _ = miette::set_hook(Box::new(move |_| {
+        Box::new(miette::MietteHandlerOpts::new().width(width).build())
+    }));
+}
+
 #[derive(Debug)]
 struct CodegenErrorReport {
     error: CodegenError,
