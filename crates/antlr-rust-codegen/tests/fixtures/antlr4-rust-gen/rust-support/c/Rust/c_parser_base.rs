@@ -6,6 +6,10 @@ thread_local! {
     static DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
+pub fn reset_symbol_table() {
+    DEPTH.set(0);
+}
+
 pub fn enter_scope() {
     DEPTH.set(DEPTH.get() + 1);
 }

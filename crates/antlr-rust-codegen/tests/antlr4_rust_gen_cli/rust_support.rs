@@ -150,6 +150,58 @@ mod rust_support_java_tests {
 }
 
 #[test]
+fn support_strictness_does_not_leak_to_an_unrelated_root() {
+    let temp = temporary_directory("rust-support-mixed-roots");
+    let grammar = fixture("java/JavaParser.g4");
+    let lexer = fixture("java/JavaLexer.g4");
+    let unrelated = temp.path().join("Unrelated.g4");
+    fs::write(
+        &unrelated,
+        "grammar Unrelated;\n\
+         options { superClass = UnrelatedBase; }\n\
+         root: ID EOF;\n\
+         ID: [a-z]+;\n\
+         WS: [ \\t\\r\\n]+ -> skip;\n",
+    )
+    .expect("unrelated grammar should be writable");
+    let generated = temp.path().join("generated");
+    let trust_store = temp.path().join("trust.toml");
+
+    let untrusted = run_with_trust_store(
+        &[&lexer, &grammar, &unrelated],
+        &generated,
+        &trust_store,
+        None,
+    );
+    assert!(!untrusted.status.success());
+    let untrusted_stderr = normalize_cli_snapshot(utf8(&untrusted.stderr));
+    let fingerprint = untrusted_fingerprint(&untrusted_stderr).to_owned();
+    let output = run_with_trust_store(
+        &[&lexer, &grammar, &unrelated],
+        &generated,
+        &trust_store,
+        Some(&fingerprint),
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert!(
+        utf8(&output.stderr)
+            .contains("warning: unsupported grammar option: superClass=UnrelatedBase")
+    );
+    let semantics =
+        fs::read_to_string(generated.join("semantics.json")).expect("semantics manifest");
+    assert!(semantics.contains(r#""policy": "assume-true""#));
+    assert!(semantics.contains(
+        r#""name": "superClass", "value": "UnrelatedBase", "line": 2, "column": 10, "disposition": "unsupported""#
+    ));
+}
+
+#[test]
 fn current_c_transform_wires_its_rust_support_module() {
     let temp = temporary_directory("rust-support-c");
     let grammar = fixture("c/CParser.g4");
@@ -169,8 +221,10 @@ fn current_c_transform_wires_its_rust_support_module() {
         utf8(&output.stderr)
     );
     let parser = fs::read_to_string(generated.join("c_parser_parser.rs")).expect("C parser module");
-    assert!(parser.starts_with("#[path = \"antlr-rust-support/"));
+    assert!(parser.starts_with("#[doc(hidden)]\n#[path = \"antlr-rust-support/"));
     assert!(parser.contains("super::__antlr_rust_support_"));
+    assert!(parser.contains("pub use self::__antlr_rust_support_"));
+    assert!(parser.contains(" as rust_support;"));
     assert!(!parser.contains("crate::c_parser_base"));
     assert_generated_project(
         temp.path(),
@@ -180,10 +234,12 @@ fn current_c_transform_wires_its_rust_support_module() {
 mod rust_support_c_tests {
     use super::c_parser_lexer::CParserLexer;
     use super::c_parser_parser::CParserParser;
+    use super::c_parser_parser::rust_support;
     use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
 
     #[test]
     fn support_actions_run_before_the_transformed_predicate() {
+        rust_support::c_parser_base::reset_symbol_table();
         let lexer = CParserLexer::new(InputStream::new("name"));
         let mut parser = CParserParser::new(CommonTokenStream::new(lexer));
         assert!(parser.translation_unit().is_ok());

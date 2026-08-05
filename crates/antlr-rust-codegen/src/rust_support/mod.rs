@@ -87,6 +87,10 @@ impl PreparedRustSupport {
         !self.bundles.is_empty()
     }
 
+    pub(crate) fn all_roots_supported(&self) -> bool {
+        self.has_bundles() && self.roots.iter().all(|root| self.supports_source(root))
+    }
+
     pub(crate) fn supports_source(&self, source: &Path) -> bool {
         self.bundles
             .iter()
@@ -111,7 +115,8 @@ impl PreparedRustSupport {
                 continue;
             }
             let declaration = format!(
-                "#[path = {path:?}]\nmod {module_name};\n\n",
+                "#[doc(hidden)]\n#[path = {path:?}]\npub mod {module_name};\n\
+                 #[allow(unused_imports)]\npub use self::{module_name} as rust_support;\n\n",
                 path = bundle.artifact_directory.join("mod.rs").to_string_lossy(),
                 module_name = bundle.generated_module,
             );
@@ -127,7 +132,7 @@ impl PreparedRustSupport {
                      clippy::nursery)]\n",
                 );
                 for support in &bundle.support_files {
-                    let _ = writeln!(aggregator, "pub(crate) mod {};", support.module_name);
+                    let _ = writeln!(aggregator, "pub mod {};", support.module_name);
                     artifacts.insert(
                         bundle
                             .artifact_directory

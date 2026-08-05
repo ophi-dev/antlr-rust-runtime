@@ -56,6 +56,9 @@ Transformed grammars, shipped `.rs` support files, and `rust-support.json` are
 emitted with the generated sources so the inputs remain inspectable. Embedded
 actions, strict semantics, generated-only parser coverage, and `superClass`
 acknowledgement are selected automatically for those staged sources.
+Shipped helpers are available through the generated recognizer module's stable
+`rust_support` re-export, for example
+`c_parser::rust_support::c_parser_base::reset_symbol_table()`.
 
 Non-interactive use fails before execution and prints the exact opt-in:
 

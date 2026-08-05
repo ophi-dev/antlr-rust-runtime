@@ -94,7 +94,11 @@ pub(crate) fn generate(
             let support_enabled =
                 source_uses_rust_support(&data, &compilation.sources, &prepared_support);
             let option_hooks = option_hooks(args, &data, support_enabled);
-            grammar_options.extend(collect_structural_grammar_options(&data, &option_hooks)?);
+            let options = collect_structural_grammar_options(&data, &option_hooks)?;
+            if support_enabled {
+                enforce_require_full_options(true, &options)?;
+            }
+            grammar_options.extend(options);
             let embedded_actions = args.embedded_actions || support_enabled;
             let sem_unknown = if support_enabled {
                 SemUnknownPolicy::Error
@@ -139,7 +143,11 @@ pub(crate) fn generate(
             let support_enabled =
                 source_uses_rust_support(&data, &compilation.sources, &prepared_support);
             let option_hooks = option_hooks(args, &data, support_enabled);
-            grammar_options.extend(collect_structural_grammar_options(&data, &option_hooks)?);
+            let options = collect_structural_grammar_options(&data, &option_hooks)?;
+            if support_enabled {
+                enforce_require_full_options(true, &options)?;
+            }
+            grammar_options.extend(options);
             let embedded_actions = args.embedded_actions || support_enabled;
             let sem_unknown = if support_enabled {
                 SemUnknownPolicy::Error
@@ -192,11 +200,8 @@ pub(crate) fn generate(
         report(warning).map_err(Error::generation)?;
     }
     warnings.extend(option_warnings);
-    enforce_require_full_options(
-        args.require_full_semantics || prepared_support.has_bundles(),
-        &grammar_options,
-    )?;
-    let manifest_policy = if prepared_support.has_bundles() {
+    enforce_require_full_options(args.require_full_semantics, &grammar_options)?;
+    let manifest_policy = if prepared_support.all_roots_supported() {
         SemUnknownPolicy::Error
     } else {
         args.sem_unknown
