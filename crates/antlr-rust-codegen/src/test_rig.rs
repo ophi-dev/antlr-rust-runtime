@@ -185,6 +185,7 @@ use std::process::ExitCode;
 
 use antlr4_runtime::{CommonTokenStream, InputStream};
 
+#[allow(dead_code)] // Parser-only flags remain accepted for lexer-only TestRig invocations.
 #[derive(Clone, Copy, Debug, Default)]
 struct Options {
     tokens: bool,
@@ -303,12 +304,6 @@ fn process(
             println!("{token}");
         }
     }
-    let _ = (
-        options.tree,
-        options.trace,
-        options.diagnostics,
-        options.sll,
-    );
     Ok(lexer_errors == 0)
 }
 "#;
@@ -433,6 +428,7 @@ fn assemble_runner(template: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -448,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_rule_dispatch_with_generated_method_name() {
+    fn renders_parser_runner_with_generated_method_name() {
         let rendered = render_test_rig(
             "reset",
             &[lexer("DemoLexer")],
@@ -456,9 +452,44 @@ mod tests {
         )
         .expect("test rig should render");
 
-        assert!(rendered.contains("parser.reset_rule()"));
-        assert!(rendered.contains(r#"#[path = "../demo_lexer.rs"]"#));
-        assert!(rendered.contains(r#"#[path = "../demo_parser.rs"]"#));
+        insta::assert_snapshot!("parser_runner_rendered", rendered);
+    }
+
+    #[test]
+    fn renders_lexer_runner_for_tokens_start_rule() {
+        let rendered = render_test_rig("tokens", &[lexer("DemoLexer")], &[])
+            .expect("lexer test rig should render");
+
+        insta::assert_snapshot!("lexer_runner_rendered", rendered);
+    }
+
+    #[test]
+    fn selects_lexer_by_parser_stem_among_multiple_candidates() {
+        let lexers = [lexer("OtherLexer"), lexer("DemoLexer")];
+        let parser = parser("DemoParser", &["start"]);
+
+        let selected =
+            select_lexer(&lexers, Some(&parser)).expect("matching lexer should be selected");
+
+        insta::assert_snapshot!(&selected.grammar_name, @"DemoLexer");
+    }
+
+    #[test]
+    fn rejects_missing_and_unmatched_lexers() {
+        let missing = select_lexer(&[], None).expect_err("missing lexer should fail");
+        insta::assert_snapshot!(
+            missing.to_string(),
+            @"test rig requires a generated lexer; use a combined grammar or pass --lexer-grammar for a split grammar"
+        );
+
+        let lexers = [lexer("FirstLexer"), lexer("SecondLexer")];
+        let parser = parser("DemoParser", &["start"]);
+        let unmatched = select_lexer(&lexers, Some(&parser))
+            .expect_err("unmatched lexer candidates should fail");
+        insta::assert_snapshot!(
+            unmatched.to_string(),
+            @"test rig cannot choose a lexer from multiple generated lexers: FirstLexer, SecondLexer"
+        );
     }
 
     #[test]
@@ -469,10 +500,9 @@ mod tests {
             &[parser("DemoParser", &["start"])],
         )
         .expect_err("missing start rule should fail");
-        assert!(
-            missing
-                .to_string()
-                .contains("available rules: DemoParser.start")
+        insta::assert_snapshot!(
+            missing.to_string(),
+            @"test rig start rule `missing` was not found; available rules: DemoParser.start"
         );
 
         let ambiguous = render_test_rig(
@@ -484,6 +514,9 @@ mod tests {
             ],
         )
         .expect_err("ambiguous start rule should fail");
-        assert!(ambiguous.to_string().contains("FirstParser, SecondParser"));
+        insta::assert_snapshot!(
+            ambiguous.to_string(),
+            @"test rig start rule `start` is ambiguous across parsers: FirstParser, SecondParser"
+        );
     }
 }

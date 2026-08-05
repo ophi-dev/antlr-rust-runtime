@@ -125,7 +125,7 @@ fn stdin_and_split_grammars_are_supported() {
         utf8(&output.stdout),
         utf8(&output.stderr)
     );
-    assert_eq!(utf8(&output.stdout), "(start split <EOF>)\n");
+    insta::assert_snapshot!("split_parser_tree", utf8(&output.stdout));
     assert_eq!(utf8(&output.stderr), "");
 }
 
