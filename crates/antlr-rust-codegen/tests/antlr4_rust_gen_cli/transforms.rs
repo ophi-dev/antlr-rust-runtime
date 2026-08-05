@@ -47,7 +47,8 @@ fn unreachable_parser_rules_warn_without_pruning() {
         utf8(&output.stdout),
         utf8(&output.stderr)
     );
-    let stderr = utf8(&output.stderr).replace(
+    let stderr = replace_miette_path(
+        utf8(&output.stderr),
         grammar
             .to_str()
             .expect("fixture path should be valid Unicode"),
@@ -86,7 +87,8 @@ fn prune_unreachable_is_transitive_loud_and_preserves_explicit_entries() {
         utf8(&output.stdout),
         utf8(&output.stderr)
     );
-    let stderr = utf8(&output.stderr).replace(
+    let stderr = replace_miette_path(
+        utf8(&output.stderr),
         grammar
             .to_str()
             .expect("fixture path should be valid Unicode"),
@@ -344,7 +346,8 @@ fn configured_entry_rule_must_name_a_parser_rule() {
         out.as_os_str(),
     ]);
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
-    let stderr = utf8(&output.stderr).replace(
+    let stderr = replace_miette_path(
+        utf8(&output.stderr),
         grammar
             .to_str()
             .expect("fixture path should be valid Unicode"),
@@ -857,7 +860,8 @@ WS : [ \t\r\n]+ -> skip ;
             diagnostics.push((
                 grammar_name,
                 flag,
-                stderr.replace(
+                replace_miette_path(
+                    stderr,
                     temp.path()
                         .to_str()
                         .expect("temporary path should be UTF-8"),

@@ -90,7 +90,8 @@ fn lexer_left_recursion_reports_each_cycle_without_partial_outputs() {
     ]);
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
     assert_eq!(utf8(&output.stdout), "");
-    let stderr = utf8(&output.stderr).replace(
+    let stderr = replace_miette_path(
+        utf8(&output.stderr),
         grammar
             .to_str()
             .expect("fixture path should be valid Unicode"),

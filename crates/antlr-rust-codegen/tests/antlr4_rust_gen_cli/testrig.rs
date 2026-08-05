@@ -16,7 +16,8 @@ fn write_combined_grammar(directory: &Path) -> PathBuf {
 }
 
 fn normalize_test_directory(value: &str, directory: &Path) -> String {
-    normalize_cli_snapshot(&value.replace(&directory.display().to_string(), "<test-directory>"))
+    let directory = directory.display().to_string();
+    normalize_cli_snapshot(&replace_miette_path(value, &directory, "<test-directory>"))
 }
 
 #[test]
