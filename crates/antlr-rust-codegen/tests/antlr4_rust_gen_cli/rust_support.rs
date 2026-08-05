@@ -79,6 +79,36 @@ fn noninteractive_bundle_rejects_a_different_fingerprint() {
 }
 
 #[test]
+fn exact_fingerprint_does_not_require_a_readable_trust_store() {
+    let temp = temporary_directory("rust-support-explicit-trust");
+    let grammar = fixture("java/JavaParser.g4");
+    let lexer = fixture("java/JavaLexer.g4");
+    let generated = temp.path().join("generated");
+    let probe_store = temp.path().join("probe-trust.toml");
+    let untrusted = run_with_trust_store(&[&lexer, &grammar], &generated, &probe_store, None);
+    assert!(!untrusted.status.success());
+    let stderr = normalize_cli_snapshot(utf8(&untrusted.stderr));
+    let fingerprint = untrusted_fingerprint(&stderr).to_owned();
+
+    let corrupt_store = temp.path().join("corrupt-trust.toml");
+    fs::write(&corrupt_store, "not valid TOML = [")
+        .expect("corrupt trust store should be writable");
+    let output = run_with_trust_store(
+        &[&lexer, &grammar],
+        &generated,
+        &corrupt_store,
+        Some(&fingerprint),
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+}
+
+#[test]
 fn current_java_transform_runs_from_the_staged_tree() {
     let temp = temporary_directory("rust-support-java");
     let grammar = fixture("java/JavaParser.g4");

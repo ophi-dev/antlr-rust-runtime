@@ -262,8 +262,7 @@ pub(crate) fn prepare(config: &CompilerConfig) -> Result<PreparedRustSupport, Er
                 "trusted Rust target support currently requires the antlr4-rust-gen CLI",
             )
         })?;
-    let mut trust_store = TrustStore::load(config.rust_support.trust_store_path.clone())
-        .map_err(Error::generation)?;
+    let mut trust_store = None;
     let mut roots = config.roots.clone();
     let mut bundles = Vec::with_capacity(candidates.len());
 
@@ -373,12 +372,19 @@ fn discover(roots: &[PathBuf]) -> BTreeMap<PathBuf, Vec<usize>> {
 fn ensure_trusted(
     options: &RustSupportOptions,
     identity: &BundleIdentity,
-    trust_store: &mut TrustStore,
+    trust_store: &mut Option<TrustStore>,
 ) -> Result<(), Error> {
-    if options.trusted_fingerprints.contains(&identity.fingerprint)
-        || trust_store.trusts_revision(identity)
-        || trust_store.trusts_repository(identity)
-    {
+    if options.trusted_fingerprints.contains(&identity.fingerprint) {
+        return Ok(());
+    }
+    if trust_store.is_none() {
+        *trust_store =
+            Some(TrustStore::load(options.trust_store_path.clone()).map_err(Error::generation)?);
+    }
+    let trust_store = trust_store
+        .as_mut()
+        .expect("trust store is loaded before persisted decisions are checked");
+    if trust_store.trusts_revision(identity) || trust_store.trusts_repository(identity) {
         return Ok(());
     }
     if !options.interactive {

@@ -93,9 +93,21 @@ pub(crate) fn fingerprint_directory(directory: &Path) -> io::Result<String> {
     digest.update(b"antlr-rust-support-v1\0");
     for (relative, path) in files {
         let contents = fs::read(path)?;
-        digest.update(relative.len().to_be_bytes());
+        let relative_len = u64::try_from(relative.len()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Rust support relative path length exceeds u64",
+            )
+        })?;
+        let contents_len = u64::try_from(contents.len()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Rust support file length exceeds u64",
+            )
+        })?;
+        digest.update(relative_len.to_be_bytes());
         digest.update(relative.as_bytes());
-        digest.update(contents.len().to_be_bytes());
+        digest.update(contents_len.to_be_bytes());
         digest.update(contents);
     }
     Ok(format!("sha256:{}", hex_lower(&digest.finalize())))
