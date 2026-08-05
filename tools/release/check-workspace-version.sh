@@ -15,6 +15,7 @@ expected_packages=(
     antlr-rust-g4-parser
     antlr-rust-rs-parser
     antlr-rust-runtime
+    antlr-rust-toml-parser
 )
 mapfile -t publishable_packages < <(
     jq -r '.packages[] | select(.publish != []) | .name' <<<"$metadata" | sort

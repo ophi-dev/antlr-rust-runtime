@@ -1,3 +1,5 @@
+use antlr_rust_toml_parser::{Item as TomlItem, Value as TomlValue};
+
 impl SemPatternFile {
     pub(crate) fn predicate_template(
         &self,
@@ -179,21 +181,6 @@ const fn member_scope_for_kind(kind: SemanticsKind) -> stack_member::MemberScope
         SemanticsKind::ParserPredicate | SemanticsKind::ParserAction => {
             stack_member::MemberScope::Parser
         }
-    }
-}
-
-/// Parses a `[[member]]` `init` value. Booleans are accepted because grammars
-/// declare `bool` members; slots store integers, so `true` seeds 1.
-fn parse_member_init_field(value: &str) -> io::Result<i64> {
-    match value.trim() {
-        "true" => Ok(1),
-        "false" => Ok(0),
-        other => other.parse::<i64>().map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("invalid member init value {other:?}: {error}"),
-            )
-        }),
     }
 }
 
@@ -410,57 +397,42 @@ pub(crate) fn load_sem_patterns(path: &Path) -> io::Result<SemPatternFile> {
     parse_sem_patterns(&fs::read_to_string(path)?)
 }
 
-/// Removes a trailing `#` comment from one TOML line, ignoring a `#` that
-/// appears inside a quoted string (basic `"..."` or literal `'...'`). A naive
-/// `split_once('#')` would corrupt valid pattern lines such as
-/// `match = "text == '#'"` or a `str("#")` lower expression. Basic-string escape
-/// handling means a `\"` inside `"..."` does not close the string.
-pub(crate) fn strip_toml_comment(line: &str) -> &str {
-    let bytes = line.as_bytes();
-    let mut index = 0;
-    let mut quote: Option<u8> = None;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        match quote {
-            // Inside a basic string, a backslash escapes the next byte.
-            Some(b'"') if byte == b'\\' => {
-                index += 2;
-                continue;
-            }
-            Some(q) if byte == q => quote = None,
-            Some(_) => {}
-            None if byte == b'"' || byte == b'\'' => quote = Some(byte),
-            None if byte == b'#' => return &line[..index],
-            None => {}
-        }
-        index += 1;
-    }
-    line
-}
-
 pub(crate) fn parse_sem_patterns(input: &str) -> io::Result<SemPatternFile> {
+    let document =
+        antlr_rust_toml_parser::parse(input).map_err(|error| invalid_toml(&error))?;
     let mut file = SemPatternFile::default();
     let mut section: Option<PatternSection> = None;
-    let mut fields = BTreeMap::<String, String>::new();
-    for raw_line in input.lines().chain(std::iter::once("")) {
-        let line = strip_toml_comment(raw_line).trim();
-        if line.is_empty() {
-            continue;
+    let mut root_fields = BTreeMap::<String, TomlValue>::new();
+    let mut fields = BTreeMap::<String, TomlValue>::new();
+    for item in document.into_items() {
+        match item {
+            TomlItem::Assignment(assignment) => {
+                let (key, value) = assignment.into_parts();
+                let name = single_schema_key(&key)?;
+                let target = if section.is_some() {
+                    &mut fields
+                } else {
+                    &mut root_fields
+                };
+                if target.insert(name.clone(), value).is_some() {
+                    return Err(invalid_semantic_pattern(format!(
+                        "duplicate semantic pattern field {name:?}"
+                    )));
+                }
+            }
+            TomlItem::Table(header) => {
+                flush_pattern_section(&mut file, section.take(), &mut fields)?;
+                if !header.is_array() {
+                    return Err(invalid_semantic_pattern(
+                        "semantic pattern sections must use TOML array tables",
+                    ));
+                }
+                section = Some(parse_pattern_section(&single_schema_key(header.key())?)?);
+            }
         }
-        if let Some(next_section) = parse_pattern_section(line) {
-            flush_pattern_section(&mut file, section.take(), &mut fields)?;
-            section = Some(next_section);
-            continue;
-        }
-        let (key, value) = line.split_once('=').ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("invalid semantic pattern line {line:?}"),
-            )
-        })?;
-        fields.insert(key.trim().to_owned(), parse_toml_scalar(value.trim()));
     }
     flush_pattern_section(&mut file, section, &mut fields)?;
+    validate_root_fields(&mut root_fields)?;
     Ok(file)
 }
 
@@ -472,30 +444,45 @@ enum PatternSection {
     Member,
 }
 
-fn parse_pattern_section(line: &str) -> Option<PatternSection> {
-    match line {
-        "[[pattern]]" => Some(PatternSection::Pattern),
-        "[[helper]]" => Some(PatternSection::Helper),
-        "[[coordinate]]" => Some(PatternSection::Coordinate),
-        "[[member]]" => Some(PatternSection::Member),
-        _ => None,
+impl PatternSection {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Pattern => "pattern",
+            Self::Helper => "helper",
+            Self::Coordinate => "coordinate",
+            Self::Member => "member",
+        }
+    }
+}
+
+fn parse_pattern_section(name: &str) -> io::Result<PatternSection> {
+    match name {
+        "pattern" => Ok(PatternSection::Pattern),
+        "helper" => Ok(PatternSection::Helper),
+        "coordinate" => Ok(PatternSection::Coordinate),
+        "member" => Ok(PatternSection::Member),
+        _ => Err(invalid_semantic_pattern(format!(
+            "unknown semantic pattern section {name:?}"
+        ))),
     }
 }
 
 fn flush_pattern_section(
     file: &mut SemPatternFile,
     section: Option<PatternSection>,
-    fields: &mut BTreeMap<String, String>,
+    fields: &mut BTreeMap<String, TomlValue>,
 ) -> io::Result<()> {
     let Some(section) = section else {
         return Ok(());
     };
     match section {
         PatternSection::Pattern => {
-            let match_body = take_required_field(fields, "match")?;
-            let lower = take_required_field(fields, "lower")?;
+            let match_body = take_required_string_field(fields, "match")?;
+            let lower = take_required_string_field(fields, "lower")?;
             let id = fields
                 .remove("id")
+                .map(|value| expect_string_field("id", value))
+                .transpose()?
                 .unwrap_or_else(|| format!("pattern:{}", file.patterns.len()));
             file.patterns.push(SemPatternRule {
                 id,
@@ -506,10 +493,14 @@ fn flush_pattern_section(
         PatternSection::Helper => {
             let kind = fields
                 .remove("kind")
+                .map(|value| expect_string_field("kind", value))
+                .transpose()?
                 .map(|value| parse_coordinate_kind(&value))
                 .transpose()?;
             let receiver = fields
                 .remove("receiver")
+                .map(|value| expect_string_field("receiver", value))
+                .transpose()?
                 .map(|receiver| {
                     if is_semantic_helper_identifier(&receiver) {
                         Ok(receiver)
@@ -525,11 +516,17 @@ fn flush_pattern_section(
                 .transpose()?;
             let arguments = fields
                 .remove("arguments")
+                .map(|value| expect_string_field("arguments", value))
+                .transpose()?
                 .map_or_else(|| Ok(Vec::new()), |value| parse_helper_arguments(&value))?;
             // `returns` is documentation in existing pattern files. Validate
             // its shape when present, but the semantic kind determines whether
             // the generated method returns bool or unit.
-            if let Some(returns) = fields.remove("returns") {
+            if let Some(returns) = fields
+                .remove("returns")
+                .map(|value| expect_string_field("returns", value))
+                .transpose()?
+            {
                 let expected = if kind.is_none_or(|kind| {
                     matches!(
                         kind,
@@ -553,19 +550,23 @@ fn flush_pattern_section(
             file.helpers.push(SemHelperRule {
                 kind,
                 receiver,
-                name: take_required_field(fields, "name")?,
+                name: take_required_string_field(fields, "name")?,
                 arguments,
-                lower: take_required_field(fields, "lower")?,
+                lower: take_required_string_field(fields, "lower")?,
             });
         }
         PatternSection::Member => {
             file.members.push(stack_member::MemberDeclaration {
-                name: take_required_field(fields, "name")?,
-                kind: stack_member::MemberKind::parse(&take_required_field(fields, "kind")?)?,
+                name: take_required_string_field(fields, "name")?,
+                kind: stack_member::MemberKind::parse(&take_required_string_field(
+                    fields, "kind",
+                )?)?,
                 // Defaults to `both`, so single-recognizer grammars (and every
                 // pattern file written before scoping existed) need no `scope`.
                 scope: fields
                     .remove("scope")
+                    .map(|value| expect_string_field("scope", value))
+                    .transpose()?
                     .map_or(Ok(stack_member::MemberScope::Both), |value| {
                         stack_member::MemberScope::parse(&value)
                     })?,
@@ -574,14 +575,17 @@ fn flush_pattern_section(
                 // host-language declaration.
                 init: fields
                     .remove("init")
-                    .map(|value| parse_member_init_field(&value))
+                    .map(parse_member_init_field)
                     .transpose()?,
             });
         }
         PatternSection::Coordinate => {
             file.coordinates.push(SemCoordinateOverride {
-                kind: parse_coordinate_kind(&take_required_field(fields, "kind")?)?,
-                rule: fields.remove("rule"),
+                kind: parse_coordinate_kind(&take_required_string_field(fields, "kind")?)?,
+                rule: fields
+                    .remove("rule")
+                    .map(|value| expect_string_field("rule", value))
+                    .transpose()?,
                 index: fields
                     .remove("index")
                     .map(|value| parse_usize_field("index", &value))
@@ -590,9 +594,17 @@ fn flush_pattern_section(
                     .remove("atn_state")
                     .map(|value| parse_usize_field("atn_state", &value))
                     .transpose()?,
-                dispose: CoordinateDispose::parse(&take_required_field(fields, "dispose")?)?,
+                dispose: CoordinateDispose::parse(&take_required_string_field(
+                    fields, "dispose",
+                )?)?,
             });
         }
+    }
+    if let Some(name) = fields.keys().next() {
+        return Err(invalid_semantic_pattern(format!(
+            "unknown field {name:?} in [[{}]]",
+            section.name()
+        )));
     }
     fields.clear();
     Ok(())
@@ -617,76 +629,89 @@ fn parse_helper_arguments(value: &str) -> io::Result<Vec<SemanticLiteralKind>> {
         .collect()
 }
 
-fn take_required_field(fields: &mut BTreeMap<String, String>, name: &str) -> io::Result<String> {
-    fields.remove(name).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("semantic pattern section missing {name}"),
-        )
+fn take_required_string_field(
+    fields: &mut BTreeMap<String, TomlValue>,
+    name: &str,
+) -> io::Result<String> {
+    let value = fields.remove(name).ok_or_else(|| {
+        invalid_semantic_pattern(format!("semantic pattern section missing {name}"))
+    })?;
+    expect_string_field(name, value)
+}
+
+fn expect_string_field(name: &str, value: TomlValue) -> io::Result<String> {
+    match value {
+        TomlValue::String(value) => Ok(value),
+        other => Err(invalid_semantic_pattern(format!(
+            "semantic pattern field {name:?} must be a string, got {}",
+            toml_value_kind(&other)
+        ))),
+    }
+}
+
+fn parse_member_init_field(value: TomlValue) -> io::Result<i64> {
+    match value {
+        TomlValue::Boolean(value) => Ok(i64::from(value)),
+        TomlValue::Integer(value) => Ok(value),
+        other => Err(invalid_semantic_pattern(format!(
+            "member init must be an integer or boolean, got {}",
+            toml_value_kind(&other)
+        ))),
+    }
+}
+
+fn parse_usize_field(name: &str, value: &TomlValue) -> io::Result<usize> {
+    let TomlValue::Integer(value) = value else {
+        return Err(invalid_semantic_pattern(format!(
+            "{name} must be an integer, got {}",
+            toml_value_kind(value)
+        )));
+    };
+    usize::try_from(*value).map_err(|error| {
+        invalid_semantic_pattern(format!("invalid {name} value {value}: {error}"))
     })
 }
 
-pub(crate) fn parse_toml_scalar(value: &str) -> String {
-    let value = value.trim();
-    if let Some(body) = value
-        .strip_prefix('"')
-        .and_then(|body| body.strip_suffix('"'))
-    {
-        return unescape_toml_basic_string(body);
-    }
-    // TOML literal strings are single-quoted with no escape processing; the body
-    // is taken verbatim. `strip_toml_comment` already treats `'...'` as a quoted
-    // string, so a value like `dispose = 'assume-false'` must have its quotes
-    // stripped here too, or the quotes would leak into the disposition/match and
-    // it would be rejected or fail to match. Require length >= 2 so a lone `'`
-    // is not mistaken for an empty literal.
-    if value.len() >= 2 {
-        if let Some(body) = value
-            .strip_prefix('\'')
-            .and_then(|body| body.strip_suffix('\''))
-        {
-            return body.to_owned();
+fn validate_root_fields(fields: &mut BTreeMap<String, TomlValue>) -> io::Result<()> {
+    if let Some(version) = fields.remove("version") {
+        if version != TomlValue::Integer(1) {
+            return Err(invalid_semantic_pattern(
+                "semantic pattern version must be the integer 1",
+            ));
         }
     }
-    value.to_owned()
+    if let Some(name) = fields.keys().next() {
+        return Err(invalid_semantic_pattern(format!(
+            "unknown top-level semantic pattern field {name:?}"
+        )));
+    }
+    Ok(())
 }
 
-fn unescape_toml_basic_string(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let mut escaped = false;
-    for ch in value.chars() {
-        if escaped {
-            match ch {
-                '"' => out.push('"'),
-                '\\' => out.push('\\'),
-                'n' => out.push('\n'),
-                'r' => out.push('\r'),
-                't' => out.push('\t'),
-                other => {
-                    out.push('\\');
-                    out.push(other);
-                }
-            }
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else {
-            out.push(ch);
-        }
-    }
-    if escaped {
-        out.push('\\');
-    }
-    out
-}
-
-fn parse_usize_field(name: &str, value: &str) -> io::Result<usize> {
-    value.parse::<usize>().map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("invalid {name} value {value:?}: {error}"),
-        )
+fn single_schema_key(key: &antlr_rust_toml_parser::Key) -> io::Result<String> {
+    key.as_single().map(str::to_owned).ok_or_else(|| {
+        invalid_semantic_pattern("semantic pattern schema does not accept dotted keys")
     })
+}
+
+const fn toml_value_kind(value: &TomlValue) -> &'static str {
+    match value {
+        TomlValue::String(_) => "string",
+        TomlValue::Integer(_) => "integer",
+        TomlValue::Float(_) => "float",
+        TomlValue::Boolean(_) => "boolean",
+        TomlValue::DateTime(_) => "date-time",
+        TomlValue::Array(_) => "array",
+        TomlValue::InlineTable(_) => "inline table",
+    }
+}
+
+fn invalid_toml(error: &antlr_rust_toml_parser::Error) -> io::Error {
+    invalid_semantic_pattern(error.to_string())
+}
+
+fn invalid_semantic_pattern(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
 
 fn parse_coordinate_kind(value: &str) -> io::Result<SemanticsKind> {

@@ -92,6 +92,7 @@ jobs:
             -p antlr-rust-runtime \
             -p antlr-rust-g4-parser \
             -p antlr-rust-rs-parser \
+            -p antlr-rust-toml-parser \
             -p antlr-rust-codegen \
             -p antlr-rust-runtime-testsuite \
             --lcov --color never -v >/dev/null 2>"$report_log"

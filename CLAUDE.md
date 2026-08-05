@@ -17,6 +17,16 @@ provides every API surface that revision's generated source needs. Package
 releases that preserve the generated-source/runtime contract MUST NOT increment
 the revision automatically.
 
+## TOML semantic pattern parser
+
+`crates/antlr-rust-toml-parser` owns the checked-in TOML recognizer and typed
+value facade used by `--sem-patterns`. Do not hand-edit files under its
+`src/generated/` directory. The pinned grammars-v4 source and Apache license
+live under `third_party/toml-grammar/`; regenerate with
+`tools/toml-syntax/update-generated.sh --update` and verify with `--check`.
+Semantic pattern schema validation remains in
+`crates/antlr-rust-codegen/src/semantics/patterns.rs`.
+
 ## Inner loop
 
 ```bash
@@ -85,6 +95,7 @@ only for small, stable values. Project specifics:
 - `crates/antlr-rust-codegen/` — generator library and `antlr4-rust-gen`
 - `crates/antlr-rust-g4-parser/` — checked-in ANTLRv4 frontend
 - `crates/antlr-rust-rs-parser/` — checked-in Rust syntax frontend
+- `crates/antlr-rust-toml-parser/` — checked-in TOML semantic-pattern frontend
 - `tests/antlr-rust-runtime-testsuite/` — runtime integration and conformance tests (see below)
 - `tests/kotlin-parity/` — Kotlin parity dumper + snippets
 - `tools/parse-bench/` — Python harness comparing rust/go/python/tree-sitter parse times
@@ -272,6 +283,7 @@ cargo llvm-cov report \
   -p antlr-rust-runtime \
   -p antlr-rust-g4-parser \
   -p antlr-rust-rs-parser \
+  -p antlr-rust-toml-parser \
   -p antlr-rust-codegen \
   -p antlr-rust-runtime-testsuite \
   --lcov --output-path conformance.lcov

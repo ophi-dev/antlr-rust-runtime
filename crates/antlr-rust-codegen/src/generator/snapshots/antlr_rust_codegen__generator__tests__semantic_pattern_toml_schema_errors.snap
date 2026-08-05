@@ -1,0 +1,38 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: errors
+---
+[
+    (
+        "malformed TOML",
+        "TOML syntax error at 1:12: extraneous input 'trailing' expecting {<EOF>, NL}",
+    ),
+    (
+        "duplicate field",
+        "duplicate semantic pattern field \"version\"",
+    ),
+    (
+        "wrong version type",
+        "semantic pattern version must be the integer 1",
+    ),
+    (
+        "standard table",
+        "semantic pattern sections must use TOML array tables",
+    ),
+    (
+        "unknown section",
+        "unknown semantic pattern section \"unknown\"",
+    ),
+    (
+        "wrong field type",
+        "semantic pattern field \"name\" must be a string, got integer",
+    ),
+    (
+        "unknown section field",
+        "unknown field \"tyop\" in [[helper]]",
+    ),
+    (
+        "dotted schema key",
+        "semantic pattern schema does not accept dotted keys",
+    ),
+]

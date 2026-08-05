@@ -33,12 +33,14 @@ flag_management:
         - crates/antlr-rust-runtime/src/
         - crates/antlr-rust-g4-parser/src/
         - crates/antlr-rust-rs-parser/src/
+        - crates/antlr-rust-toml-parser/src/
         - crates/antlr-rust-codegen/src/
     - name: conformance
       paths:
         - crates/antlr-rust-runtime/src/
         - crates/antlr-rust-g4-parser/src/
         - crates/antlr-rust-rs-parser/src/
+        - crates/antlr-rust-toml-parser/src/
         - crates/antlr-rust-codegen/src/
 
 comment:

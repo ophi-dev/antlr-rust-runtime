@@ -1,0 +1,5 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: error
+---
+TOML syntax error at 1:12: extraneous input 'trailing' expecting {<EOF>, NL}

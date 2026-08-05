@@ -32,6 +32,7 @@ anstyle = "1"
 antlr-rust-g4-parser.workspace = true
 antlr-rust-rs-parser.workspace = true
 antlr-rust-runtime.workspace = true
+antlr-rust-toml-parser.workspace = true
 clap = { version = "4.6.5", default-features = false, features = [
     "cargo",
     "color",

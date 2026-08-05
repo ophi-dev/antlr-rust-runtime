@@ -25,6 +25,16 @@ provides every API surface that revision's generated source needs. Package
 releases that preserve the generated-source/runtime contract MUST NOT increment
 the revision automatically.
 
+## TOML semantic pattern parser
+
+`crates/antlr-rust-toml-parser` owns the checked-in TOML recognizer and typed
+value facade used by `--sem-patterns`. Do not hand-edit files under its
+`src/generated/` directory. The pinned grammars-v4 source and Apache license
+live under `third_party/toml-grammar/`; regenerate with
+`tools/toml-syntax/update-generated.sh --update` and verify with `--check`.
+Semantic pattern schema validation remains in
+`crates/antlr-rust-codegen/src/semantics/patterns.rs`.
+
 ## Kotlin parser parity perf benchmark
 
 Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.
@@ -185,6 +195,7 @@ cargo llvm-cov report \
   -p antlr-rust-runtime \
   -p antlr-rust-g4-parser \
   -p antlr-rust-rs-parser \
+  -p antlr-rust-toml-parser \
   -p antlr-rust-codegen \
   -p antlr-rust-runtime-testsuite \
   --lcov --output-path conformance.lcov

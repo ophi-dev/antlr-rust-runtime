@@ -80,6 +80,7 @@ jobs:
             crates/antlr-rust-codegen/src
             crates/antlr-rust-g4-parser/src
             crates/antlr-rust-rs-parser/src
+            crates/antlr-rust-toml-parser/src
             tests/antlr-rust-runtime-testsuite/src
 
   msrv:

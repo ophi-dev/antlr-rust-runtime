@@ -1,0 +1,194 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: document
+---
+Document {
+    items: [
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "title",
+                    ],
+                },
+                value: String(
+                    "TOML Rules # inside",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal",
+                    ],
+                },
+                value: String(
+                    "a\\nb",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "answer",
+                    ],
+                },
+                value: Integer(
+                    42,
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "enabled",
+                    ],
+                },
+                value: Boolean(
+                    true,
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "when",
+                    ],
+                },
+                value: DateTime(
+                    "1979-05-27T07:32:00Z",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "values",
+                    ],
+                },
+                value: Array(
+                    [
+                        Integer(
+                            1,
+                        ),
+                        String(
+                            "two",
+                        ),
+                        Boolean(
+                            false,
+                        ),
+                        InlineTable(
+                            [
+                                Assignment {
+                                    key: Key {
+                                        segments: [
+                                            "first",
+                                        ],
+                                    },
+                                    value: String(
+                                        "a",
+                                    ),
+                                },
+                                Assignment {
+                                    key: Key {
+                                        segments: [
+                                            "second",
+                                        ],
+                                    },
+                                    value: Integer(
+                                        2,
+                                    ),
+                                },
+                            ],
+                        ),
+                    ],
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "owner",
+                        "name",
+                    ],
+                },
+                value: String(
+                    "Ada",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "standard",
+                        "table",
+                    ],
+                },
+                array: false,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "value",
+                    ],
+                },
+                value: String(
+                    "kept",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "helper",
+                    ],
+                },
+                array: true,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "name",
+                    ],
+                },
+                value: String(
+                    "one",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "helper",
+                    ],
+                },
+                array: true,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "name",
+                    ],
+                },
+                value: String(
+                    "two",
+                ),
+            },
+        ),
+    ],
+}

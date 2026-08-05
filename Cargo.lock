@@ -107,6 +107,7 @@ dependencies = [
  "antlr-rust-g4-parser",
  "antlr-rust-rs-parser",
  "antlr-rust-runtime",
+ "antlr-rust-toml-parser",
  "clap",
  "hmac-sha256",
  "icu_casemap",
@@ -158,6 +159,14 @@ dependencies = [
  "antlr-rust-codegen",
  "antlr-rust-runtime",
  "icu_properties",
+]
+
+[[package]]
+name = "antlr-rust-toml-parser"
+version = "0.30.0"
+dependencies = [
+ "antlr-rust-runtime",
+ "insta",
 ]
 
 [[package]]

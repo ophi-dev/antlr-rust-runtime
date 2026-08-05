@@ -3,6 +3,7 @@ members = [
     "crates/antlr-rust-runtime",
     "crates/antlr-rust-g4-parser",
     "crates/antlr-rust-rs-parser",
+    "crates/antlr-rust-toml-parser",
     "crates/antlr-rust-codegen",
     "tests/antlr-rust-runtime-testsuite",
 ]
@@ -32,6 +33,7 @@ homepage = "https://github.com/ophi-dev/antlr-rust-runtime"
 antlr-rust-runtime = { path = "crates/antlr-rust-runtime", version = "=0.30.0" }
 antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.30.0" }
 antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.30.0" }
+antlr-rust-toml-parser = { path = "crates/antlr-rust-toml-parser", version = "=0.30.0" }
 antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.30.0" }
 # x-release-please-end
 icu_properties = { version = "2.2.0", features = ["alloc"] }
