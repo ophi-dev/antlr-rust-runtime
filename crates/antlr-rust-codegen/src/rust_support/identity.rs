@@ -33,6 +33,21 @@ impl BundleIdentity {
             format!("{}/{}", self.repository, self.bundle_path)
         }
     }
+
+    pub(crate) fn artifact_id(&self) -> String {
+        let fingerprint = self
+            .fingerprint
+            .strip_prefix("sha256:")
+            .expect("fingerprints are normalized");
+        let mut digest = Sha256::new();
+        digest.update(self.repository.as_bytes());
+        digest.update(b"\0");
+        digest.update(self.revision.as_deref().unwrap_or("unversioned").as_bytes());
+        digest.update(b"\0");
+        digest.update(self.bundle_path.as_bytes());
+        let source = hex_lower(&digest.finalize());
+        format!("{}-{}", &fingerprint[..12], &source[..8])
+    }
 }
 
 pub(crate) fn identify(
@@ -398,5 +413,24 @@ mod tests {
             };
             assert!(store.trusts_repository(&identity));
         }
+    }
+
+    #[test]
+    fn artifact_ids_disambiguate_identical_bundle_contents() {
+        let fingerprint = format!("sha256:{}", "a".repeat(64));
+        let first = BundleIdentity {
+            repository: "https://example.test/grammars".to_owned(),
+            revision: Some("0123456789abcdef".to_owned()),
+            bundle_path: "first/Rust".to_owned(),
+            fingerprint: fingerprint.clone(),
+        };
+        let second = BundleIdentity {
+            repository: first.repository.clone(),
+            revision: first.revision.clone(),
+            bundle_path: "second/Rust".to_owned(),
+            fingerprint,
+        };
+
+        assert_ne!(first.artifact_id(), second.artifact_id());
     }
 }

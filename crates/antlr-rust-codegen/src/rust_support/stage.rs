@@ -14,9 +14,12 @@ pub(crate) fn copy_grammar_directory(source: &Path) -> io::Result<(tempfile::Tem
         .tempdir()?;
     let staged = temporary.path().join("grammar");
     copy_directory(source, &staged)?;
-    // The current C transform copies support into this trgen-style directory.
-    fs::create_dir_all(staged.join("src"))?;
     Ok((temporary, fs::canonicalize(staged)?))
+}
+
+pub(crate) fn prepare_support_output_directory(staged: &Path) -> io::Result<()> {
+    // Bundles that ship Rust modules may copy generated support into this convention.
+    fs::create_dir_all(staged.join("src"))
 }
 
 fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {

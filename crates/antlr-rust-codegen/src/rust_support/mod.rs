@@ -272,6 +272,14 @@ pub(crate) fn prepare(config: &CompilerConfig) -> Result<PreparedRustSupport, Er
         let (temporary, staged_directory) =
             stage::copy_grammar_directory(&directory).map_err(Error::generation)?;
         let staged_support_directory = staged_directory.join("Rust");
+        let ships_rust_modules =
+            !stage::top_level_files_with_extension(&staged_support_directory, "rs")
+                .map_err(Error::generation)?
+                .is_empty();
+        if ships_rust_modules {
+            stage::prepare_support_output_directory(&staged_directory)
+                .map_err(Error::generation)?;
+        }
         let identity = identify(&directory, &support_directory, &staged_support_directory)
             .map_err(Error::generation)?;
         ensure_trusted(&config.rust_support, &identity, &mut trust_store)?;
@@ -284,12 +292,11 @@ pub(crate) fn prepare(config: &CompilerConfig) -> Result<PreparedRustSupport, Er
 
         let support_paths = stage::top_level_files_with_extension(&staged_support_directory, "rs")
             .map_err(Error::generation)?;
-        let fingerprint = identity
-            .fingerprint
-            .strip_prefix("sha256:")
-            .expect("fingerprints are normalized");
-        let suffix = fingerprint[..12].to_owned();
-        let generated_module = format!("__antlr_rust_support_{suffix}");
+        let artifact_id = identity.artifact_id();
+        let generated_module = format!(
+            "__antlr_rust_support_{}",
+            replace_all(&artifact_id, "-", "_")
+        );
         rewrite_support_paths(&staged_directory, &support_paths, &generated_module)
             .map_err(Error::generation)?;
         let transformed_grammars = stage::top_level_files_with_extension(&staged_directory, "g4")
@@ -326,7 +333,7 @@ pub(crate) fn prepare(config: &CompilerConfig) -> Result<PreparedRustSupport, Er
             staged_directory,
             identity,
             generated_module,
-            artifact_directory: PathBuf::from("antlr-rust-support").join(&suffix),
+            artifact_directory: PathBuf::from("antlr-rust-support").join(artifact_id),
             support_files,
             transformed_grammars,
         });
@@ -446,6 +453,20 @@ fn rewrite_support_paths(
         }
         if source != original {
             fs::write(grammar, source)?;
+        }
+    }
+    for support in support_paths {
+        let mut source = fs::read_to_string(support)?;
+        let original = source.clone();
+        for module in &modules {
+            source = replace_all(
+                &source,
+                &format!("crate::{module}"),
+                &format!("super::{module}"),
+            );
+        }
+        if source != original {
+            fs::write(support, source)?;
         }
     }
     Ok(())
