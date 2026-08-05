@@ -43,7 +43,7 @@ fn noninteractive_bundle_requires_its_exact_fingerprint() {
     let temp = temporary_directory("rust-support-trust");
     let grammar = fixture("java/JavaParser.g4");
     let generated = temp.path().join("generated");
-    let trust_store = temp.path().join("trust.toml");
+    let trust_store = temp.path().join("trust.json");
 
     let output = run_with_trust_store(&[&grammar], &generated, &trust_store, None);
 
@@ -64,7 +64,7 @@ fn noninteractive_bundle_rejects_a_different_fingerprint() {
     let temp = temporary_directory("rust-support-mismatched-trust");
     let grammar = fixture("java/JavaParser.g4");
     let generated = temp.path().join("generated");
-    let trust_store = temp.path().join("trust.toml");
+    let trust_store = temp.path().join("trust.json");
     let fingerprint = format!("sha256:{}", "0".repeat(64));
 
     let output = run_with_trust_store(&[&grammar], &generated, &trust_store, Some(&fingerprint));
@@ -84,14 +84,14 @@ fn exact_fingerprint_does_not_require_a_readable_trust_store() {
     let grammar = fixture("java/JavaParser.g4");
     let lexer = fixture("java/JavaLexer.g4");
     let generated = temp.path().join("generated");
-    let probe_store = temp.path().join("probe-trust.toml");
+    let probe_store = temp.path().join("probe-trust.json");
     let untrusted = run_with_trust_store(&[&lexer, &grammar], &generated, &probe_store, None);
     assert!(!untrusted.status.success());
     let stderr = normalize_cli_snapshot(utf8(&untrusted.stderr));
     let fingerprint = untrusted_fingerprint(&stderr).to_owned();
 
-    let corrupt_store = temp.path().join("corrupt-trust.toml");
-    fs::write(&corrupt_store, "not valid TOML = [")
+    let corrupt_store = temp.path().join("corrupt-trust.json");
+    fs::write(&corrupt_store, "not valid JSON = [")
         .expect("corrupt trust store should be writable");
     let output = run_with_trust_store(
         &[&lexer, &grammar],
@@ -115,7 +115,7 @@ fn current_java_transform_runs_from_the_staged_tree() {
     let lexer = fixture("java/JavaLexer.g4");
     let original = fs::read_to_string(&grammar).expect("fixture grammar should be readable");
     let generated = temp.path().join("generated");
-    let trust_store = temp.path().join("trust.toml");
+    let trust_store = temp.path().join("trust.json");
 
     let untrusted = run_with_trust_store(&[&lexer, &grammar], &generated, &trust_store, None);
     assert!(!untrusted.status.success());
@@ -155,8 +155,16 @@ fn current_java_transform_runs_from_the_staged_tree() {
     assert!(transformed.contains("recog.input.la(1)"));
     let semantics =
         fs::read_to_string(generated.join("semantics.json")).expect("semantics manifest");
-    assert!(semantics.contains(r#""policy": "error""#));
-    assert!(semantics.contains(r#""disposition": "hooked""#));
+    let manifest: serde_json::Value =
+        serde_json::from_str(&semantics).expect("semantics manifest should be valid JSON");
+    assert_eq!(manifest["policy"], "error");
+    assert!(
+        manifest["options"]
+            .as_array()
+            .expect("manifest options should be an array")
+            .iter()
+            .any(|option| option["disposition"] == "hooked")
+    );
     assert_generated_project(
         temp.path(),
         &["java_lexer.rs", "java_parser.rs"],
@@ -195,7 +203,7 @@ fn support_strictness_does_not_leak_to_an_unrelated_root() {
     )
     .expect("unrelated grammar should be writable");
     let generated = temp.path().join("generated");
-    let trust_store = temp.path().join("trust.toml");
+    let trust_store = temp.path().join("trust.json");
 
     let untrusted = run_with_trust_store(
         &[&lexer, &grammar, &unrelated],
@@ -225,10 +233,19 @@ fn support_strictness_does_not_leak_to_an_unrelated_root() {
     );
     let semantics =
         fs::read_to_string(generated.join("semantics.json")).expect("semantics manifest");
-    assert!(semantics.contains(r#""policy": "assume-true""#));
-    assert!(semantics.contains(
-        r#""name": "superClass", "value": "UnrelatedBase", "line": 2, "column": 10, "disposition": "unsupported""#
-    ));
+    let manifest: serde_json::Value =
+        serde_json::from_str(&semantics).expect("semantics manifest should be valid JSON");
+    assert_eq!(manifest["policy"], "assume-true");
+    let option = manifest["options"]
+        .as_array()
+        .expect("manifest options should be an array")
+        .iter()
+        .find(|option| option["name"] == "superClass" && option["value"] == "UnrelatedBase")
+        .expect("unrelated superClass option should be reported");
+    insta::assert_snapshot!(
+        "unrelated_super_class_option",
+        serde_json::to_string_pretty(option).expect("option should serialize")
+    );
 }
 
 #[test]
@@ -236,7 +253,7 @@ fn current_c_transform_wires_its_rust_support_module() {
     let temp = temporary_directory("rust-support-c");
     let grammar = fixture("c/CParser.g4");
     let generated = temp.path().join("generated");
-    let trust_store = temp.path().join("trust.toml");
+    let trust_store = temp.path().join("trust.json");
 
     let untrusted = run_with_trust_store(&[&grammar], &generated, &trust_store, None);
     assert!(!untrusted.status.success());

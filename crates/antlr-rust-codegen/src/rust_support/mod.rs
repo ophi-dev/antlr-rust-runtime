@@ -10,16 +10,19 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::Serialize;
+
 use crate::artifact::GeneratedArtifacts;
 use crate::config::CompilerConfig;
 use crate::error::Error;
+use crate::json::to_pretty_json;
 use crate::rust_output::replace_all;
 use identity::{BundleIdentity, TrustStore, identify};
 use prompt::TrustDecision;
 
 pub(crate) use python::run_transform_child;
 
-const TRANSFORM_FILE: &str = "transformGrammar.py";
+const TRANSFORM_PATH: &str = "Rust/transformGrammar.py";
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RustSupportOptions {
@@ -65,6 +68,23 @@ struct PreparedBundle {
     artifact_directory: PathBuf,
     support_files: Vec<SupportFile>,
     transformed_grammars: Vec<PathBuf>,
+}
+
+#[derive(Serialize)]
+struct RustSupportManifest<'a> {
+    version: u8,
+    bundles: Vec<RustSupportBundleManifest<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RustSupportBundleManifest<'a> {
+    source: String,
+    revision: Option<&'a str>,
+    fingerprint: &'a str,
+    transform: &'static str,
+    rust_modules: Vec<&'a str>,
+    transformed_grammars: Vec<&'a str>,
 }
 
 #[derive(Debug)]
@@ -161,7 +181,7 @@ impl PreparedRustSupport {
 
     pub(crate) fn additional_inputs(&self) -> impl Iterator<Item = PathBuf> + '_ {
         self.bundles.iter().flat_map(|bundle| {
-            let script = bundle.original_directory.join("Rust").join(TRANSFORM_FILE);
+            let script = bundle.original_directory.join(TRANSFORM_PATH);
             std::iter::once(script)
                 .chain(
                     bundle
@@ -183,57 +203,31 @@ impl PreparedRustSupport {
     }
 
     fn render_manifest(&self) -> io::Result<String> {
-        let mut output = String::from("{\n  \"version\": 1,\n  \"bundles\": [\n");
-        for (index, bundle) in self.bundles.iter().enumerate() {
-            let comma = if index + 1 == self.bundles.len() {
-                ""
-            } else {
-                ","
-            };
-            let _ = writeln!(output, "    {{");
-            let _ = writeln!(
-                output,
-                "      \"source\": {},",
-                json_string(&bundle.identity.source_label())
-            );
-            let _ = writeln!(
-                output,
-                "      \"revision\": {},",
-                bundle
-                    .identity
-                    .revision
-                    .as_deref()
-                    .map_or_else(|| "null".to_owned(), json_string)
-            );
-            let _ = writeln!(
-                output,
-                "      \"fingerprint\": {},",
-                json_string(&bundle.identity.fingerprint)
-            );
-            let _ = writeln!(
-                output,
-                "      \"transform\": {},",
-                json_string("Rust/transformGrammar.py")
-            );
-            write_file_name_array(
-                &mut output,
-                "rustModules",
-                bundle
-                    .support_files
-                    .iter()
-                    .map(|support| support.source.as_path()),
-            )?;
-            output.push_str(",\n");
-            write_file_name_array(
-                &mut output,
-                "transformedGrammars",
-                bundle.transformed_grammars.iter().map(PathBuf::as_path),
-            )?;
-            output.push('\n');
-            let _ = writeln!(output, "    }}{comma}");
-        }
-        output.push_str("  ]\n}\n");
-        Ok(output)
+        let bundles = self
+            .bundles
+            .iter()
+            .map(|bundle| {
+                Ok(RustSupportBundleManifest {
+                    source: bundle.identity.source_label(),
+                    revision: bundle.identity.revision.as_deref(),
+                    fingerprint: &bundle.identity.fingerprint,
+                    transform: TRANSFORM_PATH,
+                    rust_modules: file_names(
+                        bundle
+                            .support_files
+                            .iter()
+                            .map(|support| support.source.as_path()),
+                    )?,
+                    transformed_grammars: file_names(
+                        bundle.transformed_grammars.iter().map(PathBuf::as_path),
+                    )?,
+                })
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        Ok(to_pretty_json(&RustSupportManifest {
+            version: 1,
+            bundles,
+        }))
     }
 }
 
@@ -360,7 +354,7 @@ fn discover(roots: &[PathBuf]) -> BTreeMap<PathBuf, Vec<usize>> {
         let Some(directory) = canonical.parent() else {
             continue;
         };
-        if directory.join("Rust").join(TRANSFORM_FILE).is_file() {
+        if directory.join(TRANSFORM_PATH).is_file() {
             candidates
                 .entry(directory.to_path_buf())
                 .or_default()
@@ -512,49 +506,19 @@ fn remap_library_directory(library: &Path, bundles: &[PreparedBundle]) -> PathBu
     library.to_path_buf()
 }
 
-fn json_string(value: &str) -> String {
-    let mut output = String::with_capacity(value.len() + 2);
-    output.push('"');
-    for character in value.chars() {
-        match character {
-            '"' => output.push_str("\\\""),
-            '\\' => output.push_str("\\\\"),
-            '\n' => output.push_str("\\n"),
-            '\r' => output.push_str("\\r"),
-            '\t' => output.push_str("\\t"),
-            character if character < '\u{20}' => {
-                let _ = write!(output, "\\u{:04x}", u32::from(character));
-            }
-            character => output.push(character),
-        }
-    }
-    output.push('"');
-    output
-}
-
-fn write_file_name_array<'a>(
-    output: &mut String,
-    name: &str,
-    paths: impl Iterator<Item = &'a Path>,
-) -> io::Result<()> {
-    let _ = write!(output, "      {}: [", json_string(name));
-    for (index, path) in paths.enumerate() {
-        if index > 0 {
-            output.push_str(", ");
-        }
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Rust support output path is not UTF-8: {}", path.display()),
-                )
-            })?;
-        output.push_str(&json_string(file_name));
-    }
-    output.push(']');
-    Ok(())
+fn file_names<'a>(paths: impl Iterator<Item = &'a Path>) -> io::Result<Vec<&'a str>> {
+    paths
+        .map(|path| {
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Rust support output path is not UTF-8: {}", path.display()),
+                    )
+                })
+        })
+        .collect()
 }
 
 #[cfg(test)]

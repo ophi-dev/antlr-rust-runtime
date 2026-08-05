@@ -1,6 +1,5 @@
 ---
-source: crates/antlr-rust-codegen/src/generator.rs
-assertion_line: 22071
+source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: manifest
 ---
 {
@@ -9,10 +8,29 @@ expression: manifest
   "grammars": [
     {
       "name": "T",
-      "summary": {"total": 2, "ll1": 1, "fixed": 0, "adaptive": 1},
+      "summary": {
+        "total": 2,
+        "ll1": 1,
+        "fixed": 0,
+        "adaptive": 1
+      },
       "decisions": [
-        {"decision": 0, "rule": "expr", "state": 15, "canDefer": true, "tier": "ll1"},
-        {"decision": 1, "rule": "expr", "state": 19, "canDefer": true, "tier": "adaptive", "reason": "precedence", "probedLookahead": 0}
+        {
+          "decision": 0,
+          "rule": "expr",
+          "state": 15,
+          "canDefer": true,
+          "tier": "ll1"
+        },
+        {
+          "decision": 1,
+          "rule": "expr",
+          "state": 19,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        }
       ]
     }
   ]
