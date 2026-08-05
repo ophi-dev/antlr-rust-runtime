@@ -7,11 +7,11 @@ use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use clap::Parser;
+use miette::{Context as _, IntoDiagnostic as _};
 
 use crate::builder::{ActionMode, UnknownSemanticPolicy};
 use crate::config::{CompilerConfig, TestRigConfig};
 use crate::driver::generate;
-use crate::error::Error;
 use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
 use crate::semantics::{SemPatternFile, load_sem_patterns, normalize_option_hook};
 
@@ -19,14 +19,23 @@ const TARGET_DIR_ENV: &str = "ANTLR4_RUST_TESTRIG_TARGET_DIR";
 const RUNTIME_PATH_ENV: &str = "ANTLR4_RUST_TESTRIG_RUNTIME";
 static NEXT_PROJECT_ID: AtomicU64 = AtomicU64::new(0);
 
-pub(crate) fn run_cli() -> Result<ExitCode, Box<dyn std::error::Error>> {
+pub(crate) fn run_cli() -> miette::Result<ExitCode> {
     let args = CliArgs::parse();
-    let project = TemporaryProject::new()?;
+    let project = TemporaryProject::new()
+        .into_diagnostic()
+        .wrap_err("failed to create temporary TestRig project")?;
     let config = args.compiler_config(&project.source_directory())?;
     let mut stderr = io::stderr().lock();
-    generate(&config, |message| writeln!(stderr, "{message}")).map_err(Error::into_io_error)?;
-    project.write_manifest()?;
-    let status = args.run_generated(&project)?;
+    generate(&config, |message| writeln!(stderr, "{message}"))
+        .map_err(crate::cli_report::codegen_error)?;
+    project
+        .write_manifest()
+        .into_diagnostic()
+        .wrap_err("failed to write temporary TestRig manifest")?;
+    let status = args
+        .run_generated(&project)
+        .into_diagnostic()
+        .wrap_err("failed to execute temporary TestRig runner")?;
     Ok(if status.success() {
         ExitCode::SUCCESS
     } else {
@@ -121,10 +130,7 @@ struct CliArgs {
 }
 
 impl CliArgs {
-    fn compiler_config(
-        &self,
-        output_directory: &Path,
-    ) -> Result<CompilerConfig, Box<dyn std::error::Error>> {
+    fn compiler_config(&self, output_directory: &Path) -> miette::Result<CompilerConfig> {
         let mut roots = Vec::with_capacity(usize::from(self.lexer_grammar.is_some()) + 1);
         if let Some(lexer) = &self.lexer_grammar {
             roots.push(grammar_path(lexer));
@@ -132,10 +138,12 @@ impl CliArgs {
         roots.push(grammar_path(&self.grammar));
 
         let sem_patterns_path = self.sem_patterns.clone();
-        let sem_patterns = sem_patterns_path
-            .as_deref()
-            .map_or_else(|| Ok(SemPatternFile::default()), load_sem_patterns)
-            .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
+        let sem_patterns = match sem_patterns_path.as_deref() {
+            Some(path) => load_sem_patterns(path)
+                .into_diagnostic()
+                .wrap_err("failed to load --sem-patterns")?,
+            None => SemPatternFile::default(),
+        };
         Ok(CompilerConfig {
             roots,
             library_directories: self.library_directories.clone(),
@@ -248,7 +256,8 @@ impl TemporaryProject {
                  name = \"{}\"\n\
                  path = \"src/{}\"\n\n\
                  [dependencies]\n\
-                 {runtime}\n",
+                 {runtime}\
+                 miette = {{ version = \"=7.6.0\", default-features = false, features = [\"fancy\"] }}\n",
                 self.package_name,
                 self.package_name,
                 crate::test_rig::MAIN_PATH,

@@ -96,7 +96,10 @@ fn lexer_left_recursion_reports_each_cycle_without_partial_outputs() {
             .expect("fixture path should be valid Unicode"),
         "<grammar>",
     );
-    insta::assert_snapshot!("lexer_left_recursion_diagnostics", stderr);
+    insta::assert_snapshot!(
+        "lexer_left_recursion_diagnostics",
+        normalize_cli_snapshot(&stderr)
+    );
     assert!(!out.exists(), "failed compilation emitted output");
 }
 
@@ -117,10 +120,18 @@ fn imported_source_diagnostics_report_the_import_path() {
     ]);
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
     let stderr = utf8(&output.stderr);
-    let delegate_diagnostic = format!("error[G4F003]: {}", fixture.join("Delegate.g4").display());
-    let wrong_root_diagnostic = format!("error[G4F003]: {}", root.display());
-    assert!(stderr.contains(&delegate_diagnostic), "{stderr}");
-    assert!(!stderr.contains(&wrong_root_diagnostic), "{stderr}");
+    let missing_semicolon = stderr
+        .split_once("Error: G4F003")
+        .and_then(|(_, remainder)| remainder.split("\nError:").next())
+        .expect("missing-semicolon diagnostic should be rendered");
+    assert!(
+        missing_semicolon.contains(&fixture.join("Delegate.g4").display().to_string()),
+        "{stderr}"
+    );
+    assert!(
+        !missing_semicolon.contains(&format!("{}:", root.display())),
+        "{stderr}"
+    );
     assert!(!out.exists(), "failed compilation emitted output");
 }
 

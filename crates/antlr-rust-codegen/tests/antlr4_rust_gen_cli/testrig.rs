@@ -15,6 +15,10 @@ fn write_combined_grammar(directory: &Path) -> PathBuf {
     grammar
 }
 
+fn normalize_test_directory(value: &str, directory: &Path) -> String {
+    normalize_cli_snapshot(&value.replace(&directory.display().to_string(), "<test-directory>"))
+}
+
 #[test]
 fn help_describes_test_runner_inputs_and_modes() {
     let output = run_antlr4_rust_testrig(&["--help"]);
@@ -64,10 +68,9 @@ fn parser_runner_prints_requested_views_and_fails_on_each_error_source() {
         !parser_output.status.success(),
         "parser syntax errors must fail the runner"
     );
-    assert!(
-        utf8(&parser_output.stderr).contains("extraneous input 'world' expecting <EOF>"),
-        "{}",
-        utf8(&parser_output.stderr)
+    insta::assert_snapshot!(
+        "parser_syntax_error",
+        normalize_test_directory(utf8(&parser_output.stderr), directory.path())
     );
 
     let lexer_output = run_antlr4_rust_testrig(&[
@@ -79,10 +82,9 @@ fn parser_runner_prints_requested_views_and_fails_on_each_error_source() {
         !lexer_output.status.success(),
         "lexer syntax errors must fail the runner"
     );
-    assert!(
-        utf8(&lexer_output.stderr).contains("token recognition error at: '@'"),
-        "{}",
-        utf8(&lexer_output.stderr)
+    insta::assert_snapshot!(
+        "lexer_syntax_error",
+        normalize_test_directory(utf8(&lexer_output.stderr), directory.path())
     );
 }
 
@@ -144,19 +146,17 @@ fn lexer_only_and_unknown_rule_failures_are_nonzero() {
     let lexer_output =
         run_antlr4_rust_testrig_with_stdin(&[lexer.as_os_str(), OsStr::new("tokens")], b"@\n");
     assert!(!lexer_output.status.success());
-    assert!(
-        utf8(&lexer_output.stderr).contains("token recognition error at: '@'"),
-        "{}",
-        utf8(&lexer_output.stderr)
+    insta::assert_snapshot!(
+        "lexer_only_syntax_error",
+        normalize_cli_snapshot(utf8(&lexer_output.stderr))
     );
 
     let grammar = write_combined_grammar(directory.path());
     let rule_output = run_antlr4_rust_testrig(&[grammar.as_os_str(), OsStr::new("missing")]);
     assert!(!rule_output.status.success());
-    assert!(
-        utf8(&rule_output.stderr).contains("test rig start rule `missing` was not found"),
-        "{}",
-        utf8(&rule_output.stderr)
+    insta::assert_snapshot!(
+        "unknown_start_rule_diagnostic",
+        normalize_cli_snapshot(utf8(&rule_output.stderr))
     );
 }
 
@@ -193,5 +193,5 @@ fn multiple_inputs_continue_after_an_error_and_return_failure() {
     assert!(stderr.contains(&missing.display().to_string()));
     assert!(stderr.contains(&last.display().to_string()));
     assert!(stderr.contains("extraneous input 'words' expecting <EOF>"));
-    assert!(stderr.contains(&format!("error: {}:", missing.display())));
+    assert!(stderr.contains("failed to open input"), "{stderr}");
 }

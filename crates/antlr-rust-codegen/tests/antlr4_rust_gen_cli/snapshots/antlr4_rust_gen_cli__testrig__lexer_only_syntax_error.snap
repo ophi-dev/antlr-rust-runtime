@@ -1,0 +1,11 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: normalize_cli_snapshot(utf8(&lexer_output.stderr))
+---
+Error: antlr4_rust_testrig::lexer
+
+  × token recognition error at: '@'
+   ╭─[<stdin>:1:1]
+ 1 │ @
+   · ─
+   ╰────

@@ -32,6 +32,7 @@ antlr-rust-rs-parser.workspace = true
 antlr-rust-runtime.workspace = true
 clap = { version = "4.6.5", default-features = false, features = [
     "cargo",
+    "color",
     "derive",
     "env",
     "error-context",
@@ -43,6 +44,7 @@ clap = { version = "4.6.5", default-features = false, features = [
 icu_casemap = "2.2.0"
 icu_properties.workspace = true
 intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
+miette = { version = "7.6.0", default-features = false, features = ["fancy"] }
 petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 thiserror.workspace = true
 

@@ -1,0 +1,11 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: "normalize_test_directory(utf8(&parser_output.stderr), directory.path())"
+---
+Error: antlr4_rust_testrig::parser
+
+  × extraneous input 'world' expecting <EOF>
+   ╭─[<test-directory>/parser-error.txt:1:7]
+ 1 │ hello world
+   ·       ─────
+   ╰────

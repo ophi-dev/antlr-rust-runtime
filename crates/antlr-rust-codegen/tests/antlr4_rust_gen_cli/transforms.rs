@@ -350,7 +350,10 @@ fn configured_entry_rule_must_name_a_parser_rule() {
             .expect("fixture path should be valid Unicode"),
         "<grammar>",
     );
-    insta::assert_snapshot!("configured_entry_rule_not_found", stderr);
+    insta::assert_snapshot!(
+        "configured_entry_rule_not_found",
+        normalize_cli_snapshot(&stderr)
+    );
     assert!(!out.exists(), "invalid entry selection emitted output");
 }
 

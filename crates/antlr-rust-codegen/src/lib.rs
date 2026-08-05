@@ -3,6 +3,7 @@
 mod artifact;
 mod builder;
 mod cli;
+mod cli_report;
 mod config;
 mod driver;
 pub(crate) mod embedded;
@@ -46,12 +47,12 @@ pub(crate) use structural::{structural_embedded_model, structural_predicates};
 /// The public [`Builder`] API is the preferred integration point for build
 /// scripts. This function exists for the package's binary adapter.
 #[doc(hidden)]
-pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_cli() -> miette::Result<()> {
     cli::run_cli()
 }
 
 /// Runs the `antlr4-rust-testrig` command using the process arguments.
 #[doc(hidden)]
-pub fn run_testrig_cli() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
+pub fn run_testrig_cli() -> miette::Result<std::process::ExitCode> {
     testrig_cli::run_cli()
 }
