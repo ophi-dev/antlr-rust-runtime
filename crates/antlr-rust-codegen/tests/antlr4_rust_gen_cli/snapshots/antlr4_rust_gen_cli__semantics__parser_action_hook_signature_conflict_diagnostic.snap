@@ -1,5 +1,7 @@
 ---
-source: tests/antlr4_rust_gen_cli/semantics.rs
-expression: normalize_current_package_version(&stderr)
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/semantics.rs
+expression: normalize_current_package_version(stderr)
 ---
-Error: Custom { kind: InvalidData, error: "typed semantic helper Mark has conflicting literal signatures [String] and [Integer]" }
+Error: antlr4_rust_codegen::generation
+
+  × typed semantic helper Mark has conflicting literal signatures [String] and [Integer]

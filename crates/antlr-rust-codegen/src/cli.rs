@@ -2,18 +2,19 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 
 use clap::{ArgAction, Parser};
+use miette::{Context as _, IntoDiagnostic as _};
 
 use crate::builder::{ActionMode, UnknownSemanticPolicy};
 use crate::config::CompilerConfig;
 use crate::driver::generate;
-use crate::error::Error;
 use crate::parser::MAX_FIXED_LOOKAHEAD_FLAG;
 use crate::semantics::{SemPatternFile, load_sem_patterns, normalize_option_hook};
 
-pub(crate) fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run_cli() -> miette::Result<()> {
     let args = CliArgs::parse().into_config()?;
     let mut stderr = io::stderr().lock();
-    generate(&args, |message| writeln!(stderr, "{message}")).map_err(Error::into_io_error)?;
+    generate(&args, |message| writeln!(stderr, "{message}"))
+        .map_err(crate::cli_report::codegen_error)?;
     Ok(())
 }
 
@@ -129,12 +130,14 @@ struct CliArgs {
 }
 
 impl CliArgs {
-    fn into_config(self) -> Result<CompilerConfig, Box<dyn std::error::Error>> {
+    fn into_config(self) -> miette::Result<CompilerConfig> {
         let sem_patterns_path = self.sem_patterns;
-        let sem_patterns = sem_patterns_path
-            .as_deref()
-            .map_or_else(|| Ok(SemPatternFile::default()), load_sem_patterns)
-            .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
+        let sem_patterns = match sem_patterns_path.as_deref() {
+            Some(path) => load_sem_patterns(path)
+                .into_diagnostic()
+                .wrap_err("failed to load --sem-patterns")?,
+            None => SemPatternFile::default(),
+        };
         Ok(CompilerConfig {
             roots: self.roots,
             library_directories: self.library_directories,
@@ -154,6 +157,7 @@ impl CliArgs {
             prune_unreachable: self.prune_unreachable,
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
+            test_rig: None,
         })
     }
 }

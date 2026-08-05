@@ -139,18 +139,6 @@ impl Error {
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
-
-    pub(crate) fn into_io_error(mut self) -> io::Error {
-        self.source.take().unwrap_or_else(|| {
-            let kind =
-                if self.kind == ErrorKind::Configuration || self.kind == ErrorKind::Compilation {
-                    io::ErrorKind::InvalidInput
-                } else {
-                    io::ErrorKind::Other
-                };
-            io::Error::new(kind, self.message)
-        })
-    }
 }
 
 impl fmt::Display for Error {

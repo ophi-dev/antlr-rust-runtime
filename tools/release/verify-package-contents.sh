@@ -48,6 +48,7 @@ case "$package" in
         ;;
     antlr-rust-codegen)
         require_file "src/bin/antlr4-rust-gen.rs"
+        require_file "src/bin/antlr4-rust-testrig.rs"
         require_file "src/grammar/unicode_decomposition.bin"
         require_file "src/lib.rs"
         if grep -Eq '(^|/)(tests|fixtures|codegen-direct)(/|$)' <<<"$listing"; then

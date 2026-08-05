@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: normalize_cli_snapshot(utf8(&output.stderr))
+---
+error: the argument '--diagnostics' cannot be used with '--sll'
+
+Usage: antlr4-rust-testrig --diagnostics <GRAMMAR[.g4]> <START_RULE> [INPUT]...
+
+For more information, try '--help'.

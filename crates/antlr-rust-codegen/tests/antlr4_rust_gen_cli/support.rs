@@ -1,15 +1,56 @@
 pub(super) use std::collections::BTreeSet;
 pub(super) use std::ffi::OsStr;
 pub(super) use std::fs;
+use std::io::Write as _;
 pub(super) use std::path::{Path, PathBuf};
-pub(super) use std::process::{Command, Output};
+pub(super) use std::process::{Command, Output, Stdio};
 pub(super) use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_antlr4-rust-gen"))
+    cli_command(env!("CARGO_BIN_EXE_antlr4-rust-gen"))
         .args(args)
         .output()
         .expect("antlr4-rust-gen should run")
+}
+
+pub(super) fn run_antlr4_rust_testrig(args: &[impl AsRef<OsStr>]) -> Output {
+    cli_command(env!("CARGO_BIN_EXE_antlr4-rust-testrig"))
+        .args(args)
+        .output()
+        .expect("antlr4-rust-testrig should run")
+}
+
+pub(super) fn run_antlr4_rust_testrig_with_stdin(
+    args: &[impl AsRef<OsStr>],
+    input: &[u8],
+) -> Output {
+    let mut child = cli_command(env!("CARGO_BIN_EXE_antlr4-rust-testrig"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("antlr4-rust-testrig should start");
+    child
+        .stdin
+        .take()
+        .expect("testrig stdin should be piped")
+        .write_all(input)
+        .expect("testrig input should be writable");
+    child
+        .wait_with_output()
+        .expect("antlr4-rust-testrig should finish")
+}
+
+fn cli_command(binary: &str) -> Command {
+    let mut command = Command::new(binary);
+    command
+        .env("NO_COLOR", "1")
+        .env("CLICOLOR", "0")
+        .env("CLICOLOR_FORCE", "0")
+        .env("NO_GRAPHICS", "0")
+        .env("COLUMNS", "4096");
+    command
 }
 
 pub(super) fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
@@ -98,6 +139,64 @@ pub(super) fn run_generated_project(
 
 pub(super) fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
+}
+
+pub(super) fn normalize_cli_snapshot(value: &str) -> String {
+    let mut normalized = value
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if value.ends_with('\n') {
+        normalized.push('\n');
+    }
+    normalized
+}
+
+pub(super) fn replace_miette_path(value: &str, path: &str, replacement: &str) -> String {
+    let Some(first) = path.chars().next() else {
+        return value.to_owned();
+    };
+    let mut first_buffer = [0; 4];
+    let first: &str = first.encode_utf8(&mut first_buffer);
+    let mut normalized = value.to_owned();
+    let mut search_from = 0;
+    while let Some(relative_start) = normalized[search_from..].find(first) {
+        let start = search_from + relative_start;
+        let Some(end) = wrapped_path_end(&normalized, start, path) else {
+            search_from = start + first.len();
+            continue;
+        };
+        normalized.replace_range(start..end, replacement);
+        search_from = start + replacement.len();
+    }
+    normalized
+}
+
+fn wrapped_path_end(value: &str, start: usize, path: &str) -> Option<usize> {
+    const CONTINUATION: &str = "\n  │ ";
+    let mut cursor = start;
+    for expected in path.chars() {
+        while value.get(cursor..)?.starts_with(CONTINUATION) {
+            cursor += CONTINUATION.len();
+        }
+        let actual = value.get(cursor..)?.chars().next()?;
+        if actual != expected {
+            return None;
+        }
+        cursor += actual.len_utf8();
+    }
+    Some(cursor)
+}
+
+#[test]
+fn miette_path_normalization_handles_message_wrapping() {
+    let path = "/tmp/antlr-rust-gen-long/Example.g4";
+    let rendered = "  × /tmp/antlr-rust-gen-\n  │ long/Example.g4:4:6: invalid input";
+    assert_eq!(
+        replace_miette_path(rendered, path, "$GRAMMAR"),
+        "  × $GRAMMAR:4:6: invalid input"
+    );
 }
 
 pub(super) fn normalize_current_package_version(value: &str) -> String {

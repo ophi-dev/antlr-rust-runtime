@@ -1,5 +1,59 @@
 ---
-source: tests/antlr4_rust_gen_cli/transforms.rs
-expression: stderr
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
+expression: normalize_cli_snapshot(&stderr)
 ---
-Error: Custom { kind: InvalidInput, error: "error[G4S079]: <grammar>:1:0: configured parser entry rule missing is not defined\n" }
+Error: antlr4_rust_codegen::compilation
+
+  × grammar compilation failed with 1 error(s)
+
+Error: G4S079
+
+  × configured parser entry rule missing is not defined
+    ╭─[<grammar>:1:1]
+  1 │ ╭─▶ grammar Reachability;
+  2 │ │
+  3 │ │   start
+  4 │ │       : live EOF
+  5 │ │       ;
+  6 │ │
+  7 │ │   script
+  8 │ │       : live end
+  9 │ │       ;
+ 10 │ │
+ 11 │ │   alternate
+ 12 │ │       : EOF
+ 13 │ │       | ID
+ 14 │ │       ;
+ 15 │ │
+ 16 │ │   end
+ 17 │ │       : EOF
+ 18 │ │       ;
+ 19 │ │
+ 20 │ │   manual
+ 21 │ │       : live
+ 22 │ │       ;
+ 23 │ │
+ 24 │ │   live
+ 25 │ │       : ID
+ 26 │ │       ;
+ 27 │ │
+ 28 │ │   deadRoot
+ 29 │ │       : ID deadHelper?
+ 30 │ │       ;
+ 31 │ │
+ 32 │ │   deadHelper
+ 33 │ │       : ID deadRoot?
+ 34 │ │       ;
+ 35 │ │
+ 36 │ │   fragment LETTER
+ 37 │ │       : [a-z]
+ 38 │ │       ;
+ 39 │ │
+ 40 │ │   ID
+ 41 │ │       : LETTER+
+ 42 │ │       ;
+ 43 │ │
+ 44 │ │   WS
+ 45 │ │       : [ \t\r\n]+ -> skip
+ 46 │ ╰─▶     ;
+    ╰────

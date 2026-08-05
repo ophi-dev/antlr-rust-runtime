@@ -1,0 +1,318 @@
+---
+source: crates/antlr-rust-codegen/src/test_rig.rs
+expression: rendered
+---
+#![allow(clippy::print_stderr, clippy::print_stdout)]
+
+#[path = "../demo_lexer.rs"]
+mod generated_lexer;
+
+use generated_lexer::DemoLexer as TestRigGeneratedLexer;
+
+use std::ffi::OsString;
+use std::fmt;
+use std::fs::File;
+use std::io;
+use std::ops::Range;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use antlr4_runtime::{
+    CharStream as _, CommonTokenStream, InputStream, IntStream as _,
+};
+use miette::{
+    Context as _, Diagnostic, IntoDiagnostic as _, LabeledSpan, NamedSource, SourceCode,
+};
+
+const LEXER_DIAGNOSTIC_CODE: &str = "antlr4_rust_testrig::lexer";
+
+type SharedSource = Arc<NamedSource<Arc<str>>>;
+
+#[derive(Debug)]
+struct DiagnosticSource {
+    name: String,
+    contents: Option<Rc<str>>,
+    shared: Option<SharedSource>,
+}
+
+impl DiagnosticSource {
+    fn new(input: &InputStream) -> Self {
+        Self {
+            name: input.source_name().to_owned(),
+            contents: input.source_text(),
+            shared: None,
+        }
+    }
+
+    fn report(&mut self, diagnostics: Vec<PendingDiagnostic>) {
+        if diagnostics.is_empty() {
+            return;
+        }
+        let source = self.shared();
+        for diagnostic in diagnostics {
+            report_diagnostic(SyntaxDiagnostic::new(
+                Arc::clone(&source),
+                diagnostic,
+            ));
+        }
+    }
+
+    fn shared(&mut self) -> SharedSource {
+        if let Some(source) = &self.shared {
+            return Arc::clone(source);
+        }
+        let contents: Arc<str> = self
+            .contents
+            .take()
+            .map_or_else(|| Arc::from(""), |contents| Arc::from(contents.as_ref()));
+        let source = Arc::new(NamedSource::new(self.name.clone(), contents));
+        self.shared = Some(Arc::clone(&source));
+        source
+    }
+}
+
+#[allow(dead_code)] // Parser-only flags remain accepted for lexer-only TestRig invocations.
+#[derive(Clone, Copy, Debug, Default)]
+struct Options {
+    tokens: bool,
+    tree: bool,
+    trace: bool,
+    diagnostics: bool,
+    sll: bool,
+}
+
+fn install_miette_handler() {
+    let Some(width) = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+    else {
+        return;
+    };
+    let _ = miette::set_hook(Box::new(move |_| {
+        Box::new(miette::MietteHandlerOpts::new().width(width).build())
+    }));
+}
+
+fn main() -> miette::Result<ExitCode> {
+    install_miette_handler();
+    Ok(if run()? {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+fn run() -> miette::Result<bool> {
+    let (options, input_files) = options_and_inputs()
+        .into_diagnostic()
+        .wrap_err("invalid TestRig runner arguments")?;
+    if input_files.is_empty() {
+        let stdin = io::stdin();
+        let input = InputStream::from_reader_with_source_name(stdin.lock(), "<stdin>")
+            .into_diagnostic()
+            .wrap_err("failed to read standard input")?;
+        return process(input, options);
+    }
+
+    let show_names = input_files.len() > 1;
+    let mut success = true;
+    for input_file in input_files {
+        let path = PathBuf::from(input_file);
+        if show_names {
+            eprintln!("{}", path.display());
+        }
+        match process_file(&path, options) {
+            Ok(input_success) => success &= input_success,
+            Err(error) => {
+                eprintln!("Error: {error:?}");
+                success = false;
+            }
+        }
+    }
+    Ok(success)
+}
+
+fn process_file(path: &std::path::Path, options: Options) -> miette::Result<bool> {
+    let file = File::open(path)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to open input {}", path.display()))?;
+    let input =
+        InputStream::from_reader_with_source_name(file, path.display().to_string())
+            .into_diagnostic()
+            .wrap_err_with(|| format!("failed to read input {}", path.display()))?;
+    process(input, options)
+}
+
+fn options_and_inputs() -> io::Result<(Options, Vec<OsString>)> {
+    let mut options = Options::default();
+    let mut inputs = Vec::new();
+    let mut arguments = std::env::args_os().skip(1);
+    while let Some(argument) = arguments.next() {
+        match argument.to_str() {
+            Some("--tokens") => options.tokens = true,
+            Some("--tree") => options.tree = true,
+            Some("--trace") => options.trace = true,
+            Some("--diagnostics") => options.diagnostics = true,
+            Some("--sll") => options.sll = true,
+            Some("--") => {
+                inputs.extend(arguments);
+                break;
+            }
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unexpected runner argument {}", argument.to_string_lossy()),
+                ));
+            }
+        }
+    }
+    if options.diagnostics && options.sll {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--diagnostics cannot be used with --sll",
+        ));
+    }
+    Ok((options, inputs))
+}
+
+#[derive(Debug)]
+struct PendingDiagnostic {
+    code: &'static str,
+    line: usize,
+    column: usize,
+    span: Option<Range<usize>>,
+    message: String,
+}
+
+#[derive(Debug)]
+struct SyntaxDiagnostic {
+    code: &'static str,
+    message: String,
+    source: SharedSource,
+    span: Option<Range<usize>>,
+}
+
+impl SyntaxDiagnostic {
+    fn new(source: SharedSource, diagnostic: PendingDiagnostic) -> Self {
+        let PendingDiagnostic {
+            code,
+            line,
+            column,
+            span,
+            message,
+        } = diagnostic;
+        let span = span
+            .filter(|span| span.start <= span.end && span.end <= source.inner().len())
+            .or_else(|| position_span(source.inner(), line, column));
+        let message = if span.is_some() {
+            message
+        } else {
+            format!("{}:{line}:{column}: {message}", source.name())
+        };
+        Self {
+            code,
+            message,
+            source,
+            span,
+        }
+    }
+}
+
+impl fmt::Display for SyntaxDiagnostic {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for SyntaxDiagnostic {}
+
+impl Diagnostic for SyntaxDiagnostic {
+    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
+        Some(Box::new(self.code))
+    }
+
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        Some(self.source.as_ref())
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        self.span.as_ref().map(|span| {
+            let label = if span.is_empty() {
+                LabeledSpan::at_offset(span.start, "here")
+            } else {
+                LabeledSpan::underline(span.clone())
+            };
+            let labels: Box<dyn Iterator<Item = LabeledSpan>> =
+                Box::new(std::iter::once(label));
+            labels
+        })
+    }
+}
+
+fn position_span(source: &str, line: usize, column: usize) -> Option<Range<usize>> {
+    let line_index = line.checked_sub(1)?;
+    let mut line_start = 0;
+    for _ in 0..line_index {
+        line_start += source.get(line_start..)?.find('\n')? + 1;
+    }
+    let remainder = source.get(line_start..)?;
+    let line_length = remainder.find('\n').unwrap_or(remainder.len());
+    let line_text = remainder.get(..line_length)?;
+    let relative = line_text
+        .char_indices()
+        .nth(column)
+        .map(|(offset, _)| offset)
+        .or_else(|| (line_text.chars().count() == column).then_some(line_text.len()))?;
+    let length = line_text
+        .get(relative..)?
+        .chars()
+        .next()
+        .map_or(0, char::len_utf8);
+    let start = line_start + relative;
+    Some(start..start + length)
+}
+
+fn report_diagnostic(diagnostic: SyntaxDiagnostic) {
+    eprintln!("Error: {:?}", miette::Report::new(diagnostic));
+}
+
+fn lexer_diagnostics<L: antlr4_runtime::TokenSource>(
+    tokens: &mut CommonTokenStream<L>,
+) -> Vec<PendingDiagnostic> {
+    tokens.fill();
+    tokens
+        .drain_source_errors()
+        .into_iter()
+        .map(|error| PendingDiagnostic {
+            code: LEXER_DIAGNOSTIC_CODE,
+            line: error.line,
+            column: error.column,
+            span: error.span,
+            message: error.message,
+        })
+        .collect()
+}
+
+
+fn process(
+    input: InputStream,
+    options: Options,
+) -> miette::Result<bool> {
+    let mut source = DiagnosticSource::new(&input);
+    let lexer = TestRigGeneratedLexer::new(input);
+    let mut tokens = CommonTokenStream::try_new(lexer)
+        .into_diagnostic()
+        .wrap_err("failed to buffer lexer tokens")?;
+    let diagnostics = lexer_diagnostics(&mut tokens);
+    let lexer_errors = diagnostics.len();
+    source.report(diagnostics);
+    if options.tokens {
+        for token in tokens.tokens() {
+            println!("{token}");
+        }
+    }
+    Ok(lexer_errors == 0)
+}

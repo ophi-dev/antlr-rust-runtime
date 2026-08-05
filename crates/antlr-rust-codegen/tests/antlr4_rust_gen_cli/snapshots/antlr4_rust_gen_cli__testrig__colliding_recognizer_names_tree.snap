@@ -1,0 +1,5 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: utf8(&output.stdout)
+---
+(start collision <EOF>)

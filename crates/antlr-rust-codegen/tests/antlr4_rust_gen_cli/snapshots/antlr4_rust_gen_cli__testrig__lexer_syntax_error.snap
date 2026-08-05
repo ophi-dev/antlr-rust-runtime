@@ -1,0 +1,18 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: "normalize_test_directory(utf8(&lexer_output.stderr), directory.path())"
+---
+Error: antlr4_rust_testrig::lexer
+
+  × token recognition error at: '@'
+   ╭─[<test-directory>/lexer-error.txt:1:1]
+ 1 │ @
+   · ─
+   ╰────
+
+Error: antlr4_rust_testrig::parser
+
+  × missing ID at '<EOF>'
+   ╭─[<test-directory>/lexer-error.txt:2:1]
+ 1 │ @
+   ╰────

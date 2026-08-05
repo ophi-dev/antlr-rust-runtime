@@ -880,11 +880,8 @@ fn unsupported_antlr4rust_surface_fails_at_its_semantic_coordinate() {
             .path()
             .to_str()
             .expect("temporary directory path should be UTF-8");
-        diagnostics.push(
-            utf8(&output.stderr)
-                .replace(path, "$GRAMMAR")
-                .replace(root, "$TMP"),
-        );
+        let stderr = replace_miette_path(utf8(&output.stderr), path, "$GRAMMAR");
+        diagnostics.push(replace_miette_path(&stderr, root, "$TMP"));
     }
     insta::assert_snapshot!(
         "unsupported_antlr4rust_surface_diagnostics",

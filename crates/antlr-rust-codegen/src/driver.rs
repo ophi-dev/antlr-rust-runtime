@@ -9,6 +9,9 @@ use crate::semantics::{
     enforce_require_full_options, enforce_require_full_semantics, enforce_sem_unknown,
     grammar_option_warning_messages, render_decisions_manifest, render_semantics_manifest,
 };
+use crate::test_rig::{
+    MAIN_PATH as TEST_RIG_MAIN_PATH, TestRigLexer, TestRigParser, render_test_rig,
+};
 
 pub(crate) fn generate(
     args: &CompilerConfig,
@@ -71,6 +74,8 @@ pub(crate) fn generate(
     let mut rendered_modules = BTreeMap::<PathBuf, String>::new();
     let mut emitted_lexers = BTreeSet::new();
     let mut emitted_parsers = BTreeSet::new();
+    let mut test_rig_lexers = Vec::new();
+    let mut test_rig_parsers = Vec::new();
 
     for root in &compilation.roots {
         if let Some(grammar) = root.lexer
@@ -104,6 +109,9 @@ pub(crate) fn generate(
             );
             let module = render_lexer_model(&render_model)?;
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
+            if args.test_rig.is_some() {
+                test_rig_lexers.push(TestRigLexer::new(grammar_name.clone()));
+            }
             manifest_grammars.push(("lexer", grammar_name, entries));
         }
 
@@ -141,6 +149,12 @@ pub(crate) fn generate(
                 },
             )?;
             insert_rendered_module(&mut rendered_modules, &grammar_name, module)?;
+            if args.test_rig.is_some() {
+                test_rig_parsers.push(TestRigParser::new(
+                    grammar_name.clone(),
+                    data.rule_names.clone(),
+                ));
+            }
             decision_report_grammars.push(DecisionReportGrammar {
                 name: grammar_name.clone(),
                 rule_names: data.rule_names.clone(),
@@ -173,6 +187,12 @@ pub(crate) fn generate(
         artifacts.insert("optimizations.json", manifest)?;
     } else {
         artifacts.remove_if_present("optimizations.json")?;
+    }
+    if let Some(test_rig) = &args.test_rig {
+        artifacts.insert(
+            TEST_RIG_MAIN_PATH,
+            render_test_rig(&test_rig.start_rule, &test_rig_lexers, &test_rig_parsers)?,
+        )?;
     }
     let outputs = artifacts.write_to(&args.out_dir)?;
     Ok(Generation::new(inputs, outputs, warnings, diagnostics))

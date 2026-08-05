@@ -1,18 +1,18 @@
 [package]
-name = "antlr-rust-codegen"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-description = "ANTLR v4 grammar compiler and Rust source generator"
-repository.workspace = true
-homepage.workspace = true
-documentation = "https://docs.rs/antlr-rust-codegen"
-license.workspace = true
+categories             = ["development-tools::build-utils", "parser-implementations", "parsing"]
+description            = "ANTLR v4 grammar compiler and Rust source generator"
+documentation          = "https://docs.rs/antlr-rust-codegen"
+edition.workspace      = true
+homepage.workspace     = true
+include                = ["/Cargo.toml", "/README.md", "/src/**"]
+keywords               = ["antlr", "antlr4", "codegen", "lexer", "parser"]
+license.workspace      = true
 license-file.workspace = true
-readme = "README.md"
-keywords = ["antlr", "antlr4", "codegen", "parser", "lexer"]
-categories = ["development-tools::build-utils", "parser-implementations", "parsing"]
-include = ["/Cargo.toml", "/README.md", "/src/**"]
+name                   = "antlr-rust-codegen"
+readme                 = "README.md"
+repository.workspace   = true
+rust-version.workspace = true
+version.workspace      = true
 
 [lib]
 name = "antlr_rust_codegen"
@@ -22,12 +22,17 @@ path = "src/lib.rs"
 name = "antlr4-rust-gen"
 path = "src/bin/antlr4-rust-gen.rs"
 
+[[bin]]
+name = "antlr4-rust-testrig"
+path = "src/bin/antlr4-rust-testrig.rs"
+
 [dependencies]
-antlr-rust-runtime.workspace = true
 antlr-rust-g4-parser.workspace = true
 antlr-rust-rs-parser.workspace = true
+antlr-rust-runtime.workspace = true
 clap = { version = "4.6.5", default-features = false, features = [
     "cargo",
+    "color",
     "derive",
     "env",
     "error-context",
@@ -39,12 +44,13 @@ clap = { version = "4.6.5", default-features = false, features = [
 icu_casemap = "2.2.0"
 icu_properties.workspace = true
 intl = { version = "0.6.0", default-features = false, features = ["full", "normalization"] }
+miette = { version = "7.6.0", default-features = false, features = ["fancy"] }
 petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 thiserror.workspace = true
 
 [dev-dependencies]
-hmac-sha256 = "1"
-insta.workspace = true
+hmac-sha256      = "1"
+insta.workspace  = true
 memchr.workspace = true
 
 [lints]

@@ -1,0 +1,46 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/testrig.rs
+expression: utf8(&output.stdout)
+---
+Generate and run an ANTLR Rust recognizer against test inputs
+
+Usage: antlr4-rust-testrig [OPTIONS] <GRAMMAR[.g4]> <START_RULE> [INPUT]...
+
+Arguments:
+  <GRAMMAR[.g4]>  Combined, parser, or lexer grammar to run
+  <START_RULE>    Parser start rule, or `tokens` for lexer-only execution
+  [INPUT]...      UTF-8 input files. Reads stdin when omitted
+
+Options:
+      --lexer-grammar <LEXER[.g4]>
+          Lexer grammar paired with a split parser grammar
+  -I, --lib <DIR>
+          Add an import/token-vocabulary lookup directory
+      --tokens
+          Print every buffered token, including hidden-channel tokens and EOF
+      --tree
+          Print the parse tree
+      --trace
+          Print parser rule enter/exit events
+      --diagnostics
+          Report exact-ambiguity prediction diagnostics
+      --sll
+          Use SLL prediction mode instead of LL
+      --allow-unsupported-lexer-actions
+          Ignore unsupported lexer actions
+      --actions <ACTIONS>
+          Choose how grammar action and predicate bodies are interpreted [default: templates] [possible values: templates, embedded]
+      --sem-unknown <SEM_UNKNOWN>
+          Choose the unsupported semantic predicate policy [default: assume-true] [possible values: assume-true, assume-false, hook, error]
+      --sem-patterns <FILE>
+          Load semantic helper patterns
+      --option-hook <KEY=VALUE>
+          Acknowledge an option implemented by caller hooks
+      --require-full-semantics
+          Fail if any semantic coordinate or option is unsupported
+      --fixed-lookahead <K>
+          Compile decisions provable within K tokens into static dispatch tables
+  -h, --help
+          Print help
+  -V, --version
+          Print version

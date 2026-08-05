@@ -1,5 +1,27 @@
 ---
-source: tests/antlr4_rust_gen_cli/diagnostics.rs
-expression: stderr
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/diagnostics.rs
+expression: normalize_cli_snapshot(&stderr)
 ---
-Error: Custom { kind: InvalidInput, error: "error[G4A005]: <grammar>:3:0: mutually left-recursive rules: [A]\nerror[G4A005]: <grammar>:4:0: mutually left-recursive rules: [B, C]\n" }
+Error: antlr4_rust_codegen::compilation
+
+  × grammar compilation failed with 2 error(s)
+
+Error: G4A005
+
+  × mutually left-recursive rules: [A]
+   ╭─[<grammar>:3:1]
+ 2 │
+ 3 │ A : A 'a' | 'x' ;
+   · ─────────────────
+ 4 │ B : C 'b' | 'y' ;
+   ╰────
+
+Error: G4A005
+
+  × mutually left-recursive rules: [B, C]
+   ╭─[<grammar>:4:1]
+ 3 │ A : A 'a' | 'x' ;
+ 4 │ B : C 'b' | 'y' ;
+   · ─────────────────
+ 5 │ C : B 'c' ;
+   ╰────
