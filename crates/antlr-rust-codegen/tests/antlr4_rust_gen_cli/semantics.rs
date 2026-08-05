@@ -101,11 +101,23 @@ lower = "hook"
 
     let manifest =
         fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
-    let predicate = manifest
-        .lines()
-        .find(|line| line.contains("\"kind\": \"parser-predicate\""))
+    let manifest: serde_json::Value =
+        serde_json::from_str(&manifest).expect("manifest should contain valid JSON");
+    let predicate = manifest["grammars"]
+        .as_array()
+        .expect("manifest grammars should be an array")
+        .iter()
+        .flat_map(|grammar| {
+            grammar["coordinates"]
+                .as_array()
+                .expect("grammar coordinates should be an array")
+        })
+        .find(|coordinate| coordinate["kind"] == "parser-predicate" && coordinate["rule"] == "shl")
         .expect("parser predicate should be inventoried");
-    insta::assert_snapshot!("recog_receiver_semantics_manifest", predicate);
+    insta::assert_snapshot!(
+        "recog_receiver_semantics_manifest",
+        serde_json::to_string_pretty(predicate).expect("predicate should serialize")
+    );
 
     let parser = fs::read_to_string(out.join("recog_predicate_parser.rs"))
         .expect("parser should be emitted");

@@ -1,6 +1,5 @@
 ---
-source: crates/antlr-rust-codegen/src/generator.rs
-assertion_line: 23033
+source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: manifest
 ---
 {
@@ -13,7 +12,18 @@ expression: manifest
       "kind": "parser",
       "name": "SParser",
       "coordinates": [
-        {"kind": "parser-predicate", "rule": "s", "rule_index": 0, "index": 0, "atn_state": null, "line": 4, "column": 6, "body": "isTypeName()", "disposition": "assume-true", "template": null}
+        {
+          "kind": "parser-predicate",
+          "rule": "s",
+          "rule_index": 0,
+          "index": 0,
+          "atn_state": null,
+          "line": 4,
+          "column": 6,
+          "body": "isTypeName()",
+          "disposition": "assume-true",
+          "template": null
+        }
       ]
     }
   ]

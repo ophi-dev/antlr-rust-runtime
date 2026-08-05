@@ -1,24 +1,25 @@
 [package]
-name = "antlr-rust-g4-parser"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-description = "ANTLR v4 grammar parser used internally by antlr-rust-codegen"
-repository.workspace = true
-homepage.workspace = true
-license.workspace = true
+categories             = ["development-tools::build-utils", "parser-implementations", "parsing"]
+description            = "ANTLR v4 grammar parser used internally by antlr-rust-codegen"
+edition.workspace      = true
+homepage.workspace     = true
+include                = ["/Cargo.toml", "/README.md", "/src/**"]
+keywords               = ["antlr", "antlr4", "codegen", "grammar", "parser"]
+license.workspace      = true
 license-file.workspace = true
-readme = "README.md"
-publish = true
-keywords = ["antlr", "antlr4", "grammar", "parser", "codegen"]
-categories = ["development-tools::build-utils", "parser-implementations", "parsing"]
-include = ["/Cargo.toml", "/README.md", "/src/**"]
+name                   = "antlr-rust-g4-parser"
+publish                = true
+readme                 = "README.md"
+repository.workspace   = true
+rust-version.workspace = true
+version.workspace      = true
 
 [dependencies]
 antlr-rust-runtime.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+serde_json      = "1"
 
 [lints]
 workspace = true

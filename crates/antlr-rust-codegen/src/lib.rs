@@ -12,6 +12,7 @@ mod error;
 mod generator;
 #[allow(dead_code)]
 pub(crate) mod grammar;
+mod json;
 mod lexer;
 mod optimization;
 mod parser;
