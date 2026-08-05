@@ -184,6 +184,7 @@ use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use antlr4_runtime::{
@@ -196,6 +197,49 @@ use miette::{
 const LEXER_DIAGNOSTIC_CODE: &str = "antlr4_rust_testrig::lexer";
 
 type SharedSource = Arc<NamedSource<Arc<str>>>;
+
+#[derive(Debug)]
+struct DiagnosticSource {
+    name: String,
+    contents: Option<Rc<str>>,
+    shared: Option<SharedSource>,
+}
+
+impl DiagnosticSource {
+    fn new(input: &InputStream) -> Self {
+        Self {
+            name: input.source_name().to_owned(),
+            contents: input.source_text(),
+            shared: None,
+        }
+    }
+
+    fn report(&mut self, diagnostics: Vec<PendingDiagnostic>) {
+        if diagnostics.is_empty() {
+            return;
+        }
+        let source = self.shared();
+        for diagnostic in diagnostics {
+            report_diagnostic(SyntaxDiagnostic::new(
+                Arc::clone(&source),
+                diagnostic,
+            ));
+        }
+    }
+
+    fn shared(&mut self) -> SharedSource {
+        if let Some(source) = &self.shared {
+            return Arc::clone(source);
+        }
+        let contents: Arc<str> = self
+            .contents
+            .take()
+            .map_or_else(|| Arc::from(""), |contents| Arc::from(contents.as_ref()));
+        let source = Arc::new(NamedSource::new(self.name.clone(), contents));
+        self.shared = Some(Arc::clone(&source));
+        source
+    }
+}
 
 #[allow(dead_code)] // Parser-only flags remain accepted for lexer-only TestRig invocations.
 #[derive(Clone, Copy, Debug, Default)]
@@ -303,6 +347,15 @@ fn options_and_inputs() -> io::Result<(Options, Vec<OsString>)> {
 }
 
 #[derive(Debug)]
+struct PendingDiagnostic {
+    code: &'static str,
+    line: usize,
+    column: usize,
+    span: Option<Range<usize>>,
+    message: String,
+}
+
+#[derive(Debug)]
 struct SyntaxDiagnostic {
     code: &'static str,
     message: String,
@@ -311,14 +364,14 @@ struct SyntaxDiagnostic {
 }
 
 impl SyntaxDiagnostic {
-    fn new(
-        code: &'static str,
-        source: SharedSource,
-        line: usize,
-        column: usize,
-        span: Option<Range<usize>>,
-        message: String,
-    ) -> Self {
+    fn new(source: SharedSource, diagnostic: PendingDiagnostic) -> Self {
+        let PendingDiagnostic {
+            code,
+            line,
+            column,
+            span,
+            message,
+        } = diagnostic;
         let span = span
             .filter(|span| span.start <= span.end && span.end <= source.inner().len())
             .or_else(|| position_span(source.inner(), line, column));
@@ -367,13 +420,6 @@ impl Diagnostic for SyntaxDiagnostic {
     }
 }
 
-fn diagnostic_source(input: &InputStream) -> SharedSource {
-    let contents: Arc<str> = input
-        .source_text()
-        .map_or_else(|| Arc::from(""), |contents| Arc::from(contents.as_ref()));
-    Arc::new(NamedSource::new(input.source_name(), contents))
-}
-
 fn position_span(source: &str, line: usize, column: usize) -> Option<Range<usize>> {
     let line_index = line.checked_sub(1)?;
     let mut line_start = 0;
@@ -401,24 +447,21 @@ fn report_diagnostic(diagnostic: SyntaxDiagnostic) {
     eprintln!("Error: {:?}", miette::Report::new(diagnostic));
 }
 
-fn report_lexer_errors<L: antlr4_runtime::TokenSource>(
+fn lexer_diagnostics<L: antlr4_runtime::TokenSource>(
     tokens: &mut CommonTokenStream<L>,
-    source: &SharedSource,
-) -> usize {
+) -> Vec<PendingDiagnostic> {
     tokens.fill();
-    let errors = tokens.drain_source_errors();
-    let count = errors.len();
-    for error in errors {
-        report_diagnostic(SyntaxDiagnostic::new(
-            LEXER_DIAGNOSTIC_CODE,
-            Arc::clone(source),
-            error.line,
-            error.column,
-            error.span,
-            error.message,
-        ));
-    }
-    count
+    tokens
+        .drain_source_errors()
+        .into_iter()
+        .map(|error| PendingDiagnostic {
+            code: LEXER_DIAGNOSTIC_CODE,
+            line: error.line,
+            column: error.column,
+            span: error.span,
+            message: error.message,
+        })
+        .collect()
 }
 "#;
 
@@ -435,12 +478,14 @@ fn process(
     input: InputStream,
     options: Options,
 ) -> miette::Result<bool> {
-    let source = diagnostic_source(&input);
+    let mut source = DiagnosticSource::new(&input);
     let lexer = TestRigGeneratedLexer::new(input);
     let mut tokens = CommonTokenStream::try_new(lexer)
         .into_diagnostic()
         .wrap_err("failed to buffer lexer tokens")?;
-    let lexer_errors = report_lexer_errors(&mut tokens, &source);
+    let diagnostics = lexer_diagnostics(&mut tokens);
+    let lexer_errors = diagnostics.len();
+    source.report(diagnostics);
     if options.tokens {
         for token in tokens.tokens() {
             println!("{token}");
@@ -472,30 +517,23 @@ const PARSER_DIAGNOSTIC_CODE: &str = "antlr4_rust_testrig::parser";
 #[derive(Clone, Debug)]
 struct DiagnosticCollector {
     code: &'static str,
-    source: SharedSource,
-    diagnostics: Arc<Mutex<Vec<SyntaxDiagnostic>>>,
+    diagnostics: Arc<Mutex<Vec<PendingDiagnostic>>>,
 }
 
 impl DiagnosticCollector {
-    fn new(code: &'static str, source: SharedSource) -> Self {
+    fn new(code: &'static str) -> Self {
         Self {
             code,
-            source,
             diagnostics: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
-    fn report(&self) {
-        let diagnostics = {
-            let mut diagnostics = self
-                .diagnostics
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            std::mem::take(&mut *diagnostics)
-        };
-        for diagnostic in diagnostics {
-            report_diagnostic(diagnostic);
-        }
+    fn take(&self) -> Vec<PendingDiagnostic> {
+        let mut diagnostics = self
+            .diagnostics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::mem::take(&mut *diagnostics)
     }
 }
 
@@ -507,14 +545,13 @@ where
         self.diagnostics
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(SyntaxDiagnostic::new(
-                self.code,
-                Arc::clone(&self.source),
-                event.line,
-                event.column,
-                event.span.clone(),
-                event.message.to_owned(),
-            ));
+            .push(PendingDiagnostic {
+                code: self.code,
+                line: event.line,
+                column: event.column,
+                span: event.span.clone(),
+                message: event.message.to_owned(),
+            });
     }
 }
 
@@ -568,12 +605,14 @@ fn process(
     input: InputStream,
     options: Options,
 ) -> miette::Result<bool> {
-    let source = diagnostic_source(&input);
+    let mut source = DiagnosticSource::new(&input);
     let lexer = TestRigGeneratedLexer::new(input);
     let mut tokens = CommonTokenStream::try_new(lexer)
         .into_diagnostic()
         .wrap_err("failed to buffer lexer tokens")?;
-    let lexer_errors = report_lexer_errors(&mut tokens, &source);
+    let lexer_diagnostics = lexer_diagnostics(&mut tokens);
+    let lexer_errors = lexer_diagnostics.len();
+    source.report(lexer_diagnostics);
     if options.tokens {
         for token in tokens.tokens() {
             println!("{token}");
@@ -581,8 +620,7 @@ fn process(
     }
 
     let mut parser = TestRigGeneratedParser::new(tokens);
-    let parser_diagnostics =
-        DiagnosticCollector::new(PARSER_DIAGNOSTIC_CODE, Arc::clone(&source));
+    let parser_diagnostics = DiagnosticCollector::new(PARSER_DIAGNOSTIC_CODE);
     parser.remove_error_listeners();
     parser.add_error_listener(parser_diagnostics.clone());
     parser.set_build_parse_trees(options.tree);
@@ -609,7 +647,7 @@ fn process(
             None
         }
     };
-    parser_diagnostics.report();
+    source.report(parser_diagnostics.take());
     if options.tree && let Some(root) = root {
         println!(
             "{}",

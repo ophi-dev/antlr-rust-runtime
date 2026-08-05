@@ -207,6 +207,20 @@ fn grammar_path(path: &Path) -> PathBuf {
     }
 }
 
+#[cfg(unix)]
+fn create_private_directory(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt as _;
+
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700);
+    builder.create(path)
+}
+
+#[cfg(not(unix))]
+fn create_private_directory(path: &Path) -> io::Result<()> {
+    fs::create_dir(path)
+}
+
 #[derive(Debug)]
 struct TemporaryProject {
     root: PathBuf,
@@ -222,7 +236,7 @@ impl TemporaryProject {
                 std::process::id()
             );
             let root = std::env::temp_dir().join(&package_name);
-            match fs::create_dir(&root) {
+            match create_private_directory(&root) {
                 Ok(()) => {
                     fs::create_dir(root.join("src"))?;
                     return Ok(Self { root, package_name });
@@ -422,5 +436,19 @@ mod tests {
             select_target_directory(None, None, project),
             project.join("target")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temporary_project_directory_is_private() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let project = TemporaryProject::new().expect("temporary project should be created");
+        let mode = fs::metadata(&project.root)
+            .expect("temporary project should have metadata")
+            .permissions()
+            .mode();
+
+        assert_eq!(mode & 0o077, 0);
     }
 }
