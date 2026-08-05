@@ -194,10 +194,14 @@ fn normalize_repository(remote: &str) -> String {
     {
         return format!("https://{host}/{path}");
     }
-    if let Some(value) = remote.strip_prefix("ssh://git@")
-        && let Some((host, path)) = value.split_once('/')
-    {
-        return format!("https://{host}/{path}");
+    if let Some((scheme, remainder)) = remote.split_once("://") {
+        let authority_end = remainder.find('/').unwrap_or(remainder.len());
+        let (authority, path) = remainder.split_at(authority_end);
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        let scheme = if scheme == "ssh" { "https" } else { scheme };
+        return format!("{scheme}://{host}{path}");
     }
     remote.to_owned()
 }
@@ -357,7 +361,23 @@ fn default_trust_store_path() -> Option<PathBuf> {
 mod tests {
     use std::sync::{Arc, Barrier};
 
-    use super::{BundleIdentity, TrustStore};
+    use super::{BundleIdentity, TrustStore, normalize_repository};
+
+    #[test]
+    fn repository_identity_strips_remote_credentials() {
+        assert_eq!(
+            normalize_repository("https://build:secret@github.com/example/grammars.git"),
+            "https://github.com/example/grammars"
+        );
+        assert_eq!(
+            normalize_repository("ssh://git@github.com/example/grammars.git"),
+            "https://github.com/example/grammars"
+        );
+        assert_eq!(
+            normalize_repository("git@github.com:example/grammars.git"),
+            "https://github.com/example/grammars"
+        );
+    }
 
     #[test]
     fn persisted_scopes_round_trip() {
