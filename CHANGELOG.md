@@ -12,6 +12,13 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.30.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.29.0...v0.30.0) (2026-08-05)
+
+
+### Features
+
+* **codegen:** add TestRig command ([#302](https://github.com/ophi-dev/antlr-rust-runtime/issues/302)) ([e03e75c](https://github.com/ophi-dev/antlr-rust-runtime/commit/e03e75c87fdab5e1644a2e3ade2a46924bbe3f75))
+
 ## [0.29.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.28.0...v0.29.0) (2026-08-04)
 
 
