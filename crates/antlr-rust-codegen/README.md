@@ -47,6 +47,10 @@ checked-in outputs from this generator, and its handwritten facade builds TOML
 values through the generated validated listener. Codegen owns only the semantic
 pattern schema layered over those values.
 
+Pattern files must now be valid TOML. Quote string-valued fields; unknown
+fields, malformed sections, and trailing junk fail generation instead of being
+silently accepted by the former permissive scalar reader.
+
 The pinned grammar and regeneration instructions live under
 `third_party/toml-grammar/`. Generated recognizers are refreshed with
 `tools/toml-syntax/update-generated.sh --update` and verified with `--check`.

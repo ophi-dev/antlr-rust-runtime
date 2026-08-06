@@ -217,6 +217,18 @@ Document {
             Assignment {
                 key: Key {
                     segments: [
+                        "float",
+                    ],
+                },
+                value: Float(
+                    "1000.5",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
                         "owner",
                         "name",
                     ],

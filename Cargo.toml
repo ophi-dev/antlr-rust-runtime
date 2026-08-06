@@ -40,6 +40,7 @@ icu_properties = { version = "2.2.0", features = ["alloc"] }
 insta = { version = "1", default-features = false }
 memchr = "2"
 thiserror = "2"
+toml_datetime = "1.1.1"
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

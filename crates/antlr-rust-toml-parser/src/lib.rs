@@ -42,6 +42,7 @@ literal_two_quote_tail = '''abc'''''
 lowercase_utc = 1979-05-27T07:32:00z
 commented_array = [1 # first
 , 2]
+float = 1_000.5
 owner.name = "Ada"
 
 [standard.table]
@@ -145,7 +146,11 @@ offset_date_time = 1979-05-27 07:32z
 inline = {
     key = 1,
 }
-"#
+"#,
+            "basic_zwnbsp = \"x\u{feff}y\"\n",
+            "literal_zwnbsp = 'x\u{feff}y'\n",
+            "multiline_zwnbsp = \"\"\"x\u{feff}y\"\"\"\n",
+            "commented_zwnbsp = 1 # x\u{feff}y\n",
         ))
         .expect("TOML 1.1 extensions should parse");
 
@@ -158,5 +163,26 @@ inline = {
             .expect_err("UTF-8 BOM is valid only at the start");
 
         insta::assert_snapshot!("invalid_interior_utf8_bom", error);
+    }
+
+    #[test]
+    fn hard_parse_failure_preserves_the_lexer_diagnostic() {
+        let error = parse("a = 1\rb = 2\n").expect_err("a bare carriage return must fail lexing");
+
+        insta::assert_snapshot!("hard_failure_lexer_diagnostic", error);
+    }
+
+    #[test]
+    fn float_payload_is_directly_parseable() {
+        let document = parse("value = 1_000.5\n").expect("float should parse");
+        let [crate::Item::Assignment(assignment)] = document.items() else {
+            panic!("expected one assignment");
+        };
+        let crate::Value::Float(value) = assignment.value() else {
+            panic!("expected a float");
+        };
+
+        assert_eq!(value, "1000.5");
+        value.parse::<f64>().expect("normalized float should parse");
     }
 }

@@ -538,6 +538,12 @@ validated-tree boundary and typed listener; codegen separately validates the
 TOML, duplicate or unknown fields, incorrect value types, and unsupported
 sections fail generation instead of being ignored.
 
+This is a migration from the former permissive scalar reader: pattern files
+must now be valid TOML, string-valued fields must be quoted, and unknown fields
+are errors. The internal TOML facade exposes flat syntax/value items; codegen's
+semantic-pattern schema remains responsible for duplicate and table semantics,
+so the implementation crate is not a standalone semantic TOML API.
+
 The same manifest inventories top-level grammar options. Options implemented
 by the source compiler (`tokenVocab` and `caseInsensitive`) are recorded
 without a warning. Target extension options such as `superClass` and

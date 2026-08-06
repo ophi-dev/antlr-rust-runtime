@@ -11,5 +11,7 @@ Foundation (ASF) under one or more contributor license agreements and are
 distributed under the Apache License, Version 2.0. The package LICENSE file
 contains that license.
 
-The repository copy includes documented corrections for TOML multiline basic
-strings and forbidden control characters in comments.
+The repository copy includes documented corrections for multiline string
+quotes and continuations, forbidden control characters in comments, comments
+around array separators, case-insensitive UTC designators, and TOML 1.1
+optional seconds, inline-table layout, byte escapes, and leading-BOM handling.

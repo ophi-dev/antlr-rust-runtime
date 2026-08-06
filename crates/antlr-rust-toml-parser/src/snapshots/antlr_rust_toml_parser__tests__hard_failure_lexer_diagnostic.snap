@@ -2,4 +2,4 @@
 source: crates/antlr-rust-toml-parser/src/lib.rs
 expression: error
 ---
-TOML syntax error at 2:0: token recognition error at: '﻿'
+TOML syntax error at 1:5: token recognition error at: '\rb'

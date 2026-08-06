@@ -63,5 +63,53 @@ Document {
                 ),
             },
         ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "multiline_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "commented_zwnbsp",
+                    ],
+                },
+                value: Integer(
+                    1,
+                ),
+            },
+        ),
     ],
 }
