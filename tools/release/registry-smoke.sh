@@ -89,6 +89,7 @@ for package in \
     antlr-rust-runtime \
     antlr-rust-g4-parser \
     antlr-rust-rs-parser \
+    antlr-rust-toml-parser \
     antlr-rust-codegen
 do
     if ! jq -e \

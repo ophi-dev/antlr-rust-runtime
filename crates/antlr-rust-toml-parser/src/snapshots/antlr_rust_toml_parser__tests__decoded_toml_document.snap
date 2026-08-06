@@ -1,0 +1,351 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: document
+---
+Document {
+    items: [
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "title",
+                    ],
+                },
+                value: String(
+                    "TOML Rules # inside",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal",
+                    ],
+                },
+                value: String(
+                    "a\\nb",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "answer",
+                    ],
+                },
+                value: Integer(
+                    42,
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "enabled",
+                    ],
+                },
+                value: Boolean(
+                    true,
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "when",
+                    ],
+                },
+                value: DateTime(
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: Some(
+                                    0,
+                                ),
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "values",
+                    ],
+                },
+                value: Array(
+                    [
+                        Integer(
+                            1,
+                        ),
+                        String(
+                            "two",
+                        ),
+                        Boolean(
+                            false,
+                        ),
+                        InlineTable(
+                            [
+                                Assignment {
+                                    key: Key {
+                                        segments: [
+                                            "first",
+                                        ],
+                                    },
+                                    value: String(
+                                        "a",
+                                    ),
+                                },
+                                Assignment {
+                                    key: Key {
+                                        segments: [
+                                            "second",
+                                        ],
+                                    },
+                                    value: Integer(
+                                        2,
+                                    ),
+                                },
+                            ],
+                        ),
+                    ],
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "multiline",
+                    ],
+                },
+                value: String(
+                    "call(\"x\")",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "multiline_pair",
+                    ],
+                },
+                value: String(
+                    "a\"\"b",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc\"",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_two_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc\"\"",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc'",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_two_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc''",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "lowercase_utc",
+                    ],
+                },
+                value: DateTime(
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: Some(
+                                    0,
+                                ),
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "commented_array",
+                    ],
+                },
+                value: Array(
+                    [
+                        Integer(
+                            1,
+                        ),
+                        Integer(
+                            2,
+                        ),
+                    ],
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "float",
+                    ],
+                },
+                value: Float(
+                    "1000.5",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "owner",
+                        "name",
+                    ],
+                },
+                value: String(
+                    "Ada",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "standard",
+                        "table",
+                    ],
+                },
+                array: false,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "value",
+                    ],
+                },
+                value: String(
+                    "kept",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "helper",
+                    ],
+                },
+                array: true,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "name",
+                    ],
+                },
+                value: String(
+                    "one",
+                ),
+            },
+        ),
+        Table(
+            TableHeader {
+                key: Key {
+                    segments: [
+                        "helper",
+                    ],
+                },
+                array: true,
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "name",
+                    ],
+                },
+                value: String(
+                    "two",
+                ),
+            },
+        ),
+    ],
+}

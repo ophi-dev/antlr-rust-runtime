@@ -1,0 +1,5 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: error
+---
+invalid TOML: unsupported TOML escape sequence \/

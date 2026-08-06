@@ -39,6 +39,22 @@ Or install the command:
 cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
+## Semantic pattern TOML
+
+`--sem-patterns FILE` is parsed by the lockstep
+`antlr-rust-toml-parser` implementation package. Its lexer and parser are
+checked-in outputs from this generator, and its handwritten facade builds TOML
+values through the generated validated listener. Codegen owns only the semantic
+pattern schema layered over those values.
+
+Pattern files must now be valid TOML. Quote string-valued fields; unknown
+fields, malformed sections, and trailing junk fail generation instead of being
+silently accepted by the former permissive scalar reader.
+
+The pinned grammar and regeneration instructions live under
+`third_party/toml-grammar/`. Generated recognizers are refreshed with
+`tools/toml-syntax/update-generated.sh --update` and verified with `--check`.
+
 ## Trusted grammars-v4 Rust support
 
 `antlr4-rust-gen` recognizes a sibling `Rust/transformGrammar.py` for the

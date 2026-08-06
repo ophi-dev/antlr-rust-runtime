@@ -46,6 +46,12 @@ case "$package" in
         require_file "src/generated/semantics.json"
         require_file "src/generated/decisions.json"
         ;;
+    antlr-rust-toml-parser)
+        require_file "NOTICE"
+        require_file "src/generated/toml_lexer.rs"
+        require_file "src/generated/toml_parser.rs"
+        require_file "src/lib.rs"
+        ;;
     antlr-rust-codegen)
         require_file "src/bin/antlr4-rust-gen.rs"
         require_file "src/bin/antlr4-rust-testrig.rs"

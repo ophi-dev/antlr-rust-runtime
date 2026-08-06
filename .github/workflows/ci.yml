@@ -48,6 +48,11 @@ jobs:
       - name: Validate workspace release metadata
         run: tools/release/check-workspace-version.sh
 
+      - name: Validate checked-in syntax recognizers
+        run: |
+          tools/rust-syntax/update-generated.sh --check
+          tools/toml-syntax/update-generated.sh --check
+
       - name: Run Clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
@@ -80,6 +85,7 @@ jobs:
             crates/antlr-rust-codegen/src
             crates/antlr-rust-g4-parser/src
             crates/antlr-rust-rs-parser/src
+            crates/antlr-rust-toml-parser/src
             tests/antlr-rust-runtime-testsuite/src
 
   msrv:

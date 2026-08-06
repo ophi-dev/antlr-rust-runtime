@@ -4976,33 +4976,6 @@ lower = "bool(false)"
 }
 
 #[test]
-fn strip_toml_comment_respects_quoted_strings() {
-    // A `#` outside quotes starts a comment.
-    assert_eq!(strip_toml_comment("key = 1 # trailing"), "key = 1 ");
-    assert_eq!(strip_toml_comment("# whole line"), "");
-    // A `#` inside a basic or literal string is NOT a comment.
-    assert_eq!(
-        strip_toml_comment(r#"match = "text == '#'""#),
-        r#"match = "text == '#'""#
-    );
-    assert_eq!(
-        strip_toml_comment(r##"lower = 'str("#")'"##),
-        r##"lower = 'str("#")'"##
-    );
-    // A `#` after a closed string is still a comment.
-    assert_eq!(
-        strip_toml_comment(r#"match = "a" # note"#),
-        r#"match = "a" "#
-    );
-    // A `\"` escape inside a basic string does not close it, so a later `#`
-    // stays inside the string.
-    assert_eq!(
-        strip_toml_comment(r##"match = "a\"#b""##),
-        r##"match = "a\"#b""##
-    );
-}
-
-#[test]
 fn sem_patterns_keep_hash_inside_quoted_match() {
     // A `#` inside the quoted `match` body must survive parsing, not be
     // truncated as a comment (which would silently change the pattern).
@@ -5015,6 +4988,63 @@ fn sem_patterns_keep_hash_inside_quoted_match() {
         .expect("pattern lookup should not fail")
         .expect("the '#'-bearing match body must be retained");
     assert_eq!(template, PredicateTemplate::False);
+}
+
+#[test]
+fn semantic_pattern_toml_and_schema_errors_fail_closed() {
+    let cases = [
+        ("malformed TOML", "version = 1 trailing\n"),
+        ("duplicate field", "version = 1\nversion = 1\n"),
+        ("wrong version type", "version = \"1\"\n"),
+        ("standard table", "[helper]\nname = \"check\"\n"),
+        ("unknown section", "[[unknown]]\nname = \"check\"\n"),
+        (
+            "wrong field type",
+            "[[helper]]\nname = 1\nlower = \"hook\"\n",
+        ),
+        (
+            "unknown section field",
+            "[[helper]]\nname = \"check\"\nlower = \"hook\"\ntyop = \"bool\"\n",
+        ),
+        (
+            "dotted schema key",
+            "[[helper]]\nname.part = \"check\"\nlower = \"hook\"\n",
+        ),
+        (
+            "non-integer coordinate index",
+            "[[coordinate]]\nkind = \"predicate\"\nindex = \"zero\"\ndispose = \"hook\"\n",
+        ),
+        (
+            "negative coordinate index",
+            "[[coordinate]]\nkind = \"predicate\"\nindex = -1\ndispose = \"hook\"\n",
+        ),
+        (
+            "wrong member init type",
+            "[[member]]\nname = \"enabled\"\nkind = \"bool\"\ninit = \"yes\"\n",
+        ),
+        ("unknown root field", "future = true\n"),
+        (
+            "duplicate section field",
+            "[[helper]]\nname = \"first\"\nname = \"second\"\nlower = \"hook\"\n",
+        ),
+        (
+            "missing required section field",
+            "[[pattern]]\nmatch = \"check()\"\n",
+        ),
+    ];
+    let errors = cases
+        .into_iter()
+        .map(|(case, input)| {
+            (
+                case,
+                parse_sem_patterns(input)
+                    .expect_err("invalid pattern input must fail")
+                    .to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    insta::assert_debug_snapshot!("semantic_pattern_toml_schema_errors", errors);
 }
 
 /// Two `[[pattern]]` entries matching one action body must be an error, not
@@ -5093,22 +5123,6 @@ lower = "pop_member(depths)"
             .is_none(),
         "a run of semicolons must not collapse onto the declared body"
     );
-}
-
-#[test]
-fn parse_toml_scalar_strips_single_quoted_literals() {
-    // TOML literal strings are single-quoted with no escape processing.
-    // `strip_toml_comment` already treats `'...'` as a string, so the scalar
-    // parser must strip those quotes too (verbatim body).
-    assert_eq!(parse_toml_scalar("'assume-false'"), "assume-false");
-    assert_eq!(parse_toml_scalar("  'hook'  "), "hook");
-    // A literal string is verbatim: a backslash is not an escape.
-    assert_eq!(parse_toml_scalar(r"'a\nb'"), r"a\nb");
-    // Double-quoted basic strings still unescape.
-    assert_eq!(parse_toml_scalar(r#""a\nb""#), "a\nb");
-    // A bare scalar and a lone quote are unchanged.
-    assert_eq!(parse_toml_scalar("42"), "42");
-    assert_eq!(parse_toml_scalar("'"), "'");
 }
 
 #[test]

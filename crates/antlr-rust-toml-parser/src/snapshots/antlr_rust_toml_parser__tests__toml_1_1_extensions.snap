@@ -1,0 +1,145 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: document
+---
+Document {
+    items: [
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "escaped",
+                    ],
+                },
+                value: String(
+                    "\u{1b}A",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "local_time",
+                    ],
+                },
+                value: DateTime(
+                    Datetime {
+                        date: None,
+                        time: Some(
+                            Time {
+                                hour: 13,
+                                minute: 37,
+                                second: None,
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: None,
+                    },
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "offset_date_time",
+                    ],
+                },
+                value: DateTime(
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: None,
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "inline",
+                    ],
+                },
+                value: InlineTable(
+                    [
+                        Assignment {
+                            key: Key {
+                                segments: [
+                                    "key",
+                                ],
+                            },
+                            value: Integer(
+                                1,
+                            ),
+                        },
+                    ],
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "multiline_zwnbsp",
+                    ],
+                },
+                value: String(
+                    "x\u{feff}y",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "commented_zwnbsp",
+                    ],
+                },
+                value: Integer(
+                    1,
+                ),
+            },
+        ),
+    ],
+}
