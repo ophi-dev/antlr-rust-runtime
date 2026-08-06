@@ -2431,13 +2431,12 @@ mod tests {
                     } = value;";
         let syntax = analyze(body);
 
-        assert_eq!(
-            syntax.pattern_binding_cfg_predicate(occurrence(body, "Alias", 0)),
-            Some("all(feature = \"outer\", feature = \"inner\")".to_owned())
-        );
-        assert_eq!(
-            syntax.pattern_binding_cfg_predicate(occurrence(body, "Same", 0)),
-            Some("any()".to_owned())
+        insta::assert_debug_snapshot!(
+            "nested_pattern_field_cfg_predicates",
+            (
+                syntax.pattern_binding_cfg_predicate(occurrence(body, "Alias", 0)),
+                syntax.pattern_binding_cfg_predicate(occurrence(body, "Same", 0)),
+            )
         );
     }
 
