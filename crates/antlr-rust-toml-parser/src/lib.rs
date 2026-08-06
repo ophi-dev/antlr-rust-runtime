@@ -182,7 +182,7 @@ inline = {
             panic!("expected a float");
         };
 
-        assert_eq!(value, "1000.5");
+        insta::assert_snapshot!("normalized_float_payload", value);
         value.parse::<f64>().expect("normalized float should parse");
     }
 }
