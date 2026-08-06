@@ -12,6 +12,23 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.31.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.30.0...v0.31.0) (2026-08-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **codegen:** semantic pattern files must now be valid TOML. String-valued fields require quotes, and malformed sections, trailing junk, and unknown fields fail generation instead of being accepted by the former permissive scalar reader.
+
+### Features
+
+* **codegen:** parse semantic patterns with generated TOML ([#313](https://github.com/ophi-dev/antlr-rust-runtime/issues/313)) ([e9b259a](https://github.com/ophi-dev/antlr-rust-runtime/commit/e9b259a5aeee57a0e9ced09b9c50efa155d1a6a4))
+* **codegen:** run trusted Rust support bundles ([#304](https://github.com/ophi-dev/antlr-rust-runtime/issues/304)) ([debc33d](https://github.com/ophi-dev/antlr-rust-runtime/commit/debc33d72d5cad5b638cb7468bccad7759406729))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate toml to v1 ([c210f81](https://github.com/ophi-dev/antlr-rust-runtime/commit/c210f819d37f81574fa7e89c3c6c767b3151855f))
+
 ## [0.30.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.29.0...v0.30.0) (2026-08-05)
 
 
