@@ -40,16 +40,15 @@ use generated::parser::{
     RULE_CLOSURE_TAIL, RULE_ENUM_DECL, RULE_EXPR, RULE_EXTERN_MOD, RULE_FIELD_NAME, RULE_FN_DECL,
     RULE_FOREIGN_FN_DECL, RULE_FOREIGN_ITEM, RULE_FOREIGN_ITEM_TAIL, RULE_IDENT, RULE_IMPL_BLOCK,
     RULE_IMPL_ITEM_TAIL, RULE_ITEM, RULE_MACRO_DECL, RULE_MACRO_INVOCATION_SEMI, RULE_METHOD_DECL,
-    RULE_METHOD_PARAM_LIST, RULE_MOD_DECL, RULE_PARAM, RULE_PARAM_LIST, RULE_PATTERN,
-    RULE_PATTERN_NO_TOP_ALT, RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT, RULE_RENAME,
-    RULE_STMT, RULE_STRUCT_DECL, RULE_STRUCT_TAIL, RULE_TRAIT_DECL, RULE_TRAIT_ITEM,
-    RULE_TRAIT_METHOD_DECL, RULE_TRAIT_METHOD_PARAM, RULE_TRAIT_METHOD_PARAM_LIST, RULE_TYPE_DECL,
-    RULE_TYPE_NO_BOUNDS, RULE_UNION_DECL, RULE_USE_ITEM, RULE_USE_ITEM_LIST, RULE_USE_PATH,
-    RULE_USE_SUFFIX, RULE_VARIADIC_PARAM_LIST, RustParser, RustParserParseOutput,
-    RustValidatedListener, StaticDeclContext, StructDeclContext, TraitAliasContext,
-    TraitDeclContext, TraitItemContext, TraitMethodDeclContext, TypeDeclContext,
-    TypeParameterContext, TypePathMainContext, UnionDeclContext, UseDeclContext,
-    ValidatedTreeContext,
+    RULE_METHOD_PARAM_LIST, RULE_MOD_DECL, RULE_PARAM, RULE_PARAM_LIST, RULE_PATTERN_NO_TOP_ALT,
+    RULE_PATTERN_WITHOUT_MUT, RULE_PRIM_EXPR_NO_STRUCT, RULE_RENAME, RULE_STMT, RULE_STRUCT_DECL,
+    RULE_STRUCT_TAIL, RULE_TRAIT_DECL, RULE_TRAIT_ITEM, RULE_TRAIT_METHOD_DECL,
+    RULE_TRAIT_METHOD_PARAM, RULE_TRAIT_METHOD_PARAM_LIST, RULE_TYPE_DECL, RULE_TYPE_NO_BOUNDS,
+    RULE_UNION_DECL, RULE_USE_ITEM, RULE_USE_ITEM_LIST, RULE_USE_PATH, RULE_USE_SUFFIX,
+    RULE_VARIADIC_PARAM_LIST, RustParser, RustParserParseOutput, RustValidatedListener,
+    StaticDeclContext, StructDeclContext, TraitAliasContext, TraitDeclContext, TraitItemContext,
+    TraitMethodDeclContext, TypeDeclContext, TypeParameterContext, TypePathMainContext,
+    UnionDeclContext, UseDeclContext, ValidatedTreeContext,
 };
 
 const WRAPPER_PREFIX: &str = "{\n";
@@ -250,12 +249,17 @@ impl RustSyntax {
     }
 
     pub fn pattern_binding_cfg_predicate(&self, byte_start: usize) -> Option<String> {
-        let predicates = self
+        let mut predicates = Vec::new();
+        for predicate in self
             .conditional_pattern_binding_ranges
             .iter()
             .filter(|binding| binding.range.contains(&byte_start))
-            .map(|binding| binding.active_predicate.clone())
-            .collect::<Vec<_>>();
+            .map(|binding| &binding.active_predicate)
+        {
+            if !predicates.contains(predicate) {
+                predicates.push(predicate.clone());
+            }
+        }
         cfg_all_predicate(&predicates)
     }
 
@@ -412,15 +416,19 @@ impl<'a> BindingCollector<'a> {
         ));
     }
 
-    fn collect_macro_imports(&mut self, rule: antlr4_runtime::RuleNodeView<'_>) {
+    fn collect_macro_imports(
+        &mut self,
+        rule: antlr4_runtime::RuleNodeView<'_>,
+        introduced: &[ImportedPathBinding],
+    ) {
         let scope = enclosing_block(rule)
             .and_then(|block| body_byte_range(block, self.tokens, self.body_len))
             .unwrap_or(0..self.body_len);
         let activation = binding_activation(rule, self.tokens, self.body, self.body_len);
         self.bindings.macros.extend(
-            use_decl_bindings(rule, self.tokens)
-                .into_iter()
-                .map(|binding| binding.name)
+            introduced
+                .iter()
+                .map(|binding| binding.name.clone())
                 .filter(|name| macro_allows_value_alias_lowering(name))
                 .map(|name| ScopedMacroBinding {
                     name,
@@ -471,8 +479,9 @@ impl RustValidatedListener<io::Error> for BindingCollector<'_> {
         context: &UseDeclContext<'_, ValidatedTreeContext>,
     ) -> io::Result<()> {
         let rule = context.as_rule_node();
-        self.collect_macro_imports(rule);
-        self.collect_standard_paths(rule, use_decl_bindings(rule, self.tokens));
+        let introduced = use_decl_bindings(rule, self.tokens);
+        self.collect_macro_imports(rule, &introduced);
+        self.collect_standard_paths(rule, introduced);
         Ok(())
     }
 
@@ -969,7 +978,7 @@ impl RustValidatedListener<io::Error> for SyntaxAnalyzer<'_> {
         context: &PatFieldContext<'_, ValidatedTreeContext>,
     ) -> io::Result<()> {
         collect_pattern_field_role(
-            context.as_rule_node(),
+            context,
             self.tokens,
             self.body,
             self.body_len,
@@ -2020,13 +2029,14 @@ fn collect_lifetime_identifier_start(
 }
 
 fn collect_pattern_field_role(
-    rule: antlr4_runtime::RuleNodeView<'_>,
+    context: &PatFieldContext<'_, ValidatedTreeContext>,
     tokens: &TokenStore,
     body: &str,
     body_len: usize,
     syntax: &mut RustSyntax,
 ) {
-    if rule.child_rule(RULE_PATTERN).is_none() {
+    let rule = context.as_rule_node();
+    if context.pattern().is_none() {
         collect_direct_identifier_start(
             rule,
             tokens,
@@ -2037,8 +2047,12 @@ fn collect_pattern_field_role(
     let Some(range) = body_byte_range(rule, tokens, body_len) else {
         return;
     };
-    let Some(active_predicate) = cfg_all_predicate(&member_cfg_predicates(&body[range.clone()]))
-    else {
+    let predicates = context
+        .attr_children()
+        .filter_map(|attribute| body_byte_range(attribute.as_rule_node(), tokens, body_len))
+        .flat_map(|attribute| member_cfg_predicates(&body[attribute]))
+        .collect::<Vec<_>>();
+    let Some(active_predicate) = cfg_all_predicate(&predicates) else {
         return;
     };
     syntax
@@ -2400,6 +2414,30 @@ mod tests {
         assert_eq!(
             syntax.pattern_binding_cfg_predicate(occurrence(body, "Other", 0)),
             Some("feature = \"other\"".to_owned())
+        );
+    }
+
+    #[test]
+    fn nested_pattern_field_cfg_predicates_compose_without_duplicates() {
+        let body = "let Outer {\n\
+                        #[cfg(feature = \"outer\")]\n\
+                        nested: Inner {\n\
+                            #[cfg(feature = \"inner\")] Alias,\n\
+                        },\n\
+                        #[cfg(any())]\n\
+                        repeated: Inner {\n\
+                            #[cfg(any())] Same,\n\
+                        },\n\
+                    } = value;";
+        let syntax = analyze(body);
+
+        assert_eq!(
+            syntax.pattern_binding_cfg_predicate(occurrence(body, "Alias", 0)),
+            Some("all(feature = \"outer\", feature = \"inner\")".to_owned())
+        );
+        assert_eq!(
+            syntax.pattern_binding_cfg_predicate(occurrence(body, "Same", 0)),
+            Some("any()".to_owned())
         );
     }
 
