@@ -477,8 +477,8 @@ fn flush_pattern_section(
     };
     match section {
         PatternSection::Pattern => {
-            let match_body = take_required_string_field(fields, "match")?;
-            let lower = take_required_string_field(fields, "lower")?;
+            let match_body = take_required_string_field(fields, section, "match")?;
+            let lower = take_required_string_field(fields, section, "lower")?;
             let id = fields
                 .remove("id")
                 .map(|value| expect_string_field("id", value))
@@ -550,16 +550,16 @@ fn flush_pattern_section(
             file.helpers.push(SemHelperRule {
                 kind,
                 receiver,
-                name: take_required_string_field(fields, "name")?,
+                name: take_required_string_field(fields, section, "name")?,
                 arguments,
-                lower: take_required_string_field(fields, "lower")?,
+                lower: take_required_string_field(fields, section, "lower")?,
             });
         }
         PatternSection::Member => {
             file.members.push(stack_member::MemberDeclaration {
-                name: take_required_string_field(fields, "name")?,
+                name: take_required_string_field(fields, section, "name")?,
                 kind: stack_member::MemberKind::parse(&take_required_string_field(
-                    fields, "kind",
+                    fields, section, "kind",
                 )?)?,
                 // Defaults to `both`, so single-recognizer grammars (and every
                 // pattern file written before scoping existed) need no `scope`.
@@ -581,7 +581,9 @@ fn flush_pattern_section(
         }
         PatternSection::Coordinate => {
             file.coordinates.push(SemCoordinateOverride {
-                kind: parse_coordinate_kind(&take_required_string_field(fields, "kind")?)?,
+                kind: parse_coordinate_kind(&take_required_string_field(
+                    fields, section, "kind",
+                )?)?,
                 rule: fields
                     .remove("rule")
                     .map(|value| expect_string_field("rule", value))
@@ -595,7 +597,7 @@ fn flush_pattern_section(
                     .map(|value| parse_usize_field("atn_state", &value))
                     .transpose()?,
                 dispose: CoordinateDispose::parse(&take_required_string_field(
-                    fields, "dispose",
+                    fields, section, "dispose",
                 )?)?,
             });
         }
@@ -606,7 +608,6 @@ fn flush_pattern_section(
             section.name()
         )));
     }
-    fields.clear();
     Ok(())
 }
 
@@ -631,10 +632,11 @@ fn parse_helper_arguments(value: &str) -> io::Result<Vec<SemanticLiteralKind>> {
 
 fn take_required_string_field(
     fields: &mut BTreeMap<String, TomlValue>,
+    section: PatternSection,
     name: &str,
 ) -> io::Result<String> {
     let value = fields.remove(name).ok_or_else(|| {
-        invalid_semantic_pattern(format!("semantic pattern section missing {name}"))
+        invalid_semantic_pattern(format!("missing {name:?} in [[{}]]", section.name()))
     })?;
     expect_string_field(name, value)
 }

@@ -35,4 +35,28 @@ expression: errors
         "dotted schema key",
         "semantic pattern schema does not accept dotted keys",
     ),
+    (
+        "non-integer coordinate index",
+        "index must be an integer, got string",
+    ),
+    (
+        "negative coordinate index",
+        "invalid index value -1: out of range integral type conversion attempted",
+    ),
+    (
+        "wrong member init type",
+        "member init must be an integer or boolean, got string",
+    ),
+    (
+        "unknown root field",
+        "unknown top-level semantic pattern field \"future\"",
+    ),
+    (
+        "duplicate section field",
+        "duplicate semantic pattern field \"name\"",
+    ),
+    (
+        "missing required section field",
+        "missing \"lower\" in [[pattern]]",
+    ),
 ]

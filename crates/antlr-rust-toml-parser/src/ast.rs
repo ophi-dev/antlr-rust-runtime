@@ -95,7 +95,7 @@ pub enum Value {
     Integer(i64),
     Float(String),
     Boolean(bool),
-    DateTime(String),
+    DateTime(toml_datetime::Datetime),
     Array(Vec<Self>),
     InlineTable(Vec<Assignment>),
 }

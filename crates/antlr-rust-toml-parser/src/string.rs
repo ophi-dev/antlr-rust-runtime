@@ -103,6 +103,8 @@ fn decode_unicode_escape(
 fn decode_spaced_multiline_continuation(
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
 ) -> Result<(), Error> {
+    // The lexer accepts only newline-terminated ML_ESC shapes; keep this
+    // defensive validation for direct decoder invariants.
     while chars.next_if(|ch| matches!(ch, ' ' | '\t')).is_some() {}
     match chars.next() {
         Some('\n') => trim_multiline_continuation(chars),

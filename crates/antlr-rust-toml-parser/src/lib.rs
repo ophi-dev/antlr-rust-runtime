@@ -174,6 +174,13 @@ inline = {
     }
 
     #[test]
+    fn hard_parse_failure_preserves_the_parser_diagnostic() {
+        let error = parse("a = 1 b = 2\n").expect_err("two pairs on one line must fail");
+
+        insta::assert_snapshot!("hard_failure_parser_diagnostic", error);
+    }
+
+    #[test]
     fn float_payload_is_directly_parseable() {
         let document = parse("value = 1_000.5\n").expect("float should parse");
         let [crate::Item::Assignment(assignment)] = document.items() else {

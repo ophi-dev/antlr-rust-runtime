@@ -60,7 +60,28 @@ Document {
                     ],
                 },
                 value: DateTime(
-                    "1979-05-27T07:32:00Z",
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: Some(
+                                    0,
+                                ),
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
                 ),
             },
         ),
@@ -190,7 +211,28 @@ Document {
                     ],
                 },
                 value: DateTime(
-                    "1979-05-27T07:32:00z",
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: Some(
+                                    0,
+                                ),
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
                 ),
             },
         ),

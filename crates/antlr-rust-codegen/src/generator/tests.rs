@@ -5010,6 +5010,27 @@ fn semantic_pattern_toml_and_schema_errors_fail_closed() {
             "dotted schema key",
             "[[helper]]\nname.part = \"check\"\nlower = \"hook\"\n",
         ),
+        (
+            "non-integer coordinate index",
+            "[[coordinate]]\nkind = \"predicate\"\nindex = \"zero\"\ndispose = \"hook\"\n",
+        ),
+        (
+            "negative coordinate index",
+            "[[coordinate]]\nkind = \"predicate\"\nindex = -1\ndispose = \"hook\"\n",
+        ),
+        (
+            "wrong member init type",
+            "[[member]]\nname = \"enabled\"\nkind = \"bool\"\ninit = \"yes\"\n",
+        ),
+        ("unknown root field", "future = true\n"),
+        (
+            "duplicate section field",
+            "[[helper]]\nname = \"first\"\nname = \"second\"\nlower = \"hook\"\n",
+        ),
+        (
+            "missing required section field",
+            "[[pattern]]\nmatch = \"check()\"\n",
+        ),
     ];
     let errors = cases
         .into_iter()

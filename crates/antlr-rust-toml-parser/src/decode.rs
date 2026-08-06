@@ -112,10 +112,13 @@ pub fn parse(input: &str) -> Result<Document, Error> {
         },
     )
     .map_err(|error| {
-        lexer_diagnostics.take().into_iter().next().map_or_else(
-            || Error::invalid(format!("recognition failed: {error}")),
-            |diagnostic| Error::syntax(diagnostic.line, diagnostic.column, diagnostic.message),
-        )
+        if let Some(diagnostic) = lexer_diagnostics.take().into_iter().next() {
+            return Error::syntax(diagnostic.line, diagnostic.column, diagnostic.message);
+        }
+        if let Some(diagnostic) = parser_diagnostics.take().into_iter().next() {
+            return Error::syntax(diagnostic.line, diagnostic.column, diagnostic.message);
+        }
+        Error::invalid(format!("recognition failed: {error}"))
     })?;
 
     let drained_lexer_error = output
@@ -166,6 +169,8 @@ struct DocumentBuilder {
 
 impl DocumentBuilder {
     fn finish(self) -> Result<Document, Error> {
+        // Validated CST traversal guarantees balance; retain these checks to
+        // catch regressions in the listener's own stack bookkeeping.
         if !self.key_segments.is_empty()
             || !self.key_marks.is_empty()
             || !self.keys.is_empty()
@@ -308,6 +313,7 @@ impl TomlValidatedListener<Error> for DocumentBuilder {
             .inline_marks
             .pop()
             .ok_or_else(|| Error::invalid("typed TOML inline-table walk is unbalanced"))?;
+        // The grammar is right-recursive, so inner entries exit first.
         let values = self.inline_assignments.drain(start..).rev().collect();
         self.values.push(Value::InlineTable(values));
         Ok(())
@@ -408,7 +414,9 @@ fn decode_float(context: &FloatingPointContext<'_, ValidatedTreeContext>) -> Res
         .ok_or_else(|| Error::invalid("TOML float has no floating-point token"))
 }
 
-fn decode_date_time(context: &DateTimeContext<'_, ValidatedTreeContext>) -> Result<String, Error> {
+fn decode_date_time(
+    context: &DateTimeContext<'_, ValidatedTreeContext>,
+) -> Result<toml_datetime::Datetime, Error> {
     let value = context
         .offset_date_time_token()
         .or_else(|| context.local_date_time_token())
@@ -418,6 +426,5 @@ fn decode_date_time(context: &DateTimeContext<'_, ValidatedTreeContext>) -> Resu
         .ok_or_else(|| Error::invalid("TOML date-time has no date-time token"))?;
     value
         .parse::<toml_datetime::Datetime>()
-        .map_err(|error| Error::invalid(format!("invalid TOML date-time {value:?}: {error}")))?;
-    Ok(value)
+        .map_err(|error| Error::invalid(format!("invalid TOML date-time {value:?}: {error}")))
 }

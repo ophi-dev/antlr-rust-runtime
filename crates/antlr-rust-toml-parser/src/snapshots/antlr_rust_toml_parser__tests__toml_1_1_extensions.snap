@@ -24,7 +24,18 @@ Document {
                     ],
                 },
                 value: DateTime(
-                    "13:37",
+                    Datetime {
+                        date: None,
+                        time: Some(
+                            Time {
+                                hour: 13,
+                                minute: 37,
+                                second: None,
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: None,
+                    },
                 ),
             },
         ),
@@ -36,7 +47,26 @@ Document {
                     ],
                 },
                 value: DateTime(
-                    "1979-05-27 07:32z",
+                    Datetime {
+                        date: Some(
+                            Date {
+                                year: 1979,
+                                month: 5,
+                                day: 27,
+                            },
+                        ),
+                        time: Some(
+                            Time {
+                                hour: 7,
+                                minute: 32,
+                                second: None,
+                                nanosecond: None,
+                            },
+                        ),
+                        offset: Some(
+                            Z,
+                        ),
+                    },
                 ),
             },
         ),
