@@ -293,7 +293,6 @@ version = 1
 # Expression-level rewrite: metavariables $a, $b bind SurfaceExpr subtrees.
 [[pattern]]
 match   = "input.la(1) != $t"            # canonical surface syntax
-where   = { t = "token_ref" }            # guards on metavariable kind
 lower   = "cmp(ne, la(1), token($t))"    # SemIR constructor DSL
 
 # Named-helper resolution: the grammar calls a @members method; translate
@@ -312,8 +311,8 @@ dispose = "hook"           # hook | assume-true | assume-false | error
 ```
 
 The `lower` DSL is a direct textual constructor for §4 IR — deliberately not
-Turing-complete. Guards (`where`) keep matches honest. Match ambiguity
-(two patterns match one body) is a codegen error listing both patterns.
+Turing-complete. Match ambiguity (two patterns match one body) is a codegen
+error listing both patterns.
 
 ### 5.3 Verifier + manifest emission
 
@@ -450,6 +449,7 @@ Phases are independently shippable; each ends green on conformance + bench.
   `SemanticHooks::action` on the committed path.
 
 Implemented follow-up:
+
 - `LexerSemCtx` plus `next_token_with_semantic_hooks` /
   `next_token_compiled_with_semantic_hooks` re-express lexer closure hooks
   through the same `SemanticHooks` trait.
