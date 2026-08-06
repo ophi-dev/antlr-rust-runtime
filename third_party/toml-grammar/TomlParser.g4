@@ -113,16 +113,12 @@ array_
     ;
 
 array_values
-    : (comment_or_nl value nl_or_comment COMMA array_values comment_or_nl)
-    | comment_or_nl value nl_or_comment COMMA?
+    : (comment_or_nl value comment_or_nl COMMA array_values comment_or_nl)
+    | comment_or_nl value comment_or_nl COMMA?
     ;
 
 comment_or_nl
     : (COMMENT? NL)*
-    ;
-
-nl_or_comment
-    : (NL COMMENT?)*
     ;
 
 table
@@ -135,7 +131,7 @@ standard_table
     ;
 
 inline_table
-    : L_BRACE inline_table_keyvals R_BRACE
+    : L_BRACE comment_or_nl inline_table_keyvals comment_or_nl R_BRACE
     ;
 
 inline_table_keyvals
@@ -143,7 +139,7 @@ inline_table_keyvals
     ;
 
 inline_table_keyvals_non_empty
-    : key EQUALS value (COMMA inline_table_keyvals_non_empty)?
+    : key EQUALS value comment_or_nl (COMMA comment_or_nl inline_table_keyvals_non_empty?)?
     ;
 
 array_table

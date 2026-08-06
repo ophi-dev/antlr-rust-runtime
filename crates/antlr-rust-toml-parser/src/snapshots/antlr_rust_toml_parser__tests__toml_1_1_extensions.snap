@@ -1,0 +1,67 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: document
+---
+Document {
+    items: [
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "escaped",
+                    ],
+                },
+                value: String(
+                    "\u{1b}A",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "local_time",
+                    ],
+                },
+                value: DateTime(
+                    "13:37",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "offset_date_time",
+                    ],
+                },
+                value: DateTime(
+                    "1979-05-27 07:32z",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "inline",
+                    ],
+                },
+                value: InlineTable(
+                    [
+                        Assignment {
+                            key: Key {
+                                segments: [
+                                    "key",
+                                ],
+                            },
+                            value: Integer(
+                                1,
+                            ),
+                        },
+                    ],
+                ),
+            },
+        ),
+    ],
+}

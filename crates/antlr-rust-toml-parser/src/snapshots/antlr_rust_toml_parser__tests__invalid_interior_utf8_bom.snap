@@ -1,0 +1,5 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: error
+---
+invalid TOML: UTF-8 BOM is only permitted at the start of a TOML document

@@ -68,17 +68,16 @@ pub const RULE_DATE_TIME: usize = 14;
 pub const RULE_ARRAY: usize = 15;
 pub const RULE_ARRAY_VALUES: usize = 16;
 pub const RULE_COMMENT_OR_NL: usize = 17;
-pub const RULE_NL_OR_COMMENT: usize = 18;
-pub const RULE_TABLE: usize = 19;
-pub const RULE_STANDARD_TABLE: usize = 20;
-pub const RULE_INLINE_TABLE: usize = 21;
-pub const RULE_INLINE_TABLE_KEYVALS: usize = 22;
-pub const RULE_INLINE_TABLE_KEYVALS_NON_EMPTY: usize = 23;
-pub const RULE_ARRAY_TABLE: usize = 24;
+pub const RULE_TABLE: usize = 18;
+pub const RULE_STANDARD_TABLE: usize = 19;
+pub const RULE_INLINE_TABLE: usize = 20;
+pub const RULE_INLINE_TABLE_KEYVALS: usize = 21;
+pub const RULE_INLINE_TABLE_KEYVALS_NON_EMPTY: usize = 22;
+pub const RULE_ARRAY_TABLE: usize = 23;
 
 pub static METADATA: GrammarMetadata = GrammarMetadata::new(
     "TomlParser",
-    &["document", "expression", "comment", "key_value", "key", "simple_key", "unquoted_key", "quoted_key", "dotted_key", "value", "string", "integer", "floating_point", "bool_", "date_time", "array_", "array_values", "comment_or_nl", "nl_or_comment", "table", "standard_table", "inline_table", "inline_table_keyvals", "inline_table_keyvals_non_empty", "array_table"],
+    &["document", "expression", "comment", "key_value", "key", "simple_key", "unquoted_key", "quoted_key", "dotted_key", "value", "string", "integer", "floating_point", "bool_", "date_time", "array_", "array_values", "comment_or_nl", "table", "standard_table", "inline_table", "inline_table_keyvals", "inline_table_keyvals_non_empty", "array_table"],
     &[None, None, None, None, Some("\'[\'"), Some("\'[[\'"), Some("\']\'"), Some("\']]\'"), Some("\'=\'"), Some("\'.\'"), Some("\',\'"), None, None, None, None, Some("\'{\'"), None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, Some("\'}\'"), None],
     &[None, Some("WS"), Some("NL"), Some("COMMENT"), Some("L_BRACKET"), Some("DOUBLE_L_BRACKET"), Some("R_BRACKET"), Some("DOUBLE_R_BRACKET"), Some("EQUALS"), Some("DOT"), Some("COMMA"), Some("BASIC_STRING"), Some("LITERAL_STRING"), Some("UNQUOTED_KEY"), Some("VALUE_WS"), Some("L_BRACE"), Some("BOOLEAN"), Some("ML_BASIC_STRING"), Some("ML_LITERAL_STRING"), Some("FLOAT"), Some("INF"), Some("NAN"), Some("DEC_INT"), Some("HEX_INT"), Some("OCT_INT"), Some("BIN_INT"), Some("OFFSET_DATE_TIME"), Some("LOCAL_DATE_TIME"), Some("LOCAL_DATE"), Some("LOCAL_TIME"), Some("INLINE_TABLE_WS"), Some("R_BRACE"), Some("ARRAY_WS")],
     &[None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None],
@@ -636,7 +635,7 @@ impl<'a, State: __RecoveryContextState> ExpressionContext<'a, State> {
             .map(|node| KeyValueContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn table(&self) -> Option<TableContext<'a>> {
-        __rule_children(self.__node, 19)
+        __rule_children(self.__node, 18)
             .next()
             .map(|node| TableContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -659,7 +658,7 @@ impl<'a> ExpressionContext<'a, ValidatedTreeContext> {
             .map(|node| KeyValueContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn table(&self) -> Option<TableContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 19)
+        __rule_children(self.__node, 18)
             .next()
             .map(|node| TableContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1020,7 +1019,7 @@ impl<'a, State: __RecoveryContextState> ValueContext<'a, State> {
             .map(|node| ArrayContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn inline_table(&self) -> Option<InlineTableContext<'a>> {
-        __rule_children(self.__node, 21)
+        __rule_children(self.__node, 20)
             .next()
             .map(|node| InlineTableContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1059,7 +1058,7 @@ impl<'a> ValueContext<'a, ValidatedTreeContext> {
             .map(|node| ArrayContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn inline_table(&self) -> Option<InlineTableContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 21)
+        __rule_children(self.__node, 20)
             .next()
             .map(|node| InlineTableContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1453,12 +1452,6 @@ impl<'a, State: __RecoveryContextState> ArrayValuesContext<'a, State> {
         __rule_children(self.__node, 17)
             .map(move |node| CommentOrNlContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
-    pub fn nl_or_comment(&self) -> Result<NlOrCommentContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 18)
-            .next()
-            .map(|node| NlOrCommentContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("ArrayValuesContext", "nl_or_comment"))
-    }
     pub fn comma_token(&self) -> Option<TerminalNode<'a>> {
         __token_children(self.__node, 10)
             .next()
@@ -1485,15 +1478,6 @@ impl<'a> ArrayValuesContext<'a, ValidatedTreeContext> {
     pub fn comment_or_nl_children(&self) -> impl Iterator<Item = CommentOrNlContext<'a, ValidatedTreeContext>> + '_ {
         __rule_children(self.__node, 17)
             .map(move |node| CommentOrNlContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn nl_or_comment(&self) -> NlOrCommentContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 18).next() else {
-            unreachable!("validated ArrayValuesContext is missing required child nl_or_comment")
-        };
-        NlOrCommentContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
     }
     pub fn comma_token(&self) -> Option<TerminalNode<'a>> {
         __token_children(self.__node, 10)
@@ -1539,44 +1523,8 @@ impl<'a> CommentOrNlContext<'a, ValidatedTreeContext> {
 }
 
 antlr4_runtime::__antlr4_rust_context! {
-    pub struct NlOrCommentContext {
-        rule_index: 18,
-        context_kind: any,
-        attributes: {
-        },
-        methods: {
-            rule_node: rule_node,
-            child_count: child_count,
-            direct_terminals: direct_terminals,
-            start: start,
-            text: text,
-        }
-    }
-}
-
-#[allow(dead_code, private_bounds, clippy::all)]
-impl<'a, State: __RecoveryContextState> NlOrCommentContext<'a, State> {
-    pub fn nl_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 2).map(TerminalNode::new)
-    }
-    pub fn comment_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 3).map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> NlOrCommentContext<'a, ValidatedTreeContext> {
-    pub fn nl_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 2).map(TerminalNode::new)
-    }
-    pub fn comment_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 3).map(TerminalNode::new)
-    }
-}
-
-antlr4_runtime::__antlr4_rust_context! {
     pub struct TableContext {
-        rule_index: 19,
+        rule_index: 18,
         context_kind: any,
         attributes: {
         },
@@ -1593,12 +1541,12 @@ antlr4_runtime::__antlr4_rust_context! {
 #[allow(dead_code, private_bounds, clippy::all)]
 impl<'a, State: __RecoveryContextState> TableContext<'a, State> {
     pub fn standard_table(&self) -> Option<StandardTableContext<'a>> {
-        __rule_children(self.__node, 20)
+        __rule_children(self.__node, 19)
             .next()
             .map(|node| StandardTableContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn array_table(&self) -> Option<ArrayTableContext<'a>> {
-        __rule_children(self.__node, 24)
+        __rule_children(self.__node, 23)
             .next()
             .map(|node| ArrayTableContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1607,12 +1555,12 @@ impl<'a, State: __RecoveryContextState> TableContext<'a, State> {
 #[allow(dead_code, clippy::all)]
 impl<'a> TableContext<'a, ValidatedTreeContext> {
     pub fn standard_table(&self) -> Option<StandardTableContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 20)
+        __rule_children(self.__node, 19)
             .next()
             .map(|node| StandardTableContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
     pub fn array_table(&self) -> Option<ArrayTableContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 24)
+        __rule_children(self.__node, 23)
             .next()
             .map(|node| ArrayTableContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1620,7 +1568,7 @@ impl<'a> TableContext<'a, ValidatedTreeContext> {
 
 antlr4_runtime::__antlr4_rust_context! {
     pub struct StandardTableContext {
-        rule_index: 20,
+        rule_index: 19,
         context_kind: any,
         attributes: {
         },
@@ -1683,7 +1631,7 @@ impl<'a> StandardTableContext<'a, ValidatedTreeContext> {
 
 antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableContext {
-        rule_index: 21,
+        rule_index: 20,
         context_kind: any,
         attributes: {
         },
@@ -1699,8 +1647,12 @@ antlr4_runtime::__antlr4_rust_context! {
 
 #[allow(dead_code, private_bounds, clippy::all)]
 impl<'a, State: __RecoveryContextState> InlineTableContext<'a, State> {
+    pub fn comment_or_nl_children(&self) -> impl Iterator<Item = CommentOrNlContext<'a>> + '_ {
+        __rule_children(self.__node, 17)
+            .map(move |node| CommentOrNlContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
     pub fn inline_table_keyvals(&self) -> Result<InlineTableKeyvalsContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 22)
+        __rule_children(self.__node, 21)
             .next()
             .map(|node| InlineTableKeyvalsContext::__from_child_node(node, self.__invocation_states.as_deref()))
             .ok_or_else(|| MissingChildError::new("InlineTableContext", "inline_table_keyvals"))
@@ -1721,8 +1673,12 @@ impl<'a, State: __RecoveryContextState> InlineTableContext<'a, State> {
 
 #[allow(dead_code, clippy::all)]
 impl<'a> InlineTableContext<'a, ValidatedTreeContext> {
+    pub fn comment_or_nl_children(&self) -> impl Iterator<Item = CommentOrNlContext<'a, ValidatedTreeContext>> + '_ {
+        __rule_children(self.__node, 17)
+            .map(move |node| CommentOrNlContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
+    }
     pub fn inline_table_keyvals(&self) -> InlineTableKeyvalsContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 22).next() else {
+        let Some(node) = __rule_children(self.__node, 21).next() else {
             unreachable!("validated InlineTableContext is missing required child inline_table_keyvals")
         };
         InlineTableKeyvalsContext::<ValidatedTreeContext>::__from_validated_child_node(
@@ -1746,7 +1702,7 @@ impl<'a> InlineTableContext<'a, ValidatedTreeContext> {
 
 antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableKeyvalsContext {
-        rule_index: 22,
+        rule_index: 21,
         context_kind: any,
         attributes: {
         },
@@ -1763,7 +1719,7 @@ antlr4_runtime::__antlr4_rust_context! {
 #[allow(dead_code, private_bounds, clippy::all)]
 impl<'a, State: __RecoveryContextState> InlineTableKeyvalsContext<'a, State> {
     pub fn inline_table_keyvals_non_empty(&self) -> Option<InlineTableKeyvalsNonEmptyContext<'a>> {
-        __rule_children(self.__node, 23)
+        __rule_children(self.__node, 22)
             .next()
             .map(|node| InlineTableKeyvalsNonEmptyContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1772,7 +1728,7 @@ impl<'a, State: __RecoveryContextState> InlineTableKeyvalsContext<'a, State> {
 #[allow(dead_code, clippy::all)]
 impl<'a> InlineTableKeyvalsContext<'a, ValidatedTreeContext> {
     pub fn inline_table_keyvals_non_empty(&self) -> Option<InlineTableKeyvalsNonEmptyContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 23)
+        __rule_children(self.__node, 22)
             .next()
             .map(|node| InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1780,7 +1736,7 @@ impl<'a> InlineTableKeyvalsContext<'a, ValidatedTreeContext> {
 
 antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableKeyvalsNonEmptyContext {
-        rule_index: 23,
+        rule_index: 22,
         context_kind: any,
         attributes: {
         },
@@ -1808,8 +1764,12 @@ impl<'a, State: __RecoveryContextState> InlineTableKeyvalsNonEmptyContext<'a, St
             .map(|node| ValueContext::__from_child_node(node, self.__invocation_states.as_deref()))
             .ok_or_else(|| MissingChildError::new("InlineTableKeyvalsNonEmptyContext", "value"))
     }
+    pub fn comment_or_nl_children(&self) -> impl Iterator<Item = CommentOrNlContext<'a>> + '_ {
+        __rule_children(self.__node, 17)
+            .map(move |node| CommentOrNlContext::__from_child_node(node, self.__invocation_states.as_deref()))
+    }
     pub fn inline_table_keyvals_non_empty(&self) -> Option<InlineTableKeyvalsNonEmptyContext<'a>> {
-        __rule_children(self.__node, 23)
+        __rule_children(self.__node, 22)
             .next()
             .map(|node| InlineTableKeyvalsNonEmptyContext::__from_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1846,8 +1806,12 @@ impl<'a> InlineTableKeyvalsNonEmptyContext<'a, ValidatedTreeContext> {
             self.__invocation_states.as_deref(),
         )
     }
+    pub fn comment_or_nl_children(&self) -> impl Iterator<Item = CommentOrNlContext<'a, ValidatedTreeContext>> + '_ {
+        __rule_children(self.__node, 17)
+            .map(move |node| CommentOrNlContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
+    }
     pub fn inline_table_keyvals_non_empty(&self) -> Option<InlineTableKeyvalsNonEmptyContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 23)
+        __rule_children(self.__node, 22)
             .next()
             .map(|node| InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
     }
@@ -1866,7 +1830,7 @@ impl<'a> InlineTableKeyvalsNonEmptyContext<'a, ValidatedTreeContext> {
 
 antlr4_runtime::__antlr4_rust_context! {
     pub struct ArrayTableContext {
-        rule_index: 24,
+        rule_index: 23,
         context_kind: any,
         attributes: {
         },
@@ -2044,44 +2008,63 @@ pub fn validate_tree_structure(
         let _ = context.value().map_err(TomlValidationError::MissingChild)?;
         {
             let actual = context.comment_or_nl_children().count();
-            if actual < 1 {
+            if actual < 2 {
                 return Err(TomlValidationError::InvalidChildCount {
                     context: "ArrayValuesContext",
                     child: "comment_or_nl",
-                    minimum: 1,
+                    minimum: 2,
                     actual,
                 });
             }
         }
-        let _ = context.nl_or_comment().map_err(TomlValidationError::MissingChild)?;
                 },
                 17 => {
                 },
                 18 => {
                 },
                 19 => {
-                },
-                20 => {
                     let context = StandardTableContext::__from_listener_node(context, None);
         let _ = context.key().map_err(TomlValidationError::MissingChild)?;
         let _ = context.l_bracket_token().map_err(TomlValidationError::MissingChild)?;
         let _ = context.r_bracket_token().map_err(TomlValidationError::MissingChild)?;
                 },
-                21 => {
+                20 => {
                     let context = InlineTableContext::__from_listener_node(context, None);
+        {
+            let actual = context.comment_or_nl_children().count();
+            if actual < 2 {
+                return Err(TomlValidationError::InvalidChildCount {
+                    context: "InlineTableContext",
+                    child: "comment_or_nl",
+                    minimum: 2,
+                    actual,
+                });
+            }
+        }
         let _ = context.inline_table_keyvals().map_err(TomlValidationError::MissingChild)?;
         let _ = context.l_brace_token().map_err(TomlValidationError::MissingChild)?;
         let _ = context.r_brace_token().map_err(TomlValidationError::MissingChild)?;
                 },
-                22 => {
+                21 => {
                 },
-                23 => {
+                22 => {
                     let context = InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, None);
         let _ = context.key().map_err(TomlValidationError::MissingChild)?;
         let _ = context.value().map_err(TomlValidationError::MissingChild)?;
+        {
+            let actual = context.comment_or_nl_children().count();
+            if actual < 1 {
+                return Err(TomlValidationError::InvalidChildCount {
+                    context: "InlineTableKeyvalsNonEmptyContext",
+                    child: "comment_or_nl",
+                    minimum: 1,
+                    actual,
+                });
+            }
+        }
         let _ = context.equals_token().map_err(TomlValidationError::MissingChild)?;
                 },
-                24 => {
+                23 => {
                     let context = ArrayTableContext::__from_listener_node(context, None);
         let _ = context.key().map_err(TomlValidationError::MissingChild)?;
         let _ = context.double_l_bracket_token().map_err(TomlValidationError::MissingChild)?;
@@ -2147,8 +2130,6 @@ pub trait TomlListener<E = std::convert::Infallible> {
     fn exit_array_values(&mut self, _ctx: &ArrayValuesContext) -> Result<(), E> { Ok(()) }
     fn enter_comment_or_nl(&mut self, _ctx: &CommentOrNlContext) -> Result<(), E> { Ok(()) }
     fn exit_comment_or_nl(&mut self, _ctx: &CommentOrNlContext) -> Result<(), E> { Ok(()) }
-    fn enter_nl_or_comment(&mut self, _ctx: &NlOrCommentContext) -> Result<(), E> { Ok(()) }
-    fn exit_nl_or_comment(&mut self, _ctx: &NlOrCommentContext) -> Result<(), E> { Ok(()) }
     fn enter_table(&mut self, _ctx: &TableContext) -> Result<(), E> { Ok(()) }
     fn exit_table(&mut self, _ctx: &TableContext) -> Result<(), E> { Ok(()) }
     fn enter_standard_table(&mut self, _ctx: &StandardTableContext) -> Result<(), E> { Ok(()) }
@@ -2225,13 +2206,12 @@ impl TomlTreeWalker {
                         15 => listener.enter_array(&ArrayContext::__from_listener_node(context, invocation_states.as_deref()))?,
                         16 => listener.enter_array_values(&ArrayValuesContext::__from_listener_node(context, invocation_states.as_deref()))?,
                         17 => listener.enter_comment_or_nl(&CommentOrNlContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        18 => listener.enter_nl_or_comment(&NlOrCommentContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        19 => listener.enter_table(&TableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        20 => listener.enter_standard_table(&StandardTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        21 => listener.enter_inline_table(&InlineTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        22 => listener.enter_inline_table_keyvals(&InlineTableKeyvalsContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        23 => listener.enter_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                        24 => listener.enter_array_table(&ArrayTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        18 => listener.enter_table(&TableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        19 => listener.enter_standard_table(&StandardTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        20 => listener.enter_inline_table(&InlineTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        21 => listener.enter_inline_table_keyvals(&InlineTableKeyvalsContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        22 => listener.enter_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                        23 => listener.enter_array_table(&ArrayTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
                             _ => {}
                         }
                         stack.push(Event::Exit(context));
@@ -2268,13 +2248,12 @@ impl TomlTreeWalker {
                     15 => listener.exit_array(&ArrayContext::__from_listener_node(context, invocation_states.as_deref()))?,
                     16 => listener.exit_array_values(&ArrayValuesContext::__from_listener_node(context, invocation_states.as_deref()))?,
                     17 => listener.exit_comment_or_nl(&CommentOrNlContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    18 => listener.exit_nl_or_comment(&NlOrCommentContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    19 => listener.exit_table(&TableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    20 => listener.exit_standard_table(&StandardTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    21 => listener.exit_inline_table(&InlineTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    22 => listener.exit_inline_table_keyvals(&InlineTableKeyvalsContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    23 => listener.exit_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, invocation_states.as_deref()))?,
-                    24 => listener.exit_array_table(&ArrayTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    18 => listener.exit_table(&TableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    19 => listener.exit_standard_table(&StandardTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    20 => listener.exit_inline_table(&InlineTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    21 => listener.exit_inline_table_keyvals(&InlineTableKeyvalsContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    22 => listener.exit_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, invocation_states.as_deref()))?,
+                    23 => listener.exit_array_table(&ArrayTableContext::__from_listener_node(context, invocation_states.as_deref()))?,
                         _ => {}
                     }
                     listener.exit_every_rule(context)?;
@@ -2338,8 +2317,6 @@ pub trait TomlValidatedListener<E = std::convert::Infallible> {
     fn exit_array_values(&mut self, _ctx: &ArrayValuesContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
     fn enter_comment_or_nl(&mut self, _ctx: &CommentOrNlContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
     fn exit_comment_or_nl(&mut self, _ctx: &CommentOrNlContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
-    fn enter_nl_or_comment(&mut self, _ctx: &NlOrCommentContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
-    fn exit_nl_or_comment(&mut self, _ctx: &NlOrCommentContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
     fn enter_table(&mut self, _ctx: &TableContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
     fn exit_table(&mut self, _ctx: &TableContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
     fn enter_standard_table(&mut self, _ctx: &StandardTableContext<ValidatedTreeContext>) -> Result<(), E> { Ok(()) }
@@ -2415,13 +2392,12 @@ impl TomlValidatedTreeWalker {
                         15 => listener.enter_array(&ArrayContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                         16 => listener.enter_array_values(&ArrayValuesContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                         17 => listener.enter_comment_or_nl(&CommentOrNlContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        18 => listener.enter_nl_or_comment(&NlOrCommentContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        19 => listener.enter_table(&TableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        20 => listener.enter_standard_table(&StandardTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        21 => listener.enter_inline_table(&InlineTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        22 => listener.enter_inline_table_keyvals(&InlineTableKeyvalsContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        23 => listener.enter_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                        24 => listener.enter_array_table(&ArrayTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        18 => listener.enter_table(&TableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        19 => listener.enter_standard_table(&StandardTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        20 => listener.enter_inline_table(&InlineTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        21 => listener.enter_inline_table_keyvals(&InlineTableKeyvalsContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        22 => listener.enter_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                        23 => listener.enter_array_table(&ArrayTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                             _ => {}
                         }
                         stack.push(Event::Exit(context));
@@ -2456,13 +2432,12 @@ impl TomlValidatedTreeWalker {
                     15 => listener.exit_array(&ArrayContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                     16 => listener.exit_array_values(&ArrayValuesContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                     17 => listener.exit_comment_or_nl(&CommentOrNlContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    18 => listener.exit_nl_or_comment(&NlOrCommentContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    19 => listener.exit_table(&TableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    20 => listener.exit_standard_table(&StandardTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    21 => listener.exit_inline_table(&InlineTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    22 => listener.exit_inline_table_keyvals(&InlineTableKeyvalsContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    23 => listener.exit_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
-                    24 => listener.exit_array_table(&ArrayTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    18 => listener.exit_table(&TableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    19 => listener.exit_standard_table(&StandardTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    20 => listener.exit_inline_table(&InlineTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    21 => listener.exit_inline_table_keyvals(&InlineTableKeyvalsContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    22 => listener.exit_inline_table_keyvals_non_empty(&InlineTableKeyvalsNonEmptyContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
+                    23 => listener.exit_array_table(&ArrayTableContext::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,
                         _ => {}
                     }
                     listener.exit_every_rule(ValidatedRuleNode { __node: context })?;
@@ -2480,7 +2455,7 @@ pub type ValidatedParseTreeWalker = TomlValidatedTreeWalker;
 
 
 
-static PARSER_ATN_DATA: &[u32] = &[1346458702, 2, 16909060, 29, 32, 181, 219, 5, 6, 17, 25, 29, 1267, 1296, 1095, 2391, 25, 2416, 12, 2448, 17, 2465, 25, 2490, 25, 2515, 10, 2428, 20, 2, 0, 8, 0, 1, 4294967295, 4294967295, 7, 0, 16, 1, 0, 4294967295, 4294967295, 2, 1, 8, 1, 1, 4294967295, 4294967295, 7, 1, 24, 2, 2, 4294967295, 4294967295, 2, 2, 8, 4, 1, 4294967295, 4294967295, 7, 2, 24, 5, 3, 4294967295, 4294967295, 2, 3, 8, 8, 1, 4294967295, 4294967295, 7, 3, 24, 9, 1, 4294967295, 4294967295, 2, 4, 8, 10, 1, 4294967295, 4294967295, 7, 4, 24, 11, 4, 4294967295, 4294967295, 2, 5, 8, 15, 1, 4294967295, 4294967295, 7, 5, 24, 16, 3, 4294967295, 4294967295, 2, 6, 8, 19, 1, 4294967295, 4294967295, 7, 6, 24, 20, 1, 4294967295, 4294967295, 2, 7, 8, 21, 1, 4294967295, 4294967295, 7, 7, 24, 22, 1, 4294967295, 4294967295, 2, 8, 8, 23, 1, 4294967295, 4294967295, 7, 8, 24, 24, 1, 4294967295, 4294967295, 2, 9, 8, 25, 1, 4294967295, 4294967295, 7, 9, 24, 26, 4, 4294967295, 4294967295, 2, 10, 8, 30, 1, 4294967295, 4294967295, 7, 10, 24, 31, 1, 4294967295, 4294967295, 2, 11, 8, 32, 1, 4294967295, 4294967295, 7, 11, 24, 33, 1, 4294967295, 4294967295, 2, 12, 8, 34, 1, 4294967295, 4294967295, 7, 12, 24, 35, 1, 4294967295, 4294967295, 2, 13, 8, 36, 1, 4294967295, 4294967295, 7, 13, 24, 37, 1, 4294967295, 4294967295, 2, 14, 8, 38, 1, 4294967295, 4294967295, 7, 14, 24, 39, 1, 4294967295, 4294967295, 2, 15, 8, 40, 1, 4294967295, 4294967295, 7, 15, 24, 41, 1, 4294967295, 4294967295, 2, 16, 8, 42, 1, 4294967295, 4294967295, 7, 16, 24, 43, 2, 4294967295, 4294967295, 2, 17, 8, 45, 1, 4294967295, 4294967295, 7, 17, 24, 46, 4, 4294967295, 4294967295, 2, 18, 8, 50, 1, 4294967295, 4294967295, 7, 18, 24, 51, 2, 4294967295, 4294967295, 2, 19, 8, 53, 1, 4294967295, 4294967295, 7, 19, 24, 54, 1, 4294967295, 4294967295, 2, 20, 8, 55, 1, 4294967295, 4294967295, 7, 20, 24, 56, 1, 4294967295, 4294967295, 2, 21, 8, 57, 1, 4294967295, 4294967295, 7, 21, 24, 58, 1, 4294967295, 4294967295, 2, 22, 8, 59, 1, 4294967295, 4294967295, 7, 22, 24, 60, 1, 4294967295, 4294967295, 2, 23, 8, 61, 1, 4294967295, 4294967295, 7, 23, 24, 62, 2, 4294967295, 4294967295, 2, 24, 8, 64, 1, 4294967295, 4294967295, 7, 24, 24, 65, 1, 4294967295, 4294967295, 1, 0, 8, 66, 1, 4294967295, 4294967295, 1, 0, 32, 67, 1, 4294967295, 4294967295, 1, 0, 8, 68, 1, 4294967295, 4294967295, 5, 0, 8, 69, 1, 54, 4294967295, 8, 0, 8, 70, 1, 4294967295, 4294967295, 10, 0, 8, 71, 2, 4294967295, 4294967295, 12, 0, 8, 73, 1, 4294967295, 57, 9, 0, 8, 74, 1, 4294967295, 4294967295, 1, 0, 32, 75, 1, 4294967295, 4294967295, 1, 0, 8, 76, 1, 4294967295, 4294967295, 1, 1, 8, 77, 1, 4294967295, 4294967295, 1, 1, 8, 78, 1, 4294967295, 4294967295, 1, 1, 8, 79, 1, 4294967295, 4294967295, 1, 1, 8, 80, 1, 4294967295, 4294967295, 1, 1, 8, 81, 1, 4294967295, 4294967295, 1, 1, 8, 82, 1, 4294967295, 4294967295, 1, 1, 8, 83, 1, 4294967295, 4294967295, 3, 1, 8, 84, 3, 68, 4294967295, 8, 1, 8, 87, 1, 4294967295, 4294967295, 1, 2, 32, 88, 1, 4294967295, 4294967295, 3, 2, 8, 89, 2, 71, 4294967295, 8, 2, 8, 91, 1, 4294967295, 4294967295, 1, 3, 8, 92, 1, 4294967295, 4294967295, 1, 3, 32, 93, 1, 4294967295, 4294967295, 1, 3, 8, 94, 1, 4294967295, 4294967295, 1, 3, 8, 95, 1, 4294967295, 4294967295, 1, 4, 8, 96, 1, 4294967295, 4294967295, 1, 4, 8, 97, 1, 4294967295, 4294967295, 3, 4, 8, 98, 2, 79, 4294967295, 8, 4, 8, 100, 1, 4294967295, 4294967295, 1, 5, 8, 101, 1, 4294967295, 4294967295, 1, 5, 8, 102, 1, 4294967295, 4294967295, 3, 5, 8, 103, 2, 83, 4294967295, 8, 5, 8, 105, 1, 4294967295, 4294967295, 1, 6, 32, 106, 1, 4294967295, 4294967295, 1, 6, 8, 107, 1, 4294967295, 4294967295, 1, 7, 32, 108, 1, 4294967295, 4294967295, 1, 7, 8, 109, 1, 4294967295, 4294967295, 1, 8, 8, 110, 1, 4294967295, 4294967295, 1, 8, 32, 111, 1, 4294967295, 4294967295, 1, 8, 8, 112, 1, 4294967295, 4294967295, 4, 8, 8, 113, 1, 92, 4294967295, 8, 8, 8, 114, 1, 4294967295, 4294967295, 11, 8, 8, 115, 2, 4294967295, 4294967295, 12, 8, 8, 117, 1, 4294967295, 93, 1, 9, 8, 118, 1, 4294967295, 4294967295, 1, 9, 8, 119, 1, 4294967295, 4294967295, 1, 9, 8, 120, 1, 4294967295, 4294967295, 1, 9, 8, 121, 1, 4294967295, 4294967295, 1, 9, 8, 122, 1, 4294967295, 4294967295, 1, 9, 8, 123, 1, 4294967295, 4294967295, 1, 9, 8, 124, 1, 4294967295, 4294967295, 3, 9, 8, 125, 7, 103, 4294967295, 8, 9, 8, 132, 1, 4294967295, 4294967295, 1, 10, 32, 133, 1, 4294967295, 4294967295, 1, 10, 8, 134, 1, 4294967295, 4294967295, 1, 11, 32, 135, 1, 4294967295, 4294967295, 1, 11, 8, 136, 1, 4294967295, 4294967295, 1, 12, 32, 137, 1, 4294967295, 4294967295, 1, 12, 8, 138, 1, 4294967295, 4294967295, 1, 13, 32, 139, 1, 4294967295, 4294967295, 1, 13, 8, 140, 1, 4294967295, 4294967295, 1, 14, 32, 141, 1, 4294967295, 4294967295, 1, 14, 8, 142, 1, 4294967295, 4294967295, 1, 15, 32, 143, 1, 4294967295, 4294967295, 1, 15, 8, 144, 1, 4294967295, 4294967295, 3, 15, 8, 145, 2, 117, 4294967295, 8, 15, 8, 147, 1, 4294967295, 4294967295, 1, 15, 8, 148, 1, 4294967295, 4294967295, 1, 15, 32, 149, 1, 4294967295, 4294967295, 1, 15, 8, 150, 1, 4294967295, 4294967295, 1, 16, 8, 151, 1, 4294967295, 4294967295, 1, 16, 8, 152, 1, 4294967295, 4294967295, 1, 16, 8, 153, 1, 4294967295, 4294967295, 1, 16, 32, 154, 1, 4294967295, 4294967295, 1, 16, 8, 155, 1, 4294967295, 4294967295, 1, 16, 8, 156, 1, 4294967295, 4294967295, 1, 16, 8, 157, 1, 4294967295, 4294967295, 1, 16, 8, 158, 1, 4294967295, 4294967295, 1, 16, 8, 159, 1, 4294967295, 4294967295, 1, 16, 8, 160, 1, 4294967295, 4294967295, 1, 16, 32, 161, 1, 4294967295, 4294967295, 3, 16, 8, 162, 2, 133, 4294967295, 8, 16, 8, 164, 1, 4294967295, 4294967295, 3, 16, 8, 165, 2, 135, 4294967295, 8, 16, 8, 167, 1, 4294967295, 4294967295, 1, 17, 32, 168, 1, 4294967295, 4294967295, 3, 17, 8, 169, 2, 138, 4294967295, 8, 17, 8, 171, 1, 4294967295, 4294967295, 1, 17, 32, 172, 1, 4294967295, 4294967295, 5, 17, 8, 173, 1, 141, 4294967295, 8, 17, 8, 174, 1, 4294967295, 4294967295, 10, 17, 8, 175, 2, 4294967295, 4294967295, 12, 17, 8, 177, 1, 4294967295, 144, 9, 17, 8, 178, 1, 4294967295, 4294967295, 1, 18, 32, 179, 1, 4294967295, 4294967295, 1, 18, 32, 180, 1, 4294967295, 4294967295, 3, 18, 8, 181, 2, 148, 4294967295, 8, 18, 8, 183, 1, 4294967295, 4294967295, 5, 18, 8, 184, 1, 150, 4294967295, 8, 18, 8, 185, 1, 4294967295, 4294967295, 10, 18, 8, 186, 2, 4294967295, 4294967295, 12, 18, 8, 188, 1, 4294967295, 153, 9, 18, 8, 189, 1, 4294967295, 4294967295, 1, 19, 8, 190, 1, 4294967295, 4294967295, 1, 19, 8, 191, 1, 4294967295, 4294967295, 3, 19, 8, 192, 2, 157, 4294967295, 8, 19, 8, 194, 1, 4294967295, 4294967295, 1, 20, 32, 195, 1, 4294967295, 4294967295, 1, 20, 8, 196, 1, 4294967295, 4294967295, 1, 20, 32, 197, 1, 4294967295, 4294967295, 1, 20, 8, 198, 1, 4294967295, 4294967295, 1, 21, 32, 199, 1, 4294967295, 4294967295, 1, 21, 8, 200, 1, 4294967295, 4294967295, 1, 21, 32, 201, 1, 4294967295, 4294967295, 1, 21, 8, 202, 1, 4294967295, 4294967295, 1, 22, 8, 203, 1, 4294967295, 4294967295, 3, 22, 8, 204, 2, 168, 4294967295, 8, 22, 8, 206, 1, 4294967295, 4294967295, 1, 23, 8, 207, 1, 4294967295, 4294967295, 1, 23, 32, 208, 1, 4294967295, 4294967295, 1, 23, 8, 209, 1, 4294967295, 4294967295, 1, 23, 32, 210, 1, 4294967295, 4294967295, 1, 23, 8, 211, 1, 4294967295, 4294967295, 3, 23, 8, 212, 2, 175, 4294967295, 8, 23, 8, 214, 1, 4294967295, 4294967295, 1, 24, 32, 215, 1, 4294967295, 4294967295, 1, 24, 8, 216, 1, 4294967295, 4294967295, 1, 24, 32, 217, 1, 4294967295, 4294967295, 1, 24, 8, 218, 1, 4294967295, 4294967295, 1, 24, 0, 219, 0, 4294967295, 4294967295, 1, 50, 0, 0, 0, 1, 67, 0, 0, 0, 1, 55, 0, 0, 0, 1, 54, 0, 0, 0, 1, 70, 0, 0, 0, 1, 62, 0, 0, 0, 1, 65, 0, 0, 0, 1, 68, 0, 0, 0, 1, 72, 0, 0, 0, 1, 61, 0, 0, 0, 1, 78, 0, 0, 0, 1, 73, 0, 0, 0, 1, 160, 0, 0, 0, 1, 170, 0, 0, 0, 1, 178, 0, 0, 0, 1, 82, 0, 0, 0, 1, 79, 0, 0, 0, 1, 91, 0, 0, 0, 1, 92, 0, 0, 0, 1, 84, 0, 0, 0, 1, 83, 0, 0, 0, 1, 86, 0, 0, 0, 1, 83, 0, 0, 0, 1, 88, 0, 0, 0, 1, 79, 0, 0, 0, 1, 102, 0, 0, 0, 1, 75, 0, 0, 0, 1, 123, 0, 0, 0, 1, 130, 0, 0, 0, 1, 174, 0, 0, 0, 1, 104, 0, 0, 0, 1, 103, 0, 0, 0, 1, 106, 0, 0, 0, 1, 103, 0, 0, 0, 1, 108, 0, 0, 0, 1, 103, 0, 0, 0, 1, 110, 0, 0, 0, 1, 103, 0, 0, 0, 1, 112, 0, 0, 0, 1, 103, 0, 0, 0, 1, 114, 0, 0, 0, 1, 103, 0, 0, 0, 1, 134, 0, 0, 0, 1, 117, 0, 0, 0, 1, 126, 0, 0, 0, 1, 142, 0, 0, 0, 1, 119, 0, 0, 0, 1, 122, 0, 0, 0, 1, 127, 0, 0, 0, 1, 129, 0, 0, 0, 1, 151, 0, 0, 0, 1, 124, 0, 0, 0, 1, 132, 0, 0, 0, 1, 156, 0, 0, 0, 1, 64, 0, 0, 0, 1, 158, 0, 0, 0, 1, 157, 0, 0, 0, 1, 162, 0, 0, 0, 1, 103, 0, 0, 0, 1, 167, 0, 0, 0, 1, 164, 0, 0, 0, 1, 169, 0, 0, 0, 1, 168, 0, 0, 0, 1, 175, 0, 0, 0, 1, 176, 0, 0, 0, 1, 157, 0, 0, 0, 3, 2, 1, 55, 0, 5, 52, 2, 0, 0, 3, 2, 1, 54, 0, 1, 51, 0, 0, 0, 1, 57, 0, 0, 0, 1, 53, 0, 0, 0, 1, 56, 0, 0, 0, 1, 58, 0, 0, 0, 1, 55, 0, 0, 0, 5, 59, 4294967295, 0, 0, 1, 1, 0, 0, 0, 3, 6, 3, 61, 0, 3, 4, 2, 62, 0, 1, 68, 0, 0, 0, 3, 38, 19, 64, 0, 3, 4, 2, 65, 0, 1, 68, 0, 0, 0, 3, 4, 2, 68, 0, 1, 60, 0, 0, 0, 1, 63, 0, 0, 0, 1, 66, 0, 0, 0, 1, 3, 0, 0, 0, 5, 71, 3, 0, 0, 1, 69, 0, 0, 0, 1, 71, 0, 0, 0, 1, 5, 0, 0, 0, 3, 8, 4, 73, 0, 5, 74, 8, 0, 0, 3, 18, 9, 75, 0, 1, 7, 0, 0, 0, 3, 10, 5, 79, 0, 3, 16, 8, 79, 0, 1, 76, 0, 0, 0, 1, 77, 0, 0, 0, 1, 9, 0, 0, 0, 3, 14, 7, 83, 0, 3, 12, 6, 83, 0, 1, 80, 0, 0, 0, 1, 81, 0, 0, 0, 1, 11, 0, 0, 0, 5, 85, 13, 0, 0, 1, 13, 0, 0, 0, 7, 87, 0, 0, 0, 1, 15, 0, 0, 0, 3, 10, 5, 91, 0, 5, 90, 9, 0, 0, 3, 10, 5, 92, 0, 1, 89, 0, 0, 0, 1, 93, 0, 0, 0, 1, 91, 0, 0, 0, 1, 94, 0, 0, 0, 1, 17, 0, 0, 0, 3, 20, 10, 103, 0, 3, 22, 11, 103, 0, 3, 24, 12, 103, 0, 3, 26, 13, 103, 0, 3, 28, 14, 103, 0, 3, 30, 15, 103, 0, 3, 42, 21, 103, 0, 1, 95, 0, 0, 0, 1, 96, 0, 0, 0, 1, 97, 0, 0, 0, 1, 98, 0, 0, 0, 1, 99, 0, 0, 0, 1, 100, 0, 0, 0, 1, 101, 0, 0, 0, 1, 19, 0, 0, 0, 7, 105, 1, 0, 0, 1, 21, 0, 0, 0, 7, 107, 2, 0, 0, 1, 23, 0, 0, 0, 7, 109, 3, 0, 0, 1, 25, 0, 0, 0, 5, 111, 16, 0, 0, 1, 27, 0, 0, 0, 7, 113, 4, 0, 0, 1, 29, 0, 0, 0, 5, 116, 4, 0, 0, 3, 32, 16, 117, 0, 1, 115, 0, 0, 0, 1, 117, 0, 0, 0, 1, 118, 0, 0, 0, 3, 34, 17, 119, 0, 5, 120, 6, 0, 0, 1, 31, 0, 0, 0, 3, 34, 17, 122, 0, 3, 18, 9, 123, 0, 3, 36, 18, 124, 0, 5, 125, 10, 0, 0, 3, 32, 16, 126, 0, 3, 34, 17, 127, 0, 1, 135, 0, 0, 0, 3, 34, 17, 129, 0, 3, 18, 9, 130, 0, 3, 36, 18, 132, 0, 5, 133, 10, 0, 0, 1, 131, 0, 0, 0, 1, 133, 0, 0, 0, 1, 135, 0, 0, 0, 1, 121, 0, 0, 0, 1, 128, 0, 0, 0, 1, 33, 0, 0, 0, 5, 138, 3, 0, 0, 1, 136, 0, 0, 0, 1, 138, 0, 0, 0, 1, 139, 0, 0, 0, 5, 141, 2, 0, 0, 1, 137, 0, 0, 0, 1, 144, 0, 0, 0, 1, 140, 0, 0, 0, 1, 143, 0, 0, 0, 1, 35, 0, 0, 0, 1, 142, 0, 0, 0, 5, 147, 2, 0, 0, 5, 148, 3, 0, 0, 1, 146, 0, 0, 0, 1, 148, 0, 0, 0, 1, 150, 0, 0, 0, 1, 145, 0, 0, 0, 1, 153, 0, 0, 0, 1, 149, 0, 0, 0, 1, 152, 0, 0, 0, 1, 37, 0, 0, 0, 1, 151, 0, 0, 0, 3, 40, 20, 157, 0, 3, 48, 24, 157, 0, 1, 154, 0, 0, 0, 1, 155, 0, 0, 0, 1, 39, 0, 0, 0, 5, 159, 4, 0, 0, 3, 8, 4, 160, 0, 5, 161, 6, 0, 0, 1, 41, 0, 0, 0, 5, 163, 15, 0, 0, 3, 44, 22, 164, 0, 5, 165, 31, 0, 0, 1, 43, 0, 0, 0, 3, 46, 23, 168, 0, 1, 166, 0, 0, 0, 1, 168, 0, 0, 0, 1, 45, 0, 0, 0, 3, 8, 4, 170, 0, 5, 171, 8, 0, 0, 3, 18, 9, 174, 0, 5, 173, 10, 0, 0, 3, 46, 23, 175, 0, 1, 172, 0, 0, 0, 1, 175, 0, 0, 0, 1, 47, 0, 0, 0, 5, 177, 5, 0, 0, 3, 8, 4, 178, 0, 5, 179, 7, 0, 0, 1, 49, 0, 0, 0, 0, 1, 1, 0, 2, 1, 2, 1, 2, 2, 3, 1, 1, 4, 2, 4, 1, 1, 6, 2, 5, 1, 1, 8, 2, 11, 12, 11, 12, 17, 18, 22, 25, 19, 21, 26, 29, 6144, 0, 0, 0, 399360, 0, 0, 0, 62914560, 0, 0, 0, 3670016, 0, 0, 0, 1006632960, 0, 0, 0, 55, 67, 70, 78, 82, 93, 102, 116, 132, 134, 137, 142, 147, 151, 156, 167, 174, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49];
+static PARSER_ATN_DATA: &[u32] = &[1346458702, 2, 16909060, 29, 32, 176, 218, 5, 6, 16, 24, 29, 1232, 1261, 1090, 2351, 25, 2376, 12, 2408, 16, 2424, 24, 2448, 24, 2472, 10, 2388, 20, 2, 0, 8, 0, 1, 4294967295, 4294967295, 7, 0, 16, 1, 0, 4294967295, 4294967295, 2, 1, 8, 1, 1, 4294967295, 4294967295, 7, 1, 24, 2, 2, 4294967295, 4294967295, 2, 2, 8, 4, 1, 4294967295, 4294967295, 7, 2, 24, 5, 3, 4294967295, 4294967295, 2, 3, 8, 8, 1, 4294967295, 4294967295, 7, 3, 24, 9, 1, 4294967295, 4294967295, 2, 4, 8, 10, 1, 4294967295, 4294967295, 7, 4, 24, 11, 4, 4294967295, 4294967295, 2, 5, 8, 15, 1, 4294967295, 4294967295, 7, 5, 24, 16, 3, 4294967295, 4294967295, 2, 6, 8, 19, 1, 4294967295, 4294967295, 7, 6, 24, 20, 1, 4294967295, 4294967295, 2, 7, 8, 21, 1, 4294967295, 4294967295, 7, 7, 24, 22, 1, 4294967295, 4294967295, 2, 8, 8, 23, 1, 4294967295, 4294967295, 7, 8, 24, 24, 1, 4294967295, 4294967295, 2, 9, 8, 25, 1, 4294967295, 4294967295, 7, 9, 24, 26, 4, 4294967295, 4294967295, 2, 10, 8, 30, 1, 4294967295, 4294967295, 7, 10, 24, 31, 1, 4294967295, 4294967295, 2, 11, 8, 32, 1, 4294967295, 4294967295, 7, 11, 24, 33, 1, 4294967295, 4294967295, 2, 12, 8, 34, 1, 4294967295, 4294967295, 7, 12, 24, 35, 1, 4294967295, 4294967295, 2, 13, 8, 36, 1, 4294967295, 4294967295, 7, 13, 24, 37, 1, 4294967295, 4294967295, 2, 14, 8, 38, 1, 4294967295, 4294967295, 7, 14, 24, 39, 1, 4294967295, 4294967295, 2, 15, 8, 40, 1, 4294967295, 4294967295, 7, 15, 24, 41, 1, 4294967295, 4294967295, 2, 16, 8, 42, 1, 4294967295, 4294967295, 7, 16, 24, 43, 2, 4294967295, 4294967295, 2, 17, 8, 45, 1, 4294967295, 4294967295, 7, 17, 24, 46, 10, 4294967295, 4294967295, 2, 18, 8, 56, 1, 4294967295, 4294967295, 7, 18, 24, 57, 1, 4294967295, 4294967295, 2, 19, 8, 58, 1, 4294967295, 4294967295, 7, 19, 24, 59, 1, 4294967295, 4294967295, 2, 20, 8, 60, 1, 4294967295, 4294967295, 7, 20, 24, 61, 1, 4294967295, 4294967295, 2, 21, 8, 62, 1, 4294967295, 4294967295, 7, 21, 24, 63, 1, 4294967295, 4294967295, 2, 22, 8, 64, 1, 4294967295, 4294967295, 7, 22, 24, 65, 2, 4294967295, 4294967295, 2, 23, 8, 67, 1, 4294967295, 4294967295, 7, 23, 24, 68, 1, 4294967295, 4294967295, 1, 0, 8, 69, 1, 4294967295, 4294967295, 1, 0, 32, 70, 1, 4294967295, 4294967295, 1, 0, 8, 71, 1, 4294967295, 4294967295, 5, 0, 8, 72, 1, 52, 4294967295, 8, 0, 8, 73, 1, 4294967295, 4294967295, 10, 0, 8, 74, 2, 4294967295, 4294967295, 12, 0, 8, 76, 1, 4294967295, 55, 9, 0, 8, 77, 1, 4294967295, 4294967295, 1, 0, 32, 78, 1, 4294967295, 4294967295, 1, 0, 8, 79, 1, 4294967295, 4294967295, 1, 1, 8, 80, 1, 4294967295, 4294967295, 1, 1, 8, 81, 1, 4294967295, 4294967295, 1, 1, 8, 82, 1, 4294967295, 4294967295, 1, 1, 8, 83, 1, 4294967295, 4294967295, 1, 1, 8, 84, 1, 4294967295, 4294967295, 1, 1, 8, 85, 1, 4294967295, 4294967295, 1, 1, 8, 86, 1, 4294967295, 4294967295, 3, 1, 8, 87, 3, 66, 4294967295, 8, 1, 8, 90, 1, 4294967295, 4294967295, 1, 2, 32, 91, 1, 4294967295, 4294967295, 3, 2, 8, 92, 2, 69, 4294967295, 8, 2, 8, 94, 1, 4294967295, 4294967295, 1, 3, 8, 95, 1, 4294967295, 4294967295, 1, 3, 32, 96, 1, 4294967295, 4294967295, 1, 3, 8, 97, 1, 4294967295, 4294967295, 1, 3, 8, 98, 1, 4294967295, 4294967295, 1, 4, 8, 99, 1, 4294967295, 4294967295, 1, 4, 8, 100, 1, 4294967295, 4294967295, 3, 4, 8, 101, 2, 77, 4294967295, 8, 4, 8, 103, 1, 4294967295, 4294967295, 1, 5, 8, 104, 1, 4294967295, 4294967295, 1, 5, 8, 105, 1, 4294967295, 4294967295, 3, 5, 8, 106, 2, 81, 4294967295, 8, 5, 8, 108, 1, 4294967295, 4294967295, 1, 6, 32, 109, 1, 4294967295, 4294967295, 1, 6, 8, 110, 1, 4294967295, 4294967295, 1, 7, 32, 111, 1, 4294967295, 4294967295, 1, 7, 8, 112, 1, 4294967295, 4294967295, 1, 8, 8, 113, 1, 4294967295, 4294967295, 1, 8, 32, 114, 1, 4294967295, 4294967295, 1, 8, 8, 115, 1, 4294967295, 4294967295, 4, 8, 8, 116, 1, 90, 4294967295, 8, 8, 8, 117, 1, 4294967295, 4294967295, 11, 8, 8, 118, 2, 4294967295, 4294967295, 12, 8, 8, 120, 1, 4294967295, 91, 1, 9, 8, 121, 1, 4294967295, 4294967295, 1, 9, 8, 122, 1, 4294967295, 4294967295, 1, 9, 8, 123, 1, 4294967295, 4294967295, 1, 9, 8, 124, 1, 4294967295, 4294967295, 1, 9, 8, 125, 1, 4294967295, 4294967295, 1, 9, 8, 126, 1, 4294967295, 4294967295, 1, 9, 8, 127, 1, 4294967295, 4294967295, 3, 9, 8, 128, 7, 101, 4294967295, 8, 9, 8, 135, 1, 4294967295, 4294967295, 1, 10, 32, 136, 1, 4294967295, 4294967295, 1, 10, 8, 137, 1, 4294967295, 4294967295, 1, 11, 32, 138, 1, 4294967295, 4294967295, 1, 11, 8, 139, 1, 4294967295, 4294967295, 1, 12, 32, 140, 1, 4294967295, 4294967295, 1, 12, 8, 141, 1, 4294967295, 4294967295, 1, 13, 32, 142, 1, 4294967295, 4294967295, 1, 13, 8, 143, 1, 4294967295, 4294967295, 1, 14, 32, 144, 1, 4294967295, 4294967295, 1, 14, 8, 145, 1, 4294967295, 4294967295, 1, 15, 32, 146, 1, 4294967295, 4294967295, 1, 15, 8, 147, 1, 4294967295, 4294967295, 3, 15, 8, 148, 2, 115, 4294967295, 8, 15, 8, 150, 1, 4294967295, 4294967295, 1, 15, 8, 151, 1, 4294967295, 4294967295, 1, 15, 32, 152, 1, 4294967295, 4294967295, 1, 15, 8, 153, 1, 4294967295, 4294967295, 1, 16, 8, 154, 1, 4294967295, 4294967295, 1, 16, 8, 155, 1, 4294967295, 4294967295, 1, 16, 8, 156, 1, 4294967295, 4294967295, 1, 16, 32, 157, 1, 4294967295, 4294967295, 1, 16, 8, 158, 1, 4294967295, 4294967295, 1, 16, 8, 159, 1, 4294967295, 4294967295, 1, 16, 8, 160, 1, 4294967295, 4294967295, 1, 16, 8, 161, 1, 4294967295, 4294967295, 1, 16, 8, 162, 1, 4294967295, 4294967295, 1, 16, 8, 163, 1, 4294967295, 4294967295, 1, 16, 32, 164, 1, 4294967295, 4294967295, 3, 16, 8, 165, 2, 131, 4294967295, 8, 16, 8, 167, 1, 4294967295, 4294967295, 3, 16, 8, 168, 2, 133, 4294967295, 8, 16, 8, 170, 1, 4294967295, 4294967295, 1, 17, 32, 171, 1, 4294967295, 4294967295, 3, 17, 8, 172, 2, 136, 4294967295, 8, 17, 8, 174, 1, 4294967295, 4294967295, 1, 17, 32, 175, 1, 4294967295, 4294967295, 5, 17, 8, 176, 1, 139, 4294967295, 8, 17, 8, 177, 1, 4294967295, 4294967295, 10, 17, 8, 178, 2, 4294967295, 4294967295, 12, 17, 8, 180, 1, 4294967295, 142, 9, 17, 8, 181, 1, 4294967295, 4294967295, 1, 18, 8, 182, 1, 4294967295, 4294967295, 1, 18, 8, 183, 1, 4294967295, 4294967295, 3, 18, 8, 184, 2, 146, 4294967295, 8, 18, 8, 186, 1, 4294967295, 4294967295, 1, 19, 32, 187, 1, 4294967295, 4294967295, 1, 19, 8, 188, 1, 4294967295, 4294967295, 1, 19, 32, 189, 1, 4294967295, 4294967295, 1, 19, 8, 190, 1, 4294967295, 4294967295, 1, 20, 32, 191, 1, 4294967295, 4294967295, 1, 20, 8, 192, 1, 4294967295, 4294967295, 1, 20, 8, 193, 1, 4294967295, 4294967295, 1, 20, 8, 194, 1, 4294967295, 4294967295, 1, 20, 32, 195, 1, 4294967295, 4294967295, 1, 20, 8, 196, 1, 4294967295, 4294967295, 1, 21, 8, 197, 1, 4294967295, 4294967295, 3, 21, 8, 198, 2, 159, 4294967295, 8, 21, 8, 200, 1, 4294967295, 4294967295, 1, 22, 8, 201, 1, 4294967295, 4294967295, 1, 22, 32, 202, 1, 4294967295, 4294967295, 1, 22, 8, 203, 1, 4294967295, 4294967295, 1, 22, 8, 204, 1, 4294967295, 4294967295, 1, 22, 32, 205, 1, 4294967295, 4294967295, 1, 22, 8, 206, 1, 4294967295, 4294967295, 1, 22, 8, 207, 1, 4294967295, 4294967295, 3, 22, 8, 208, 2, 168, 4294967295, 8, 22, 8, 210, 1, 4294967295, 4294967295, 3, 22, 8, 211, 2, 170, 4294967295, 8, 22, 8, 213, 1, 4294967295, 4294967295, 1, 23, 32, 214, 1, 4294967295, 4294967295, 1, 23, 8, 215, 1, 4294967295, 4294967295, 1, 23, 32, 216, 1, 4294967295, 4294967295, 1, 23, 8, 217, 1, 4294967295, 4294967295, 1, 23, 0, 218, 0, 4294967295, 4294967295, 1, 48, 0, 0, 0, 1, 65, 0, 0, 0, 1, 53, 0, 0, 0, 1, 52, 0, 0, 0, 1, 68, 0, 0, 0, 1, 60, 0, 0, 0, 1, 63, 0, 0, 0, 1, 66, 0, 0, 0, 1, 70, 0, 0, 0, 1, 59, 0, 0, 0, 1, 76, 0, 0, 0, 1, 71, 0, 0, 0, 1, 149, 0, 0, 0, 1, 161, 0, 0, 0, 1, 173, 0, 0, 0, 1, 80, 0, 0, 0, 1, 77, 0, 0, 0, 1, 89, 0, 0, 0, 1, 90, 0, 0, 0, 1, 82, 0, 0, 0, 1, 81, 0, 0, 0, 1, 84, 0, 0, 0, 1, 81, 0, 0, 0, 1, 86, 0, 0, 0, 1, 77, 0, 0, 0, 1, 100, 0, 0, 0, 1, 73, 0, 0, 0, 1, 121, 0, 0, 0, 1, 128, 0, 0, 0, 1, 163, 0, 0, 0, 1, 102, 0, 0, 0, 1, 101, 0, 0, 0, 1, 104, 0, 0, 0, 1, 101, 0, 0, 0, 1, 106, 0, 0, 0, 1, 101, 0, 0, 0, 1, 108, 0, 0, 0, 1, 101, 0, 0, 0, 1, 110, 0, 0, 0, 1, 101, 0, 0, 0, 1, 112, 0, 0, 0, 1, 101, 0, 0, 0, 1, 132, 0, 0, 0, 1, 115, 0, 0, 0, 1, 124, 0, 0, 0, 1, 140, 0, 0, 0, 1, 117, 0, 0, 0, 1, 120, 0, 0, 0, 1, 122, 0, 0, 0, 1, 125, 0, 0, 0, 1, 127, 0, 0, 0, 1, 130, 0, 0, 0, 1, 153, 0, 0, 0, 1, 155, 0, 0, 0, 1, 169, 0, 0, 0, 1, 167, 0, 0, 0, 1, 145, 0, 0, 0, 1, 62, 0, 0, 0, 1, 147, 0, 0, 0, 1, 146, 0, 0, 0, 1, 151, 0, 0, 0, 1, 101, 0, 0, 0, 1, 158, 0, 0, 0, 1, 154, 0, 0, 0, 1, 160, 0, 0, 0, 1, 159, 0, 0, 0, 1, 168, 0, 0, 0, 1, 171, 0, 0, 0, 1, 146, 0, 0, 0, 3, 2, 1, 53, 0, 5, 50, 2, 0, 0, 3, 2, 1, 52, 0, 1, 49, 0, 0, 0, 1, 55, 0, 0, 0, 1, 51, 0, 0, 0, 1, 54, 0, 0, 0, 1, 56, 0, 0, 0, 1, 53, 0, 0, 0, 5, 57, 4294967295, 0, 0, 1, 1, 0, 0, 0, 3, 6, 3, 59, 0, 3, 4, 2, 60, 0, 1, 66, 0, 0, 0, 3, 36, 18, 62, 0, 3, 4, 2, 63, 0, 1, 66, 0, 0, 0, 3, 4, 2, 66, 0, 1, 58, 0, 0, 0, 1, 61, 0, 0, 0, 1, 64, 0, 0, 0, 1, 3, 0, 0, 0, 5, 69, 3, 0, 0, 1, 67, 0, 0, 0, 1, 69, 0, 0, 0, 1, 5, 0, 0, 0, 3, 8, 4, 71, 0, 5, 72, 8, 0, 0, 3, 18, 9, 73, 0, 1, 7, 0, 0, 0, 3, 10, 5, 77, 0, 3, 16, 8, 77, 0, 1, 74, 0, 0, 0, 1, 75, 0, 0, 0, 1, 9, 0, 0, 0, 3, 14, 7, 81, 0, 3, 12, 6, 81, 0, 1, 78, 0, 0, 0, 1, 79, 0, 0, 0, 1, 11, 0, 0, 0, 5, 83, 13, 0, 0, 1, 13, 0, 0, 0, 7, 85, 0, 0, 0, 1, 15, 0, 0, 0, 3, 10, 5, 89, 0, 5, 88, 9, 0, 0, 3, 10, 5, 90, 0, 1, 87, 0, 0, 0, 1, 91, 0, 0, 0, 1, 89, 0, 0, 0, 1, 92, 0, 0, 0, 1, 17, 0, 0, 0, 3, 20, 10, 101, 0, 3, 22, 11, 101, 0, 3, 24, 12, 101, 0, 3, 26, 13, 101, 0, 3, 28, 14, 101, 0, 3, 30, 15, 101, 0, 3, 40, 20, 101, 0, 1, 93, 0, 0, 0, 1, 94, 0, 0, 0, 1, 95, 0, 0, 0, 1, 96, 0, 0, 0, 1, 97, 0, 0, 0, 1, 98, 0, 0, 0, 1, 99, 0, 0, 0, 1, 19, 0, 0, 0, 7, 103, 1, 0, 0, 1, 21, 0, 0, 0, 7, 105, 2, 0, 0, 1, 23, 0, 0, 0, 7, 107, 3, 0, 0, 1, 25, 0, 0, 0, 5, 109, 16, 0, 0, 1, 27, 0, 0, 0, 7, 111, 4, 0, 0, 1, 29, 0, 0, 0, 5, 114, 4, 0, 0, 3, 32, 16, 115, 0, 1, 113, 0, 0, 0, 1, 115, 0, 0, 0, 1, 116, 0, 0, 0, 3, 34, 17, 117, 0, 5, 118, 6, 0, 0, 1, 31, 0, 0, 0, 3, 34, 17, 120, 0, 3, 18, 9, 121, 0, 3, 34, 17, 122, 0, 5, 123, 10, 0, 0, 3, 32, 16, 124, 0, 3, 34, 17, 125, 0, 1, 133, 0, 0, 0, 3, 34, 17, 127, 0, 3, 18, 9, 128, 0, 3, 34, 17, 130, 0, 5, 131, 10, 0, 0, 1, 129, 0, 0, 0, 1, 131, 0, 0, 0, 1, 133, 0, 0, 0, 1, 119, 0, 0, 0, 1, 126, 0, 0, 0, 1, 33, 0, 0, 0, 5, 136, 3, 0, 0, 1, 134, 0, 0, 0, 1, 136, 0, 0, 0, 1, 137, 0, 0, 0, 5, 139, 2, 0, 0, 1, 135, 0, 0, 0, 1, 142, 0, 0, 0, 1, 138, 0, 0, 0, 1, 141, 0, 0, 0, 1, 35, 0, 0, 0, 1, 140, 0, 0, 0, 3, 38, 19, 146, 0, 3, 46, 23, 146, 0, 1, 143, 0, 0, 0, 1, 144, 0, 0, 0, 1, 37, 0, 0, 0, 5, 148, 4, 0, 0, 3, 8, 4, 149, 0, 5, 150, 6, 0, 0, 1, 39, 0, 0, 0, 5, 152, 15, 0, 0, 3, 34, 17, 153, 0, 3, 42, 21, 154, 0, 3, 34, 17, 155, 0, 5, 156, 31, 0, 0, 1, 41, 0, 0, 0, 3, 44, 22, 159, 0, 1, 157, 0, 0, 0, 1, 159, 0, 0, 0, 1, 43, 0, 0, 0, 3, 8, 4, 161, 0, 5, 162, 8, 0, 0, 3, 18, 9, 163, 0, 3, 34, 17, 169, 0, 5, 165, 10, 0, 0, 3, 34, 17, 167, 0, 3, 44, 22, 168, 0, 1, 166, 0, 0, 0, 1, 168, 0, 0, 0, 1, 170, 0, 0, 0, 1, 164, 0, 0, 0, 1, 170, 0, 0, 0, 1, 45, 0, 0, 0, 5, 172, 5, 0, 0, 3, 8, 4, 173, 0, 5, 174, 7, 0, 0, 1, 47, 0, 0, 0, 0, 1, 1, 0, 2, 1, 2, 1, 2, 2, 3, 1, 1, 4, 2, 4, 1, 1, 6, 2, 5, 1, 1, 8, 2, 11, 12, 11, 12, 17, 18, 22, 25, 19, 21, 26, 29, 6144, 0, 0, 0, 399360, 0, 0, 0, 62914560, 0, 0, 0, 3670016, 0, 0, 0, 1006632960, 0, 0, 0, 53, 65, 68, 76, 80, 91, 100, 114, 130, 132, 135, 140, 145, 158, 167, 169, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47];
 static ATN_CELL: OnceLock<ParserAtn> = OnceLock::new();
 
 /// Validates and caches the packed grammar ATN for all parser instances.
@@ -2654,7 +2629,6 @@ pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R
 /// - `array()`
 /// - `array_values()`
 /// - `comment_or_nl()`
-/// - `nl_or_comment()`
 /// - `table()`
 /// - `standard_table()`
 /// - `inline_table()`
@@ -2854,7 +2828,6 @@ where
             21 => Some(self.parse_generated_rule_21_dispatch(precedence, allow_fallback)),
             22 => Some(self.parse_generated_rule_22_dispatch(precedence, allow_fallback)),
             23 => Some(self.parse_generated_rule_23_dispatch(precedence, allow_fallback)),
-            24 => Some(self.parse_generated_rule_24_dispatch(precedence, allow_fallback)),
             _ => None,
         }
     }
@@ -2874,14 +2847,14 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __invoking_marker = self.base.push_invoking_state(50isize);
+                let __invoking_marker = self.base.push_invoking_state(48isize);
                 let __child = self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let mut __loop_iter_55 = false;
+                let mut __loop_iter_53 = false;
                 loop {
-                    match self.base.sync_decision(atn(), 55, !__ctx.has_matched_child(), __loop_iter_55) {
+                    match self.base.sync_decision(atn(), 53, !__ctx.has_matched_child(), __loop_iter_53) {
                         Ok(__sync_children) => {
                             for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                         }
@@ -2896,14 +2869,14 @@ where
                         -1 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     };
-                    self.base.record_generated_prediction_diagnostic(atn(), 55, &__prediction);
+                    self.base.record_generated_prediction_diagnostic(atn(), 53, &__prediction);
                     match __prediction.alt {
                         1 => {
-                            __loop_iter_55 = true;
-                            let __match = self.base.match_token_recovering(2, 52, atn())?;
+                            __loop_iter_53 = true;
+                            let __match = self.base.match_token_recovering(2, 50, atn())?;
                             __consumed_eof |= __match.consumed_eof();
                             for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                            let __invoking_marker = self.base.push_invoking_state(52isize);
+                            let __invoking_marker = self.base.push_invoking_state(50isize);
                             let __child = self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                             self.base.discard_invoking_state(__invoking_marker);
                             let __child = __child?;
@@ -2915,7 +2888,7 @@ where
                         _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
                 }
-                let __match = self.base.match_token_recovering(-1, 59, atn())?;
+                let __match = self.base.match_token_recovering(-1, 57, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -2939,7 +2912,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                match self.base.sync_decision(atn(), 67, !__ctx.has_matched_child(), false) {
+                match self.base.sync_decision(atn(), 65, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -2955,34 +2928,34 @@ where
                     -1 | 2..=3 => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     _ => antlr4_runtime::ParserAtnPrediction { alt: 3, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 67, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 65, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(60isize);
+                        let __invoking_marker = self.base.push_invoking_state(58isize);
                         let __child = self.parse_generated_rule_3_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(61isize);
+                        let __invoking_marker = self.base.push_invoking_state(59isize);
                         let __child = self.parse_generated_rule_2_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     2 => {
-                        let __invoking_marker = self.base.push_invoking_state(63isize);
-                        let __child = self.parse_generated_rule_19_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        let __invoking_marker = self.base.push_invoking_state(61isize);
+                        let __child = self.parse_generated_rule_18_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(64isize);
+                        let __invoking_marker = self.base.push_invoking_state(62isize);
                         let __child = self.parse_generated_rule_2_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     3 => {
-                        let __invoking_marker = self.base.push_invoking_state(66isize);
+                        let __invoking_marker = self.base.push_invoking_state(64isize);
                         let __child = self.parse_generated_rule_2_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
@@ -3011,7 +2984,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                match self.base.sync_decision(atn(), 70, !__ctx.has_matched_child(), false) {
+                match self.base.sync_decision(atn(), 68, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -3026,10 +2999,10 @@ where
                     -1 | 2 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 70, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 68, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __match = self.base.match_token_recovering(3, 71, atn())?;
+                        let __match = self.base.match_token_recovering(3, 69, atn())?;
                         __consumed_eof |= __match.consumed_eof();
                         for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -3058,15 +3031,15 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __invoking_marker = self.base.push_invoking_state(72isize);
+                let __invoking_marker = self.base.push_invoking_state(70isize);
                 let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(8, 74, atn())?;
+                let __match = self.base.match_token_recovering(8, 72, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(74isize);
+                let __invoking_marker = self.base.push_invoking_state(72isize);
                 let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
@@ -3092,7 +3065,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                match self.base.sync_decision(atn(), 78, !__ctx.has_matched_child(), false) {
+                match self.base.sync_decision(atn(), 76, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -3102,7 +3075,7 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 78) {
+                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 76) {
                     __prediction
                 } else {
                     let __prediction = {
@@ -3126,17 +3099,17 @@ where
                         __prediction
                     }
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 78, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 76, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(76isize);
+                        let __invoking_marker = self.base.push_invoking_state(74isize);
                         let __child = self.parse_generated_rule_5_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     2 => {
-                        let __invoking_marker = self.base.push_invoking_state(77isize);
+                        let __invoking_marker = self.base.push_invoking_state(75isize);
                         let __child = self.parse_generated_rule_8_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
@@ -3170,7 +3143,7 @@ where
                     11..=12 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     13 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     _ => {
-                        match self.base.sync_decision(atn(), 82, !__ctx.has_matched_child(), false) {
+                        match self.base.sync_decision(atn(), 80, !__ctx.has_matched_child(), false) {
                             Ok(__sync_children) => {
                                 for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                             }
@@ -3187,17 +3160,17 @@ where
                         }
                     }
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 82, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 80, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(80isize);
+                        let __invoking_marker = self.base.push_invoking_state(78isize);
                         let __child = self.parse_generated_rule_7_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     2 => {
-                        let __invoking_marker = self.base.push_invoking_state(81isize);
+                        let __invoking_marker = self.base.push_invoking_state(79isize);
                         let __child = self.parse_generated_rule_6_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
@@ -3226,7 +3199,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_token_recovering(13, 85, atn())?;
+                let __match = self.base.match_token_recovering(13, 83, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3250,7 +3223,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_set_recovering(&[(11, 12)], 87, atn())?;
+                let __match = self.base.match_set_recovering(&[(11, 12)], 85, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3274,22 +3247,22 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
+                let __invoking_marker = self.base.push_invoking_state(86isize);
+                let __child = self.parse_generated_rule_5_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __match = self.base.match_token_recovering(9, 88, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
                 let __invoking_marker = self.base.push_invoking_state(88isize);
                 let __child = self.parse_generated_rule_5_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(9, 90, atn())?;
-                __consumed_eof |= __match.consumed_eof();
-                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(90isize);
-                let __child = self.parse_generated_rule_5_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                self.base.discard_invoking_state(__invoking_marker);
-                let __child = __child?;
-                self.base.add_parse_child(&mut __ctx, __child);
-                let mut __loop_iter_93 = true;
+                let mut __loop_iter_91 = true;
                 loop {
-                    match self.base.sync_decision(atn(), 93, !__ctx.has_matched_child(), __loop_iter_93) {
+                    match self.base.sync_decision(atn(), 91, !__ctx.has_matched_child(), __loop_iter_91) {
                         Ok(__sync_children) => {
                             for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                         }
@@ -3304,14 +3277,14 @@ where
                         6..=8 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     };
-                    self.base.record_generated_prediction_diagnostic(atn(), 93, &__prediction);
+                    self.base.record_generated_prediction_diagnostic(atn(), 91, &__prediction);
                     match __prediction.alt {
                         1 => {
-                            __loop_iter_93 = true;
-                            let __match = self.base.match_token_recovering(9, 90, atn())?;
+                            __loop_iter_91 = true;
+                            let __match = self.base.match_token_recovering(9, 88, atn())?;
                             __consumed_eof |= __match.consumed_eof();
                             for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                            let __invoking_marker = self.base.push_invoking_state(90isize);
+                            let __invoking_marker = self.base.push_invoking_state(88isize);
                             let __child = self.parse_generated_rule_5_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                             self.base.discard_invoking_state(__invoking_marker);
                             let __child = __child?;
@@ -3354,7 +3327,7 @@ where
                     4 => antlr4_runtime::ParserAtnPrediction { alt: 6, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     15 => antlr4_runtime::ParserAtnPrediction { alt: 7, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     _ => {
-                        match self.base.sync_decision(atn(), 102, !__ctx.has_matched_child(), false) {
+                        match self.base.sync_decision(atn(), 100, !__ctx.has_matched_child(), false) {
                             Ok(__sync_children) => {
                                 for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                             }
@@ -3376,53 +3349,53 @@ where
                         }
                     }
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 102, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 100, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(95isize);
+                        let __invoking_marker = self.base.push_invoking_state(93isize);
                         let __child = self.parse_generated_rule_10_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     2 => {
-                        let __invoking_marker = self.base.push_invoking_state(96isize);
+                        let __invoking_marker = self.base.push_invoking_state(94isize);
                         let __child = self.parse_generated_rule_11_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     3 => {
-                        let __invoking_marker = self.base.push_invoking_state(97isize);
+                        let __invoking_marker = self.base.push_invoking_state(95isize);
                         let __child = self.parse_generated_rule_12_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     4 => {
-                        let __invoking_marker = self.base.push_invoking_state(98isize);
+                        let __invoking_marker = self.base.push_invoking_state(96isize);
                         let __child = self.parse_generated_rule_13_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     5 => {
-                        let __invoking_marker = self.base.push_invoking_state(99isize);
+                        let __invoking_marker = self.base.push_invoking_state(97isize);
                         let __child = self.parse_generated_rule_14_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     6 => {
-                        let __invoking_marker = self.base.push_invoking_state(100isize);
+                        let __invoking_marker = self.base.push_invoking_state(98isize);
                         let __child = self.parse_generated_rule_15_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     7 => {
-                        let __invoking_marker = self.base.push_invoking_state(101isize);
-                        let __child = self.parse_generated_rule_21_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        let __invoking_marker = self.base.push_invoking_state(99isize);
+                        let __child = self.parse_generated_rule_20_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
@@ -3450,7 +3423,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_set_recovering(&[(11, 12), (17, 18)], 105, atn())?;
+                let __match = self.base.match_set_recovering(&[(11, 12), (17, 18)], 103, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3474,7 +3447,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_set_recovering(&[(22, 25)], 107, atn())?;
+                let __match = self.base.match_set_recovering(&[(22, 25)], 105, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3498,7 +3471,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_set_recovering(&[(19, 21)], 109, atn())?;
+                let __match = self.base.match_set_recovering(&[(19, 21)], 107, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3522,7 +3495,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_token_recovering(16, 111, atn())?;
+                let __match = self.base.match_token_recovering(16, 109, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3546,7 +3519,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_set_recovering(&[(26, 29)], 113, atn())?;
+                let __match = self.base.match_set_recovering(&[(26, 29)], 111, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3570,10 +3543,10 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_token_recovering(4, 116, atn())?;
+                let __match = self.base.match_token_recovering(4, 114, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                match self.base.sync_decision(atn(), 116, !__ctx.has_matched_child(), false) {
+                match self.base.sync_decision(atn(), 114, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -3583,7 +3556,7 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 116) {
+                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 114) {
                     __prediction
                 } else {
                     let __prediction = {
@@ -3607,10 +3580,10 @@ where
                         __prediction
                     }
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 116, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 114, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(115isize);
+                        let __invoking_marker = self.base.push_invoking_state(113isize);
                         let __child = self.parse_generated_rule_16_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
@@ -3620,12 +3593,12 @@ where
                     }
                     _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 }
-                let __invoking_marker = self.base.push_invoking_state(118isize);
+                let __invoking_marker = self.base.push_invoking_state(116isize);
                 let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(6, 120, atn())?;
+                let __match = self.base.match_token_recovering(6, 118, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -3649,7 +3622,7 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                match self.base.sync_decision(atn(), 134, !__ctx.has_matched_child(), false) {
+                match self.base.sync_decision(atn(), 132, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -3659,7 +3632,7 @@ where
                     }
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 134) {
+                let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 132) {
                     __prediction
                 } else {
                     let __prediction = {
@@ -3683,55 +3656,55 @@ where
                         __prediction
                     }
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 134, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 132, &__prediction);
                 match __prediction.alt {
                     1 => {
+                        let __invoking_marker = self.base.push_invoking_state(119isize);
+                        let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
+                        let __invoking_marker = self.base.push_invoking_state(120isize);
+                        let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
                         let __invoking_marker = self.base.push_invoking_state(121isize);
                         let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(122isize);
-                        let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(123isize);
-                        let __child = self.parse_generated_rule_18_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                        let __match = self.base.match_token_recovering(10, 125, atn())?;
+                        let __match = self.base.match_token_recovering(10, 123, atn())?;
                         __consumed_eof |= __match.consumed_eof();
                         for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                        let __invoking_marker = self.base.push_invoking_state(125isize);
+                        let __invoking_marker = self.base.push_invoking_state(123isize);
                         let __child = self.parse_generated_rule_16_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(126isize);
+                        let __invoking_marker = self.base.push_invoking_state(124isize);
                         let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
                     }
                     2 => {
+                        let __invoking_marker = self.base.push_invoking_state(126isize);
+                        let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
+                        let __invoking_marker = self.base.push_invoking_state(127isize);
+                        let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
                         let __invoking_marker = self.base.push_invoking_state(128isize);
                         let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(129isize);
-                        let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                        let __invoking_marker = self.base.push_invoking_state(130isize);
-                        let __child = self.parse_generated_rule_18_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                        match self.base.sync_decision(atn(), 132, !__ctx.has_matched_child(), false) {
+                        match self.base.sync_decision(atn(), 130, !__ctx.has_matched_child(), false) {
                             Ok(__sync_children) => {
                                 for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                             }
@@ -3746,10 +3719,10 @@ where
                             2..=3 | 6 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                             _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                         };
-                        self.base.record_generated_prediction_diagnostic(atn(), 132, &__prediction);
+                        self.base.record_generated_prediction_diagnostic(atn(), 130, &__prediction);
                         match __prediction.alt {
                             1 => {
-                                let __match = self.base.match_token_recovering(10, 133, atn())?;
+                                let __match = self.base.match_token_recovering(10, 131, atn())?;
                                 __consumed_eof |= __match.consumed_eof();
                                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
                             }
@@ -3781,9 +3754,9 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let mut __loop_iter_142 = false;
+                let mut __loop_iter_140 = false;
                 loop {
-                    match self.base.sync_decision(atn(), 142, !__ctx.has_matched_child(), __loop_iter_142) {
+                    match self.base.sync_decision(atn(), 140, !__ctx.has_matched_child(), __loop_iter_140) {
                         Ok(__sync_children) => {
                             for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                         }
@@ -3793,7 +3766,7 @@ where
                         }
                     }
                     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 142) {
+                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 140) {
                         __prediction
                     } else {
                         let __prediction = {
@@ -3817,11 +3790,11 @@ where
                             __prediction
                         }
                     };
-                    self.base.record_generated_prediction_diagnostic(atn(), 142, &__prediction);
+                    self.base.record_generated_prediction_diagnostic(atn(), 140, &__prediction);
                     match __prediction.alt {
                         1 => {
-                            __loop_iter_142 = true;
-                            match self.base.sync_decision(atn(), 137, !__ctx.has_matched_child(), false) {
+                            __loop_iter_140 = true;
+                            match self.base.sync_decision(atn(), 135, !__ctx.has_matched_child(), false) {
                                 Ok(__sync_children) => {
                                     for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                                 }
@@ -3836,10 +3809,10 @@ where
                                 2 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                                 _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                             };
-                            self.base.record_generated_prediction_diagnostic(atn(), 137, &__prediction);
+                            self.base.record_generated_prediction_diagnostic(atn(), 135, &__prediction);
                             match __prediction.alt {
                                 1 => {
-                                    let __match = self.base.match_token_recovering(3, 138, atn())?;
+                                    let __match = self.base.match_token_recovering(3, 136, atn())?;
                                     __consumed_eof |= __match.consumed_eof();
                                     for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
                                 }
@@ -3847,7 +3820,7 @@ where
                                 }
                                 _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                             }
-                            let __match = self.base.match_token_recovering(2, 141, atn())?;
+                            let __match = self.base.match_token_recovering(2, 139, atn())?;
                             __consumed_eof |= __match.consumed_eof();
                             for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
                         }
@@ -3878,100 +3851,45 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let mut __loop_iter_151 = false;
-                loop {
-                    match self.base.sync_decision(atn(), 151, !__ctx.has_matched_child(), __loop_iter_151) {
-                        Ok(__sync_children) => {
-                            for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
-                        }
-                        Err(__error) => {
-                            __sync_error = Some(__error.clone());
-                            return Err(__error);
-                        }
-                    }
-                    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 151) {
-                        __prediction
-                    } else {
-                        let __prediction = {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            __simulator.adaptive_predict_stream_info_sll_probe(13, 0, self.base.input())
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        };
-                        if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                            __simulator.adaptive_predict_stream_info_with_context(13, 0, self.base.input(), __prediction_context)
-                                .map_err(|__error| match __error {
-                                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                    _ => self.base.no_viable_alternative_error(__decision_start),
-                                })?
-                        } else {
-                            __prediction
-                        }
-                    };
-                    self.base.record_generated_prediction_diagnostic(atn(), 151, &__prediction);
-                    match __prediction.alt {
-                        1 => {
-                            __loop_iter_151 = true;
-                            let __match = self.base.match_token_recovering(2, 147, atn())?;
-                            __consumed_eof |= __match.consumed_eof();
-                            for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                            match self.base.sync_decision(atn(), 147, !__ctx.has_matched_child(), false) {
-                                Ok(__sync_children) => {
-                                    for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
-                                }
-                                Err(__error) => {
-                                    __sync_error = Some(__error.clone());
-                                    return Err(__error);
-                                }
+                let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());
+                let __prediction = match self.base.la(1) {
+                    4 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    5 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => {
+                        match self.base.sync_decision(atn(), 145, !__ctx.has_matched_child(), false) {
+                            Ok(__sync_children) => {
+                                for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                             }
-                            let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                            let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), 147) {
-                                __prediction
-                            } else {
-                                let __prediction = {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    __simulator.adaptive_predict_stream_info_sll_probe(12, 0, self.base.input())
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                };
-                                if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {
-                                    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-                                    let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));
-                                    __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);
-                                    __simulator.adaptive_predict_stream_info_with_context(12, 0, self.base.input(), __prediction_context)
-                                        .map_err(|__error| match __error {
-                                            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { index, .. } => self.base.no_viable_alternative_error_at(__decision_start, index),
-                                            _ => self.base.no_viable_alternative_error(__decision_start),
-                                        })?
-                                } else {
-                                    __prediction
-                                }
-                            };
-                            self.base.record_generated_prediction_diagnostic(atn(), 147, &__prediction);
-                            match __prediction.alt {
-                                1 => {
-                                    let __match = self.base.match_token_recovering(3, 148, atn())?;
-                                    __consumed_eof |= __match.consumed_eof();
-                                    for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                                }
-                                2 => {
-                                }
-                                _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
+                            Err(__error) => {
+                                __sync_error = Some(__error.clone());
+                                return Err(__error);
                             }
                         }
-                        2 => {
-                            break;
+                        __decision_start = antlr4_runtime::IntStream::index(self.base.input());
+                        match self.base.la(1) {
+                            4 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            5 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                         }
-                        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                     }
+                };
+                self.base.record_generated_prediction_diagnostic(atn(), 145, &__prediction);
+                match __prediction.alt {
+                    1 => {
+                        let __invoking_marker = self.base.push_invoking_state(143isize);
+                        let __child = self.parse_generated_rule_19_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
+                    }
+                    2 => {
+                        let __invoking_marker = self.base.push_invoking_state(144isize);
+                        let __child = self.parse_generated_rule_23_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
+                    }
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
                 }
             }
             success {}
@@ -3994,46 +3912,17 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = match self.base.la(1) {
-                    4 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                    5 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                    _ => {
-                        match self.base.sync_decision(atn(), 156, !__ctx.has_matched_child(), false) {
-                            Ok(__sync_children) => {
-                                for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
-                            }
-                            Err(__error) => {
-                                __sync_error = Some(__error.clone());
-                                return Err(__error);
-                            }
-                        }
-                        __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                        match self.base.la(1) {
-                            4 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                            5 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                            _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
-                        }
-                    }
-                };
-                self.base.record_generated_prediction_diagnostic(atn(), 156, &__prediction);
-                match __prediction.alt {
-                    1 => {
-                        let __invoking_marker = self.base.push_invoking_state(154isize);
-                        let __child = self.parse_generated_rule_20_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                    }
-                    2 => {
-                        let __invoking_marker = self.base.push_invoking_state(155isize);
-                        let __child = self.parse_generated_rule_24_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                    }
-                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
-                }
+                let __match = self.base.match_token_recovering(4, 148, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+                let __invoking_marker = self.base.push_invoking_state(148isize);
+                let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __match = self.base.match_token_recovering(6, 150, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
             success {}
             recovery {}
@@ -4055,15 +3944,25 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_token_recovering(4, 159, atn())?;
+                let __match = self.base.match_token_recovering(15, 152, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(159isize);
-                let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                let __invoking_marker = self.base.push_invoking_state(152isize);
+                let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(6, 161, atn())?;
+                let __invoking_marker = self.base.push_invoking_state(153isize);
+                let __child = self.parse_generated_rule_21_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __invoking_marker = self.base.push_invoking_state(154isize);
+                let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __match = self.base.match_token_recovering(31, 156, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -4087,17 +3986,34 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __match = self.base.match_token_recovering(15, 163, atn())?;
-                __consumed_eof |= __match.consumed_eof();
-                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(163isize);
-                let __child = self.parse_generated_rule_22_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                self.base.discard_invoking_state(__invoking_marker);
-                let __child = __child?;
-                self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(31, 165, atn())?;
-                __consumed_eof |= __match.consumed_eof();
-                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+                match self.base.sync_decision(atn(), 158, !__ctx.has_matched_child(), false) {
+                    Ok(__sync_children) => {
+                        for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
+                    }
+                    Err(__error) => {
+                        __sync_error = Some(__error.clone());
+                        return Err(__error);
+                    }
+                }
+                let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
+                let __prediction = match self.base.la(1) {
+                    11..=13 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    2..=3 | 31 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                };
+                self.base.record_generated_prediction_diagnostic(atn(), 158, &__prediction);
+                match __prediction.alt {
+                    1 => {
+                        let __invoking_marker = self.base.push_invoking_state(157isize);
+                        let __child = self.parse_generated_rule_22_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        self.base.discard_invoking_state(__invoking_marker);
+                        let __child = __child?;
+                        self.base.add_parse_child(&mut __ctx, __child);
+                    }
+                    2 => {
+                    }
+                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
+                }
             }
             success {}
             recovery {}
@@ -4119,7 +4035,25 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                match self.base.sync_decision(atn(), 167, !__ctx.has_matched_child(), false) {
+                let __invoking_marker = self.base.push_invoking_state(160isize);
+                let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __match = self.base.match_token_recovering(8, 162, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+                let __invoking_marker = self.base.push_invoking_state(162isize);
+                let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                let __invoking_marker = self.base.push_invoking_state(163isize);
+                let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                self.base.discard_invoking_state(__invoking_marker);
+                let __child = __child?;
+                self.base.add_parse_child(&mut __ctx, __child);
+                match self.base.sync_decision(atn(), 169, !__ctx.has_matched_child(), false) {
                     Ok(__sync_children) => {
                         for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
                     }
@@ -4130,18 +4064,49 @@ where
                 }
                 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
                 let __prediction = match self.base.la(1) {
-                    11..=13 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                    31 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    10 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                    2..=3 | 31 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                     _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
                 };
-                self.base.record_generated_prediction_diagnostic(atn(), 167, &__prediction);
+                self.base.record_generated_prediction_diagnostic(atn(), 169, &__prediction);
                 match __prediction.alt {
                     1 => {
-                        let __invoking_marker = self.base.push_invoking_state(166isize);
-                        let __child = self.parse_generated_rule_23_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                        let __match = self.base.match_token_recovering(10, 165, atn())?;
+                        __consumed_eof |= __match.consumed_eof();
+                        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+                        let __invoking_marker = self.base.push_invoking_state(165isize);
+                        let __child = self.parse_generated_rule_17_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                         self.base.discard_invoking_state(__invoking_marker);
                         let __child = __child?;
                         self.base.add_parse_child(&mut __ctx, __child);
+                        match self.base.sync_decision(atn(), 167, !__ctx.has_matched_child(), false) {
+                            Ok(__sync_children) => {
+                                for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
+                            }
+                            Err(__error) => {
+                                __sync_error = Some(__error.clone());
+                                return Err(__error);
+                            }
+                        }
+                        let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
+                        let __prediction = match self.base.la(1) {
+                            11..=13 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            2..=3 | 31 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                            _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
+                        };
+                        self.base.record_generated_prediction_diagnostic(atn(), 167, &__prediction);
+                        match __prediction.alt {
+                            1 => {
+                                let __invoking_marker = self.base.push_invoking_state(166isize);
+                                let __child = self.parse_generated_rule_22_dispatch(0, false).map_err(GeneratedRuleError::into_error);
+                                self.base.discard_invoking_state(__invoking_marker);
+                                let __child = __child?;
+                                self.base.add_parse_child(&mut __ctx, __child);
+                            }
+                            2 => {
+                            }
+                            _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
+                        }
                     }
                     2 => {
                     }
@@ -4168,80 +4133,15 @@ where
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {
-                let __invoking_marker = self.base.push_invoking_state(169isize);
+                let __match = self.base.match_token_recovering(5, 172, atn())?;
+                __consumed_eof |= __match.consumed_eof();
+                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+                let __invoking_marker = self.base.push_invoking_state(172isize);
                 let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
                 self.base.discard_invoking_state(__invoking_marker);
                 let __child = __child?;
                 self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(8, 171, atn())?;
-                __consumed_eof |= __match.consumed_eof();
-                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(171isize);
-                let __child = self.parse_generated_rule_9_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                self.base.discard_invoking_state(__invoking_marker);
-                let __child = __child?;
-                self.base.add_parse_child(&mut __ctx, __child);
-                match self.base.sync_decision(atn(), 174, !__ctx.has_matched_child(), false) {
-                    Ok(__sync_children) => {
-                        for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
-                    }
-                    Err(__error) => {
-                        __sync_error = Some(__error.clone());
-                        return Err(__error);
-                    }
-                }
-                let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
-                let __prediction = match self.base.la(1) {
-                    10 => antlr4_runtime::ParserAtnPrediction { alt: 1, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                    31 => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                    _ => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: false, has_semantic_context: false, diagnostic: None },
-                };
-                self.base.record_generated_prediction_diagnostic(atn(), 174, &__prediction);
-                match __prediction.alt {
-                    1 => {
-                        let __match = self.base.match_token_recovering(10, 173, atn())?;
-                        __consumed_eof |= __match.consumed_eof();
-                        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                        let __invoking_marker = self.base.push_invoking_state(173isize);
-                        let __child = self.parse_generated_rule_23_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                        self.base.discard_invoking_state(__invoking_marker);
-                        let __child = __child?;
-                        self.base.add_parse_child(&mut __ctx, __child);
-                    }
-                    2 => {
-                    }
-                    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
-                }
-            }
-            success {}
-            recovery {}
-        }
-    }
-
-    #[allow(dead_code)]
-    fn parse_generated_rule_24_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
-        let _ = precedence;
-        antlr4_runtime::__antlr4_rust_generated_rule! { dispatch self, 24, GeneratedRuleError::Fatal; self.parse_generated_rule_24(precedence, allow_fallback) }
-    }
-
-    #[allow(dead_code)]
-    fn parse_generated_rule_24(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
-        let _ = __precedence;
-        antlr4_runtime::__antlr4_rust_generated_rule! {
-            ordinary self, 48isize, 24, allow_fallback, atn(), GeneratedRuleError::Fatal;
-            retry [none];
-            bind (__ctx, __rule_start, __consumed_eof, __sync_error);
-            setup {}
-            body {
-                let __match = self.base.match_token_recovering(5, 177, atn())?;
-                __consumed_eof |= __match.consumed_eof();
-                for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
-                let __invoking_marker = self.base.push_invoking_state(177isize);
-                let __child = self.parse_generated_rule_4_dispatch(0, false).map_err(GeneratedRuleError::into_error);
-                self.base.discard_invoking_state(__invoking_marker);
-                let __child = __child?;
-                self.base.add_parse_child(&mut __ctx, __child);
-                let __match = self.base.match_token_recovering(7, 179, atn())?;
+                let __match = self.base.match_token_recovering(7, 174, atn())?;
                 __consumed_eof |= __match.consumed_eof();
                 for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
             }
@@ -4306,26 +4206,23 @@ where
     pub fn comment_or_nl(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(17)
     }
-    pub fn nl_or_comment(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+    pub fn table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(18)
     }
-    pub fn table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+    pub fn standard_table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(19)
     }
-    pub fn standard_table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+    pub fn inline_table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(20)
     }
-    pub fn inline_table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+    pub fn inline_table_keyvals(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(21)
     }
-    pub fn inline_table_keyvals(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
+    pub fn inline_table_keyvals_non_empty(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
         self.parse_rule(22)
     }
-    pub fn inline_table_keyvals_non_empty(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
-        self.parse_rule(23)
-    }
     pub fn array_table(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {
-        self.parse_rule(24)
+        self.parse_rule(23)
     }
 
 

@@ -66,12 +66,15 @@ fn decode_escape(
         'n' => decoded.push('\n'),
         'f' => decoded.push('\u{000c}'),
         'r' => decoded.push('\r'),
+        'e' => decoded.push('\u{001b}'),
+        'x' => decoded.push(decode_unicode_escape(chars, 2)?),
         'u' => decoded.push(decode_unicode_escape(chars, 4)?),
         'U' => decoded.push(decode_unicode_escape(chars, 8)?),
-        '\n' if multiline => trim_multiline_continuation(chars),
+        '\n' if multiline => trim_multiline_continuation(chars)?,
         '\r' if multiline && chars.next_if_eq(&'\n').is_some() => {
-            trim_multiline_continuation(chars);
+            trim_multiline_continuation(chars)?;
         }
+        ' ' | '\t' if multiline => decode_spaced_multiline_continuation(chars)?,
         other => {
             return Err(Error::invalid(format!(
                 "unsupported TOML escape sequence \\{other}"
@@ -97,11 +100,38 @@ fn decode_unicode_escape(
         .ok_or_else(|| Error::invalid(format!("invalid TOML Unicode scalar U+{value:04X}")))
 }
 
-fn trim_multiline_continuation(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
-    while chars
-        .next_if(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r'))
-        .is_some()
-    {}
+fn decode_spaced_multiline_continuation(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Result<(), Error> {
+    while chars.next_if(|ch| matches!(ch, ' ' | '\t')).is_some() {}
+    match chars.next() {
+        Some('\n') => trim_multiline_continuation(chars),
+        Some('\r') if chars.next_if_eq(&'\n').is_some() => trim_multiline_continuation(chars),
+        _ => Err(Error::invalid(
+            "multiline continuation whitespace must end with a newline",
+        )),
+    }
+}
+
+fn trim_multiline_continuation(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Result<(), Error> {
+    loop {
+        match chars.peek().copied() {
+            Some(' ' | '\t' | '\n') => {
+                chars.next();
+            }
+            Some('\r') => {
+                chars.next();
+                if chars.next_if_eq(&'\n').is_none() {
+                    return Err(Error::invalid(
+                        "bare carriage return in TOML multiline continuation",
+                    ));
+                }
+            }
+            _ => return Ok(()),
+        }
+    }
 }
 
 fn push_source_char(

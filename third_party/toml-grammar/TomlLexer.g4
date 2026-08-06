@@ -38,7 +38,7 @@ fragment DIGIT : [0-9];
 fragment ALPHA : [A-Za-z];
 
 // strings
-fragment ESC     : '\\' (["\\/bfnrt] | UNICODE | EX_UNICODE);
+fragment ESC     : '\\' (["\\/bfnrte] | 'x' HEX_DIGIT HEX_DIGIT | UNICODE | EX_UNICODE);
 fragment UNICODE : 'u' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT;
 fragment EX_UNICODE:
     'U' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT
@@ -60,11 +60,11 @@ ARRAY_START : L_BRACKET -> type(L_BRACKET), mode(ARRAY_MODE);
 BOOLEAN: ('true' | 'false') -> popMode;
 
 // strings
-fragment ML_ESC      : '\\' '\r'? '\n' | ESC;
+fragment ML_ESC      : '\\' [ \t]* '\r'? '\n' | ESC;
 VALUE_BASIC_STRING   : BASIC_STRING                    -> type(BASIC_STRING), popMode;
-ML_BASIC_STRING      : '"""' (ML_ESC | ~[\\])*? '"""' -> popMode;
+ML_BASIC_STRING      : '"""' (ML_ESC | ~[\\])*? ('"""""' | '""""' | '"""') -> popMode;
 VALUE_LITERAL_STRING : LITERAL_STRING                  -> type(LITERAL_STRING), popMode;
-ML_LITERAL_STRING    : '\'\'\'' (.)*? '\'\'\''         -> popMode;
+ML_LITERAL_STRING    : '\'\'\'' (.)*? ('\'\'\'\'\'' | '\'\'\'\'' | '\'\'\'') -> popMode;
 
 // floating point numbers
 fragment EXP                 : ('e' | 'E') [+-]? ZERO_PREFIXABLE_INT;
@@ -94,8 +94,8 @@ fragment MINUTE       : DIGIT DIGIT;
 fragment SECOND       : DIGIT DIGIT;
 fragment SECFRAC      : '.' DIGIT+;
 fragment NUMOFFSET    : ('+' | '-') HOUR ':' MINUTE;
-fragment OFFSET       : 'Z' | NUMOFFSET;
-fragment PARTIAL_TIME : HOUR ':' MINUTE ':' SECOND SECFRAC?;
+fragment OFFSET       : 'Z' | 'z' | NUMOFFSET;
+fragment PARTIAL_TIME : HOUR ':' MINUTE (':' SECOND SECFRAC?)?;
 fragment FULL_DATE    : YEAR '-' MONTH '-' DAY;
 fragment FULL_TIME    : PARTIAL_TIME OFFSET;
 OFFSET_DATE_TIME      : FULL_DATE DELIM FULL_TIME    -> popMode;
@@ -106,6 +106,8 @@ LOCAL_TIME            : PARTIAL_TIME                 -> popMode;
 mode INLINE_TABLE_MODE;
 
 INLINE_TABLE_WS      : WS    -> skip;
+INLINE_TABLE_NL      : NL    -> type(NL);
+INLINE_TABLE_COMMENT : COMMENT -> type(COMMENT);
 INLINE_TABLE_KEY_DOT : DOT   -> type(DOT);
 INLINE_TABLE_COMMA   : COMMA -> type(COMMA);
 R_BRACE              : '}'   -> popMode;

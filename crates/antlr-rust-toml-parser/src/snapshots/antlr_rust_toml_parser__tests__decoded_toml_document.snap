@@ -126,6 +126,97 @@ Document {
             Assignment {
                 key: Key {
                     segments: [
+                        "multiline_pair",
+                    ],
+                },
+                value: String(
+                    "a\"\"b",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc\"",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "basic_two_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc\"\"",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc'",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "literal_two_quote_tail",
+                    ],
+                },
+                value: String(
+                    "abc''",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "lowercase_utc",
+                    ],
+                },
+                value: DateTime(
+                    "1979-05-27T07:32:00z",
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "commented_array",
+                    ],
+                },
+                value: Array(
+                    [
+                        Integer(
+                            1,
+                        ),
+                        Integer(
+                            2,
+                        ),
+                    ],
+                ),
+            },
+        ),
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
                         "owner",
                         "name",
                     ],

@@ -1,0 +1,20 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: document
+---
+Document {
+    items: [
+        Assignment(
+            Assignment {
+                key: Key {
+                    segments: [
+                        "continued",
+                    ],
+                },
+                value: String(
+                    "abcdef",
+                ),
+            },
+        ),
+    ],
+}

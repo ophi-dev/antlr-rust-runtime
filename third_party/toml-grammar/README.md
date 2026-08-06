@@ -8,9 +8,14 @@ licensed under Apache-2.0; its upstream license and source notices are retained.
 Local corrections:
 
 - multiline basic strings permit raw single and paired quote characters while
-  the non-greedy lexer loop still terminates at the closing triple quote;
+  four- and five-quote terminal runs preserve their data quotes;
+- multiline continuations accept spaces and tabs before the newline;
 - comments reject TOML-forbidden C0 control characters and DEL while retaining
-  horizontal tab.
+  horizontal tab;
+- arrays accept comments and newlines between values and separators;
+- UTC offsets accept TOML's case-insensitive `Z` spelling;
+- TOML 1.1 optional seconds, multiline inline tables, and `\e` / `\xHH`
+  escapes are accepted.
 
 The smaller `benkonz/TOML-Grammar` candidate generated 309,019 bytes of Rust
 with version 0.30.0, versus 436,379 bytes for this grammar. It was not selected
@@ -29,6 +34,10 @@ tools/toml-syntax/update-generated.sh --check
 ```
 
 Regenerate them with `tools/toml-syntax/update-generated.sh --update`.
+
+The generated parser and value facade accept all 268 valid fixtures from
+`toml-lang/toml-test` commit
+`9eef1b959e0449d41a31d4e4e0a839faee534b36`.
 
 The baseline generator output is retained because the optional optimization
 passes do not reduce this recognizer: reachability pruning leaves the output

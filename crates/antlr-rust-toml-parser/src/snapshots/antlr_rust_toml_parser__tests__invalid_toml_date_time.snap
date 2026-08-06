@@ -1,0 +1,5 @@
+---
+source: crates/antlr-rust-toml-parser/src/lib.rs
+expression: error
+---
+invalid TOML: invalid TOML date-time "1979-13-40T25:61:61+01:99": invalid date, expected month between 01 and 12

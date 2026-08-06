@@ -34,6 +34,14 @@ enabled = true
 when = 1979-05-27T07:32:00Z
 values = [1, "two", false, { first = "a", second = 2 }]
 multiline = """call("x")"""
+multiline_pair = """a""b"""
+basic_quote_tail = """abc""""
+basic_two_quote_tail = """abc"""""
+literal_quote_tail = '''abc''''
+literal_two_quote_tail = '''abc'''''
+lowercase_utc = 1979-05-27T07:32:00z
+commented_array = [1 # first
+, 2]
 owner.name = "Ada"
 
 [standard.table]
@@ -87,5 +95,68 @@ name = "two"
             error.to_string().contains("token recognition error"),
             "unexpected diagnostic: {error}"
         );
+    }
+
+    #[test]
+    fn multiline_continuation_allows_pre_newline_whitespace() {
+        let document = parse("continued = \"\"\"abc\\   \n def\"\"\"\n")
+            .expect("continuation whitespace is valid TOML");
+
+        insta::assert_debug_snapshot!("multiline_continuation_whitespace", document);
+    }
+
+    #[test]
+    fn bare_carriage_return_after_continuation_is_rejected() {
+        let error = parse("value = \"\"\"abc\\\n\rdef\"\"\"\n")
+            .expect_err("a bare carriage return is not TOML whitespace");
+
+        insta::assert_snapshot!("invalid_multiline_continuation_cr", error);
+    }
+
+    #[test]
+    fn invalid_date_time_components_are_rejected() {
+        let error = parse("when = 1979-13-40T25:61:61+01:99\n")
+            .expect_err("date-time components must satisfy TOML ranges");
+
+        insta::assert_snapshot!("invalid_toml_date_time", error);
+
+        for value in [
+            "1979-02-30",
+            "1979-05-27T24:00:00Z",
+            "1979-05-27T23:60:00Z",
+            "1979-05-27T23:59:61Z",
+            "1979-05-27T23:59:59+01:99",
+        ] {
+            assert!(
+                parse(&format!("when = {value}\n")).is_err(),
+                "{value} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn toml_1_1_extensions_decode_through_the_generated_parser() {
+        let document = parse(concat!(
+            "\u{feff}",
+            r#"
+escaped = "\e\x41"
+local_time = 13:37
+offset_date_time = 1979-05-27 07:32z
+inline = {
+    key = 1,
+}
+"#
+        ))
+        .expect("TOML 1.1 extensions should parse");
+
+        insta::assert_debug_snapshot!("toml_1_1_extensions", document);
+    }
+
+    #[test]
+    fn interior_utf8_bom_is_rejected() {
+        let error = parse("first = 1\n\u{feff}second = 2\n")
+            .expect_err("UTF-8 BOM is valid only at the start");
+
+        insta::assert_snapshot!("invalid_interior_utf8_bom", error);
     }
 }

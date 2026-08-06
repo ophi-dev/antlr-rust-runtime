@@ -92,6 +92,12 @@ where
 }
 
 pub fn parse(input: &str) -> Result<Document, Error> {
+    let input = input.strip_prefix('\u{feff}').unwrap_or(input);
+    if input.contains('\u{feff}') {
+        return Err(Error::invalid(
+            "UTF-8 BOM is only permitted at the start of a TOML document",
+        ));
+    }
     let lexer_diagnostics = DiagnosticCollector::default();
     let lexer_listener = lexer_diagnostics.clone();
     let parser_diagnostics = DiagnosticCollector::default();
@@ -403,11 +409,15 @@ fn decode_float(context: &FloatingPointContext<'_, ValidatedTreeContext>) -> Res
 }
 
 fn decode_date_time(context: &DateTimeContext<'_, ValidatedTreeContext>) -> Result<String, Error> {
-    context
+    let value = context
         .offset_date_time_token()
         .or_else(|| context.local_date_time_token())
         .or_else(|| context.local_date_token())
         .or_else(|| context.local_time_token())
         .map(|token| token.to_string())
-        .ok_or_else(|| Error::invalid("TOML date-time has no date-time token"))
+        .ok_or_else(|| Error::invalid("TOML date-time has no date-time token"))?;
+    value
+        .parse::<toml_datetime::Datetime>()
+        .map_err(|error| Error::invalid(format!("invalid TOML date-time {value:?}: {error}")))?;
+    Ok(value)
 }
