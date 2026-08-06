@@ -92,6 +92,7 @@ name = "two"
         let error = parse("version = 1 # bad\u{0000}\n")
             .expect_err("TOML comments must reject forbidden control characters");
 
+        // A snapshot would embed the raw U+0000 diagnostic byte in the file.
         assert!(
             error.to_string().contains("token recognition error"),
             "unexpected diagnostic: {error}"
