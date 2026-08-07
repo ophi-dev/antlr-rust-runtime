@@ -128,14 +128,7 @@ pub(crate) fn render_generated_step(
         } => {
             writeln!(
                 out,
-                "{pad}let __match = self.base.match_token_recovering({token_type}, {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
-                .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}self.base.match_token_into({token_type}, {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
             )
             .expect("writing to a string cannot fail");
         }
@@ -147,24 +140,17 @@ pub(crate) fn render_generated_step(
             if let Some(token_set) = token_set {
                 writeln!(
                     out,
-                    "{pad}let __match = self.base.match_token_set_recovering(atn().token_set({token_set}).expect(\"generated parser token-set index\"), {follow_state}, atn())?;"
+                    "{pad}self.base.match_token_set_into(atn().token_set({token_set}).expect(\"generated parser token-set index\"), {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
                 )
                 .expect("writing to a string cannot fail");
             } else {
                 let intervals = render_i32_ranges(intervals);
                 writeln!(
                     out,
-                    "{pad}let __match = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
+                    "{pad}self.base.match_set_into(&{intervals}, {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
                 )
                 .expect("writing to a string cannot fail");
             }
-            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
-                .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
-            )
-            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchNotSet {
             token_set,
@@ -174,24 +160,17 @@ pub(crate) fn render_generated_step(
             if let Some(token_set) = token_set {
                 writeln!(
                     out,
-                    "{pad}let __match = self.base.match_not_token_set_recovering(atn().token_set({token_set}).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), {follow_state}, atn())?;"
+                    "{pad}self.base.match_not_token_set_into(atn().token_set({token_set}).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
                 )
                 .expect("writing to a string cannot fail");
             } else {
                 let intervals = render_i32_ranges(intervals);
                 writeln!(
                     out,
-                    "{pad}let __match = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
+                    "{pad}self.base.match_not_set_into(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
                 )
                 .expect("writing to a string cannot fail");
             }
-            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
-                .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
-            )
-            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchWildcard { follow_state } => {
             // A wildcard matches any single token. Model it as a not-set with an
@@ -201,14 +180,7 @@ pub(crate) fn render_generated_step(
             // aborting the remaining steps.
             writeln!(
                 out,
-                "{pad}let __match = self.base.match_not_set_recovering(&[], 1, atn().max_token_type(), {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
-                .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}self.base.match_not_set_into(&[], 1, atn().max_token_type(), {follow_state}, atn(), &mut __ctx, &mut __consumed_eof)?;"
             )
             .expect("writing to a string cannot fail");
         }
@@ -297,19 +269,27 @@ pub(crate) fn render_generated_step(
             rule_index,
             precedence,
         } => {
-            writeln!(
-                out,
-                "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
-            )
-            .expect("writing to a string cannot fail");
-            if let Some(embedded) = render_context.embedded {
-                if let Some(expression) = embedded.call_args.get(source_state) {
-                    writeln!(
-                        out,
-                        "{pad}self.__embedded_pending_arg = Some(i64::from({expression}));"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
+            let has_embedded_call_arg = render_context
+                .embedded
+                .and_then(|embedded| embedded.call_args.get(source_state))
+                .is_some();
+            if has_embedded_call_arg {
+                writeln!(
+                    out,
+                    "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
+                )
+                .expect("writing to a string cannot fail");
+                let expression = render_context
+                    .embedded
+                    .expect("has_embedded_call_arg guard ensures embedded is Some")
+                    .call_args
+                    .get(source_state)
+                    .expect("has_embedded_call_arg guard ensures call_arg exists");
+                writeln!(
+                    out,
+                    "{pad}self.__embedded_pending_arg = Some(i64::from({expression}));"
+                )
+                .expect("writing to a string cannot fail");
             }
             let precedence = match precedence {
                 GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
@@ -353,19 +333,8 @@ pub(crate) fn render_generated_step(
                 .copied()
                 .unwrap_or_default()
             {
-                // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
-                // The rule's `parse_generated_rule` dispatch arm is guarded by
-                // `generated_only() || has_rule_depth_cap() || has_parse_listeners()`:
-                // in the default configuration the generated probe returns `None`
-                // and the wrapper parses the child on the INTERPRETED path
-                // (preserving the ATN-preferred optimization); a configured depth
-                // cap or a registered parse listener flips it to the generated
-                // body, the only path that enforces the cap and fires events.
                 from_generated_call
             } else if probes_enclosing_candidate {
-                // The child is also a candidate for direct entry paths, but
-                // this call belongs to an enclosing wrapper candidate. Probe
-                // that wrapper and keep it as the sole retry boundary.
                 generated_child_call
             } else if let Some(slot) = render_context
                 .adaptive_atn_preferred_rule_slots
@@ -373,26 +342,31 @@ pub(crate) fn render_generated_step(
                 .copied()
                 .flatten()
             {
-                // Keep the direct generated call while prediction remains
-                // cheap. Once the warmed simulator crosses the cost threshold,
-                // enter through the wrapper so its guarded dispatch can select
-                // the interpreted rule without reordering buffered actions.
                 format!(
                     "if self.adaptive_atn_preferred_rules[{slot}] {{ {from_generated_call} }} else {{ self.parse_generated_rule_{rule_index}_adaptive_dispatch({precedence}, false, Some({source_state}isize)).map_err(GeneratedRuleError::into_error) }}"
                 )
             } else {
                 generated_child_call
             };
-            writeln!(out, "{pad}let __child = {child_call};")
+            if has_embedded_call_arg {
+                writeln!(out, "{pad}let __child = {child_call};")
+                    .expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}self.base.discard_invoking_state(__invoking_marker);"
+                )
                 .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}self.base.discard_invoking_state(__invoking_marker);"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
-            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                writeln!(out, "{pad}let __child = __child?;")
+                    .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                    .expect("writing to a string cannot fail");
+            } else {
+                writeln!(
+                    out,
+                    "{pad}antlr4_runtime::__antlr4_rust_invoke_subrule!(self, {source_state}isize, {child_call}, __ctx);"
+                )
                 .expect("writing to a string cannot fail");
+            }
         }
         GeneratedParserStep::Action {
             source_state,
