@@ -236,23 +236,23 @@ fn generated_lex_helpers_expose_hidden_and_custom_channels() {
     assert_generated_project(
         temp.path(),
         &["channels.rs"],
-        r##"
+        r####"
+// Inline snapshot is intentional: the temporary generated crate is deleted
+// after this test, so an external snapshot cannot be retained in the repository.
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod lex_helper_tests {
-    use super::channels::{
-        self, CHANNEL_COMMENTS, COMMENT, Channels, UNICODE, WORD, WS,
-    };
-    use antlr4_runtime::{
-        ByteStream, DEFAULT_CHANNEL, HIDDEN_CHANNEL, TOKEN_EOF, Token as _,
-    };
+    use super::channels::{self, Channels, WORD};
+    use antlr4_runtime::{ByteStream, Token as _};
 
     #[test]
     fn buffers_every_emitted_channel_without_a_parser() {
         let tokens = channels::lex("alpha ~\u{e9}#note", Channels::new);
+        let vocabulary = channels::metadata().vocabulary();
         let observed = tokens
             .tokens()
             .map(|token| (
-                token.token_type(),
+                vocabulary.display_name(token.token_type()),
                 token.channel(),
                 token.text_or_empty(),
                 token.byte_span(),
@@ -260,16 +260,58 @@ mod lex_helper_tests {
             ))
             .collect::<Vec<_>>();
 
-        assert_eq!(
-            &observed[..4],
-            [
-                (WORD, DEFAULT_CHANNEL, "alpha", Some(0..5), 0),
-                (WS, HIDDEN_CHANNEL, " ", Some(5..6), 5),
-                (UNICODE, DEFAULT_CHANNEL, "\u{e9}", Some(7..9), 7),
-                (COMMENT, CHANNEL_COMMENTS, "#note", Some(9..14), 8),
-            ]
+        insta::assert_debug_snapshot!(
+            observed,
+            @r###"
+        [
+            (
+                "WORD",
+                0,
+                "alpha",
+                Some(
+                    0..5,
+                ),
+                0,
+            ),
+            (
+                "WS",
+                1,
+                " ",
+                Some(
+                    5..6,
+                ),
+                5,
+            ),
+            (
+                "'\\u00E9'",
+                0,
+                "é",
+                Some(
+                    7..9,
+                ),
+                7,
+            ),
+            (
+                "COMMENT",
+                2,
+                "#note",
+                Some(
+                    9..14,
+                ),
+                8,
+            ),
+            (
+                "EOF",
+                0,
+                "<EOF>",
+                Some(
+                    14..14,
+                ),
+                13,
+            ),
+        ]
+        "###
         );
-        assert_eq!(observed[4].0, TOKEN_EOF);
         assert_eq!(tokens.number_of_source_errors(), 0);
     }
 
@@ -283,6 +325,6 @@ mod lex_helper_tests {
         assert_eq!(first.byte_span(), Some(0..4));
     }
 }
-"##,
+"####,
     );
 }
