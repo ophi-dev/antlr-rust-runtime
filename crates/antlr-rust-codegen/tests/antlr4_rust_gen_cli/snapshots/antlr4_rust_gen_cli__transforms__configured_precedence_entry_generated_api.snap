@@ -1,5 +1,6 @@
 ---
 source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
+assertion_line: 329
 expression: api
 ---
 [
@@ -177,6 +178,7 @@ expression: api
     "fn rule_names",
     "fn rule_node",
     "fn set_token_stream",
+    "fn shared_descent_stats",
     "fn star_start",
     "fn start",
     "fn sum",

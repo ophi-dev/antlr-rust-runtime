@@ -40,6 +40,8 @@ Options:
           Fail if any semantic coordinate or option is unsupported
       --fixed-lookahead <K>
           Compile decisions provable within K tokens into static dispatch tables
+      --shared-descent
+          Parse proven shared first-consuming rules once before tail dispatch
   -h, --help
           Print help
   -V, --version

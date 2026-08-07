@@ -345,6 +345,7 @@ fn embedded_render_slots(
 /// are part of the opt-in flag.
 fn decision_routing_render<'a>(
     classification: &'a ParserDecisionAnalysis,
+    shared_descent: &'a SharedDescentAnalysis,
     options: ParserRenderOptions<'_>,
 ) -> DecisionRoutingRender<'a> {
     DecisionRoutingRender {
@@ -356,6 +357,7 @@ fn decision_routing_render<'a>(
             .fixed_lookahead
             .is_some_and(|depth| depth >= 2)
             .then_some(&classification.fixed_lookahead_tables),
+        shared_descent_plans: options.shared_descent.then_some(&shared_descent.plans),
     }
 }
 
@@ -451,7 +453,6 @@ fn parser_action_routing(
         committed_indices,
     })
 }
-
 
 /// Renders stable authored parser-action coordinates for committed fallback.
 fn render_parser_action_index_array(action_indices: &[(usize, usize)]) -> String {

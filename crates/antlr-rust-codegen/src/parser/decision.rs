@@ -60,6 +60,7 @@ pub(crate) fn classify_decisions(
             rule_index: state.rule_index(),
             fallback: tier.fallback_capability(),
             tier,
+            shared_descent: Vec::new(),
         };
         // The tool never LL(1)-compiles non-greedy or left-recursion
         // precedence decisions, disjoint LOOK or not — Java always emits
@@ -350,6 +351,7 @@ pub(crate) struct DecisionReportRow {
     pub(crate) rule_index: Option<usize>,
     pub(crate) fallback: DecisionFallbackCapability,
     pub(crate) tier: DecisionTierReport,
+    pub(crate) shared_descent: Vec<SharedDescentGroupReport>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

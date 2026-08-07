@@ -59,6 +59,7 @@ pub struct Builder {
     generate_visitor: bool,
     action_mode: ActionMode,
     fixed_lookahead: Option<usize>,
+    shared_descent: bool,
     entry_rules: BTreeSet<String>,
     prune_unreachable: bool,
     optimize_precedence_ladders: bool,
@@ -81,6 +82,7 @@ impl Default for Builder {
             generate_visitor: false,
             action_mode: ActionMode::default(),
             fixed_lookahead: None,
+            shared_descent: false,
             entry_rules: BTreeSet::new(),
             prune_unreachable: false,
             optimize_precedence_ladders: false,
@@ -165,6 +167,11 @@ impl Builder {
         self
     }
 
+    pub const fn shared_descent(mut self, enabled: bool) -> Self {
+        self.shared_descent = enabled;
+        self
+    }
+
     pub fn entry_rule(mut self, name: impl Into<String>) -> Self {
         self.entry_rules.insert(name.into());
         self
@@ -236,6 +243,7 @@ impl Builder {
             generate_visitor: self.generate_visitor,
             embedded_actions: self.action_mode == ActionMode::Embedded,
             fixed_lookahead: self.fixed_lookahead,
+            shared_descent: self.shared_descent,
             entry_rules: self.entry_rules,
             prune_unreachable: self.prune_unreachable,
             optimize_precedence_ladders: self.optimize_precedence_ladders,

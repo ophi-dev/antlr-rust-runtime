@@ -65,22 +65,15 @@ pub(crate) fn render_generated_decision(
             "{pad}        __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
         )
         .expect("writing to a string cannot fail");
-        if let Some(dispatch) = complete_ll1_dispatch {
-            render_generated_complete_ll1_prediction(
-                out,
-                &format!("{pad}        "),
-                dispatch,
-                false,
-            );
-        } else {
-            render_generated_ll1_then_adaptive_prediction(
-                out,
-                &format!("{pad}        "),
-                state,
-                decision,
-                false,
-            );
-        }
+        render_generated_post_sync_prediction(
+            out,
+            &format!("{pad}        "),
+            state,
+            decision,
+            render_context,
+            complete_ll1_dispatch,
+            false,
+        );
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
         writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
     } else {
@@ -97,12 +90,17 @@ pub(crate) fn render_generated_decision(
             .is_some_and(|embedded| embedded.adaptive_decision(decision));
         if allow_semantic_context || force_context {
             render_generated_adaptive_prediction(out, &pad, decision);
-        } else if force_adaptive {
-            render_generated_two_stage_adaptive_assignment(out, &pad, decision);
-        } else if let Some(dispatch) = complete_ll1_dispatch {
-            render_generated_complete_ll1_prediction(out, &pad, dispatch, true);
         } else {
-            render_generated_ll1_then_adaptive_prediction(out, &pad, state, decision, true);
+            let _ = force_adaptive;
+            render_generated_post_sync_prediction(
+                out,
+                &pad,
+                state,
+                decision,
+                render_context,
+                complete_ll1_dispatch,
+                true,
+            );
         }
     }
     if allow_semantic_context {
@@ -221,6 +219,314 @@ fn render_generated_ll1_then_adaptive_prediction(
     writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
     render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 1);
     writeln!(out, "{pad}}}{suffix}").expect("writing to a string cannot fail");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_generated_post_sync_prediction(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    decision: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+    complete_ll1_dispatch: Option<&CompleteLl1Dispatch>,
+    assign: bool,
+) {
+    let plans = render_context
+        .decision_routing
+        .shared_descent_plans(decision);
+    if plans.is_empty() {
+        render_generated_post_sync_fallback(
+            out,
+            pad,
+            (state, decision),
+            render_context,
+            complete_ll1_dispatch,
+            assign,
+        );
+    } else {
+        render_generated_shared_descent_prediction(
+            out,
+            pad,
+            state,
+            decision,
+            plans,
+            render_context,
+            complete_ll1_dispatch,
+            assign,
+        );
+    }
+}
+
+fn render_generated_post_sync_fallback(
+    out: &mut String,
+    pad: &str,
+    decision: (usize, usize),
+    render_context: GeneratedStepRenderContext<'_>,
+    complete_ll1_dispatch: Option<&CompleteLl1Dispatch>,
+    assign: bool,
+) {
+    let (state, decision) = decision;
+    if render_context
+        .embedded
+        .is_some_and(|embedded| embedded.adaptive_decision(decision))
+    {
+        if assign {
+            render_generated_two_stage_adaptive_assignment(out, pad, decision);
+        } else {
+            render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 0);
+        }
+    } else if let Some(dispatch) = complete_ll1_dispatch {
+        render_generated_complete_ll1_prediction(out, pad, dispatch, assign);
+    } else {
+        render_generated_ll1_then_adaptive_prediction(out, pad, state, decision, assign);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_generated_shared_descent_prediction(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    decision: usize,
+    plans: &[SharedDescentPlan],
+    render_context: GeneratedStepRenderContext<'_>,
+    complete_ll1_dispatch: Option<&CompleteLl1Dispatch>,
+    assign: bool,
+) {
+    let prefix = if assign { "let __prediction = " } else { "" };
+    let suffix = if assign { ";" } else { "" };
+    writeln!(out, "{pad}{prefix}{{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __shared_descent_prediction = '__shared_descent_{decision}: {{"
+    )
+    .expect("writing to a string cannot fail");
+    for plan in plans {
+        render_shared_descent_attempt(out, &format!("{pad}        "), plan);
+    }
+    writeln!(out, "{pad}        break '__shared_descent_{decision} None;")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    if let Some(__shared_descent_prediction) = __shared_descent_prediction {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        __shared_descent_prediction")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }} else {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        self.base.record_shared_descent_adaptive_fallback();"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_post_sync_fallback(
+        out,
+        &format!("{pad}        "),
+        (state, decision),
+        render_context,
+        complete_ll1_dispatch,
+        false,
+    );
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}{suffix}").expect("writing to a string cannot fail");
+}
+
+fn render_shared_descent_attempt(out: &mut String, pad: &str, plan: &SharedDescentPlan) {
+    let prefix_checks = plan
+        .prefix_tokens
+        .iter()
+        .enumerate()
+        .map(|(index, token)| format!("self.base.la({}) == {token}", index + 1));
+    let trigger_patterns = render_i32_match_patterns(&plan.trigger_intervals);
+    let trigger_depth = plan.prefix_tokens.len() + 1;
+    let condition = prefix_checks
+        .chain(std::iter::once(format!(
+            "matches!(self.base.la({trigger_depth}), {trigger_patterns})"
+        )))
+        .collect::<Vec<_>>()
+        .join(" && ");
+    writeln!(out, "{pad}if {condition} {{").expect("writing to a string cannot fail");
+    let preview = render_shared_descent_preview(plan);
+    let transaction_pad = preview.as_ref().map_or_else(
+        || pad.to_owned(),
+        |preview| {
+            writeln!(
+                out,
+                "{pad}    let __shared_descent_preview_alt: Option<usize> = {preview};"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    if let Some(__shared_descent_preview_alt) = __shared_descent_preview_alt {{"
+            )
+            .expect("writing to a string cannot fail");
+            format!("{pad}    ")
+        },
+    );
+    writeln!(
+        out,
+        "{transaction_pad}    if let Some(__shared_descent_marker) = self.base.begin_shared_descent({}) {{",
+        plan.prefix_tokens.len()
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}        let __shared_invoking_marker = self.base.push_invoking_state({}isize);",
+        plan.call_site
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}        let __shared_descent_result = self.parse_generated_rule_{}_dispatch(0, false);",
+        plan.common_rule
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}        self.base.discard_invoking_state(__shared_invoking_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}        match __shared_descent_result {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}            Ok(__shared_descent_node) if self.base.shared_descent_parse_is_clean(&__shared_descent_marker) => {{"
+    )
+    .expect("writing to a string cannot fail");
+    let success_pad = format!("{transaction_pad}                ");
+    if preview.is_some() {
+        render_shared_descent_commit(out, &success_pad, plan, "__shared_descent_preview_alt");
+    } else {
+        writeln!(
+            out,
+            "{success_pad}let __shared_descent_tail = self.base.la(1);"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{success_pad}let __shared_descent_alt = match __shared_descent_tail {{"
+        )
+        .expect("writing to a string cannot fail");
+        render_shared_descent_tail_arms(out, &format!("{success_pad}    "), plan, false);
+        writeln!(out, "{success_pad}}};").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{success_pad}if let Some(__shared_descent_alt) = __shared_descent_alt {{"
+        )
+        .expect("writing to a string cannot fail");
+        render_shared_descent_commit(
+            out,
+            &format!("{success_pad}    "),
+            plan,
+            "__shared_descent_alt",
+        );
+        writeln!(out, "{success_pad}}}").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{success_pad}self.base.rollback_shared_descent(&__shared_descent_marker, false);"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{transaction_pad}            }}").expect("writing to a string cannot fail");
+    writeln!(out, "{transaction_pad}            _ => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{transaction_pad}                self.base.rollback_shared_descent(&__shared_descent_marker, true);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{transaction_pad}            }}").expect("writing to a string cannot fail");
+    writeln!(out, "{transaction_pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{transaction_pad}    }}").expect("writing to a string cannot fail");
+    if preview.is_some() {
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_shared_descent_preview(plan: &SharedDescentPlan) -> Option<String> {
+    let token_length = plan.common_token_length?;
+    let tail_depth = plan
+        .prefix_tokens
+        .len()
+        .checked_add(token_length)?
+        .checked_add(1)?;
+    let mut out = format!(
+        "{{ let __shared_descent_preview_tail = self.base.la({tail_depth}); match __shared_descent_preview_tail {{ "
+    );
+    render_shared_descent_tail_arms(&mut out, "", plan, true);
+    out.push_str("} }");
+    Some(out)
+}
+
+fn render_shared_descent_tail_arms(
+    out: &mut String,
+    pad: &str,
+    plan: &SharedDescentPlan,
+    preview: bool,
+) {
+    for tail in &plan.tails {
+        let patterns = render_i32_match_patterns(&tail.intervals);
+        if tail.guard_against_follow {
+            let tail_name = if preview {
+                "__shared_descent_preview_tail"
+            } else {
+                "__shared_descent_tail"
+            };
+            writeln!(
+                out,
+                "{pad}{patterns} if self.base.shared_descent_guard_allows(atn(), {tail_name}) => Some({}),",
+                tail.alt
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(out, "{pad}{patterns} => Some({}),", tail.alt)
+                .expect("writing to a string cannot fail");
+        }
+    }
+    if let Some(default_alt) = plan.default_alt {
+        let tail_name = if preview {
+            "__shared_descent_preview_tail"
+        } else {
+            "__shared_descent_tail"
+        };
+        let exclusion = if plan.default_excluded_intervals.is_empty() {
+            String::new()
+        } else {
+            let patterns = render_i32_match_patterns(&plan.default_excluded_intervals);
+            format!("!matches!({tail_name}, {patterns}) && ")
+        };
+        writeln!(
+            out,
+            "{pad}_ if {exclusion}self.base.shared_descent_follow_contains(atn(), {tail_name}) => Some({default_alt}),"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}_ => None,").expect("writing to a string cannot fail");
+}
+
+fn render_shared_descent_commit(out: &mut String, pad: &str, plan: &SharedDescentPlan, alt: &str) {
+    let call_sites = plan
+        .resume_call_sites
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    writeln!(
+        out,
+        "{pad}self.base.commit_shared_descent(&__shared_descent_marker, __shared_descent_node, {}, &[{call_sites}]);",
+        plan.common_rule
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}break '__shared_descent_{} Some(antlr4_runtime::ParserAtnPrediction {{ alt: {alt}, requires_full_context: false, has_semantic_context: false, diagnostic: None }});",
+        plan.decision
+    )
+    .expect("writing to a string cannot fail");
 }
 
 /// `--fixed-lookahead`: a static `la(1)..la(k)` dispatch trie whose hits

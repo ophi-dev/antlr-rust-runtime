@@ -175,6 +175,7 @@ pub(crate) fn generate(
                     sem_unknown,
                     patterns: Some(&args.sem_patterns),
                     fixed_lookahead: args.fixed_lookahead,
+                    shared_descent: args.shared_descent,
                 },
             )?;
             prepared_support.decorate_rendered_module(&mut module);
@@ -215,7 +216,11 @@ pub(crate) fn generate(
     artifacts.insert("semantics.json", manifest)?;
     artifacts.insert(
         "decisions.json",
-        render_decisions_manifest(args.fixed_lookahead, &decision_report_grammars),
+        render_decisions_manifest(
+            args.fixed_lookahead,
+            args.shared_descent,
+            &decision_report_grammars,
+        ),
     )?;
     if let Some(manifest) = optimization_manifest {
         artifacts.insert("optimizations.json", manifest)?;

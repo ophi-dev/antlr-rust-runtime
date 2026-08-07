@@ -202,6 +202,7 @@ pub(crate) struct DecisionRoutingRender<'a> {
     pub(crate) complete_ll1_dispatches: Option<&'a BTreeMap<usize, CompleteLl1Dispatch>>,
     pub(crate) ll1_dispatch_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
     pub(crate) fixed_lookahead_tables: Option<&'a BTreeMap<usize, FixedLookaheadTable>>,
+    pub(crate) shared_descent_plans: Option<&'a BTreeMap<usize, Vec<SharedDescentPlan>>>,
 }
 
 impl<'a> DecisionRoutingRender<'a> {
@@ -215,16 +216,33 @@ impl<'a> DecisionRoutingRender<'a> {
     /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
     /// switch through [`EmbeddedStepRender`]). Both are pre-restricted to
     /// sync-no-op lookahead and render through the same dispatch shape.
-    pub(crate) fn static_dispatch_table(
-        self,
-        decision: usize,
-    ) -> Option<&'a FixedLookaheadTable> {
+    pub(crate) fn static_dispatch_table(self, decision: usize) -> Option<&'a FixedLookaheadTable> {
         self.fixed_lookahead_tables
             .and_then(|tables| tables.get(&decision))
             .or_else(|| {
                 self.ll1_dispatch_tables
                     .and_then(|tables| tables.get(&decision))
             })
+    }
+
+    pub(crate) fn shared_descent_plans(self, decision: usize) -> &'a [SharedDescentPlan] {
+        self.shared_descent_plans
+            .and_then(|plans| plans.get(&decision))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn shared_descent_resume_call(self, rule_index: usize, source_state: usize) -> bool {
+        self.shared_descent_plans.is_some_and(|plans| {
+            plans.values().flatten().any(|plan| {
+                plan.common_rule == rule_index && plan.resume_call_sites.contains(&source_state)
+            })
+        })
+    }
+
+    pub(crate) fn has_shared_descent_plans(self) -> bool {
+        self.shared_descent_plans
+            .is_some_and(|plans| plans.values().any(|plans| !plans.is_empty()))
     }
 }
 
@@ -326,6 +344,9 @@ pub(crate) struct ParserRenderOptions<'a> {
     /// `--fixed-lookahead <k>`: compile decisions provable within `k`
     /// tokens of lookahead into static dispatch tables.
     pub(crate) fixed_lookahead: Option<usize>,
+    /// `--shared-descent`: parse proven common first-consuming rules once and
+    /// resume through the ordinary selected alternative.
+    pub(crate) shared_descent: bool,
 }
 
 impl Default for ParserRenderOptions<'_> {
@@ -338,6 +359,7 @@ impl Default for ParserRenderOptions<'_> {
             sem_unknown: SemUnknownPolicy::default(),
             patterns: None,
             fixed_lookahead: None,
+            shared_descent: false,
         }
     }
 }
@@ -709,11 +731,7 @@ pub(crate) fn parser_rule_callers_reaching(
         return graph_nodes_reaching(&graph, target_rules);
     }
     let atn = data.parser_atn();
-    atn_rule_callers_reaching(
-        atn,
-        target_rules,
-        data.rule_names.len(),
-    )
+    atn_rule_callers_reaching(atn, target_rules, data.rule_names.len())
 }
 
 pub(crate) fn atn_rule_callers_reaching(

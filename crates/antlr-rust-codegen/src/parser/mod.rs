@@ -19,6 +19,10 @@ mod decision {
     use super::*;
     include!("decision.rs");
 }
+mod shared_descent {
+    use super::*;
+    include!("shared_descent.rs");
+}
 mod ir {
     use super::*;
     include!("ir/mod.rs");
@@ -53,4 +57,5 @@ pub(crate) use decision::*;
 pub(crate) use ir::*;
 pub(crate) use render::*;
 pub(crate) use routing::*;
+pub(crate) use shared_descent::*;
 pub(crate) use surface::*;

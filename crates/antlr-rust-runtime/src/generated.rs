@@ -609,6 +609,11 @@ macro_rules! __antlr4_rust_parser_facade {
                 )
             }
 
+            #[must_use]
+            pub const fn shared_descent_stats(&self) -> $crate::parser::SharedDescentStats {
+                self.$base.shared_descent_stats()
+            }
+
             /// Clears this grammar's learned parser decision DFAs.
             pub fn clear_dfa(&mut self) {
                 if let ::core::option::Option::Some(simulator) = self.$simulator.as_mut() {

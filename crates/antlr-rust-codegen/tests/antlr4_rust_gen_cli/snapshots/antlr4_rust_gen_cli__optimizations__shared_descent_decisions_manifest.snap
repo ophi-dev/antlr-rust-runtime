@@ -1,0 +1,222 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/optimizations.rs
+expression: manifest
+---
+{
+  "version": 3,
+  "fixedLookahead": null,
+  "sharedDescent": true,
+  "grammars": [
+    {
+      "name": "SharedParser",
+      "summary": {
+        "total": 12,
+        "ll1": 5,
+        "fixed": 0,
+        "adaptive": 7
+      },
+      "decisions": [
+        {
+          "decision": 0,
+          "rule": "expression",
+          "state": 36,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1
+        },
+        {
+          "decision": 1,
+          "rule": "leftExpression",
+          "state": 50,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "precedence",
+          "probedLookahead": 0
+        },
+        {
+          "decision": 2,
+          "rule": "primary",
+          "state": 57,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 3,
+          "rule": "primary",
+          "state": 65,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 4,
+          "rule": "primary",
+          "state": 70,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 5,
+          "rule": "primary",
+          "state": 82,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1,
+          "sharedDescent": [
+            {
+              "rule": "processingMode",
+              "prefixTokens": [],
+              "alternatives": [
+                2,
+                3
+              ],
+              "status": "declined",
+              "reason": "no-tail-dispatch"
+            },
+            {
+              "rule": "qualifiedName",
+              "prefixTokens": [],
+              "alternatives": [
+                2,
+                3
+              ],
+              "status": "declined",
+              "reason": "no-safe-trigger"
+            },
+            {
+              "rule": "identifier",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "status": "selected"
+            }
+          ]
+        },
+        {
+          "decision": 6,
+          "rule": "qualifiedName",
+          "state": 91,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 7,
+          "rule": "prefixed",
+          "state": 106,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1,
+          "sharedDescent": [
+            {
+              "rule": "identifier",
+              "prefixTokens": [
+                9
+              ],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "selected"
+            }
+          ]
+        },
+        {
+          "decision": 8,
+          "rule": "wrapped",
+          "state": 118,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1,
+          "sharedDescent": [
+            {
+              "rule": "identifier",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "selected"
+            },
+            {
+              "rule": "wrapper",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "declined",
+              "reason": "no-tail-dispatch"
+            }
+          ]
+        },
+        {
+          "decision": 9,
+          "rule": "wrapper",
+          "state": 121,
+          "canDefer": false,
+          "tier": "ll1"
+        },
+        {
+          "decision": 10,
+          "rule": "failed",
+          "state": 131,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "not-disjoint",
+          "probedLookahead": 1,
+          "sharedDescent": [
+            {
+              "rule": "identifier",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "declined",
+              "reason": "no-tail-dispatch"
+            },
+            {
+              "rule": "pair",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "selected"
+            }
+          ]
+        },
+        {
+          "decision": 11,
+          "rule": "semantic",
+          "state": 146,
+          "canDefer": true,
+          "tier": "adaptive",
+          "reason": "predicate",
+          "probedLookahead": 1,
+          "sharedDescent": [
+            {
+              "rule": "identifier",
+              "prefixTokens": [],
+              "alternatives": [
+                1,
+                2
+              ],
+              "status": "declined",
+              "reason": "semantic-descent"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -29,6 +29,9 @@ pub(crate) struct CompilerConfig {
     /// Compile decisions whose alternatives are pairwise disjoint within this
     /// token depth into static dispatch tables.
     pub(crate) fixed_lookahead: Option<usize>,
+    /// Parse a proven common first-consuming rule once, then dispatch on its
+    /// continuation before resuming the ordinary generated alternative.
+    pub(crate) shared_descent: bool,
     /// Parser entry rules configured for reachability diagnostics and pruning.
     pub(crate) entry_rules: BTreeSet<String>,
     /// Remove parser rules unreachable from every inferred/configured entry.

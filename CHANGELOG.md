@@ -4,13 +4,20 @@
 
 ### Breaking Changes
 
+* Bump the generated/runtime API contract to revision 7 for the neutral-parse
+  transaction and resume methods used by opt-in shared-descent dispatch.
 * Move `antlr4-rust-gen` and the removed runtime `codegen` feature to the
   `antlr-rust-codegen` package. Install the binary from that package or add it
-  as a build dependency and use `Builder`; generated/runtime API revision 3 is
-  unchanged.
+  as a build dependency and use `Builder`; that package move did not itself
+  change generated/runtime API revision 3.
 * Replace `antlr4-rust-gen`'s handwritten argument parser with `clap` and remove
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
+
+### Features
+
+* Add opt-in `--shared-descent` parser dispatch with deterministic candidate
+  reporting, neutral-parse rollback/resume support, and runtime counters.
 
 ## [0.31.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.30.0...v0.31.0) (2026-08-06)
 

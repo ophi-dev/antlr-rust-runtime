@@ -133,6 +133,10 @@ struct CliArgs {
     )]
     fixed_lookahead: Option<u8>,
 
+    /// Parse proven shared first-consuming rules once before tail dispatch.
+    #[arg(long)]
+    shared_descent: bool,
+
     /// Declare a parser entry rule by bare name (repeatable).
     #[arg(long = "entry-rule", value_name = "NAME")]
     entry_rules: Vec<String>,
@@ -191,6 +195,7 @@ impl CliArgs {
             generate_visitor: self.visitor && !self.no_visitor,
             embedded_actions: self.actions == ActionMode::Embedded,
             fixed_lookahead: self.fixed_lookahead.map(usize::from),
+            shared_descent: self.shared_descent,
             entry_rules: self.entry_rules.into_iter().collect(),
             prune_unreachable: self.prune_unreachable,
             optimize_precedence_ladders: self.optimize_precedence_ladders,

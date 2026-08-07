@@ -575,9 +575,11 @@ fn run_main() -> Result<(), String> {{
         antlr4_runtime::dump_prediction_perf_counters();
     }}
     if collect_stats && phase == "parse" {{
-        let (context_stats, dfa_stats) = prediction_stats_once(&language, &src)?;
+        let (context_stats, dfa_stats, shared_descent_stats) =
+            prediction_stats_once(&language, &src)?;
         dump_prediction_context_stats(context_stats);
         dump_parser_dfa_stats(dfa_stats);
+        dump_shared_descent_stats(shared_descent_stats);
     }}
     Ok(())
 }}
@@ -662,7 +664,11 @@ fn tree_text(text: &str) -> String {{
 fn prediction_stats_once(
     language: &str,
     src: &str,
-) -> Result<(antlr4_runtime::PredictionContextStats, antlr4_runtime::ParserDfaStats), String> {{
+) -> Result<(
+    antlr4_runtime::PredictionContextStats,
+    antlr4_runtime::ParserDfaStats,
+    antlr4_runtime::SharedDescentStats,
+), String> {{
     let stats = match language {{
 {stats_arms}
         other => return Err(format!("unsupported language: {{other}}")),
@@ -732,6 +738,14 @@ fn dump_parser_dfa_stats(stats: antlr4_runtime::ParserDfaStats) {{
     eprintln!("perf dfa_store.states_deduplicated={{}}", stats.states_deduplicated);
     eprintln!("perf dfa_store.fingerprint_candidates={{}}", stats.fingerprint_candidates);
     eprintln!("perf dfa_store.fingerprint_collisions={{}}", stats.fingerprint_collisions);
+}}
+
+fn dump_shared_descent_stats(stats: antlr4_runtime::SharedDescentStats) {{
+    eprintln!("perf shared_descent.attempts={{}}", stats.attempts);
+    eprintln!("perf shared_descent.commits={{}}", stats.commits);
+    eprintln!("perf shared_descent.guarded_deferrals={{}}", stats.guarded_deferrals);
+    eprintln!("perf shared_descent.failed_neutral_parses={{}}", stats.failed_neutral_parses);
+    eprintln!("perf shared_descent.adaptive_fallbacks={{}}", stats.adaptive_fallbacks);
 }}
 """
     )
@@ -817,12 +831,20 @@ fn dump_tree_{spec.name}(src: &str, out: &mut dyn Write) -> Result<(), String> {
 
 fn prediction_stats_{spec.name}(
     src: &str,
-) -> Result<(antlr4_runtime::PredictionContextStats, antlr4_runtime::ParserDfaStats), antlr4_runtime::AntlrError> {{
+) -> Result<(
+    antlr4_runtime::PredictionContextStats,
+    antlr4_runtime::ParserDfaStats,
+    antlr4_runtime::SharedDescentStats,
+), antlr4_runtime::AntlrError> {{
     let lexer = {lexer};
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
     let tree = parser.{spec.rust_entry}()?;
-    let stats = (parser.prediction_context_stats(), parser.parser_dfa_stats());
+    let stats = (
+        parser.prediction_context_stats(),
+        parser.parser_dfa_stats(),
+        parser.shared_descent_stats(),
+    );
     black_box(&tree);
     Ok(stats)
 }}"""

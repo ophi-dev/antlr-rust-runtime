@@ -39,6 +39,19 @@ Or install the command:
 cargo install antlr-rust-codegen --bin antlr4-rust-gen
 ```
 
+## Parser decision optimizations
+
+`--fixed-lookahead K` emits static dispatch for decisions proven disjoint
+within `K` tokens. The separate `--shared-descent` flag parses a proven common
+first-consuming parser rule once and dispatches on its continuation before
+resuming the ordinary generated alternative. Both are opt-in and retain the
+existing adaptive path for every unproved or guarded case.
+
+The builder equivalents are `.fixed_lookahead(K)` and
+`.shared_descent(true)`. Every generation writes deterministic analysis to
+`decisions.json`; shared-descent candidates are recorded as selected or
+declined with a reason.
+
 ## Semantic pattern TOML
 
 `--sem-patterns FILE` is parsed by the lockstep

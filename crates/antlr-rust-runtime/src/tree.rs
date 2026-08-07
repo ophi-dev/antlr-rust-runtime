@@ -294,6 +294,18 @@ impl ParseTreeStorage {
         })
     }
 
+    pub(crate) fn set_rule_invoking_state(&mut self, node: NodeId, invoking_state: isize) {
+        let Some(kind) = self.kinds.get(node.index()) else {
+            return;
+        };
+        if *kind != NodeKind::Rule {
+            return;
+        }
+        self.payload_b[node.index()] = i32::try_from(invoking_state)
+            .expect("invoking state exceeds i32")
+            .cast_unsigned();
+    }
+
     fn push_node(&mut self, record: NodeRecord) -> NodeId {
         let id = NodeId(self.kinds.len_u32("parse-tree node pool"));
         self.kinds.push(record.kind);

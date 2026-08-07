@@ -110,6 +110,7 @@ pub(crate) struct DecisionReportGrammar {
 struct DecisionsManifest<'a> {
     version: u8,
     fixed_lookahead: Option<usize>,
+    shared_descent: bool,
     grammars: Vec<DecisionGrammarManifest<'a>>,
 }
 
@@ -137,6 +138,19 @@ struct DecisionRowManifest<'a> {
     can_defer: bool,
     #[serde(flatten)]
     tier: DecisionTierManifest,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    shared_descent: Vec<SharedDescentGroupManifest<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SharedDescentGroupManifest<'a> {
+    rule: Option<&'a str>,
+    prefix_tokens: &'a [i32],
+    alternatives: &'a [usize],
+    status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -173,7 +187,7 @@ impl DecisionSummaryManifest {
 }
 
 fn decision_row_manifest<'a>(
-    row: &DecisionReportRow,
+    row: &'a DecisionReportRow,
     rule_names: &'a [String],
 ) -> DecisionRowManifest<'a> {
     let tier = match row.tier {
@@ -196,6 +210,25 @@ fn decision_row_manifest<'a>(
         state: row.state,
         can_defer: row.fallback.can_defer(),
         tier,
+        shared_descent: row
+            .shared_descent
+            .iter()
+            .map(|group| {
+                let (status, reason) = match group.outcome {
+                    SharedDescentGroupOutcome::Selected => ("selected", None),
+                    SharedDescentGroupOutcome::Declined(reason) => {
+                        ("declined", Some(reason.manifest_name()))
+                    }
+                };
+                SharedDescentGroupManifest {
+                    rule: rule_names.get(group.common_rule).map(String::as_str),
+                    prefix_tokens: &group.prefix_tokens,
+                    alternatives: &group.alternatives,
+                    status,
+                    reason,
+                }
+            })
+            .collect(),
     }
 }
 
@@ -208,6 +241,7 @@ fn decision_row_manifest<'a>(
 /// order, and the classifier itself is pure.
 pub(crate) fn render_decisions_manifest(
     fixed_lookahead: Option<usize>,
+    shared_descent: bool,
     grammars: &[DecisionReportGrammar],
 ) -> String {
     let grammars = grammars
@@ -223,8 +257,9 @@ pub(crate) fn render_decisions_manifest(
         })
         .collect();
     to_pretty_json(&DecisionsManifest {
-        version: 2,
+        version: 3,
         fixed_lookahead,
+        shared_descent,
         grammars,
     })
 }

@@ -35,9 +35,8 @@ pub(crate) fn render_parser_with_decision_report(
     let surface_model = build_parser_surface_model(data, &type_name, grammar_name, options)?;
     let embedded_data = surface_model.embedded_bindings();
     let structural_surface = surface_model.structural_bindings();
-    let embedded_step_render = embedded_data
-        .map(|embedded| embedded_step_render(embedded, &decision_classification));
-    let decision_routing = decision_routing_render(&decision_classification, options);
+    let embedded_step_render =
+        embedded_data.map(|embedded| embedded_step_render(embedded, &decision_classification));
     let mut portable_local_data = if options.embedded {
         PortableLocalData::default()
     } else {
@@ -138,8 +137,39 @@ pub(crate) fn render_parser_with_decision_report(
             && !options.embedded,
     )?;
     let generated_rules = optimized_ir.rules();
-    let decision_report_rows =
+    let mut shared_descent_semantic_rules = predicate_coordinates
+        .iter()
+        .map(|(rule_index, _)| *rule_index)
+        .collect::<BTreeSet<_>>();
+    shared_descent_semantic_rules.extend(parameterized_rules.iter().copied());
+    shared_descent_semantic_rules.extend(action_states.iter().filter_map(|state| {
+        parser_atn
+            .state(*state)
+            .and_then(ParserAtnState::rule_index)
+    }));
+    if let Some(embedded) = embedded_step_render {
+        shared_descent_semantic_rules.extend(embedded.init_entry.keys().copied());
+        shared_descent_semantic_rules.extend(embedded.after.keys().copied());
+    }
+    let shared_descent_analysis = if options.shared_descent {
+        analyze_shared_descent(
+            parser_atn,
+            generated_rules,
+            &decision_classification.report_rows,
+            &shared_descent_semantic_rules,
+        )
+    } else {
+        SharedDescentAnalysis::default()
+    };
+    let mut decision_report_rows =
         rendered_decision_report_rows(&decision_classification.report_rows, generated_rules);
+    for row in &mut decision_report_rows {
+        if let Some(reports) = shared_descent_analysis.reports.get(&row.decision) {
+            row.shared_descent.clone_from(reports);
+        }
+    }
+    let decision_routing =
+        decision_routing_render(&decision_classification, &shared_descent_analysis, options);
     require_portable_local_rules_generated(
         generated_rules,
         &portable_local_data.required_generated_rules,
@@ -158,8 +188,7 @@ pub(crate) fn render_parser_with_decision_report(
         embedded_step_render.is_some(),
         portable_step_render.map(|portable| portable.required_generated_rules),
     );
-    let adaptive_atn_preferred_rule_count =
-        routing_plan.adaptive_atn_preferred_rule_count();
+    let adaptive_atn_preferred_rule_count = routing_plan.adaptive_atn_preferred_rule_count();
     let generated_rule_dispatch = render_routing_plan(
         &routing_plan,
         generated_rules,
@@ -280,10 +309,7 @@ pub(crate) fn render_parser_with_decision_report(
         action_method,
         typed_parser_constructor,
     };
-    Ok((
-        render_parser_module(&render_model),
-        decision_report_rows,
-    ))
+    Ok((render_parser_module(&render_model), decision_report_rows))
 }
 
 fn render_parser_module(model: &ParserRenderModel) -> String {

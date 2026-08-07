@@ -4704,6 +4704,7 @@ fn fixed_lookahead_manifest_reports_tiers() {
     let classification = classify_decisions(&data, Some(2));
     let manifest = render_decisions_manifest(
         Some(2),
+        false,
         &[DecisionReportGrammar {
             name: "T".to_owned(),
             rule_names: data.rule_names.clone(),
@@ -4715,9 +4716,9 @@ fn fixed_lookahead_manifest_reports_tiers() {
     // Flag-off and `--fixed-lookahead 1` emit different parsers (only
     // the latter compiles static LL(1) dispatch), so the manifest must
     // not conflate them: unset renders as null.
-    let flag_off = render_decisions_manifest(None, &[]);
+    let flag_off = render_decisions_manifest(None, false, &[]);
     assert!(flag_off.contains("\"fixedLookahead\": null"));
-    let depth_one = render_decisions_manifest(Some(1), &[]);
+    let depth_one = render_decisions_manifest(Some(1), false, &[]);
     assert!(depth_one.contains("\"fixedLookahead\": 1"));
 }
 
@@ -4787,6 +4788,7 @@ fn decision_manifest_reports_render_forced_adaptive_fallback() {
 
     let manifest = render_decisions_manifest(
         None,
+        false,
         &[DecisionReportGrammar {
             name: "T".to_owned(),
             rule_names: data.rule_names.clone(),

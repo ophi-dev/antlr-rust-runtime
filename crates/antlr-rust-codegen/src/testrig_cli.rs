@@ -128,6 +128,10 @@ struct CliArgs {
             .range(1..=i64::from(MAX_FIXED_LOOKAHEAD_FLAG))
     )]
     fixed_lookahead: Option<u8>,
+
+    /// Parse proven shared first-consuming rules once before tail dispatch.
+    #[arg(long)]
+    shared_descent: bool,
 }
 
 impl CliArgs {
@@ -160,6 +164,7 @@ impl CliArgs {
             generate_visitor: false,
             embedded_actions: self.actions == ActionMode::Embedded,
             fixed_lookahead: self.fixed_lookahead.map(usize::from),
+            shared_descent: self.shared_descent,
             entry_rules: BTreeSet::new(),
             prune_unreachable: false,
             optimize_precedence_ladders: false,

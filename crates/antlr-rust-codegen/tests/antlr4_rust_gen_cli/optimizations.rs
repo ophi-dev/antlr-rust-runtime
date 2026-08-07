@@ -37,6 +37,310 @@ fn adaptive_atn_routing_generated_path_compiles() {
     );
 }
 
+#[test]
+fn shared_descent_matches_baseline_for_valid_invalid_and_observed_parses() {
+    let temp = temporary_directory("shared-descent");
+    let fixtures =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/antlr4-rust-gen/shared-descent");
+    let out = temp.path().join("generated");
+
+    for (grammar, shared) in [("Baseline.g4", false), ("Shared.g4", true)] {
+        let grammar = fixtures.join(grammar);
+        let mut args = vec![
+            grammar.as_os_str(),
+            OsStr::new("--actions"),
+            OsStr::new("embedded"),
+            OsStr::new("--require-generated-parser"),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ];
+        if shared {
+            args.push(OsStr::new("--shared-descent"));
+        }
+        let output = run_antlr4_rust_gen(&args);
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+    }
+
+    let manifest =
+        fs::read_to_string(out.join("decisions.json")).expect("manifest should be emitted");
+    assert!(manifest.contains("\"status\": \"selected\""));
+    assert!(manifest.contains("\"reason\": \"semantic-descent\""));
+    insta::assert_snapshot!("shared_descent_decisions_manifest", manifest);
+
+    let baseline_parser =
+        fs::read_to_string(out.join("baseline_parser.rs")).expect("baseline parser should exist");
+    let shared_parser =
+        fs::read_to_string(out.join("shared_parser.rs")).expect("shared parser should exist");
+    assert!(!baseline_parser.contains("begin_shared_descent("));
+    assert!(!baseline_parser.contains("take_shared_descent_resume("));
+    assert!(shared_parser.contains("begin_shared_descent("));
+    assert!(shared_parser.contains("take_shared_descent_resume("));
+
+    assert_generated_project(
+        temp.path(),
+        &[
+            "baseline_lexer.rs",
+            "baseline_parser.rs",
+            "shared_lexer.rs",
+            "shared_parser.rs",
+        ],
+        r##"
+#[cfg(test)]
+mod shared_descent_tests {
+    use std::sync::{Arc, Mutex};
+
+    use antlr4_runtime::{
+        AntlrError, CommonTokenStream, ErrorListener, InputStream, IntStream as _, Node,
+        NodeKind, ParseListener, Parser as _, Recognizer, SharedDescentStats, SyntaxErrorEvent,
+    };
+
+    #[derive(Clone, Copy, Debug)]
+    enum Entry {
+        Start,
+        LeftStart,
+        Prefixed,
+        Wrapped,
+        Failed,
+        Semantic,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct Diagnostic {
+        line: usize,
+        column: usize,
+        message: String,
+        offending: Option<String>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct DiagnosticListener {
+        events: Arc<Mutex<Vec<Diagnostic>>>,
+    }
+
+    impl<R> ErrorListener<R> for DiagnosticListener
+    where
+        R: Recognizer + ?Sized,
+    {
+        fn syntax_error(&mut self, _recognizer: &R, event: &SyntaxErrorEvent<'_>) {
+            self.events.lock().expect("diagnostic lock").push(Diagnostic {
+                line: event.line,
+                column: event.column,
+                message: event.message.to_owned(),
+                offending: event
+                    .offending
+                    .and_then(|token| token.text().map(str::to_owned)),
+            });
+        }
+    }
+
+    struct TraceListener {
+        events: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl ParseListener for TraceListener {
+        fn enter_every_rule(
+            &mut self,
+            event: &antlr4_runtime::EnterRuleEvent<'_>,
+        ) -> Result<(), AntlrError> {
+            self.events
+                .lock()
+                .expect("trace lock")
+                .push(format!("enter:{}", event.rule_index));
+            Ok(())
+        }
+
+        fn exit_every_rule(&mut self, rule_index: usize) {
+            self.events
+                .lock()
+                .expect("trace lock")
+                .push(format!("exit:{rule_index}"));
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct Outcome {
+        status: String,
+        syntax_errors: usize,
+        token_index: usize,
+        diagnostics: Vec<Diagnostic>,
+        trace: Vec<String>,
+        tree: Option<String>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct Run {
+        outcome: Outcome,
+        stats: SharedDescentStats,
+    }
+
+    fn lisp(node: Node<'_>, names: &[&str], out: &mut String) {
+        match node.kind() {
+            NodeKind::Rule => {
+                let rule = node.as_rule().expect("rule node");
+                out.push('(');
+                out.push_str(names.get(rule.rule_index()).copied().unwrap_or("?"));
+                for child in rule.children() {
+                    out.push(' ');
+                    lisp(child, names, out);
+                }
+                out.push(')');
+            }
+            NodeKind::Terminal => {
+                out.push_str(&node.as_terminal().expect("terminal node").text());
+            }
+            NodeKind::Error => {
+                out.push_str("<error:");
+                out.push_str(&node.as_error().expect("error node").text());
+                out.push('>');
+            }
+        }
+    }
+
+    macro_rules! define_runner {
+        ($name:ident, $lexer_mod:ident, $lexer:ident, $parser_mod:ident, $parser:ident) => {
+            fn $name(input: &str, entry: Entry, observed: bool) -> Run {
+                let lexer = super::$lexer_mod::$lexer::new(InputStream::new(input));
+                let mut parser =
+                    super::$parser_mod::$parser::new(CommonTokenStream::new(lexer));
+                parser.remove_error_listeners();
+                let diagnostics = Arc::new(Mutex::new(Vec::new()));
+                parser.add_error_listener(DiagnosticListener {
+                    events: Arc::clone(&diagnostics),
+                });
+                let trace = Arc::new(Mutex::new(Vec::new()));
+                if observed {
+                    parser.add_parse_listener(TraceListener {
+                        events: Arc::clone(&trace),
+                    });
+                }
+                let result = match entry {
+                    Entry::Start => parser.start(),
+                    Entry::LeftStart => parser.left_start(),
+                    Entry::Prefixed => parser.prefixed(),
+                    Entry::Wrapped => parser.wrapped(),
+                    Entry::Failed => parser.failed(),
+                    Entry::Semantic => parser.semantic(),
+                };
+                let syntax_errors = parser.number_of_syntax_errors();
+                let token_index = parser.token_stream_mut().index();
+                let tree = result.as_ref().ok().map(|root| {
+                    let mut out = String::new();
+                    lisp(
+                        parser.node(*root),
+                        super::$parser_mod::rule_names(),
+                        &mut out,
+                    );
+                    out
+                });
+                Run {
+                    outcome: Outcome {
+                        status: result
+                            .as_ref()
+                            .map(|_| "ok".to_owned())
+                            .unwrap_or_else(|error| format!("error:{error:?}")),
+                        syntax_errors,
+                        token_index,
+                        diagnostics: diagnostics.lock().expect("diagnostic lock").clone(),
+                        trace: trace.lock().expect("trace lock").clone(),
+                        tree,
+                    },
+                    stats: parser.shared_descent_stats(),
+                }
+            }
+        };
+    }
+
+    define_runner!(
+        run_baseline,
+        baseline_lexer,
+        BaselineLexer,
+        baseline_parser,
+        BaselineParser
+    );
+    define_runner!(
+        run_shared,
+        shared_lexer,
+        SharedLexer,
+        shared_parser,
+        SharedParser
+    );
+
+    #[test]
+    fn differential_corpus() {
+        let cases = [
+            (Entry::Start, "foo"),
+            (Entry::Start, "kw"),
+            (Entry::Start, "foo over"),
+            (Entry::Start, "foo -> bar"),
+            (Entry::Start, "foo 'x'"),
+            (Entry::Start, "foo(*)"),
+            (Entry::Start, "foo()"),
+            (Entry::Start, "distinct foo()"),
+            (Entry::Start, "foo.bar()"),
+            (Entry::Start, "foo + bar"),
+            (Entry::Start, "foo("),
+            (Entry::Start, "foo ->"),
+            (Entry::Start, "foo +"),
+            (Entry::LeftStart, "foo + bar"),
+            (Entry::LeftStart, "foo +"),
+            (Entry::Prefixed, "@ foo :"),
+            (Entry::Prefixed, "@ foo ;"),
+            (Entry::Prefixed, "@ foo ?"),
+            (Entry::Wrapped, "foo :"),
+            (Entry::Wrapped, "foo ;"),
+            (Entry::Wrapped, "# foo :"),
+            (Entry::Wrapped, "# ?"),
+            (Entry::Failed, "foo ! :"),
+            (Entry::Failed, "foo ! ;"),
+            (Entry::Failed, "foo ?"),
+            (Entry::Failed, "foo ? :"),
+            (Entry::Semantic, "foo :"),
+            (Entry::Semantic, "foo ;"),
+        ];
+        for (entry, input) in cases {
+            let baseline = run_baseline(input, entry, false);
+            let shared = run_shared(input, entry, false);
+            assert_eq!(
+                shared.outcome, baseline.outcome,
+                "shared descent changed {entry:?} for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn counters_and_observer_fallbacks_are_explicit() {
+        let direct = run_shared("foo", Entry::Start, false);
+        assert!(direct.stats.attempts > 0);
+        assert!(direct.stats.commits > 0);
+
+        let collision = run_shared("foo()", Entry::Start, false);
+        assert!(collision.stats.adaptive_fallbacks > 0);
+
+        let wrapped = run_shared("foo :", Entry::Wrapped, false);
+        assert!(wrapped.stats.commits > 0);
+
+        let failed = run_shared("foo ? :", Entry::Failed, false);
+        assert!(failed.stats.failed_neutral_parses > 0);
+
+        let baseline_observed = run_baseline("foo over", Entry::Start, true);
+        let shared_observed = run_shared("foo over", Entry::Start, true);
+        assert_eq!(shared_observed.outcome, baseline_observed.outcome);
+        assert_eq!(shared_observed.stats.attempts, 0);
+        assert!(shared_observed.stats.adaptive_fallbacks > 0);
+
+        let semantic = run_shared("foo :", Entry::Semantic, false);
+        assert_eq!(semantic.stats.attempts, 0);
+    }
+}
+"##,
+    );
+}
+
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 #[test]
 fn complete_ll1_recovery_matches_java_without_adaptive_fallback() {

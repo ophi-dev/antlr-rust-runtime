@@ -1,5 +1,6 @@
 ---
 source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
+assertion_line: 61
 expression: generated_parser_api(&parser)
 ---
 [
@@ -89,6 +90,7 @@ expression: generated_parser_api(&parser)
     "fn rule_node",
     "fn script",
     "fn set_token_stream",
+    "fn shared_descent_stats",
     "fn start",
     "fn symbol",
     "fn text",

@@ -156,6 +156,11 @@ pub(crate) fn render_routing_plan(
     let atn_preferred_rule_calls = &plan.atn_preferred_rule_calls;
     let adaptive_atn_preferred_rule_slots = &plan.adaptive_atn_preferred_rule_slots;
     let adaptive_atn_probe_rule_slots = &plan.adaptive_atn_probe_rule_slots;
+    let shared_resume_guard = if decision_routing.has_shared_descent_plans() {
+        " || self.base.shared_descent_resume_active()"
+    } else {
+        ""
+    };
     writeln!(
         out,
         "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
@@ -177,7 +182,7 @@ pub(crate) fn render_routing_plan(
             // coverage beat the long-call-chain optimization.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners(){shared_resume_guard} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
         } else if let Some(slot) = adaptive_atn_preferred_rule_slots
@@ -192,7 +197,7 @@ pub(crate) fn render_routing_plan(
             // parsing, still override the adaptive ATN preference.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions(){shared_resume_guard} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -280,7 +285,7 @@ pub(crate) fn render_routing_plan(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() {{\n            \
+                "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions(){shared_resume_guard} {{\n            \
                  return self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
                  }}\n        \
                  let __adaptive_outermost = self.adaptive_atn_preference_depths[{slot}] == 0;\n        \

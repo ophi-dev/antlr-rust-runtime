@@ -1,10 +1,12 @@
 ---
 source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/optimizations.rs
+assertion_line: 375
 expression: manifest
 ---
 {
-  "version": 2,
+  "version": 3,
   "fixedLookahead": null,
+  "sharedDescent": false,
   "grammars": [
     {
       "name": "TParser",

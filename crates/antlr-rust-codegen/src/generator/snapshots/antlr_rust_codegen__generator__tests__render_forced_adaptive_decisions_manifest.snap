@@ -3,8 +3,9 @@ source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: manifest
 ---
 {
-  "version": 2,
+  "version": 3,
   "fixedLookahead": null,
+  "sharedDescent": false,
   "grammars": [
     {
       "name": "T",

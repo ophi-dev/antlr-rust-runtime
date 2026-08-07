@@ -170,10 +170,10 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 6, which moves generated parser
-rule lifecycle and recovery scaffolding behind a runtime support macro. The
-runtime also accepts revisions 1 through 5 because their older generated
-recognizers use API surfaces that remain available.
+The bundled generator currently emits revision 7, which adds the neutral-parse
+transaction and resume APIs used by opt-in shared-descent dispatch. The runtime
+also accepts revisions 1 through 6 because their older generated recognizers
+use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,
@@ -851,7 +851,7 @@ Python compatibility is intentionally pinned to the imports and filesystem
 operations used by those two transforms. Other or future sibling scripts must
 be evaluated explicitly before they are considered supported.
 
-### Decision Tiers and `--fixed-lookahead`
+### Decision Tiers, Fixed Lookahead, and Shared Descent
 
 ANTLR always generates an adaptive `ALL(*)` recognizer: every decision point
 carries prediction machinery and a learned DFA cache, even when one token of
@@ -864,10 +864,11 @@ Every generation writes a **`decisions.json`** manifest next to
 `semantics.json` reporting the tier of each decision — `ll1`, `fixed`
 (see below), or `adaptive` with the reason it needs the simulator
 (`non-greedy`, `precedence`, `predicate`, `empty-look`, `not-disjoint`,
-`budget-exceeded`, `sync-bound`). Manifest version 2 also reports
+`budget-exceeded`, `sync-bound`). Manifest version 3 also reports
 `canDefer`: complete LL(1) dispatches are `false`, while partial fixed
 tables and adaptive decisions are `true`, so the report agrees with whether
-the emitted path can reach adaptive prediction:
+the emitted path can reach adaptive prediction. Its top-level
+`sharedDescent` boolean records whether that separate opt-in analysis ran:
 
 ```json
 {"decision": 4, "rule": "namespace_", "state": 113, "canDefer": true, "tier": "fixed", "lookahead": 2}
@@ -892,6 +893,35 @@ last (`namespace_`) fixed-LL(2) — with `--fixed-lookahead 2` the whole
 parser runs prediction-free. Rego adds two fixed-LL(2) tables (`regoElse`,
 and `object_`'s trailing-comma list loop) over 27 LL(1) decisions, with the
 10 genuinely ambiguous decisions staying adaptive.
+
+The independent opt-in **`--shared-descent`** flag targets residual adaptive
+decisions whose alternatives reach the same parser rule as their first
+consuming rule invocation. The analyzer works from ATN structure, not grammar
+or rule names. It supports a common fixed token prefix, nullable wrapper
+chains, conditional pre-rule branches guarded by their head tokens, and
+left-recursive callers. It declines common rules or descent chains with
+actions, predicates, parameterized calls, left-recursive common rules, or
+context-sensitive adaptive decisions.
+
+On a proven trigger, generated code parses the common rule once in a neutral
+transaction, inspects the following token, and resumes through the selected
+ordinary alternative at that rule's natural call site. Direct tail arms must
+be unique. Nullable boundary commits consult the real generated rule stack;
+collisions, nested resume attempts, registered parse listeners, rule-depth
+caps, semantic decision hooks, failed neutral parses, and every unproved token
+fall through to the existing sync plus adaptive-prediction body. Rollback
+restores input, tree storage, diagnostics, syntax-error count, parser state,
+recovery state, and resume state.
+
+`decisions.json` adds a `sharedDescent` array to decisions with candidates.
+Each deterministic group names its common rule, token prefix, alternatives,
+and `selected` or `declined` status with a reason. Generated parsers expose
+`shared_descent_stats()` for attempts, commits, guarded deferrals, failed
+neutral parses, and adaptive fallbacks. The feature is off by default:
+
+```bash
+antlr4-rust-gen Grammar.g4 --shared-descent --out-dir src/generated
+```
 
 ### Unreachable parser rules
 

@@ -248,6 +248,7 @@ macro_rules! __antlr4_rust_generated_rule {
                 Ok(__tree)
             }
             Err(__error) => {
+                $parser.base.abort_shared_descent_resume();
                 $crate::__antlr4_rust_generated_rule! {
                     @retry
                     [$($retry)*]
@@ -1534,6 +1535,13 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// configuration, and every dispatch site is gated on emptiness so the
     /// unused feature costs one predictable branch per rule boundary.
     parse_listeners: Vec<ParseListenerSlot>,
+    /// Detached common-rule node retained while a shared-descent dispatch
+    /// re-enters the selected ordinary alternative.
+    shared_descent_resume: Option<SharedDescentResume>,
+    /// Suppresses generated parse-listener callbacks during a neutral common
+    /// rule parse. Error diagnostics remain buffered and are rolled back.
+    shared_descent_neutral: bool,
+    shared_descent_stats: SharedDescentStats,
     /// Sticky abort requested by a parse listener's `enter_every_rule`.
     /// Mirrors `rule_depth_error`: rule-level recovery absorbs the error like
     /// any rule failure, so the flag stays set until the top-level entry
@@ -1666,6 +1674,42 @@ pub struct GeneratedDiagnosticsCheckpoint {
     diagnostics_len: usize,
     syntax_errors: usize,
     tree: ParseTreeCheckpoint,
+}
+
+/// Counters for the opt-in generated shared-descent tier.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SharedDescentStats {
+    pub attempts: usize,
+    pub commits: usize,
+    pub guarded_deferrals: usize,
+    pub failed_neutral_parses: usize,
+    pub adaptive_fallbacks: usize,
+}
+
+#[derive(Debug)]
+struct SharedDescentResume {
+    node: NodeId,
+    rule_index: usize,
+    tail_index: usize,
+    call_sites: &'static [usize],
+}
+
+/// Opaque rollback marker for one generated neutral common-rule parse.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct SharedDescentCheckpoint {
+    input_index: usize,
+    parser_state: isize,
+    diagnostics: GeneratedDiagnosticsCheckpoint,
+    rule_context_len: usize,
+    rule_context_version: usize,
+    pending_invoking_states_len: usize,
+    precedence_stack_len: usize,
+    recursion_expansions: usize,
+    recursion_expansion_marks_len: usize,
+    invoked_predicates_len: usize,
+    unknown_predicate_hits_len: usize,
+    unhandled_action_hits_len: usize,
 }
 
 /// Storage and reachability counters for the most recent interpreted-rule
@@ -5228,6 +5272,9 @@ where
             invoked_predicates: Vec::new(),
             bail_on_error: false,
             parse_listeners: Vec::new(),
+            shared_descent_resume: None,
+            shared_descent_neutral: false,
+            shared_descent_stats: SharedDescentStats::default(),
             parse_listener_abort: None,
             max_rule_depth: None,
             rule_depth_error: None,
@@ -5292,6 +5339,9 @@ where
         self.decision_override_generation = 0;
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
+        self.shared_descent_resume = None;
+        self.shared_descent_neutral = false;
+        self.shared_descent_stats = SharedDescentStats::default();
         self.parse_listener_abort = None;
         self.rule_depth_error = None;
         self.recursion_expansions = 0;
@@ -5447,6 +5497,211 @@ where
             syntax_errors: self.syntax_errors,
             tree: self.tree.checkpoint(),
         }
+    }
+
+    /// Starts one neutral shared-descent common-rule parse.
+    ///
+    /// Returns `None` when parser features whose observable behavior cannot be
+    /// replayed are active, or when another neutral/resume transaction is
+    /// already in flight.
+    #[doc(hidden)]
+    pub fn begin_shared_descent(&mut self, prefix_len: usize) -> Option<SharedDescentCheckpoint> {
+        if self.shared_descent_neutral
+            || self.shared_descent_resume.is_some()
+            || self.has_parse_listeners()
+            || self.has_rule_depth_cap()
+            || self.observes_parser_decisions()
+            || self.syntax_errors != 0
+            || self.generated_sync_expected.is_some()
+            || self.generated_recovery_error_index.is_some()
+            || !self.generated_recovery_error_states.is_empty()
+        {
+            return None;
+        }
+        let checkpoint = SharedDescentCheckpoint {
+            input_index: self.input.index(),
+            parser_state: self.data.state(),
+            diagnostics: self.generated_diagnostics_checkpoint(),
+            rule_context_len: self.rule_context_stack.len(),
+            rule_context_version: self.rule_context_version,
+            pending_invoking_states_len: self.pending_invoking_states.len(),
+            precedence_stack_len: self.precedence_stack.len(),
+            recursion_expansions: self.recursion_expansions,
+            recursion_expansion_marks_len: self.recursion_expansion_marks.len(),
+            invoked_predicates_len: self.invoked_predicates.len(),
+            unknown_predicate_hits_len: self.unknown_predicate_hits.len(),
+            unhandled_action_hits_len: self.unhandled_action_hits.len(),
+        };
+        for _ in 0..prefix_len {
+            IntStream::consume(&mut self.input);
+        }
+        self.shared_descent_neutral = true;
+        self.shared_descent_stats.attempts = self.shared_descent_stats.attempts.saturating_add(1);
+        Some(checkpoint)
+    }
+
+    /// Reports whether a neutral parse completed without recovery or semantic
+    /// accountability side effects.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn shared_descent_parse_is_clean(&self, marker: &SharedDescentCheckpoint) -> bool {
+        self.syntax_errors == marker.diagnostics.syntax_errors
+            && self.generated_parser_diagnostics.len() == marker.diagnostics.diagnostics_len
+            && self.unknown_predicate_hits.len() == marker.unknown_predicate_hits_len
+            && self.unhandled_action_hits.len() == marker.unhandled_action_hits_len
+            && self.parse_listener_abort.is_none()
+            && self.rule_depth_error.is_none()
+    }
+
+    /// Rolls a failed or unselected neutral parse back completely.
+    #[doc(hidden)]
+    pub fn rollback_shared_descent(
+        &mut self,
+        marker: &SharedDescentCheckpoint,
+        failed_neutral_parse: bool,
+    ) {
+        self.restore_generated_diagnostics(marker.diagnostics);
+        self.reset_generated_recovery_state();
+        self.restore_shared_descent_execution(marker);
+        if failed_neutral_parse {
+            self.shared_descent_stats.failed_neutral_parses = self
+                .shared_descent_stats
+                .failed_neutral_parses
+                .saturating_add(1);
+        }
+    }
+
+    /// Retains a clean neutral node and rewinds into ordinary alternative
+    /// execution. The natural call site later consumes the node through
+    /// [`Self::take_shared_descent_resume`].
+    #[doc(hidden)]
+    pub fn commit_shared_descent(
+        &mut self,
+        marker: &SharedDescentCheckpoint,
+        node: NodeId,
+        rule_index: usize,
+        call_sites: &'static [usize],
+    ) {
+        let tail_index = self.input.index();
+        debug_assert_eq!(self.rule_context_stack.len(), marker.rule_context_len);
+        debug_assert_eq!(
+            self.pending_invoking_states.len(),
+            marker.pending_invoking_states_len
+        );
+        debug_assert_eq!(self.precedence_stack.len(), marker.precedence_stack_len);
+        debug_assert_eq!(self.recursion_expansions, marker.recursion_expansions);
+        debug_assert_eq!(
+            self.recursion_expansion_marks.len(),
+            marker.recursion_expansion_marks_len
+        );
+        debug_assert_eq!(self.invoked_predicates.len(), marker.invoked_predicates_len);
+        self.input.seek(marker.input_index);
+        self.data.set_state(marker.parser_state);
+        self.rule_context_version = marker.rule_context_version;
+        self.shared_descent_neutral = false;
+        self.shared_descent_resume = Some(SharedDescentResume {
+            node,
+            rule_index,
+            tail_index,
+            call_sites,
+        });
+        self.shared_descent_stats.commits = self.shared_descent_stats.commits.saturating_add(1);
+    }
+
+    fn restore_shared_descent_execution(&mut self, marker: &SharedDescentCheckpoint) {
+        self.input.seek(marker.input_index);
+        self.data.set_state(marker.parser_state);
+        self.rule_context_stack.truncate(marker.rule_context_len);
+        self.rule_context_version = marker.rule_context_version;
+        self.pending_invoking_states
+            .truncate(marker.pending_invoking_states_len);
+        self.precedence_stack.truncate(marker.precedence_stack_len);
+        self.recursion_expansions = marker.recursion_expansions;
+        self.recursion_expansion_marks
+            .truncate(marker.recursion_expansion_marks_len);
+        self.invoked_predicates
+            .truncate(marker.invoked_predicates_len);
+        self.unknown_predicate_hits
+            .truncate(marker.unknown_predicate_hits_len);
+        self.unhandled_action_hits
+            .truncate(marker.unhandled_action_hits_len);
+        self.shared_descent_neutral = false;
+    }
+
+    /// Takes the retained node at its natural generated call site.
+    #[doc(hidden)]
+    pub fn take_shared_descent_resume(
+        &mut self,
+        rule_index: usize,
+        call_site: usize,
+    ) -> Option<NodeId> {
+        let resume = self.shared_descent_resume.as_ref()?;
+        if resume.rule_index != rule_index || !resume.call_sites.contains(&call_site) {
+            return None;
+        }
+        let resume = self
+            .shared_descent_resume
+            .take()
+            .expect("shared-descent resume checked above");
+        self.tree.set_rule_invoking_state(
+            resume.node,
+            isize::try_from(call_site).expect("parser ATN state fits isize"),
+        );
+        self.input.seek(resume.tail_index);
+        Some(resume.node)
+    }
+
+    /// Clears a resume transaction that unwound before reaching its target.
+    #[doc(hidden)]
+    pub fn abort_shared_descent_resume(&mut self) {
+        if let Some(resume) = self.shared_descent_resume.take() {
+            self.input.seek(resume.tail_index);
+        }
+    }
+
+    /// Reports whether ordinary generated re-descent is carrying a retained
+    /// common-rule node.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn shared_descent_resume_active(&self) -> bool {
+        self.shared_descent_resume.is_some()
+    }
+
+    /// Records that a decision with shared-descent candidates used its
+    /// ordinary adaptive path.
+    #[doc(hidden)]
+    pub const fn record_shared_descent_adaptive_fallback(&mut self) {
+        self.shared_descent_stats.adaptive_fallbacks = self
+            .shared_descent_stats
+            .adaptive_fallbacks
+            .saturating_add(1);
+    }
+
+    /// Checks the current real rule stack for a nullable-member boundary.
+    #[doc(hidden)]
+    pub fn shared_descent_follow_contains(&mut self, atn: &Atn, symbol: i32) -> bool {
+        self.context_expected_contains(atn, symbol)
+    }
+
+    /// Returns whether an explicit tail arm may commit, counting a collision
+    /// as a guarded deferral.
+    #[doc(hidden)]
+    pub fn shared_descent_guard_allows(&mut self, atn: &Atn, symbol: i32) -> bool {
+        if self.context_expected_contains(atn, symbol) {
+            self.shared_descent_stats.guarded_deferrals = self
+                .shared_descent_stats
+                .guarded_deferrals
+                .saturating_add(1);
+            false
+        } else {
+            true
+        }
+    }
+
+    /// Returns counters for the current parse.
+    #[must_use]
+    pub const fn shared_descent_stats(&self) -> SharedDescentStats {
+        self.shared_descent_stats
     }
 
     /// Restores generated-parser diagnostics after a speculative rule path failed.
@@ -6382,7 +6637,7 @@ where
     /// the returned error, so the flag holds until the top-level entry drains
     /// it via [`Self::take_parse_listener_abort`] and fails the parse.
     pub fn parse_listener_enter_rule(&mut self, rule_index: usize) -> Option<AntlrError> {
-        if self.parse_listeners.is_empty() {
+        if self.shared_descent_neutral || self.parse_listeners.is_empty() {
             return None;
         }
         self.parse_listener_enter_rule_dispatch(rule_index)
@@ -6422,7 +6677,7 @@ where
     /// left-recursive loop calls it once per operator expansion when the rule
     /// finishes unrolling.
     pub fn parse_listener_exit_rule(&mut self, rule_index: usize) {
-        if self.parse_listeners.is_empty() {
+        if self.shared_descent_neutral || self.parse_listeners.is_empty() {
             return;
         }
         // Reverse registration order, matching upstream ANTLR

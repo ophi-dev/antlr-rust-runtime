@@ -253,6 +253,7 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
                 "remove_parse_listeners",
                 "reset",
                 "set_token_stream",
+                "shared_descent_stats",
                 "token_store",
                 "token_stream",
                 "token_stream_mut",

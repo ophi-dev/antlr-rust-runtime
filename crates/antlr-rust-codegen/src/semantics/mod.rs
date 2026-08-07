@@ -1,7 +1,8 @@
 use crate::generator::prelude::*;
 use crate::parser::{
     DecisionReportRow, DecisionTierReport, LexerTypedHookKind, LexerTypedHookMapping,
-    ParserTypedHookKind, TypedHookMapping, build_structural_portable_local_data,
+    ParserTypedHookKind, SharedDescentGroupOutcome, TypedHookMapping,
+    build_structural_portable_local_data,
 };
 use crate::structural::{
     structural_actions, structural_embedded_model, structural_line_column, structural_predicates,

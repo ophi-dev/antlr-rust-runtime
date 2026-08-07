@@ -297,20 +297,6 @@ pub(crate) fn render_generated_step(
             rule_index,
             precedence,
         } => {
-            writeln!(
-                out,
-                "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
-            )
-            .expect("writing to a string cannot fail");
-            if let Some(embedded) = render_context.embedded {
-                if let Some(expression) = embedded.call_args.get(source_state) {
-                    writeln!(
-                        out,
-                        "{pad}self.__embedded_pending_arg = Some(i64::from({expression}));"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-            }
             let precedence = match precedence {
                 GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
                 GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
@@ -383,13 +369,64 @@ pub(crate) fn render_generated_step(
             } else {
                 generated_child_call
             };
-            writeln!(out, "{pad}let __child = {child_call};")
+            if render_context
+                .decision_routing
+                .shared_descent_resume_call(*rule_index, *source_state)
+            {
+                writeln!(
+                    out,
+                    "{pad}let __child = if let Some(__resumed_child) = self.base.take_shared_descent_resume({rule_index}, {source_state}) {{"
+                )
                 .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}self.base.discard_invoking_state(__invoking_marker);"
-            )
-            .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}    Ok(__resumed_child)")
+                    .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}    let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
+                )
+                .expect("writing to a string cannot fail");
+                if let Some(embedded) = render_context.embedded {
+                    if let Some(expression) = embedded.call_args.get(source_state) {
+                        writeln!(
+                            out,
+                            "{pad}    self.__embedded_pending_arg = Some(i64::from({expression}));"
+                        )
+                        .expect("writing to a string cannot fail");
+                    }
+                }
+                writeln!(out, "{pad}    let __child = {child_call};")
+                    .expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}    self.base.discard_invoking_state(__invoking_marker);"
+                )
+                .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}    __child").expect("writing to a string cannot fail");
+                writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+            } else {
+                writeln!(
+                    out,
+                    "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
+                )
+                .expect("writing to a string cannot fail");
+                if let Some(embedded) = render_context.embedded {
+                    if let Some(expression) = embedded.call_args.get(source_state) {
+                        writeln!(
+                            out,
+                            "{pad}self.__embedded_pending_arg = Some(i64::from({expression}));"
+                        )
+                        .expect("writing to a string cannot fail");
+                    }
+                }
+                writeln!(out, "{pad}let __child = {child_call};")
+                    .expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}self.base.discard_invoking_state(__invoking_marker);"
+                )
+                .expect("writing to a string cannot fail");
+            }
             writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
