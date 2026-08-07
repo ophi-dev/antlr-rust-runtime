@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-rs-parser/src/lib.rs
+assertion_line: 2434
+expression: "(syntax.pattern_binding_cfg_predicate(occurrence(body, \"Alias\", 0)),\nsyntax.pattern_binding_cfg_predicate(occurrence(body, \"Same\", 0)),)"
+---
+(
+    Some(
+        "all(feature = \"outer\", feature = \"inner\")",
+    ),
+    Some(
+        "any()",
+    ),
+)
