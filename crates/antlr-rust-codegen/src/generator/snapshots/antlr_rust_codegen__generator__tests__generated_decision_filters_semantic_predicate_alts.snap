@@ -1,6 +1,5 @@
 ---
-source: crates/antlr-rust-codegen/src/generator.rs
-assertion_line: 20500
+source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: rendered
 ---
 let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
@@ -77,9 +76,7 @@ match __prediction.alt {
             }
             return Err(self.base.failed_predicate_error("semantic predicate"));
         }
-        let __match = self.base.match_token_recovering(1, 2, atn())?;
-        __consumed_eof |= __match.consumed_eof();
-        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+        self.base.match_token_into(1, 2, atn(), &mut __ctx, &mut __consumed_eof)?;
     }
     2 => {
         if !self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 1, &__ctx, __precedence) {
@@ -88,14 +85,10 @@ match __prediction.alt {
             }
             return Err(self.base.failed_predicate_error("semantic predicate"));
         }
-        let __match = self.base.match_token_recovering(1, 3, atn())?;
-        __consumed_eof |= __match.consumed_eof();
-        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+        self.base.match_token_into(1, 3, atn(), &mut __ctx, &mut __consumed_eof)?;
     }
     3 => {
-        let __match = self.base.match_token_recovering(2, 4, atn())?;
-        __consumed_eof |= __match.consumed_eof();
-        for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+        self.base.match_token_into(2, 4, atn(), &mut __ctx, &mut __consumed_eof)?;
     }
     _ => return Err(self.base.no_viable_alternative_error(__decision_start)),
 }

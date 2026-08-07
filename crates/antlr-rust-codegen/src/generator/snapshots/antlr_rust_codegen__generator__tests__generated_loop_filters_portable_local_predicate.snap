@@ -1,19 +1,10 @@
 ---
-source: crates/antlr-rust-codegen/src/generator.rs
-assertion_line: 20764
+source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: rendered
 ---
 let mut __loop_iter_1 = false;
 loop {
-    match self.base.sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1) {
-        Ok(__sync_children) => {
-            for __child in __sync_children { self.base.add_parse_child(&mut __ctx, __child); }
-        }
-        Err(__error) => {
-            __sync_error = Some(__error.clone());
-            return Err(__error);
-        }
-    }
+    self.base.sync_into(atn(), 1, &mut __ctx, __loop_iter_1, &mut __sync_error)?;
     let __decision_start = antlr4_runtime::IntStream::index(self.base.input());
     let __prediction = {
         let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
@@ -42,9 +33,7 @@ loop {
             if !(__antlr_local_seen) {
                 return Err(self.base.failed_predicate_error("semantic predicate"));
             }
-            let __match = self.base.match_token_recovering(3, 4, atn())?;
-            __consumed_eof |= __match.consumed_eof();
-            for __child in __match.into_child_iter() { self.base.add_parse_child(&mut __ctx, __child); }
+            self.base.match_token_into(3, 4, atn(), &mut __ctx, &mut __consumed_eof)?;
         }
         2 => {
             break;

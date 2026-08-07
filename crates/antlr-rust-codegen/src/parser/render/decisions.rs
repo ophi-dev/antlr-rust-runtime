@@ -704,22 +704,9 @@ fn render_generated_alt_number_assignments(
 fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize, loop_back_expr: &str) {
     writeln!(
         out,
-        "{pad}match self.base.sync_decision(atn(), {state}, !__ctx.has_matched_child(), {loop_back_expr}) {{"
+        "{pad}self.base.sync_into(atn(), {state}, &mut __ctx, {loop_back_expr}, &mut __sync_error)?;"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    Ok(__sync_children) => {{").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        for __child in __sync_children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    Err(__error) => {{").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        __sync_error = Some(__error.clone());")
-        .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        return Err(__error);").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
 fn render_generated_adaptive_prediction(out: &mut String, pad: &str, decision: usize) {

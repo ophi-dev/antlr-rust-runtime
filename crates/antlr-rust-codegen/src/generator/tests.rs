@@ -458,7 +458,7 @@ fn compiles_linear_parser_rule_body() {
     assert_eq!(body.steps, [mt(1, 2), mt(TOKEN_EOF, 3)]);
 
     let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
-    assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
+    assert!(rendered.contains("match_token_into(1, 2, atn(), &mut __ctx, &mut __consumed_eof)?"));
     assert!(rendered.contains("antlr4_runtime::__antlr4_rust_generated_rule!"));
     assert!(!rendered.contains("generated_diagnostics_checkpoint()"));
     assert!(!rendered.contains("recover_generated_rule("));
@@ -515,7 +515,7 @@ fn compiles_block_decision_with_adaptive_prediction() {
     let rendered =
         render_generated_rule_dispatch(&[Some(body.clone())], &[], &BTreeMap::new(), false);
     assert!(rendered.contains("parse_generated_rule_0"));
-    assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"));
+    assert!(rendered.contains("sync_into(atn(), 1, &mut __ctx, false, &mut __sync_error)?"));
     assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
     // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
     // stage 2 re-runs with the real context only when full context is needed.
@@ -546,7 +546,7 @@ fn compiles_star_loop_with_adaptive_prediction() {
     // (single-token deletion), so the iteration flag inits to `false`.
     assert!(rendered.contains("let mut __loop_iter_1 = false;"));
     assert!(
-        rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1)")
+        rendered.contains("sync_into(atn(), 1, &mut __ctx, __loop_iter_1, &mut __sync_error)?")
     );
     assert!(rendered.contains("__loop_iter_1 = true;"));
     assert!(rendered.contains("1 => {"));
@@ -574,7 +574,7 @@ fn compiles_plus_loop_back_with_adaptive_prediction() {
     // `consumeUntil`, matching ANTLR's PLUS_LOOP_BACK.
     assert!(rendered.contains("let mut __loop_iter_4 = true;"));
     assert!(
-        rendered.contains("sync_decision(atn(), 4, !__ctx.has_matched_child(), __loop_iter_4)")
+        rendered.contains("sync_into(atn(), 4, &mut __ctx, __loop_iter_4, &mut __sync_error)?")
     );
 }
 
@@ -3056,10 +3056,10 @@ fn generated_rule_sync_policy_uses_shared_lifecycle_contract() {
 fn call_rule_step_skips_child_action_scaffolding_without_parser_actions() {
     let rendered = render_call_rule_step(&[true, true], &[false, false], &[]);
 
-    assert!(rendered.contains("let __child = self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error);"));
-    assert!(rendered.contains("self.base.discard_invoking_state(__invoking_marker);"));
-    assert!(rendered.contains("let __child = __child?;"));
-    assert!(rendered.contains("self.base.add_parse_child(&mut __ctx, __child);"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_invoke_subrule!(self, "));
+    assert!(rendered.contains(
+        "self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error)"
+    ));
     assert!(!rendered.contains("__child_action_marker"));
     assert!(!rendered.contains("__child_member_checkpoint"));
     assert!(!rendered.contains(&format!(
@@ -3089,9 +3089,8 @@ fn renders_wildcard_match_through_recovering_path() {
     // Recovering not-set over 1..=max with an empty exclusion = "any token",
     // threading the wildcard's follow state for EOF-insertion follow checks.
     assert!(
-        rendered.contains("match_not_set_recovering(&[], 1, atn().max_token_type(), 7, atn())")
+        rendered.contains("match_not_set_into(&[], 1, atn().max_token_type(), 7, atn(), &mut __ctx, &mut __consumed_eof)?")
     );
-    assert!(rendered.contains("__consumed_eof |= __match.consumed_eof();"));
     // The old non-recovering call must be gone.
     assert!(!rendered.contains("self.base.match_wildcard()"));
 }
@@ -3109,7 +3108,7 @@ fn renders_packed_token_sets_for_generated_matches_and_lookahead() {
     let rendered = render_generated_rule_dispatch(&[Some(rule)], &[], &BTreeMap::new(), false);
 
     assert!(rendered.contains(
-            "match_token_set_recovering(atn().token_set(4).expect(\"generated parser token-set index\"), 7, atn())"
+            "match_token_set_into(atn().token_set(4).expect(\"generated parser token-set index\"), 7, atn(), &mut __ctx, &mut __consumed_eof)?"
         ));
     assert_eq!(
         leading_lookahead_condition(&[step], "__la"),
@@ -3129,7 +3128,7 @@ fn renders_packed_token_sets_for_generated_matches_and_lookahead() {
     let rendered = render_generated_rule_dispatch(&[Some(not_rule)], &[], &BTreeMap::new(), false);
 
     assert!(rendered.contains(
-            "match_not_token_set_recovering(atn().token_set(5).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), 8, atn())"
+            "match_not_token_set_into(atn().token_set(5).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), 8, atn(), &mut __ctx, &mut __consumed_eof)?"
         ));
     assert_eq!(
             leading_lookahead_condition(&[not_step], "__la"),
@@ -4825,8 +4824,8 @@ fn fixed_lookahead_dispatch_commits_bare_and_syncs_on_miss() {
     let method_start = rendered[..dispatch_start]
         .rfind("fn parse_generated_rule_")
         .expect("dispatch is inside a generated rule method");
-    assert!(!rendered[method_start..dispatch_start].contains("sync_decision"));
-    assert!(rendered[dispatch_start..].contains("sync_decision"));
+    assert!(!rendered[method_start..dispatch_start].contains("sync_into"));
+    assert!(rendered[dispatch_start..].contains("sync_into"));
     assert!(
         !rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"),
         "the complete LL(1) loop must not emit an adaptive miss path"

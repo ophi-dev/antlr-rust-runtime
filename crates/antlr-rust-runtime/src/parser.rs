@@ -299,6 +299,33 @@ macro_rules! __antlr4_rust_generated_rule {
     };
 }
 
+/// Pushes invoking state, evaluates a subrule call, discards the marker on
+/// both success and error paths, propagates the error, and appends the child.
+///
+/// Replaces the 5-line generated motif:
+/// ```ignore
+/// let __invoking_marker = self.base.push_invoking_state(STATE);
+/// let __child = CALL;
+/// self.base.discard_invoking_state(__invoking_marker);
+/// let __child = __child?;
+/// self.base.add_parse_child(&mut __ctx, __child);
+/// ```
+///
+/// The macro is necessary because the child call borrows `self` (the generated
+/// parser), which contains `base`, so the push/discard cannot be a single
+/// method call on `BaseParser`.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __antlr4_rust_invoke_subrule {
+    ($parser:ident, $state:expr, $call:expr, $ctx:ident) => {{
+        let __invoking_marker = $parser.base.push_invoking_state($state);
+        let __child = $call;
+        $parser.base.discard_invoking_state(__invoking_marker);
+        let __child = __child?;
+        $parser.base.add_parse_child(&mut $ctx, __child);
+    }};
+}
+
 /// Receives committed rule enter/exit events during recognition, matching
 /// ANTLR's `addParseListener` contract ([`Parser::add_parse_listener`],
 /// also inherent on [`BaseParser`] and generated parsers).
@@ -6542,6 +6569,149 @@ where
         } else {
             context.note_matched_child();
         }
+    }
+
+    /// Combined sync-decision + child-append + sync-error capture.
+    ///
+    /// Replaces the 9-line generated sync-decision motif with a single call.
+    /// On success, appends any sync children to the context. On error, stores
+    /// the error in `sync_error` and returns `Err` for the caller to propagate.
+    #[inline]
+    pub fn sync_into(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        context: &mut ParserRuleContext,
+        loop_back: bool,
+        sync_error: &mut Option<AntlrError>,
+    ) -> Result<(), AntlrError> {
+        let current_context_empty = !context.has_matched_child();
+        match self.sync_decision(atn, state_number, current_context_empty, loop_back) {
+            Ok(children) => {
+                for child in children {
+                    self.add_parse_child(context, child);
+                }
+                Ok(())
+            }
+            Err(error) => {
+                *sync_error = Some(error.clone());
+                Err(error)
+            }
+        }
+    }
+
+    /// Combined token-match + EOF accounting + child append.
+    ///
+    /// Replaces the 3-line generated token-match motif with a single call.
+    #[inline]
+    pub fn match_token_into(
+        &mut self,
+        token_type: i32,
+        follow_state: usize,
+        atn: &Atn,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let m = self.match_token_recovering(token_type, follow_state, atn)?;
+        *consumed_eof |= m.consumed_eof();
+        for child in m.into_child_iter() {
+            self.add_parse_child(context, child);
+        }
+        Ok(())
+    }
+
+    /// Combined set-match + EOF accounting + child append (ATN token-set
+    /// variant).
+    #[inline]
+    pub fn match_token_set_into(
+        &mut self,
+        token_set: ParserIntervalSet<'_>,
+        follow_state: usize,
+        atn: &Atn,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let m = self.match_token_set_recovering(token_set, follow_state, atn)?;
+        *consumed_eof |= m.consumed_eof();
+        for child in m.into_child_iter() {
+            self.add_parse_child(context, child);
+        }
+        Ok(())
+    }
+
+    /// Combined set-match + EOF accounting + child append (inline intervals
+    /// variant).
+    #[inline]
+    pub fn match_set_into(
+        &mut self,
+        intervals: &[(i32, i32)],
+        follow_state: usize,
+        atn: &Atn,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let m = self.match_set_recovering(intervals, follow_state, atn)?;
+        *consumed_eof |= m.consumed_eof();
+        for child in m.into_child_iter() {
+            self.add_parse_child(context, child);
+        }
+        Ok(())
+    }
+
+    /// Combined not-set-match + EOF accounting + child append (ATN token-set
+    /// complement variant).
+    #[allow(clippy::too_many_arguments)]
+    #[inline]
+    pub fn match_not_token_set_into(
+        &mut self,
+        token_set: ParserIntervalSet<'_>,
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+        follow_state: usize,
+        atn: &Atn,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let m = self.match_not_token_set_recovering(
+            token_set,
+            min_vocabulary,
+            max_vocabulary,
+            follow_state,
+            atn,
+        )?;
+        *consumed_eof |= m.consumed_eof();
+        for child in m.into_child_iter() {
+            self.add_parse_child(context, child);
+        }
+        Ok(())
+    }
+
+    /// Combined not-set-match + EOF accounting + child append (inline intervals
+    /// complement variant).
+    #[allow(clippy::too_many_arguments)]
+    #[inline]
+    pub fn match_not_set_into(
+        &mut self,
+        intervals: &[(i32, i32)],
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+        follow_state: usize,
+        atn: &Atn,
+        context: &mut ParserRuleContext,
+        consumed_eof: &mut bool,
+    ) -> Result<(), AntlrError> {
+        let m = self.match_not_set_recovering(
+            intervals,
+            min_vocabulary,
+            max_vocabulary,
+            follow_state,
+            atn,
+        )?;
+        *consumed_eof |= m.consumed_eof();
+        for child in m.into_child_iter() {
+            self.add_parse_child(context, child);
+        }
+        Ok(())
     }
 
     fn release_tree_scratch_if_idle(&mut self) {
