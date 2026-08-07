@@ -349,9 +349,8 @@ fn __write_invocation_states(
         });
         let _ = writeln!(
             out,
-            "#[allow(dead_code, private_bounds, clippy::all)]\nimpl<'a, State: __RecoveryContextState> {view_name}<'a, State> {{\n{recovered}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a, ValidatedTreeContext> {{\n{validated}}}\n{compatibility_impl}",
-            recovered = rendered_accessors.recovered,
-            validated = rendered_accessors.validated,
+            "antlr4_runtime::__antlr4_rust_context_accessors! {{\n    {view_name} {{\n{declarations}    }}\n}}\n{compatibility_impl}",
+            declarations = rendered_accessors.declarations,
             compatibility_impl = compatibility_impl.unwrap_or_default(),
         );
         let validation_body = if rendered_accessors.validation.is_empty() {

@@ -2,41 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"NestedGroupContext\")"
 ---
-
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("NestedGroupContext", "NUM"))
-    }
-    pub fn deep(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 13)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> NestedGroupContext<'a, ValidatedTreeContext> {
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 14).next() else {
-            unreachable!("validated NestedGroupContext is missing required child NUM")
-        };
-        TerminalNode::new(node)
-    }
-    pub fn deep(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 13)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        token ident_token: optional(13),
+        token num_token: required(14, "NUM"),
+        label_token deep: optional(nth(0), [13]),

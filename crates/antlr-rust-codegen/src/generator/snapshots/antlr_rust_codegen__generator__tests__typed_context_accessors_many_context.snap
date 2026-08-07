@@ -2,33 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: many_context
 ---
-
-    pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 1).map(TerminalNode::new)
-    }
-    pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
-        __rule_children(self.__node, 2)
-            .skip(0)
-            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> ManyLabelContext<'a, ValidatedTreeContext> {
-    pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 1).map(TerminalNode::new)
-    }
-    pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 2)
-            .skip(0)
-            .map(move |node| AtomContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-}
+        rule atom_children: many(AtomContext[2]),
+        token comma_tokens: many(1),
+        label_rule rest: many(skip(0), AtomContext[2]),

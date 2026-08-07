@@ -2,69 +2,9 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"SharedOptionalBlockContext\")"
 ---
-
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn shared(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[8, 9, 11, 12])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> SharedOptionalBlockContext<'a, ValidatedTreeContext> {
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn shared(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[8, 9, 11, 12])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        token star_token: optional(8),
+        token slash_token: optional(9),
+        token plus_token: optional(11),
+        token minus_token: optional(12),
+        token num_token: optional(14),
+        label_token shared: optional(nth(0), [8, 9, 11, 12]),

@@ -2,35 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"MergedRivalsContext\")"
 ---
-
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-    pub fn pick(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[13, 14])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> MergedRivalsContext<'a, ValidatedTreeContext> {
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-    pub fn pick(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[13, 14])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        token ident_token: optional(13),
+        token num_tokens: many(14),
+        label_token pick: optional(nth(0), [13, 14]),

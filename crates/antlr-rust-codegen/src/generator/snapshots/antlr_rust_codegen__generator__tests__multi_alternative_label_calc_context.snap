@@ -2,87 +2,11 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: calc_context
 ---
-
-    pub fn calc_children(&self) -> impl Iterator<Item = CalcContext<'a>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| CalcContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn unary(&self) -> Option<UnaryContext<'a>> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn percent_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 10)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn op(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[8, 9, 10, 11, 12])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> CalcContext<'a, ValidatedTreeContext> {
-    pub fn calc_children(&self) -> impl Iterator<Item = CalcContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| CalcContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn unary(&self) -> Option<UnaryContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn percent_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 10)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn op(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[8, 9, 10, 11, 12])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        rule calc_children: many(CalcContext[2]),
+        rule unary: optional(UnaryContext[4]),
+        token star_token: optional(8),
+        token slash_token: optional(9),
+        token percent_token: optional(10),
+        token plus_token: optional(11),
+        token minus_token: optional(12),
+        label_token op: optional(nth(0), [8, 9, 10, 11, 12]),

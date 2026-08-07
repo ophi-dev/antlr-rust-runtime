@@ -1976,16 +1976,14 @@ mod tests {
                     let data = parser_codegen_data(&compilation, "TParser");
                     let rendered =
                         render_parser("TParser", &data).expect("fixture parser should render");
-                    let single =
-                        "pub fn token_token(&self) -> Result<TerminalNode<'a>, MissingChildError>";
-                    let repeated_signature =
-                        "pub fn token_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_";
+                    let single = "token token_token: required(";
+                    let repeated_declaration = "token token_tokens: many(";
                     if repeated {
-                        assert!(rendered.contains(repeated_signature), "{fixture_name}");
+                        assert!(rendered.contains(repeated_declaration), "{fixture_name}");
                         assert!(!rendered.contains(single), "{fixture_name}");
                     } else {
                         assert!(rendered.contains(single), "{fixture_name}");
-                        assert!(!rendered.contains(repeated_signature), "{fixture_name}");
+                        assert!(!rendered.contains(repeated_declaration), "{fixture_name}");
                     }
                 }
                 ToolCase::CodegenAccessLevel => {

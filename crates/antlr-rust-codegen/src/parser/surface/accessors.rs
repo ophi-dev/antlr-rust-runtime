@@ -636,8 +636,10 @@ fn accessor_stem(name: &str) -> String {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 struct RenderedContextAccessors {
-    recovered: String,
-    validated: String,
+    /// Accessor declarations for the runtime's
+    /// `__antlr4_rust_context_accessors!` macro, which expands both the
+    /// recovery-oriented and validated state-variant impls.
+    declarations: String,
     validation: String,
     compatibility: String,
 }
@@ -902,12 +904,8 @@ fn render_rule_label_accessor(
     } = context;
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a, ValidatedTreeContext>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+            rendered.declarations,
+            "        label_rule {method}: many(skip({skip}), {child_view}[{child_index}]),"
         );
         render_repeated_accessor_validation(
             &mut rendered.validation,
@@ -919,20 +917,15 @@ fn render_rule_label_accessor(
         );
         return;
     }
-    let lookup = match label.selector {
-        ContextLabelSelector::Nth(occurrence) => format!(".nth({occurrence})"),
-        ContextLabelSelector::LastAfter(skip) => format!(".skip({skip}).last()"),
+    let selector = match label.selector {
+        ContextLabelSelector::Nth(occurrence) => format!("nth({occurrence})"),
+        ContextLabelSelector::LastAfter(skip) => format!("last_after({skip})"),
         ContextLabelSelector::AllAfter(_) => unreachable!("handled above"),
     };
     if label.cardinality.is_required_single() {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
-            label.source_name
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> {child_view}<'a, ValidatedTreeContext> {{\n        let Some(node) = __rule_children(self.__node, {child_index})\n            {lookup}\n        else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        {child_view}::<ValidatedTreeContext>::__from_validated_child_node(\n            node,\n            self.__invocation_states.as_deref(),\n        )\n    }}",
+            rendered.declarations,
+            "        label_rule {method}: required({selector}, {child_view}[{child_index}], \"{}\"),",
             label.source_name
         );
         render_required_accessor_validation(
@@ -942,12 +935,8 @@ fn render_rule_label_accessor(
         );
     } else {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> Option<{child_view}<'a, ValidatedTreeContext>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+            rendered.declarations,
+            "        label_rule {method}: optional({selector}, {child_view}[{child_index}]),"
         );
     }
 }
@@ -965,19 +954,10 @@ fn render_token_label_accessor(
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-    let children = if let [token_type] = label.token_types.as_slice() {
-        format!("__labeled_token_children(self.__node, {token_type})")
-    } else {
-        format!("__labeled_token_children_matching(self.__node, &[{token_types}])")
-    };
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        {children}\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        {children}\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
+            rendered.declarations,
+            "        label_token {method}: many(skip({skip}), [{token_types}]),"
         );
         render_repeated_accessor_validation(
             &mut rendered.validation,
@@ -989,20 +969,15 @@ fn render_token_label_accessor(
         );
         return;
     }
-    let lookup = match label.selector {
-        ContextLabelSelector::Nth(occurrence) => format!(".nth({occurrence})"),
-        ContextLabelSelector::LastAfter(skip) => format!(".skip({skip}).last()"),
+    let selector = match label.selector {
+        ContextLabelSelector::Nth(occurrence) => format!("nth({occurrence})"),
+        ContextLabelSelector::LastAfter(skip) => format!("last_after({skip})"),
         ContextLabelSelector::AllAfter(_) => unreachable!("handled above"),
     };
     if label.cardinality.is_required_single() {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
-            label.source_name
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> TerminalNode<'a> {{\n        let Some(node) = {children}\n            {lookup}\n        else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        TerminalNode::new(node)\n    }}",
+            rendered.declarations,
+            "        label_token {method}: required({selector}, [{token_types}], \"{}\"),",
             label.source_name
         );
         render_required_accessor_validation(
@@ -1012,12 +987,8 @@ fn render_token_label_accessor(
         );
     } else {
         let _ = writeln!(
-            rendered.recovered,
-            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
-        );
-        let _ = writeln!(
-            rendered.validated,
-            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        {children}\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
+            rendered.declarations,
+            "        label_token {method}: optional({selector}, [{token_types}]),"
         );
     }
 }
@@ -1076,12 +1047,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         let child_view = &context_names.rules[child_index].context_type;
         if cardinality.is_repeated() {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a, ValidatedTreeContext>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+                rendered.declarations,
+                "        rule {method}: many({child_view}[{child_index}]),"
             );
             render_repeated_accessor_validation(
                 &mut rendered.validation,
@@ -1111,13 +1078,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             }
         } else if cardinality.is_required_single() {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
-                child.name
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> {child_view}<'a, ValidatedTreeContext> {{\n        let Some(node) = __rule_children(self.__node, {child_index}).next() else {{\n            unreachable!(\"validated {view_name} is missing required child {}\")\n        }};\n        {child_view}::<ValidatedTreeContext>::__from_validated_child_node(\n            node,\n            self.__invocation_states.as_deref(),\n        )\n    }}",
+                rendered.declarations,
+                "        rule {method}: required({child_view}[{child_index}], \"{}\"),",
                 child.name
             );
             render_required_accessor_validation(
@@ -1127,12 +1089,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             );
         } else {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, self.__invocation_states.as_deref()))\n    }}"
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> Option<{child_view}<'a, ValidatedTreeContext>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))\n    }}"
+                rendered.declarations,
+                "        rule {method}: optional({child_view}[{child_index}]),"
             );
         }
         if antlr4rust_compat && !cardinality.is_repeated() {
@@ -1167,12 +1125,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         );
         if cardinality.is_repeated() {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type}).map(TerminalNode::new)\n    }}"
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type}).map(TerminalNode::new)\n    }}"
+                rendered.declarations,
+                "        token {method}: many({token_type}),"
             );
             render_repeated_accessor_validation(
                 &mut rendered.validation,
@@ -1198,12 +1152,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             }
         } else if cardinality.is_required_single() {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{token_name}\"))\n    }}"
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> TerminalNode<'a> {{\n        let Some(node) = __token_children(self.__node, {token_type}).next() else {{\n            unreachable!(\"validated {view_name} is missing required child {token_name}\")\n        }};\n        TerminalNode::new(node)\n    }}"
+                rendered.declarations,
+                "        token {method}: required({token_type}, \"{token_name}\"),"
             );
             render_required_accessor_validation(
                 &mut rendered.validation,
@@ -1221,12 +1171,8 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             }
         } else {
             let _ = writeln!(
-                rendered.recovered,
-                "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n    }}"
-            );
-            let _ = writeln!(
-                rendered.validated,
-                "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n    }}"
+                rendered.declarations,
+                "        token {method}: optional({token_type}),"
             );
             if antlr4rust_compat {
                 render_antlr4rust_single_token_accessor(

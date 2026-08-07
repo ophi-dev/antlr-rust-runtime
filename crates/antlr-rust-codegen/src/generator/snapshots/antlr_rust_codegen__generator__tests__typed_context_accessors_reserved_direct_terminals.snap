@@ -3,84 +3,9 @@ source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: context_surface
 ---
 StartContext
-
-    pub fn direct_terminals_rule_child(&self) -> Result<DirectTerminalsContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 1)
-            .next()
-            .map(|node| DirectTerminalsContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("StartContext", "directTerminals"))
-    }
-    pub fn labeled(&self) -> Result<LabeledContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 2)
-            .next()
-            .map(|node| LabeledContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("StartContext", "labeled"))
-    }
-    pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, -1)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("StartContext", "EOF"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> StartContext<'a, ValidatedTreeContext> {
-    pub fn direct_terminals_rule_child(&self) -> DirectTerminalsContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 1).next() else {
-            unreachable!("validated StartContext is missing required child directTerminals")
-        };
-        DirectTerminalsContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-    pub fn labeled(&self) -> LabeledContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 2).next() else {
-            unreachable!("validated StartContext is missing required child labeled")
-        };
-        LabeledContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-    pub fn eof_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, -1).next() else {
-            unreachable!("validated StartContext is missing required child EOF")
-        };
-        TerminalNode::new(node)
-    }
-}
+        rule direct_terminals_rule_child: required(DirectTerminalsContext[1], "directTerminals"),
+        rule labeled: required(LabeledContext[2], "labeled"),
+        token eof_token: required(-1, "EOF"),
 LabeledContext
-
-    pub fn id_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("LabeledContext", "ID"))
-    }
-    pub fn direct_terminals_label(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __labeled_token_children(self.__node, 1)
-            .nth(0)
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("LabeledContext", "direct_terminals"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> LabeledContext<'a, ValidatedTreeContext> {
-    pub fn id_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 1).next() else {
-            unreachable!("validated LabeledContext is missing required child ID")
-        };
-        TerminalNode::new(node)
-    }
-    pub fn direct_terminals_label(&self) -> TerminalNode<'a> {
-        let Some(node) = __labeled_token_children(self.__node, 1)
-            .nth(0)
-        else {
-            unreachable!("validated LabeledContext is missing required child direct_terminals")
-        };
-        TerminalNode::new(node)
-    }
-}
+        token id_token: required(1, "ID"),
+        label_token direct_terminals_label: required(nth(0), [1], "direct_terminals"),

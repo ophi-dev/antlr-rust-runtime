@@ -2,59 +2,8 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"DirectOptionalInSharedBlockContext\")"
 ---
-
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> DirectOptionalInSharedBlockContext<'a, ValidatedTreeContext> {
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn slash_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 9)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 11)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn minus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 12)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-    }
-}
+        token star_token: optional(8),
+        token slash_token: optional(9),
+        token plus_token: optional(11),
+        token minus_token: optional(12),
+        token num_token: optional(14),

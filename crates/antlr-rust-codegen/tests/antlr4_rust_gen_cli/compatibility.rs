@@ -417,10 +417,8 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
             && java_parser
                 .contains("pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>>")
             && java_parser.contains("self.0.self_().ok().map(__Antlr4RustContext)")
-            && java_parser
-                .contains("pub fn r#type(&self) -> Result<TypeContext<'a>, MissingChildError>")
-            && java_parser
-                .contains("pub fn self_(&self) -> Result<SelfContext<'a>, MissingChildError>"),
+            && java_parser.contains("rule r#type: required(TypeContext[")
+            && java_parser.contains("rule self_: required(SelfContext["),
         "keyword compatibility getters must coexist with the native fallible surface"
     );
     let unrelated_context_tail = java_parser

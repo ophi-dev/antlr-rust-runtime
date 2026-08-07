@@ -2,43 +2,7 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"MergedRepeatsContext\")"
 ---
-
-    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 13).map(TerminalNode::new)
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-    pub fn lparen_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 16)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("MergedRepeatsContext", "LPAREN"))
-    }
-    pub fn last_pick(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[13, 14])
-            .skip(0).last()
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> MergedRepeatsContext<'a, ValidatedTreeContext> {
-    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 13).map(TerminalNode::new)
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-    pub fn lparen_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 16).next() else {
-            unreachable!("validated MergedRepeatsContext is missing required child LPAREN")
-        };
-        TerminalNode::new(node)
-    }
-    pub fn last_pick(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[13, 14])
-            .skip(0).last()
-            .map(TerminalNode::new)
-    }
-}
+        token ident_tokens: many(13),
+        token num_tokens: many(14),
+        token lparen_token: required(16, "LPAREN"),
+        label_token last_pick: optional(last_after(0), [13, 14]),

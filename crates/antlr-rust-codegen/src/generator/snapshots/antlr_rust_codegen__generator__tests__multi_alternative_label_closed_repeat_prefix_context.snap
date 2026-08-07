@@ -2,33 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"ClosedRepeatPrefixContext\")"
 ---
-
-    pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 8).map(TerminalNode::new)
-    }
-    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 13).map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("ClosedRepeatPrefixContext", "NUM"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> ClosedRepeatPrefixContext<'a, ValidatedTreeContext> {
-    pub fn star_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 8).map(TerminalNode::new)
-    }
-    pub fn ident_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 13).map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 14).next() else {
-            unreachable!("validated ClosedRepeatPrefixContext is missing required child NUM")
-        };
-        TerminalNode::new(node)
-    }
-}
+        token star_tokens: many(8),
+        token ident_tokens: many(13),
+        token num_token: required(14, "NUM"),

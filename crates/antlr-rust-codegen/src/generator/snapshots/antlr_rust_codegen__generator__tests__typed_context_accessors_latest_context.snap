@@ -2,34 +2,5 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: latest_context
 ---
-
-    pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 2)
-            .skip(0).last()
-            .map(|node| AtomContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("LatestContext", "value"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> LatestContext<'a, ValidatedTreeContext> {
-    pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 2)
-            .map(move |node| AtomContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn value(&self) -> AtomContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 2)
-            .skip(0).last()
-        else {
-            unreachable!("validated LatestContext is missing required child value")
-        };
-        AtomContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-}
+        rule atom_children: many(AtomContext[2]),
+        label_rule value: required(last_after(0), AtomContext[2], "value"),

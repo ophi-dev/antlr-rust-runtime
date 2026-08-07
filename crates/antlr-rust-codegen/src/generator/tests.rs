@@ -3,15 +3,14 @@ use super::*;
 use antlr4_runtime::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 
 fn rendered_context_impl<'a>(rendered: &'a str, name: &str) -> &'a str {
-    let marker = format!("impl<'a, State: __RecoveryContextState> {name}<'a, State> {{");
+    let marker = format!("antlr4_runtime::__antlr4_rust_context_accessors! {{\n    {name} {{\n");
     let tail = rendered
         .split_once(&marker)
-        .unwrap_or_else(|| panic!("{name} recovery context impl"))
+        .unwrap_or_else(|| panic!("{name} accessor declarations"))
         .1;
     let end = tail
-        .find("\nantlr4_runtime::__antlr4_rust_context!")
-        .or_else(|| tail.find("\n/// Checks generated required-child invariants"))
-        .unwrap_or_else(|| panic!("surface after {name} context"));
+        .find("    }\n}\n")
+        .unwrap_or_else(|| panic!("surface after {name} accessor declarations"));
     &tail[..end]
 }
 
@@ -22,7 +21,7 @@ fn rendered_context_declaration<'a>(rendered: &'a str, name: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{name} context declaration"));
     let tail = &rendered[start..];
     let end = tail
-        .find("\n}\n\n#[allow(dead_code, private_bounds, clippy::all)]")
+        .find("\n}\n\nantlr4_runtime::__antlr4_rust_context_accessors!")
         .unwrap_or_else(|| panic!("{name} context declaration end"));
     &tail[..end + 2]
 }
@@ -1759,7 +1758,7 @@ fn embedded_contexts_delegate_stored_invocation_states_to_the_runtime_api() {
     assert!(rendered.contains("antlr4_runtime::__antlr4_rust_context!"));
     assert!(!rendered.contains("__invocation_states: Option<Vec<isize>>"));
     assert!(!rendered.contains("Self::__from_node_with_invocation_states(node, None)"));
-    assert!(rendered.contains("::__from_child_node(node, self.__invocation_states.as_deref())"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_context_accessors!"));
     assert!(rendered.contains("::__from_listener_node(context, invocation_states.as_deref())"));
     assert!(rendered.contains("pub fn walk_with_invocation_states"));
     assert!(
@@ -2747,9 +2746,11 @@ fn label_resolution_corpus_matches_expected_outcomes() {
         )
         .expect("fixture should be readable");
         let reads_via_action = source.contains(&format!("${label}"));
-        let resolved = rendered
-            .as_ref()
-            .is_ok_and(|parser| reads_via_action || parser.contains(&format!("pub fn {label}(")));
+        let resolved = rendered.as_ref().is_ok_and(|parser| {
+            reads_via_action
+                || parser.contains(&format!("label_rule {label}:"))
+                || parser.contains(&format!("label_token {label}:"))
+        });
         if resolved != resolves {
             let outcome = if resolves { "resolve" } else { "decline" };
             let error = rendered

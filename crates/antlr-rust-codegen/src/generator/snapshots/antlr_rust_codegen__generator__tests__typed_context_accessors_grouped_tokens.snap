@@ -3,167 +3,22 @@ source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: context_surface
 ---
 ExpressionContext
-
-    pub fn expression_children(&self) -> impl Iterator<Item = ExpressionContext<'a>> + '_ {
-        __rule_children(self.__node, 1)
-            .map(move |node| ExpressionContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn identifier(&self) -> Option<IdentifierContext<'a>> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| IdentifierContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn le_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn ge_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 2)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn equal_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 3)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn notequal_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 4)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn assign_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 5)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn add_assign_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 6)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn bop(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[1, 2, 3, 4, 5, 6])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> ExpressionContext<'a, ValidatedTreeContext> {
-    pub fn expression_children(&self) -> impl Iterator<Item = ExpressionContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 1)
-            .map(move |node| ExpressionContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn identifier(&self) -> Option<IdentifierContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| IdentifierContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn le_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn ge_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 2)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn equal_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 3)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn notequal_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 4)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn assign_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 5)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn add_assign_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 6)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn bop(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children_matching(self.__node, &[1, 2, 3, 4, 5, 6])
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        rule expression_children: many(ExpressionContext[1]),
+        rule identifier: optional(IdentifierContext[4]),
+        token le_token: optional(1),
+        token ge_token: optional(2),
+        token equal_token: optional(3),
+        token notequal_token: optional(4),
+        token assign_token: optional(5),
+        token add_assign_token: optional(6),
+        label_token bop: optional(nth(0), [1, 2, 3, 4, 5, 6]),
 OperatorSequenceContext
-
-    pub fn le_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 1).map(TerminalNode::new)
-    }
-    pub fn ge_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 2).map(TerminalNode::new)
-    }
-    pub fn equal_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 3).map(TerminalNode::new)
-    }
-    pub fn notequal_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 4).map(TerminalNode::new)
-    }
-    pub fn assign_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 5).map(TerminalNode::new)
-    }
-    pub fn add_assign_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 6).map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> OperatorSequenceContext<'a, ValidatedTreeContext> {
-    pub fn le_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 1).map(TerminalNode::new)
-    }
-    pub fn ge_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 2).map(TerminalNode::new)
-    }
-    pub fn equal_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 3).map(TerminalNode::new)
-    }
-    pub fn notequal_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 4).map(TerminalNode::new)
-    }
-    pub fn assign_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 5).map(TerminalNode::new)
-    }
-    pub fn add_assign_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 6).map(TerminalNode::new)
-    }
-}
+        token le_tokens: many(1),
+        token ge_tokens: many(2),
+        token equal_tokens: many(3),
+        token notequal_tokens: many(4),
+        token assign_tokens: many(5),
+        token add_assign_tokens: many(6),
 EofChoiceContext
-
-    pub fn eof_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, -1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn le_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> EofChoiceContext<'a, ValidatedTreeContext> {
-    pub fn eof_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, -1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn le_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-}
+        token eof_token: optional(-1),
+        token le_token: optional(1),

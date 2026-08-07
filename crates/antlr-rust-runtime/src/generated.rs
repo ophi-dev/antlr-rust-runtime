@@ -320,6 +320,334 @@ macro_rules! __antlr4_rust_context {
     };
 }
 
+/// Expands one declarative accessor list into both state-variant impls of a
+/// generated typed parser context: the recovery-oriented impl (generic over
+/// the module's `__RecoveryContextState`, returning `Result<_,
+/// MissingChildError>` for required children) and the validated impl
+/// (`ValidatedTreeContext`, returning required children directly).
+///
+/// Accessor declarations, one per generated method:
+///
+/// ```text
+/// rule <method>: required(<ChildContext>[<child rule index>], "<child name>"),
+/// rule <method>: optional(<ChildContext>[<child rule index>]),
+/// rule <method>: many(<ChildContext>[<child rule index>]),
+/// token <method>: required(<token type>, "<token name>"),
+/// token <method>: optional(<token type>),
+/// token <method>: many(<token type>),
+/// label_rule <method>: required(<selector>, <ChildContext>[<child rule index>], "<label>"),
+/// label_rule <method>: optional(<selector>, <ChildContext>[<child rule index>]),
+/// label_rule <method>: many(skip(<n>), <ChildContext>[<child rule index>]),
+/// label_token <method>: required(<selector>, [<token types>], "<label>"),
+/// label_token <method>: optional(<selector>, [<token types>]),
+/// label_token <method>: many(skip(<n>), [<token types>]),
+/// ```
+///
+/// where `<selector>` is `nth(<n>)` or `last_after(<n>)`. All names, indices,
+/// and token types are grammar data supplied by the generated invocation; the
+/// module-local support items (`__rule_children`, `__token_children`,
+/// `__labeled_token_children`, `__labeled_token_children_matching`,
+/// `TerminalNode`, `ValidatedTreeContext`, `__RecoveryContextState`) are
+/// emitted per generated module, exactly as `__antlr4_rust_context!` relies
+/// on.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __antlr4_rust_context_accessors {
+    (
+        $context:ident {
+            $( $kind:tt $method:ident: $card:tt $payload:tt ),* $(,)?
+        }
+    ) => {
+        #[allow(dead_code, private_bounds, clippy::all)]
+        impl<'a, State: __RecoveryContextState> $context<'a, State> {
+            $(
+                $crate::__antlr4_rust_context_accessors!(
+                    @recovered $context, $kind $card $method $payload
+                );
+            )*
+        }
+
+        #[allow(dead_code, clippy::all)]
+        impl<'a> $context<'a, ValidatedTreeContext> {
+            $(
+                $crate::__antlr4_rust_context_accessors!(
+                    @validated $context, $kind $card $method $payload
+                );
+            )*
+        }
+    };
+
+    // Recovery-oriented rule children.
+    (@recovered $context:ident, rule required $method:ident ($child:ident[$index:expr], $name:literal)) => {
+        pub fn $method(&self) -> Result<$child<'a>, $crate::MissingChildError> {
+            __rule_children(self.__node, $index)
+                .next()
+                .map(|node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+                .ok_or_else(|| $crate::MissingChildError::new(stringify!($context), $name))
+        }
+    };
+    (@recovered $context:ident, rule optional $method:ident ($child:ident[$index:expr])) => {
+        pub fn $method(&self) -> Option<$child<'a>> {
+            __rule_children(self.__node, $index)
+                .next()
+                .map(|node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+        }
+    };
+    (@recovered $context:ident, rule many $method:ident ($child:ident[$index:expr])) => {
+        pub fn $method(&self) -> impl Iterator<Item = $child<'a>> + '_ {
+            __rule_children(self.__node, $index)
+                .map(move |node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+        }
+    };
+
+    // Recovery-oriented token children.
+    (@recovered $context:ident, token required $method:ident ($token_type:expr, $name:literal)) => {
+        pub fn $method(&self) -> Result<TerminalNode<'a>, $crate::MissingChildError> {
+            __token_children(self.__node, $token_type)
+                .next()
+                .map(TerminalNode::new)
+                .ok_or_else(|| $crate::MissingChildError::new(stringify!($context), $name))
+        }
+    };
+    (@recovered $context:ident, token optional $method:ident ($token_type:expr)) => {
+        pub fn $method(&self) -> Option<TerminalNode<'a>> {
+            __token_children(self.__node, $token_type)
+                .next()
+                .map(TerminalNode::new)
+        }
+    };
+    (@recovered $context:ident, token many $method:ident ($token_type:expr)) => {
+        pub fn $method(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+            __token_children(self.__node, $token_type).map(TerminalNode::new)
+        }
+    };
+
+    // Recovery-oriented labeled rule children.
+    (@recovered $context:ident, label_rule required $method:ident ($sel:ident($selarg:expr), $child:ident[$index:expr], $name:literal)) => {
+        pub fn $method(&self) -> Result<$child<'a>, $crate::MissingChildError> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected(__rule_children(self.__node, $index)) $sel($selarg)
+            )
+            .map(|node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+            .ok_or_else(|| $crate::MissingChildError::new(stringify!($context), $name))
+        }
+    };
+    (@recovered $context:ident, label_rule optional $method:ident ($sel:ident($selarg:expr), $child:ident[$index:expr])) => {
+        pub fn $method(&self) -> Option<$child<'a>> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected(__rule_children(self.__node, $index)) $sel($selarg)
+            )
+            .map(|node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+        }
+    };
+    (@recovered $context:ident, label_rule many $method:ident (skip($skip:expr), $child:ident[$index:expr])) => {
+        pub fn $method(&self) -> impl Iterator<Item = $child<'a>> + '_ {
+            __rule_children(self.__node, $index)
+                .skip($skip)
+                .map(move |node| $child::__from_child_node(node, self.__invocation_states.as_deref()))
+        }
+    };
+
+    // Recovery-oriented labeled token children.
+    (@recovered $context:ident, label_token required $method:ident ($sel:ident($selarg:expr), $tokens:tt, $name:literal)) => {
+        pub fn $method(&self) -> Result<TerminalNode<'a>, $crate::MissingChildError> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected($crate::__antlr4_rust_context_accessors!(
+                    @labeled_token_children(self.__node) $tokens
+                )) $sel($selarg)
+            )
+            .map(TerminalNode::new)
+            .ok_or_else(|| $crate::MissingChildError::new(stringify!($context), $name))
+        }
+    };
+    (@recovered $context:ident, label_token optional $method:ident ($sel:ident($selarg:expr), $tokens:tt)) => {
+        pub fn $method(&self) -> Option<TerminalNode<'a>> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected($crate::__antlr4_rust_context_accessors!(
+                    @labeled_token_children(self.__node) $tokens
+                )) $sel($selarg)
+            )
+            .map(TerminalNode::new)
+        }
+    };
+    (@recovered $context:ident, label_token many $method:ident (skip($skip:expr), $tokens:tt)) => {
+        pub fn $method(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+            $crate::__antlr4_rust_context_accessors!(
+                @labeled_token_children(self.__node) $tokens
+            )
+            .skip($skip)
+            .map(TerminalNode::new)
+        }
+    };
+
+    // Validated rule children.
+    (@validated $context:ident, rule required $method:ident ($child:ident[$index:expr], $name:literal)) => {
+        pub fn $method(&self) -> $child<'a, ValidatedTreeContext> {
+            let Some(node) = __rule_children(self.__node, $index).next() else {
+                unreachable!(concat!(
+                    "validated ",
+                    stringify!($context),
+                    " is missing required child ",
+                    $name
+                ))
+            };
+            $child::<ValidatedTreeContext>::__from_validated_child_node(
+                node,
+                self.__invocation_states.as_deref(),
+            )
+        }
+    };
+    (@validated $context:ident, rule optional $method:ident ($child:ident[$index:expr])) => {
+        pub fn $method(&self) -> Option<$child<'a, ValidatedTreeContext>> {
+            __rule_children(self.__node, $index)
+                .next()
+                .map(|node| {
+                    $child::<ValidatedTreeContext>::__from_validated_child_node(
+                        node,
+                        self.__invocation_states.as_deref(),
+                    )
+                })
+        }
+    };
+    (@validated $context:ident, rule many $method:ident ($child:ident[$index:expr])) => {
+        pub fn $method(&self) -> impl Iterator<Item = $child<'a, ValidatedTreeContext>> + '_ {
+            __rule_children(self.__node, $index).map(move |node| {
+                $child::<ValidatedTreeContext>::__from_validated_child_node(
+                    node,
+                    self.__invocation_states.as_deref(),
+                )
+            })
+        }
+    };
+
+    // Validated token children.
+    (@validated $context:ident, token required $method:ident ($token_type:expr, $name:literal)) => {
+        pub fn $method(&self) -> TerminalNode<'a> {
+            let Some(node) = __token_children(self.__node, $token_type).next() else {
+                unreachable!(concat!(
+                    "validated ",
+                    stringify!($context),
+                    " is missing required child ",
+                    $name
+                ))
+            };
+            TerminalNode::new(node)
+        }
+    };
+    (@validated $context:ident, token optional $method:ident ($token_type:expr)) => {
+        pub fn $method(&self) -> Option<TerminalNode<'a>> {
+            __token_children(self.__node, $token_type)
+                .next()
+                .map(TerminalNode::new)
+        }
+    };
+    (@validated $context:ident, token many $method:ident ($token_type:expr)) => {
+        pub fn $method(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+            __token_children(self.__node, $token_type).map(TerminalNode::new)
+        }
+    };
+
+    // Validated labeled rule children.
+    (@validated $context:ident, label_rule required $method:ident ($sel:ident($selarg:expr), $child:ident[$index:expr], $name:literal)) => {
+        pub fn $method(&self) -> $child<'a, ValidatedTreeContext> {
+            let Some(node) = $crate::__antlr4_rust_context_accessors!(
+                @selected(__rule_children(self.__node, $index)) $sel($selarg)
+            ) else {
+                unreachable!(concat!(
+                    "validated ",
+                    stringify!($context),
+                    " is missing required child ",
+                    $name
+                ))
+            };
+            $child::<ValidatedTreeContext>::__from_validated_child_node(
+                node,
+                self.__invocation_states.as_deref(),
+            )
+        }
+    };
+    (@validated $context:ident, label_rule optional $method:ident ($sel:ident($selarg:expr), $child:ident[$index:expr])) => {
+        pub fn $method(&self) -> Option<$child<'a, ValidatedTreeContext>> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected(__rule_children(self.__node, $index)) $sel($selarg)
+            )
+            .map(|node| {
+                $child::<ValidatedTreeContext>::__from_validated_child_node(
+                    node,
+                    self.__invocation_states.as_deref(),
+                )
+            })
+        }
+    };
+    (@validated $context:ident, label_rule many $method:ident (skip($skip:expr), $child:ident[$index:expr])) => {
+        pub fn $method(&self) -> impl Iterator<Item = $child<'a, ValidatedTreeContext>> + '_ {
+            __rule_children(self.__node, $index)
+                .skip($skip)
+                .map(move |node| {
+                    $child::<ValidatedTreeContext>::__from_validated_child_node(
+                        node,
+                        self.__invocation_states.as_deref(),
+                    )
+                })
+        }
+    };
+
+    // Validated labeled token children.
+    (@validated $context:ident, label_token required $method:ident ($sel:ident($selarg:expr), $tokens:tt, $name:literal)) => {
+        pub fn $method(&self) -> TerminalNode<'a> {
+            let Some(node) = $crate::__antlr4_rust_context_accessors!(
+                @selected($crate::__antlr4_rust_context_accessors!(
+                    @labeled_token_children(self.__node) $tokens
+                )) $sel($selarg)
+            ) else {
+                unreachable!(concat!(
+                    "validated ",
+                    stringify!($context),
+                    " is missing required child ",
+                    $name
+                ))
+            };
+            TerminalNode::new(node)
+        }
+    };
+    (@validated $context:ident, label_token optional $method:ident ($sel:ident($selarg:expr), $tokens:tt)) => {
+        pub fn $method(&self) -> Option<TerminalNode<'a>> {
+            $crate::__antlr4_rust_context_accessors!(
+                @selected($crate::__antlr4_rust_context_accessors!(
+                    @labeled_token_children(self.__node) $tokens
+                )) $sel($selarg)
+            )
+            .map(TerminalNode::new)
+        }
+    };
+    (@validated $context:ident, label_token many $method:ident (skip($skip:expr), $tokens:tt)) => {
+        pub fn $method(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
+            $crate::__antlr4_rust_context_accessors!(
+                @labeled_token_children(self.__node) $tokens
+            )
+            .skip($skip)
+            .map(TerminalNode::new)
+        }
+    };
+
+    // Label occurrence selectors.
+    (@selected($children:expr) nth($occurrence:expr)) => {
+        $children.nth($occurrence)
+    };
+    (@selected($children:expr) last_after($skip:expr)) => {
+        $children.skip($skip).last()
+    };
+
+    // Labeled token child sources: a single token type uses the scalar
+    // helper; a set uses the matching helper.
+    (@labeled_token_children($node:expr) [$token_type:expr]) => {
+        __labeled_token_children($node, $token_type)
+    };
+    (@labeled_token_children($node:expr) [$($token_type:expr),+ $(,)?]) => {
+        __labeled_token_children_matching($node, &[$($token_type),+])
+    };
+}
+
 /// Defines the grammar-independent facade and trait delegation for one
 /// generated lexer.
 #[doc(hidden)]

@@ -2,67 +2,9 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: e_context
 ---
-
-    pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>> + '_ {
-        __rule_children(self.__node, 1)
-            .map(move |node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn int_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 2)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 3)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn left(&self) -> Option<EContext<'a>> {
-        __rule_children(self.__node, 1)
-            .nth(0)
-            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn right(&self) -> Option<EContext<'a>> {
-        __rule_children(self.__node, 1)
-            .nth(1)
-            .map(|node| EContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> EContext<'a, ValidatedTreeContext> {
-    pub fn e_children(&self) -> impl Iterator<Item = EContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 1)
-            .map(move |node| EContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn int_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 1)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 2)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn plus_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 3)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn left(&self) -> Option<EContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 1)
-            .nth(0)
-            .map(|node| EContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn right(&self) -> Option<EContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 1)
-            .nth(1)
-            .map(|node| EContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-}
+        rule e_children: many(EContext[1]),
+        token int_token: optional(1),
+        token star_token: optional(2),
+        token plus_token: optional(3),
+        label_rule left: optional(nth(0), EContext[1]),
+        label_rule right: optional(nth(1), EContext[1]),

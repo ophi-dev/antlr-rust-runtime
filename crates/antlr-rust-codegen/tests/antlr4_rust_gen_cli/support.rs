@@ -261,6 +261,7 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
         );
     }
     let mut context_methods = false;
+    let mut context_accessors = false;
     for line in source.lines().map(str::trim) {
         if line == "methods: {" {
             context_methods = true;
@@ -277,6 +278,25 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
                 .unwrap_or_default();
             if !name.is_empty() {
                 api.insert(format!("fn {name}"));
+            }
+            continue;
+        }
+        if line == "antlr4_runtime::__antlr4_rust_context_accessors! {" {
+            context_accessors = true;
+            continue;
+        }
+        if context_accessors {
+            if line == "}" {
+                context_accessors = false;
+                continue;
+            }
+            let declaration = ["rule ", "token ", "label_rule ", "label_token "]
+                .iter()
+                .find_map(|prefix| line.strip_prefix(prefix));
+            if let Some(rest) = declaration
+                && let Some((name, _)) = rest.split_once(':')
+            {
+                api.insert(format!("fn {}", name.trim()));
             }
             continue;
         }

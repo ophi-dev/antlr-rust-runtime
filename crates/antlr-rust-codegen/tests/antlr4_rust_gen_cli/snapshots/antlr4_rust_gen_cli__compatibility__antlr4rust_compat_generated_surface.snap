@@ -41,14 +41,8 @@ pub fn IDENTIFIER(&self, index: usize) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER_all(&self) -> Vec<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
-pub fn r#type(&self) -> Result<TypeContext<'a>, MissingChildError> {
-pub fn self_(&self) -> Result<SelfContext<'a>, MissingChildError> {
-pub fn r#type(&self) -> TypeContext<'a, ValidatedTreeContext> {
-pub fn self_(&self) -> SelfContext<'a, ValidatedTreeContext> {
 pub fn r#type(&self) -> Option<__Antlr4RustContext<TypeContext<'a>>> {
 pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>> {
-pub fn self__token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-pub fn self__token(&self) -> TerminalNode<'a> {
 __Antlr4RustInput(self.base.token_stream()).la(1),
 __antlr4rust_token_aliases::JavaCompatParser_IDENTIFIER | __antlr4rust_token_aliases::JavaCompatParser_MODULE
 ) || __Antlr4RustInput(self.base.token_stream()).la(2) != __antlr4rust_token_aliases::JavaCompatParser_ASSIGN
