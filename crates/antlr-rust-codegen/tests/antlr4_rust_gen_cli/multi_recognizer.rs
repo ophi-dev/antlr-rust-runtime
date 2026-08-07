@@ -340,6 +340,8 @@ fn three_build_dependency_consumers_share_codegen_and_track_only_resolved_inputs
         ),
     )
     .expect("fixture workspace manifest should be writable");
+    fs::copy(root.join("Cargo.lock"), workspace.join("Cargo.lock"))
+        .expect("fixture workspace should reuse the repository lockfile");
 
     let first = run_fixture_workspace(workspace);
     assert_fixture_success(&first);
