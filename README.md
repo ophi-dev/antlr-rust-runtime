@@ -352,25 +352,6 @@ let parsed = json_parser::parse_stream(input, JsonLexer::new, JsonParser::json)?
 `parse_stream_with_parser` is the corresponding stream-based helper when the
 caller also needs the parser afterward.
 
-### Inspecting tokens
-
-Generated lexer modules expose `lex` for token-only workflows. The returned
-stream is already filled and retains EOF plus tokens on hidden or custom
-channels:
-
-```rust
-use generated::json_lexer::{self, JsonLexer};
-
-let tokens = json_lexer::lex(r#"{"a":1}"#, JsonLexer::new);
-for token in tokens.tokens() {
-    println!("{token}");
-}
-```
-
-`TokenView`'s display format includes token text, type, channel, line, and
-column. Rules using `skip` do not emit tokens. Use `lex_stream` to supply a
-named `InputStream`, `ByteStream`, or custom `CharStream`.
-
 Construct each layer explicitly when you need parser options or custom error
 handling before invoking the entry rule:
 
@@ -398,6 +379,38 @@ from both the lexer and parser to suppress recovery output, as above, or call
 `ErrorListener::syntax_error` receives a `SyntaxErrorEvent`; its `span` is the
 resolved half-open UTF-8 byte range for parser tokens and lexer failures, when
 the input stream can provide byte offsets.
+
+### Inspecting tokens
+
+Generated lexer modules expose `lex` for token-only workflows. The returned
+stream is already filled and retains EOF plus tokens on hidden or custom
+channels:
+
+```rust
+use antlr4_runtime::Token as _;
+use generated::json_lexer::{self, JsonLexer};
+
+let tokens = json_lexer::lex(r#"{"a":1}"#, JsonLexer::new);
+let vocabulary = json_lexer::metadata().vocabulary();
+for token in tokens.tokens() {
+    println!(
+        "type={} channel={} text={:?}",
+        vocabulary.display_name(token.token_type()),
+        token.channel(),
+        token.text(),
+    );
+}
+```
+
+The vocabulary resolves symbolic or literal token names, and the explicit
+channel value includes the default channel. Rules using `skip` do not emit
+tokens. `number_of_source_errors()` reports buffered lexer diagnostics; after
+iterating `tokens()`, call `drain_source_errors()` to retrieve them.
+
+Use `lex_stream` to supply a named `InputStream`, `ByteStream`, or custom
+`CharStream`. Like `CommonTokenStream::new`, both helpers panic if token
+buffering returns `TokenStoreError`; construct the lexer and use
+`CommonTokenStream::try_new` when that error must be handled.
 
 ### Reusing Recognizers
 

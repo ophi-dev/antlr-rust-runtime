@@ -215,7 +215,9 @@ fn generated_lex_helpers_expose_hidden_and_custom_channels() {
          channels { COMMENTS }\n\
          WORD: [a-z]+;\n\
          COMMENT: '#' ~[\\r\\n]* -> channel(COMMENTS);\n\
-         WS: [ \\t]+ -> channel(HIDDEN);\n",
+         WS: [ \\t]+ -> channel(HIDDEN);\n\
+         UNICODE: '\\u00E9';\n\
+         SKIPPED: '~' -> skip;\n",
     )
     .expect("grammar should be writable");
 
@@ -238,7 +240,7 @@ fn generated_lex_helpers_expose_hidden_and_custom_channels() {
 #[cfg(test)]
 mod lex_helper_tests {
     use super::channels::{
-        self, CHANNEL_COMMENTS, COMMENT, Channels, WORD, WS,
+        self, CHANNEL_COMMENTS, COMMENT, Channels, UNICODE, WORD, WS,
     };
     use antlr4_runtime::{
         ByteStream, DEFAULT_CHANNEL, HIDDEN_CHANNEL, TOKEN_EOF, Token as _,
@@ -246,25 +248,28 @@ mod lex_helper_tests {
 
     #[test]
     fn buffers_every_emitted_channel_without_a_parser() {
-        let tokens = channels::lex("alpha # note", Channels::new);
+        let tokens = channels::lex("alpha ~\u{e9}#note", Channels::new);
         let observed = tokens
             .tokens()
             .map(|token| (
                 token.token_type(),
                 token.channel(),
                 token.text_or_empty(),
+                token.byte_span(),
+                token.column(),
             ))
             .collect::<Vec<_>>();
 
         assert_eq!(
-            &observed[..3],
+            &observed[..4],
             [
-                (WORD, DEFAULT_CHANNEL, "alpha"),
-                (WS, HIDDEN_CHANNEL, " "),
-                (COMMENT, CHANNEL_COMMENTS, "# note"),
+                (WORD, DEFAULT_CHANNEL, "alpha", Some(0..5), 0),
+                (WS, HIDDEN_CHANNEL, " ", Some(5..6), 5),
+                (UNICODE, DEFAULT_CHANNEL, "\u{e9}", Some(7..9), 7),
+                (COMMENT, CHANNEL_COMMENTS, "#note", Some(9..14), 8),
             ]
         );
-        assert_eq!(observed[3].0, TOKEN_EOF);
+        assert_eq!(observed[4].0, TOKEN_EOF);
         assert_eq!(tokens.number_of_source_errors(), 0);
     }
 
