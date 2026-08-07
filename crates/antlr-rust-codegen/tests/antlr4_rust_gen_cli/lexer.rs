@@ -203,3 +203,128 @@ mod combined_literal_tests {
 "#,
     );
 }
+
+#[test]
+fn generated_lex_helpers_expose_hidden_and_custom_channels() {
+    let temp = temporary_directory("lex-helper-channels");
+    let grammar = temp.path().join("Channels.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "lexer grammar Channels;\n\
+         channels { COMMENTS }\n\
+         WORD: [a-z]+;\n\
+         COMMENT: '#' ~[\\r\\n]* -> channel(COMMENTS);\n\
+         WS: [ \\t]+ -> channel(HIDDEN);\n\
+         UNICODE: '\\u00E9';\n\
+         SKIPPED: '~' -> skip;\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["channels.rs"],
+        r####"
+// Inline snapshot is intentional: the temporary generated crate is deleted
+// after this test, so an external snapshot cannot be retained in the repository.
+#[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
+mod lex_helper_tests {
+    use super::channels::{self, Channels, WORD};
+    use antlr4_runtime::{ByteStream, Token as _};
+
+    #[test]
+    fn buffers_every_emitted_channel_without_a_parser() {
+        let tokens = channels::lex("alpha ~\u{e9}#note", Channels::new);
+        let vocabulary = channels::metadata().vocabulary();
+        let observed = tokens
+            .tokens()
+            .map(|token| (
+                vocabulary.display_name(token.token_type()),
+                token.channel(),
+                token.text_or_empty(),
+                token.byte_span(),
+                token.column(),
+            ))
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(
+            observed,
+            @r###"
+        [
+            (
+                "WORD",
+                0,
+                "alpha",
+                Some(
+                    0..5,
+                ),
+                0,
+            ),
+            (
+                "WS",
+                1,
+                " ",
+                Some(
+                    5..6,
+                ),
+                5,
+            ),
+            (
+                "'\\u00E9'",
+                0,
+                "é",
+                Some(
+                    7..9,
+                ),
+                7,
+            ),
+            (
+                "COMMENT",
+                2,
+                "#note",
+                Some(
+                    9..14,
+                ),
+                8,
+            ),
+            (
+                "EOF",
+                0,
+                "<EOF>",
+                Some(
+                    14..14,
+                ),
+                13,
+            ),
+        ]
+        "###
+        );
+        assert_eq!(tokens.number_of_source_errors(), 0);
+    }
+
+    #[test]
+    fn accepts_arbitrary_character_streams() {
+        let tokens =
+            channels::lex_stream(ByteStream::new(b"beta".to_vec()), Channels::new);
+        let first = tokens.get(0).expect("word token");
+
+        assert_eq!(first.token_type(), WORD);
+        assert_eq!(first.byte_span(), Some(0..4));
+    }
+}
+"####,
+    );
+}
