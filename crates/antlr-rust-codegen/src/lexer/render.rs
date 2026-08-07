@@ -34,6 +34,7 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
     let embedded = model.embedded;
     let type_name = rust_type_name(grammar_name);
     let metadata = render_lexer_metadata(grammar_name, data);
+    let lex_convenience = render_lexer_lex_convenience(&type_name);
     let token_constants = render_lexer_token_constants(data);
     let lexer_state_constants = render_lexer_state_constants(data);
     // Embedded mode: lexer action/predicate bodies are verbatim Rust from the
@@ -263,6 +264,7 @@ use std::sync::OnceLock;
 {token_constants}
 {lexer_state_constants}
 {metadata}
+{lex_convenience}
 {typed_hook_adapter}
 
 static ATN_CELL: OnceLock<LexerAtn> = OnceLock::new();

@@ -203,3 +203,81 @@ mod combined_literal_tests {
 "#,
     );
 }
+
+#[test]
+fn generated_lex_helpers_expose_hidden_and_custom_channels() {
+    let temp = temporary_directory("lex-helper-channels");
+    let grammar = temp.path().join("Channels.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "lexer grammar Channels;\n\
+         channels { COMMENTS }\n\
+         WORD: [a-z]+;\n\
+         COMMENT: '#' ~[\\r\\n]* -> channel(COMMENTS);\n\
+         WS: [ \\t]+ -> channel(HIDDEN);\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &["channels.rs"],
+        r##"
+#[cfg(test)]
+mod lex_helper_tests {
+    use super::channels::{
+        self, CHANNEL_COMMENTS, COMMENT, Channels, WORD, WS,
+    };
+    use antlr4_runtime::{
+        ByteStream, DEFAULT_CHANNEL, HIDDEN_CHANNEL, TOKEN_EOF, Token as _,
+    };
+
+    #[test]
+    fn buffers_every_emitted_channel_without_a_parser() {
+        let tokens = channels::lex("alpha # note", Channels::new);
+        let observed = tokens
+            .tokens()
+            .map(|token| (
+                token.token_type(),
+                token.channel(),
+                token.text_or_empty(),
+            ))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            &observed[..3],
+            [
+                (WORD, DEFAULT_CHANNEL, "alpha"),
+                (WS, HIDDEN_CHANNEL, " "),
+                (COMMENT, CHANNEL_COMMENTS, "# note"),
+            ]
+        );
+        assert_eq!(observed[3].0, TOKEN_EOF);
+        assert_eq!(tokens.number_of_source_errors(), 0);
+    }
+
+    #[test]
+    fn accepts_arbitrary_character_streams() {
+        let tokens =
+            channels::lex_stream(ByteStream::new(b"beta".to_vec()), Channels::new);
+        let first = tokens.get(0).expect("word token");
+
+        assert_eq!(first.token_type(), WORD);
+        assert_eq!(first.byte_span(), Some(0..4));
+    }
+}
+"##,
+    );
+}

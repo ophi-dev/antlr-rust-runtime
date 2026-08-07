@@ -2896,6 +2896,35 @@ fn portable_local_semantics_reject_missing_generated_caller() {
 }
 
 #[test]
+fn renders_lex_convenience_without_a_parser() {
+    let rendered = render_lexer(
+        "TLexer",
+        &predicate_lexer_data(),
+        false,
+        SemUnknownPolicy::default(),
+        &SemPatternFile::default(),
+        false,
+    )
+    .expect("lexer should render");
+
+    insta::assert_snapshot!(
+        "lexer_lex_convenience",
+        render_lexer_lex_convenience("TLexer")
+    );
+    assert!(rendered.contains("pub fn lex<L: antlr4_runtime::TokenSource>("));
+    assert!(rendered.contains(
+        "pub fn lex_stream<I: antlr4_runtime::CharStream, L: antlr4_runtime::TokenSource>("
+    ));
+    assert!(
+        rendered.contains("lex_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer)")
+    );
+    assert!(rendered.contains("antlr4_runtime::CommonTokenStream::new(lexer(input))"));
+    assert!(
+        rendered.contains("for token in lex(src, TLexer::new).tokens() { println!(\"{token}\"); }")
+    );
+}
+
+#[test]
 fn renders_parse_convenience_without_replacing_manual_constructor() {
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
@@ -6269,7 +6298,7 @@ fn lexer_default_policy_keeps_compiled_token_path() {
         "generated_lexer_lifecycle_facade",
         rendered_facade_declaration(&module, "__antlr4_rust_lexer_facade")
     );
-    assert!(!module.contains("CommonToken"));
+    assert!(!module.contains("CommonToken::"));
     assert!(!module.contains("TokenFactory"));
 }
 

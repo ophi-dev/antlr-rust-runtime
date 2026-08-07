@@ -352,6 +352,25 @@ let parsed = json_parser::parse_stream(input, JsonLexer::new, JsonParser::json)?
 `parse_stream_with_parser` is the corresponding stream-based helper when the
 caller also needs the parser afterward.
 
+### Inspecting tokens
+
+Generated lexer modules expose `lex` for token-only workflows. The returned
+stream is already filled and retains EOF plus tokens on hidden or custom
+channels:
+
+```rust
+use generated::json_lexer::{self, JsonLexer};
+
+let tokens = json_lexer::lex(r#"{"a":1}"#, JsonLexer::new);
+for token in tokens.tokens() {
+    println!("{token}");
+}
+```
+
+`TokenView`'s display format includes token text, type, channel, line, and
+column. Rules using `skip` do not emit tokens. Use `lex_stream` to supply a
+named `InputStream`, `ByteStream`, or custom `CharStream`.
+
 Construct each layer explicitly when you need parser options or custom error
 handling before invoking the entry rule:
 
