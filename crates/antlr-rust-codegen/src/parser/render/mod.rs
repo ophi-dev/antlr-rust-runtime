@@ -24,8 +24,11 @@ pub(crate) fn render_parser_with_decision_report(
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn();
     let parser_atn_data = render_u32_slice(parser_atn.packed_words());
-    let token_constants = render_token_constants(data);
-    let rule_constants = render_rule_constants(data);
+    // Every constant in the generated module shares one Rust value
+    // namespace; allocation order matches emission order (tokens first).
+    let mut const_names = BTreeSet::new();
+    let token_constants = render_recognizer_token_constants(data, &mut const_names);
+    let rule_constants = render_rule_constants(data, &mut const_names);
     // Decision routing: embedded mode always follows the tool
     // classification (Java parity); `--fixed-lookahead` additionally
     // compiles static dispatch for provable decisions in either mode. The

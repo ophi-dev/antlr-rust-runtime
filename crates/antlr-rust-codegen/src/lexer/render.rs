@@ -35,8 +35,11 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
     let type_name = rust_type_name(grammar_name);
     let metadata = render_lexer_metadata(grammar_name, data);
     let lex_convenience = render_lexer_lex_convenience(&type_name);
-    let token_constants = render_lexer_token_constants(data);
-    let lexer_state_constants = render_lexer_state_constants(data);
+    // Every constant in the generated module shares one Rust value
+    // namespace; allocation order matches emission order (tokens first).
+    let mut const_names = BTreeSet::new();
+    let token_constants = render_recognizer_token_constants(data, &mut const_names);
+    let lexer_state_constants = render_lexer_state_constants(data, &mut const_names);
     // Embedded mode: lexer action/predicate bodies are verbatim Rust from the
     // rendered grammar; translate the recognizer surface textually and skip
     // the template machinery entirely.
