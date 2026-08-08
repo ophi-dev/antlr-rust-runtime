@@ -12,6 +12,15 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.32.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.31.0...v0.32.0) (2026-08-08)
+
+
+### Features
+
+* **codegen:** add lex-only generated helpers ([#316](https://github.com/ophi-dev/antlr-rust-runtime/issues/316)) ([0949b7c](https://github.com/ophi-dev/antlr-rust-runtime/commit/0949b7c57ded357d930e944bda6c42cbc55397e7))
+* **codegen:** emit context accessors from one declaration per method ([#326](https://github.com/ophi-dev/antlr-rust-runtime/issues/326)) ([e699024](https://github.com/ophi-dev/antlr-rust-runtime/commit/e699024913e7b6250e4967a2630dbc4eaec72f9c))
+* **codegen:** single-call runtime helpers for rule-body steps ([#325](https://github.com/ophi-dev/antlr-rust-runtime/issues/325)) ([565ea9c](https://github.com/ophi-dev/antlr-rust-runtime/commit/565ea9caaeb394e9f0b5f64e0517c981b85e6a8c))
+
 ## [0.31.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.30.0...v0.31.0) (2026-08-06)
 
 
