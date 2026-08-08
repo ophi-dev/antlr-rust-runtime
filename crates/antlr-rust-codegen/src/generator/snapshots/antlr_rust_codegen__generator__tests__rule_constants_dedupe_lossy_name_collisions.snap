@@ -1,0 +1,8 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: render_rule_constants(&data)
+---
+pub const RULE_COMPILATION_UNIT: usize = 0;
+pub const RULE_STATEMENT: usize = 1;
+pub const RULE_COMPILATION_UNIT_2: usize = 2;
+pub const RULE_COMPILATION_UNIT_3: usize = 3;

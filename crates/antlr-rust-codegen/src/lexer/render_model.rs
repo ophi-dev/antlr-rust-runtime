@@ -103,55 +103,46 @@ pub(crate) fn render_lexer_metadata(grammar_name: &str, data: &LexerCodegenData<
     )
 }
 
-/// Renders lexer token constants without coupling lexer emission to parser
-/// surface rendering.
-pub(crate) fn render_lexer_token_constants(data: &LexerCodegenData<'_>) -> String {
-    let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
-    let mut seen = BTreeSet::new();
-    if let Some(semantic) = data.semantic {
-        let vocabulary = &semantic.recognizer.vocabulary;
-        for name in vocabulary
-            .name_order
-            .iter()
-            .filter(|name| name.starts_with("T__"))
-        {
-            let ident = sanitize_identifier(name);
-            let _ = seen.insert(ident.clone());
-            let token_type = vocabulary.by_name[name];
-            writeln!(out, "pub const {ident}: i32 = {token_type};")
-                .expect("writing to a string cannot fail");
-        }
-    }
-    for (index, name) in data.symbolic_names.iter().enumerate() {
-        let Some(name) = name else { continue };
-        let ident = rust_const_name(name);
-        if ident == "EOF" || !seen.insert(ident.clone()) {
-            continue;
-        }
-        writeln!(out, "pub const {ident}: i32 = {index};")
+/// Renders `CHANNEL_*` / `MODE_*` constants for one prefix.
+///
+/// Identifiers are allocated in declaration order (channel/mode number), so
+/// the first-declared name keeps the canonical identifier and a `_2` suffix
+/// never reads like a channel or mode number, while emission keeps the
+/// name-ordered layout so non-colliding grammars render byte-identically.
+fn render_lexer_prefixed_constants<N: Copy + Ord + std::fmt::Display>(
+    prefix: &str,
+    numbers: &BTreeMap<String, N>,
+    used: &mut BTreeSet<String>,
+) -> String {
+    let mut declaration_order: Vec<(&String, N)> =
+        numbers.iter().map(|(name, number)| (name, *number)).collect();
+    declaration_order.sort_by_key(|&(_, number)| number);
+    let idents: BTreeMap<&String, String> = declaration_order
+        .into_iter()
+        .map(|(name, _)| (name, allocate_const_name(prefix, name, used)))
+        .collect();
+    let mut out = String::new();
+    for (name, number) in numbers {
+        writeln!(out, "pub const {}: i32 = {number};", idents[name])
             .expect("writing to a string cannot fail");
     }
     out
 }
 
-pub(crate) fn render_lexer_state_constants(data: &LexerCodegenData<'_>) -> String {
-    let mut out = String::new();
-    for (name, number) in &data.channel_numbers {
-        writeln!(
-            out,
-            "pub const CHANNEL_{}: i32 = {number};",
-            rust_const_name(name)
-        )
-        .expect("writing to a string cannot fail");
-    }
-    for (name, number) in &data.mode_numbers {
-        writeln!(
-            out,
-            "pub const MODE_{}: i32 = {number};",
-            rust_const_name(name)
-        )
-        .expect("writing to a string cannot fail");
-    }
+/// Renders lexer channel and mode constants. Both prefixes share the
+/// generated module's `used` identifier set with the token constants, since
+/// a token named `ChannelFoo` or `ModeBar` would otherwise collide with a
+/// channel `foo` or mode `bar`.
+pub(crate) fn render_lexer_state_constants(
+    data: &LexerCodegenData<'_>,
+    used: &mut BTreeSet<String>,
+) -> String {
+    let mut out = render_lexer_prefixed_constants("CHANNEL_", &data.channel_numbers, used);
+    out.push_str(&render_lexer_prefixed_constants(
+        "MODE_",
+        &data.mode_numbers,
+        used,
+    ));
     out
 }
 

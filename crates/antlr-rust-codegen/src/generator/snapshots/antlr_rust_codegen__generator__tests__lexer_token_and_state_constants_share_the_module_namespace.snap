@@ -1,0 +1,9 @@
+---
+source: crates/antlr-rust-codegen/src/generator/tests.rs
+expression: rendered
+---
+pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;
+pub const CHANNEL_FOO: i32 = 1;
+pub const MODE_BAR: i32 = 2;
+pub const CHANNEL_FOO_2: i32 = 2;
+pub const MODE_BAR_2: i32 = 1;

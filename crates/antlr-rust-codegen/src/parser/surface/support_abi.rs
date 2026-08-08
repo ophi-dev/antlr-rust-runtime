@@ -677,37 +677,6 @@ fn render_metadata_with_atn(
     )
 }
 
-/// Renders token constants from symbolic token names while avoiding duplicate
-/// Rust identifiers after sanitization.
-pub(crate) fn render_token_constants(data: &RecognizerCodegenData<'_>) -> String {
-    let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
-    let mut seen = BTreeSet::new();
-    if let Some(semantic) = data.semantic {
-        let vocabulary = &semantic.recognizer.vocabulary;
-        for name in vocabulary
-            .name_order
-            .iter()
-            .filter(|name| name.starts_with("T__"))
-        {
-            let ident = sanitize_identifier(name);
-            let _ = seen.insert(ident.clone());
-            let token_type = vocabulary.by_name[name];
-            writeln!(out, "pub const {ident}: i32 = {token_type};")
-                .expect("writing to a string cannot fail");
-        }
-    }
-    for (index, name) in data.symbolic_names.iter().enumerate() {
-        let Some(name) = name else { continue };
-        let ident = rust_const_name(name);
-        if ident == "EOF" || !seen.insert(ident.clone()) {
-            continue;
-        }
-        writeln!(out, "pub const {ident}: i32 = {index};")
-            .expect("writing to a string cannot fail");
-    }
-    out
-}
-
 /// Metadata-derived `<GeneratedParserType>_<TOKEN>` aliases used by
 /// antlr4rust embedded bodies.
 fn antlr4rust_token_alias_name(type_name: &str, token_name: &str) -> String {
@@ -899,14 +868,21 @@ fn render_antlr4rust_token_aliases(
     out
 }
 
-/// Renders rule-index constants from grammar rule names.
-pub(crate) fn render_rule_constants(data: &RecognizerCodegenData<'_>) -> String {
+/// Renders rule-index constants from grammar rule names. Rule names are
+/// unique in the grammar, but their upper-snake mangling is lossy and the
+/// literal `RULE_` prefix can itself collide with a token constant (token
+/// `RuleFoo` vs rule `foo`), so allocation shares the generated module's
+/// `used` identifier set and colliders get a numbered suffix.
+pub(crate) fn render_rule_constants(
+    data: &RecognizerCodegenData<'_>,
+    used: &mut BTreeSet<String>,
+) -> String {
     let mut out = String::new();
     for (index, name) in data.rule_names.iter().enumerate() {
         writeln!(
             out,
-            "pub const RULE_{}: usize = {index};",
-            rust_const_name(name)
+            "pub const {}: usize = {index};",
+            allocate_const_name("RULE_", name, used)
         )
         .expect("writing to a string cannot fail");
     }

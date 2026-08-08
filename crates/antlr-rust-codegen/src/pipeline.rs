@@ -1,7 +1,8 @@
 pub(crate) mod prelude {
     pub(crate) use super::{
         GENERATED_MODULE_FOOTER, LexerCodegenData, ParserCodegenData, RecognizerCodegenData,
-        generated_module_header, max_len, rust_const_name, token_type_for_name,
+        allocate_const_name, generated_module_header, max_len, render_recognizer_token_constants,
+        token_type_for_name,
     };
     pub(crate) use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
     pub(crate) use std::env;
@@ -207,6 +208,69 @@ pub(crate) fn rust_const_name(name: &str) -> String {
         ascii_uppercase(&words.join("_"))
     };
     sanitize_identifier(&ident)
+}
+
+/// Allocates a collision-free generated-constant identifier: `prefix`
+/// followed by the upper-snake [`rust_const_name`] mangling of `name`.
+///
+/// The mangling is lossy — `compilationUnit` and `compilation_unit` both
+/// yield `COMPILATION_UNIT` — and every constant a generated recognizer
+/// module emits (token, `RULE_*`, `CHANNEL_*`, `MODE_*`) shares one Rust
+/// value namespace, so callers thread a single `used` set per generated
+/// module through every constant renderer (tokens first, matching emission
+/// order). The first emission keeps the canonical identifier and later
+/// colliders receive a deterministic `_2`, `_3`, ... suffix, mirroring the
+/// numbered dedup used for generated rule methods and context types.
+pub(crate) fn allocate_const_name(prefix: &str, name: &str, used: &mut BTreeSet<String>) -> String {
+    let canonical = format!("{prefix}{}", rust_const_name(name));
+    if used.insert(canonical.clone()) {
+        return canonical;
+    }
+    let mut suffix = 2_usize;
+    loop {
+        let candidate = format!("{canonical}_{suffix}");
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+/// Renders token constants from the vocabulary's implicit `T__n` tokens and
+/// the symbolic token names, shared verbatim by lexer and parser emission.
+///
+/// Distinct token types whose names mangle to one identifier are
+/// deduplicated with a numbered suffix instead of silently losing their
+/// constant (a token mangling to the predefined `EOF` becomes `EOF_2`).
+/// Every allocated identifier is recorded in `used` so the module's other
+/// constant renderers cannot collide with a token constant.
+pub(crate) fn render_recognizer_token_constants(
+    data: &RecognizerCodegenData<'_>,
+    used: &mut BTreeSet<String>,
+) -> String {
+    let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
+    let _ = used.insert("EOF".to_owned());
+    if let Some(semantic) = data.semantic {
+        let vocabulary = &semantic.recognizer.vocabulary;
+        for name in vocabulary
+            .name_order
+            .iter()
+            .filter(|name| name.starts_with("T__"))
+        {
+            let ident = sanitize_identifier(name);
+            let token_type = vocabulary.by_name[name];
+            let _ = used.insert(ident.clone());
+            writeln!(out, "pub const {ident}: i32 = {token_type};")
+                .expect("writing to a string cannot fail");
+        }
+    }
+    for (index, name) in data.symbolic_names.iter().enumerate() {
+        let Some(name) = name else { continue };
+        let ident = allocate_const_name("", name, used);
+        writeln!(out, "pub const {ident}: i32 = {index};")
+            .expect("writing to a string cannot fail");
+    }
+    out
 }
 
 /// Converts ASCII letters to upper case without using allocation-hiding string
