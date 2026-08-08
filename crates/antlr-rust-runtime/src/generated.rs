@@ -347,9 +347,11 @@ macro_rules! __antlr4_rust_context {
 /// and token types are grammar data supplied by the generated invocation; the
 /// module-local support items (`__rule_children`, `__token_children`,
 /// `__labeled_token_children`, `__labeled_token_children_matching`,
-/// `TerminalNode`, `ValidatedTreeContext`, `__RecoveryContextState`) are
-/// emitted per generated module, exactly as `__antlr4_rust_context!` relies
-/// on.
+/// `TerminalNode`, `ValidatedTreeContext`, `__RecoveryContextState`, plus the
+/// `__from_child_node`/`__from_validated_child_node` constructors and the
+/// `__node`/`__invocation_states` context fields defined by
+/// `__antlr4_rust_context!`) are emitted per generated module, exactly as
+/// `__antlr4_rust_context!` relies on.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_context_accessors {
@@ -645,6 +647,37 @@ macro_rules! __antlr4_rust_context_accessors {
     };
     (@labeled_token_children($node:expr) [$($token_type:expr),+ $(,)?]) => {
         __labeled_token_children_matching($node, &[$($token_type),+])
+    };
+
+    // Catch-alls that name the offending declaration instead of failing with
+    // a bare `no rules expected this token` deep inside a generated module.
+    (@recovered $context:ident, $($declaration:tt)*) => {
+        compile_error!(concat!(
+            "unsupported generated accessor declaration for ",
+            stringify!($context),
+            ": ",
+            stringify!($($declaration)*)
+        ));
+    };
+    (@validated $context:ident, $($declaration:tt)*) => {
+        compile_error!(concat!(
+            "unsupported generated accessor declaration for ",
+            stringify!($context),
+            ": ",
+            stringify!($($declaration)*)
+        ));
+    };
+    (@selected($children:expr) $($selector:tt)*) => {
+        compile_error!(concat!(
+            "unsupported generated accessor selector: ",
+            stringify!($($selector)*)
+        ))
+    };
+    (@labeled_token_children($node:expr) $($tokens:tt)*) => {
+        compile_error!(concat!(
+            "unsupported generated accessor token set: ",
+            stringify!($($tokens)*)
+        ))
     };
 }
 

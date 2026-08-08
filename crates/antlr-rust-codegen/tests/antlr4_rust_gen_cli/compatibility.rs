@@ -418,7 +418,8 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
                 .contains("pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>>")
             && java_parser.contains("self.0.self_().ok().map(__Antlr4RustContext)")
             && java_parser.contains("rule r#type: required(TypeContext[")
-            && java_parser.contains("rule self_: required(SelfContext["),
+            && java_parser.contains("rule self_: required(SelfContext[")
+            && java_parser.contains("token self__token: required("),
         "keyword compatibility getters must coexist with the native fallible surface"
     );
     let unrelated_context_tail = java_parser
@@ -434,8 +435,13 @@ fn antlr4rust_transform_surface_compiles_and_matches_native_behavior() {
         "antlr4rust_unrelated_context_surface",
         unrelated_context
             .lines()
-            .filter(|line| line.trim_start().starts_with("pub fn "))
             .map(str::trim)
+            .filter(|line| {
+                line.starts_with("pub fn ")
+                    || ["rule ", "token ", "label_rule ", "label_token "]
+                        .iter()
+                        .any(|kind| line.starts_with(kind))
+            })
             .collect::<Vec<_>>()
             .join("\n")
     );
