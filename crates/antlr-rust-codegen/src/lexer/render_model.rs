@@ -104,10 +104,12 @@ pub(crate) fn render_lexer_metadata(grammar_name: &str, data: &LexerCodegenData<
 }
 
 /// Renders lexer token constants without coupling lexer emission to parser
-/// surface rendering.
+/// surface rendering. Re-emissions of the same token type are skipped, and
+/// distinct token types whose names mangle to one identifier are
+/// deduplicated with a numbered suffix.
 pub(crate) fn render_lexer_token_constants(data: &LexerCodegenData<'_>) -> String {
     let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
-    let mut seen = BTreeSet::new();
+    let mut seen = BTreeMap::from([("EOF".to_owned(), TOKEN_EOF)]);
     if let Some(semantic) = data.semantic {
         let vocabulary = &semantic.recognizer.vocabulary;
         for name in vocabulary
@@ -116,19 +118,19 @@ pub(crate) fn render_lexer_token_constants(data: &LexerCodegenData<'_>) -> Strin
             .filter(|name| name.starts_with("T__"))
         {
             let ident = sanitize_identifier(name);
-            let _ = seen.insert(ident.clone());
             let token_type = vocabulary.by_name[name];
+            let _ = seen.insert(ident.clone(), token_type);
             writeln!(out, "pub const {ident}: i32 = {token_type};")
                 .expect("writing to a string cannot fail");
         }
     }
     for (index, name) in data.symbolic_names.iter().enumerate() {
         let Some(name) = name else { continue };
-        let ident = rust_const_name(name);
-        if ident == "EOF" || !seen.insert(ident.clone()) {
+        let token_type = i32::try_from(index).expect("token type exceeds i32");
+        let Some(ident) = allocate_token_const_name(name, token_type, &mut seen) else {
             continue;
-        }
-        writeln!(out, "pub const {ident}: i32 = {index};")
+        };
+        writeln!(out, "pub const {ident}: i32 = {token_type};")
             .expect("writing to a string cannot fail");
     }
     out
@@ -136,19 +138,21 @@ pub(crate) fn render_lexer_token_constants(data: &LexerCodegenData<'_>) -> Strin
 
 pub(crate) fn render_lexer_state_constants(data: &LexerCodegenData<'_>) -> String {
     let mut out = String::new();
+    let mut used_channels = BTreeSet::new();
     for (name, number) in &data.channel_numbers {
         writeln!(
             out,
             "pub const CHANNEL_{}: i32 = {number};",
-            rust_const_name(name)
+            allocate_rust_const_name(name, &mut used_channels)
         )
         .expect("writing to a string cannot fail");
     }
+    let mut used_modes = BTreeSet::new();
     for (name, number) in &data.mode_numbers {
         writeln!(
             out,
             "pub const MODE_{}: i32 = {number};",
-            rust_const_name(name)
+            allocate_rust_const_name(name, &mut used_modes)
         )
         .expect("writing to a string cannot fail");
     }

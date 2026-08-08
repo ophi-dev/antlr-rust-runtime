@@ -678,10 +678,12 @@ fn render_metadata_with_atn(
 }
 
 /// Renders token constants from symbolic token names while avoiding duplicate
-/// Rust identifiers after sanitization.
+/// Rust identifiers after sanitization: re-emissions of the same token type
+/// are skipped, and distinct token types whose names mangle to one identifier
+/// are deduplicated with a numbered suffix.
 pub(crate) fn render_token_constants(data: &RecognizerCodegenData<'_>) -> String {
     let mut out = String::from("pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;\n");
-    let mut seen = BTreeSet::new();
+    let mut seen = BTreeMap::from([("EOF".to_owned(), TOKEN_EOF)]);
     if let Some(semantic) = data.semantic {
         let vocabulary = &semantic.recognizer.vocabulary;
         for name in vocabulary
@@ -690,19 +692,19 @@ pub(crate) fn render_token_constants(data: &RecognizerCodegenData<'_>) -> String
             .filter(|name| name.starts_with("T__"))
         {
             let ident = sanitize_identifier(name);
-            let _ = seen.insert(ident.clone());
             let token_type = vocabulary.by_name[name];
+            let _ = seen.insert(ident.clone(), token_type);
             writeln!(out, "pub const {ident}: i32 = {token_type};")
                 .expect("writing to a string cannot fail");
         }
     }
     for (index, name) in data.symbolic_names.iter().enumerate() {
         let Some(name) = name else { continue };
-        let ident = rust_const_name(name);
-        if ident == "EOF" || !seen.insert(ident.clone()) {
+        let token_type = i32::try_from(index).expect("token type exceeds i32");
+        let Some(ident) = allocate_token_const_name(name, token_type, &mut seen) else {
             continue;
-        }
-        writeln!(out, "pub const {ident}: i32 = {index};")
+        };
+        writeln!(out, "pub const {ident}: i32 = {token_type};")
             .expect("writing to a string cannot fail");
     }
     out
@@ -899,14 +901,17 @@ fn render_antlr4rust_token_aliases(
     out
 }
 
-/// Renders rule-index constants from grammar rule names.
+/// Renders rule-index constants from grammar rule names. Rule names are
+/// unique in the grammar, but their upper-snake mangling is lossy, so
+/// colliding constants are deduplicated with a numbered suffix.
 pub(crate) fn render_rule_constants(data: &RecognizerCodegenData<'_>) -> String {
     let mut out = String::new();
+    let mut used = BTreeSet::new();
     for (index, name) in data.rule_names.iter().enumerate() {
         writeln!(
             out,
             "pub const RULE_{}: usize = {index};",
-            rust_const_name(name)
+            allocate_rust_const_name(name, &mut used)
         )
         .expect("writing to a string cannot fail");
     }

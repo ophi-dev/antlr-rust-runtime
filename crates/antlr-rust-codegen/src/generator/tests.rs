@@ -143,6 +143,112 @@ fn renders_structural_channel_and_mode_constants() {
 }
 
 #[test]
+fn rule_constants_dedupe_lossy_name_collisions() {
+    let data = RecognizerCodegenData {
+        rule_names: vec![
+            "compilationUnit".to_owned(),
+            "statement".to_owned(),
+            "compilation_unit".to_owned(),
+            "COMPILATION_UNIT".to_owned(),
+        ],
+        ..RecognizerCodegenData::default()
+    };
+
+    insta::assert_snapshot!(
+        "rule_constants_dedupe_lossy_name_collisions",
+        render_rule_constants(&data)
+    );
+}
+
+#[test]
+fn token_constants_dedupe_lossy_name_collisions() {
+    let common = RecognizerCodegenData {
+        symbolic_names: vec![
+            None,
+            Some("FooBar".to_owned()),
+            Some("FOO_BAR".to_owned()),
+            Some("Eof".to_owned()),
+        ],
+        ..RecognizerCodegenData::default()
+    };
+
+    let rendered = render_token_constants(&common);
+
+    insta::assert_snapshot!("token_constants_dedupe_lossy_name_collisions", rendered);
+
+    let lexer_data = LexerCodegenData {
+        common,
+        channel_names: Vec::new(),
+        channel_numbers: BTreeMap::new(),
+        mode_names: Vec::new(),
+        mode_numbers: BTreeMap::new(),
+        lexer_atn_words: Vec::new(),
+        lexer_atn: LexerAtn::new(0),
+        lexer_dfa_words: Vec::new(),
+    };
+    assert_eq!(
+        render_lexer_token_constants(&lexer_data),
+        rendered,
+        "lexer and parser token-constant rendering must stay in lockstep"
+    );
+}
+
+#[test]
+fn token_const_allocation_skips_same_type_and_suffixes_collisions() {
+    let mut seen = BTreeMap::from([("EOF".to_owned(), TOKEN_EOF)]);
+
+    assert_eq!(
+        allocate_token_const_name("FooBar", 1, &mut seen),
+        Some("FOO_BAR".to_owned())
+    );
+    assert_eq!(
+        allocate_token_const_name("FooBar", 1, &mut seen),
+        None,
+        "re-emitting the same token type must not duplicate its constant"
+    );
+    assert_eq!(
+        allocate_token_const_name("FOO_BAR", 2, &mut seen),
+        Some("FOO_BAR_2".to_owned())
+    );
+    assert_eq!(
+        allocate_token_const_name("Foo_Bar", 3, &mut seen),
+        Some("FOO_BAR_3".to_owned())
+    );
+    assert_eq!(
+        allocate_token_const_name("Eof", 4, &mut seen),
+        Some("EOF_2".to_owned()),
+        "a token mangling to the predefined EOF constant must keep a constant"
+    );
+}
+
+#[test]
+fn channel_and_mode_constants_dedupe_lossy_name_collisions() {
+    let data = LexerCodegenData {
+        common: RecognizerCodegenData::default(),
+        channel_names: Vec::new(),
+        channel_numbers: BTreeMap::from([
+            ("DEFAULT_TOKEN_CHANNEL".to_owned(), 0),
+            ("FOO_BAR".to_owned(), 3),
+            ("FooBar".to_owned(), 2),
+        ]),
+        mode_names: Vec::new(),
+        mode_numbers: BTreeMap::from([
+            ("DEFAULT_MODE".to_owned(), 0),
+            ("FOO_BAR".to_owned(), 2),
+            ("FooBar".to_owned(), 1),
+        ]),
+        lexer_atn_words: Vec::new(),
+        lexer_atn: LexerAtn::new(0),
+        lexer_dfa_words: Vec::new(),
+    };
+
+    insta::assert_snapshot!(
+        "channel_and_mode_constants_dedupe_lossy_name_collisions",
+        render_lexer_state_constants(&data)
+    );
+}
+
+#[test]
 fn renders_parser_rustdoc_with_entry_rule_methods() {
     let data = RecognizerCodegenData {
         rule_names: vec![

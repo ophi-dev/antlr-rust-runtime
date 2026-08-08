@@ -1,7 +1,8 @@
 pub(crate) mod prelude {
     pub(crate) use super::{
         GENERATED_MODULE_FOOTER, LexerCodegenData, ParserCodegenData, RecognizerCodegenData,
-        generated_module_header, max_len, rust_const_name, token_type_for_name,
+        allocate_rust_const_name, allocate_token_const_name, generated_module_header, max_len,
+        token_type_for_name,
     };
     pub(crate) use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
     pub(crate) use std::env;
@@ -207,6 +208,59 @@ pub(crate) fn rust_const_name(name: &str) -> String {
         ascii_uppercase(&words.join("_"))
     };
     sanitize_identifier(&ident)
+}
+
+/// Allocates a collision-free [`rust_const_name`] for `name`.
+///
+/// The conversion is lossy — `compilationUnit` and `compilation_unit` both
+/// mangle to `COMPILATION_UNIT` — so the first source name keeps the
+/// canonical identifier and later colliding names receive a deterministic
+/// `_2`, `_3`, ... suffix, mirroring the numbered dedup used for generated
+/// rule methods and context types.
+pub(crate) fn allocate_rust_const_name(name: &str, used: &mut BTreeSet<String>) -> String {
+    let canonical = rust_const_name(name);
+    if used.insert(canonical.clone()) {
+        return canonical;
+    }
+    let mut suffix = 2_usize;
+    loop {
+        let candidate = format!("{canonical}_{suffix}");
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+/// Allocates a token-constant identifier for a symbolic token name, or `None`
+/// when the identifier is already bound to the same token type (implicit
+/// `T__n` vocabulary tokens are rendered ahead of symbolic names, and `EOF`
+/// is always predefined).
+///
+/// Distinct token types whose names mangle to one identifier receive a
+/// deterministic `_2`, `_3`, ... suffix instead of silently losing their
+/// constant.
+pub(crate) fn allocate_token_const_name(
+    name: &str,
+    token_type: i32,
+    seen: &mut BTreeMap<String, i32>,
+) -> Option<String> {
+    let canonical = rust_const_name(name);
+    let mut candidate = canonical.clone();
+    let mut suffix = 2_usize;
+    loop {
+        match seen.entry(candidate) {
+            Entry::Vacant(entry) => {
+                let allocated = entry.key().clone();
+                entry.insert(token_type);
+                return Some(allocated);
+            }
+            Entry::Occupied(entry) if *entry.get() == token_type => return None,
+            Entry::Occupied(_) => {}
+        }
+        candidate = format!("{canonical}_{suffix}");
+        suffix += 1;
+    }
 }
 
 /// Converts ASCII letters to upper case without using allocation-hiding string
