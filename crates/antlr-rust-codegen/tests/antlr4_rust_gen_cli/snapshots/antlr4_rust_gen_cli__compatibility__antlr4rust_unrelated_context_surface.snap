@@ -1,10 +1,7 @@
 ---
 source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/compatibility.rs
-expression: "unrelated_context.lines().filter(|line|\nline.trim_start().starts_with(\"pub fn \")).map(str::trim).collect::<Vec<_>>().join(\"\\n\")"
+expression: "unrelated_context.lines().map(str::trim).filter(|line|\n{\n    line.starts_with(\"pub fn \") ||\n    [\"rule \", \"token \", \"label_rule \",\n    \"label_token \"].iter().any(|kind| line.starts_with(kind))\n}).collect::<Vec<_>>().join(\"\\n\")"
 ---
-pub fn text_rule_child(&self) -> Result<TextContext<'a>, MissingChildError> {
-pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-pub fn identifier_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-pub fn text_rule_child(&self) -> TextContext<'a, ValidatedTreeContext> {
-pub fn eof_token(&self) -> TerminalNode<'a> {
-pub fn identifier_token(&self) -> TerminalNode<'a> {
+rule text_rule_child: required(TextContext[12], "text"),
+token eof_token: required(-1, "EOF"),
+token identifier_token: required(11, "IDENTIFIER"),

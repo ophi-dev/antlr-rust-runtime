@@ -388,7 +388,19 @@ function historicalPath(path) {
 }
 
 function gitShowOptional(cwd, commit, path) {
-    return gitShowAtPath(cwd, commit, historicalPath(path));
+    // Pinned commits may predate the workspace-root refactor, so fall back
+    // to the pre-move location when the current path is absent.
+    return (
+        gitShowAtPath(cwd, commit, path) ??
+        gitShowAtPath(cwd, commit, historicalPath(path)) ??
+        (path.startsWith("crates/antlr-rust-runtime/")
+            ? gitShowAtPath(
+                  cwd,
+                  commit,
+                  path.replace("crates/antlr-rust-runtime/", ""),
+              )
+            : null)
+    );
 }
 
 const update = parseMode(
@@ -2785,7 +2797,16 @@ function refactorSectionsEquivalent(left, right) {
             .replace(
                 /CodegenData::from_compiled\(\n\s+parser_named\(compilation, parser_name\),\n\s+&compilation\.sources,\n\s+\)/u,
                 "CodegenData::from_parser(parser_named(compilation, parser_name), &compilation.sources)",
-            );
+            )
+            // Generated context accessors moved from literal method bodies to
+            // declarative `__antlr4_rust_context_accessors!` records; the
+            // CodegenLiteralAccessor probe matches the declaration lines now.
+            .replace(
+                /let single =\n\s+"pub fn token_token\(&self\) -> Result<TerminalNode<'a>, MissingChildError>";\n\s+let repeated_signature =\n\s+"pub fn token_tokens\(&self\) -> impl Iterator<Item = TerminalNode<'a>> \+ '_";/u,
+                'let single = "token token_token: required(";\n' +
+                    '                    let repeated_declaration = "token token_tokens: many(";',
+            )
+            .replaceAll("repeated_signature", "repeated_declaration");
     return normalize(left) === normalize(right);
 }
 

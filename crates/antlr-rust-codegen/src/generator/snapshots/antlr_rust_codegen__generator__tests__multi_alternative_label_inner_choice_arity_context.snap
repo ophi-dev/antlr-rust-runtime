@@ -2,33 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"InnerChoiceArityContext\")"
 ---
-
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn param(&self) -> Option<ParamContext<'a>> {
-        __rule_children(self.__node, 8)
-            .next()
-            .map(|node| ParamContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> InnerChoiceArityContext<'a, ValidatedTreeContext> {
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn param(&self) -> Option<ParamContext<'a, ValidatedTreeContext>> {
-        __rule_children(self.__node, 8)
-            .next()
-            .map(|node| ParamContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn num_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 14).map(TerminalNode::new)
-    }
-}
+        rule unary_children: many(UnaryContext[4]),
+        rule param: optional(ParamContext[8]),
+        token num_tokens: many(14),

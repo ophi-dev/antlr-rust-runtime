@@ -97,7 +97,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
-    for revision in [1, 2, 3, 4, 5, 6] {
+    for revision in [1, 2, 3, 4, 5, 6, 7] {
         let supported = format!("__antlr4_rust_require_codegen_api!({revision},");
         let mut supported_parser = parser.clone();
         let check_start = supported_parser
@@ -129,7 +129,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        diagnostic.contains("supports revisions 1, 2, 3, 4, 5, 6, and 7"),
+        diagnostic.contains("supports revisions 1, 2, 3, 4, 5, 6, 7, and 8"),
         "diagnostic should name every supported revision: {diagnostic}"
     );
     insta::assert_snapshot!(

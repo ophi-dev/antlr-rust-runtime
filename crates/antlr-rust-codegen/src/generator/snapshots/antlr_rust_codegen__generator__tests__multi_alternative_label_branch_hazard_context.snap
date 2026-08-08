@@ -2,46 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, name)"
 ---
-
-    pub fn unary(&self) -> Result<UnaryContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("BranchHazardContext", "unary"))
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("BranchHazardContext", "NUM"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> BranchHazardContext<'a, ValidatedTreeContext> {
-    pub fn unary(&self) -> UnaryContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 4).next() else {
-            unreachable!("validated BranchHazardContext is missing required child unary")
-        };
-        UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 14).next() else {
-            unreachable!("validated BranchHazardContext is missing required child NUM")
-        };
-        TerminalNode::new(node)
-    }
-}
+        rule unary: required(UnaryContext[4], "unary"),
+        token star_token: optional(8),
+        token num_token: required(14, "NUM"),

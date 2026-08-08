@@ -2,30 +2,5 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: shadowed_context
 ---
-
-    pub fn unary(&self) -> Result<UnaryContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 4)
-            .next()
-            .map(|node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("ShadowedContext", "unary"))
-    }
-    pub fn plus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 11).map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> ShadowedContext<'a, ValidatedTreeContext> {
-    pub fn unary(&self) -> UnaryContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 4).next() else {
-            unreachable!("validated ShadowedContext is missing required child unary")
-        };
-        UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-    pub fn plus_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 11).map(TerminalNode::new)
-    }
-}
+        rule unary: required(UnaryContext[4], "unary"),
+        token plus_tokens: many(11),

@@ -2,46 +2,6 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"ExhaustivePrefixContext\")"
 ---
-
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("ExhaustivePrefixContext", "NUM"))
-    }
-    pub fn pick(&self) -> Result<UnaryContext<'a>, MissingChildError> {
-        __rule_children(self.__node, 4)
-            .nth(1)
-            .map(|node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-            .ok_or_else(|| MissingChildError::new("ExhaustivePrefixContext", "pick"))
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> ExhaustivePrefixContext<'a, ValidatedTreeContext> {
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn num_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 14).next() else {
-            unreachable!("validated ExhaustivePrefixContext is missing required child NUM")
-        };
-        TerminalNode::new(node)
-    }
-    pub fn pick(&self) -> UnaryContext<'a, ValidatedTreeContext> {
-        let Some(node) = __rule_children(self.__node, 4)
-            .nth(1)
-        else {
-            unreachable!("validated ExhaustivePrefixContext is missing required child pick")
-        };
-        UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(
-            node,
-            self.__invocation_states.as_deref(),
-        )
-    }
-}
+        rule unary_children: many(UnaryContext[4]),
+        token num_token: required(14, "NUM"),
+        label_rule pick: required(nth(1), UnaryContext[4], "pick"),

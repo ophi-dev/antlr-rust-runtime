@@ -7,9 +7,11 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 6 so generated parser rules can use the
-runtime-owned lifecycle and recovery contract. This runtime continues to
-accept revisions 1 through 5 because their required APIs remain supported.
+The current generator emits revision 8 so generated typed-context accessors
+can be declared once and expanded into both the recovery-oriented and
+validated state-variant impls by the runtime-owned
+`__antlr4_rust_context_accessors!` macro. This runtime continues to accept
+revisions 1 through 7 because their required APIs remain supported.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when

@@ -44,10 +44,10 @@ fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
         "fn enter_every_rule(&mut self",
         "fn enter_single_label(&mut self",
         "fn enter_many_label(&mut self",
-        "pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a>>",
-        "pub fn first(&self) -> Result<AtomContext<'a>, MissingChildError>",
-        "pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>>",
-        "pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError>",
+        "rule atom_children: many(AtomContext[",
+        "label_rule first: required(nth(0), AtomContext[",
+        "label_rule rest: many(skip(0), AtomContext[",
+        "label_rule value: required(last_after(0), AtomContext[",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }
@@ -559,11 +559,12 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
         "pub fn validate(self) -> Result<TValidatedTree, TValidationError>",
         "pub trait TValidatedListener",
         "pub trait TValidatedVisitor",
-        "impl<'a> StartContext<'a, ValidatedTreeContext>",
-        "pub fn required_rule(&self) -> RequiredRuleContext<'a, ValidatedTreeContext>",
-        "pub fn bang_token(&self) -> TerminalNode<'a>",
-        "pub fn optional_rule(&self) -> Option<OptionalRuleContext<'a, ValidatedTreeContext>>",
-        "pub fn atom_children(&self) -> impl Iterator<Item = AtomContext<'a, ValidatedTreeContext>>",
+        "antlr4_runtime::__antlr4_rust_context_accessors! {\n    StartContext {",
+        "rule required_rule: required(RequiredRuleContext[",
+        "token bang_token: required(",
+        "rule optional_rule: optional(OptionalRuleContext[",
+        "rule atom_children: many(AtomContext[",
+        "label_token tails: many(skip(0), [",
         "let _ = context.required_rule().map_err(TValidationError::MissingChild)?;",
         "TValidationError::InvalidChildCount",
     ] {
@@ -681,7 +682,7 @@ mod validated_tree_tests {
 
     #[test]
     fn clean_tree_exposes_direct_required_children_and_typed_traversal() {
-        let validated = strict("(head) [maybe] ! : ? one two").expect("clean parse validates");
+        let validated = strict("(head) [maybe] ! : ? one two , ,").expect("clean parse validates");
         let start = start_context(&validated);
 
         assert_eq!(start.required_rule().text(), "(head)");
@@ -713,6 +714,13 @@ mod validated_tree_tests {
                 .collect::<Vec<_>>(),
             ["one", "two"]
         );
+        assert_eq!(
+            start
+                .tails()
+                .map(|token| token.to_string())
+                .collect::<Vec<_>>(),
+            [",", ","]
+        );
         assert_eq!(start.eof_token().to_string(), "<EOF>");
 
         let mut listener = ValidatedTrace::default();
@@ -739,6 +747,7 @@ mod validated_tree_tests {
         assert!(start.question_token().is_none());
         assert!(start.question().is_none());
         assert_eq!(start.items().count(), 1);
+        assert_eq!(start.tails().count(), 0);
 
         let mut visitor = ValidatedVisitor::default();
         visitor.visit(validated.tree());
@@ -1030,19 +1039,18 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
         "fn visit_number_label(&mut self",
         "fn default_result(&mut self) -> Self::Result;",
         "pub trait CalculatorListener<E = std::convert::Infallible>",
-        "pub fn expression_children(&self) -> impl Iterator<Item = ExpressionContext<'a>>",
-        "pub fn left(&self) -> Result<ExpressionContext<'a>, MissingChildError>",
-        "pub fn right(&self) -> Result<ExpressionContext<'a>, MissingChildError>",
-        "pub fn star_token(&self) -> Option<TerminalNode<'a>>",
-        "pub fn int_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn eof_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn literal(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn choice(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn other(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn wildcard(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn plus_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "pub fn star_token(&self) -> Result<TerminalNode<'a>, MissingChildError>",
-        "__labeled_token_children_matching(self.__node",
+        "rule expression_children: many(ExpressionContext[",
+        "label_rule left: required(nth(0), ExpressionContext[",
+        "label_rule right: required(nth(1), ExpressionContext[",
+        "token star_token: optional(",
+        "token int_token: required(",
+        "token eof_token: required(-1, \"EOF\")",
+        "label_token literal: required(",
+        "label_token choice: required(nth(0), [2, 3], \"choice\")",
+        "label_token other: required(",
+        "label_token wildcard: required(",
+        "token plus_token: required(",
+        "token star_token: required(",
         "track_context_alt_numbers: true",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");

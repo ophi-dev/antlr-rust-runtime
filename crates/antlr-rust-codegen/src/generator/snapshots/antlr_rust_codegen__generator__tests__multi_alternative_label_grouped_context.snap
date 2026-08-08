@@ -2,95 +2,12 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: "rendered_context_impl(&rendered, \"GroupedContext\")"
 ---
-
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn in_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 7)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> Result<TerminalNode<'a>, MissingChildError> {
-        __token_children(self.__node, 14)
-            .next()
-            .map(TerminalNode::new)
-            .ok_or_else(|| MissingChildError::new("GroupedContext", "NUM"))
-    }
-    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 15).map(TerminalNode::new)
-    }
-    pub fn doc(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 13)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-    pub fn errors(&self) -> impl Iterator<Item = UnaryContext<'a>> + '_ {
-        __rule_children(self.__node, 4)
-            .skip(0)
-            .map(move |node| UnaryContext::__from_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn oneway(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 8)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
-
-#[allow(dead_code, clippy::all)]
-impl<'a> GroupedContext<'a, ValidatedTreeContext> {
-    pub fn unary_children(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 4)
-            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn in_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 7)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn star_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 8)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn ident_token(&self) -> Option<TerminalNode<'a>> {
-        __token_children(self.__node, 13)
-            .next()
-            .map(TerminalNode::new)
-    }
-    pub fn num_token(&self) -> TerminalNode<'a> {
-        let Some(node) = __token_children(self.__node, 14).next() else {
-            unreachable!("validated GroupedContext is missing required child NUM")
-        };
-        TerminalNode::new(node)
-    }
-    pub fn comma_tokens(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {
-        __token_children(self.__node, 15).map(TerminalNode::new)
-    }
-    pub fn doc(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 13)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-    pub fn errors(&self) -> impl Iterator<Item = UnaryContext<'a, ValidatedTreeContext>> + '_ {
-        __rule_children(self.__node, 4)
-            .skip(0)
-            .map(move |node| UnaryContext::<ValidatedTreeContext>::__from_validated_child_node(node, self.__invocation_states.as_deref()))
-    }
-    pub fn oneway(&self) -> Option<TerminalNode<'a>> {
-        __labeled_token_children(self.__node, 8)
-            .nth(0)
-            .map(TerminalNode::new)
-    }
-}
+        rule unary_children: many(UnaryContext[4]),
+        token in_token: optional(7),
+        token star_token: optional(8),
+        token ident_token: optional(13),
+        token num_token: required(14, "NUM"),
+        token comma_tokens: many(15),
+        label_token doc: optional(nth(0), [13]),
+        label_rule errors: many(skip(0), UnaryContext[4]),
+        label_token oneway: optional(nth(0), [8]),
