@@ -62,7 +62,7 @@
       "path": "crates/antlr-rust-codegen/src/grammar/atn/interp_test.rs",
       "marker": "    mod upstream_phase_c_runtime {",
       "end_marker": "\n    mod upstream_left_recursion_tool_issues {",
-      "sha256": "70e5e4fda9ad536d7548e68c295a772aa06fa92fb2c74055d6b722eafb9352fd"
+      "sha256": "25192a81f4866e5f06c9c7ff0dd383c73aa62d38a53cb17e684221b0179349f3"
     },
     {
       "path": "crates/antlr-rust-codegen/tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs",
