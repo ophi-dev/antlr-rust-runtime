@@ -564,6 +564,7 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
         "token bang_token: required(",
         "rule optional_rule: optional(OptionalRuleContext[",
         "rule atom_children: many(AtomContext[",
+        "label_token tails: many(skip(0), [",
         "let _ = context.required_rule().map_err(TValidationError::MissingChild)?;",
         "TValidationError::InvalidChildCount",
     ] {
@@ -681,7 +682,7 @@ mod validated_tree_tests {
 
     #[test]
     fn clean_tree_exposes_direct_required_children_and_typed_traversal() {
-        let validated = strict("(head) [maybe] ! : ? one two").expect("clean parse validates");
+        let validated = strict("(head) [maybe] ! : ? one two , ,").expect("clean parse validates");
         let start = start_context(&validated);
 
         assert_eq!(start.required_rule().text(), "(head)");
@@ -713,6 +714,13 @@ mod validated_tree_tests {
                 .collect::<Vec<_>>(),
             ["one", "two"]
         );
+        assert_eq!(
+            start
+                .tails()
+                .map(|token| token.to_string())
+                .collect::<Vec<_>>(),
+            [",", ","]
+        );
         assert_eq!(start.eof_token().to_string(), "<EOF>");
 
         let mut listener = ValidatedTrace::default();
@@ -739,6 +747,7 @@ mod validated_tree_tests {
         assert!(start.question_token().is_none());
         assert!(start.question().is_none());
         assert_eq!(start.items().count(), 1);
+        assert_eq!(start.tails().count(), 0);
 
         let mut visitor = ValidatedVisitor::default();
         visitor.visit(validated.tree());

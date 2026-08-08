@@ -286,6 +286,9 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
             continue;
         }
         if context_accessors {
+            // The first trimmed `}` is the inner `{view_name} {` close; the
+            // invocation's outer `}` then falls through to the generic prefix
+            // scan below, where it matches nothing.
             if line == "}" {
                 context_accessors = false;
                 continue;

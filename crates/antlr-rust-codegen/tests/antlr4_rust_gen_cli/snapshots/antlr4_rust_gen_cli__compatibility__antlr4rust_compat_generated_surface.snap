@@ -41,8 +41,11 @@ pub fn IDENTIFIER(&self, index: usize) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER_all(&self) -> Vec<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
 pub fn IDENTIFIER(&self) -> Option<TerminalNode<'a>> {
+rule r#type: required(TypeContext[10], "type"),
+rule self_: required(SelfContext[11], "self"),
 pub fn r#type(&self) -> Option<__Antlr4RustContext<TypeContext<'a>>> {
 pub fn self_(&self) -> Option<__Antlr4RustContext<SelfContext<'a>>> {
+token self__token: required(10, "SELF"),
 __Antlr4RustInput(self.base.token_stream()).la(1),
 __antlr4rust_token_aliases::JavaCompatParser_IDENTIFIER | __antlr4rust_token_aliases::JavaCompatParser_MODULE
 ) || __Antlr4RustInput(self.base.token_stream()).la(2) != __antlr4rust_token_aliases::JavaCompatParser_ASSIGN

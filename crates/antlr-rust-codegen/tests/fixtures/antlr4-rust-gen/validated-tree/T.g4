@@ -7,6 +7,7 @@ start
       COLON
       question = QUESTION?
       items += atom+
+      tails += COMMA*
       EOF
     ;
 

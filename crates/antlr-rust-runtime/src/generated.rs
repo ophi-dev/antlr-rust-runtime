@@ -651,6 +651,34 @@ macro_rules! __antlr4_rust_context_accessors {
 
     // Catch-alls that name the offending declaration instead of failing with
     // a bare `no rules expected this token` deep inside a generated module.
+    // The structured arms reconstruct the source declaration order; the
+    // trailing generic arms catch shapes that do not even parse as one.
+    (@recovered $context:ident, $kind:tt $card:tt $method:ident $payload:tt) => {
+        compile_error!(concat!(
+            "unsupported generated accessor declaration for ",
+            stringify!($context),
+            ": ",
+            stringify!($kind),
+            " ",
+            stringify!($method),
+            ": ",
+            stringify!($card),
+            stringify!($payload)
+        ));
+    };
+    (@validated $context:ident, $kind:tt $card:tt $method:ident $payload:tt) => {
+        compile_error!(concat!(
+            "unsupported generated accessor declaration for ",
+            stringify!($context),
+            ": ",
+            stringify!($kind),
+            " ",
+            stringify!($method),
+            ": ",
+            stringify!($card),
+            stringify!($payload)
+        ));
+    };
     (@recovered $context:ident, $($declaration:tt)*) => {
         compile_error!(concat!(
             "unsupported generated accessor declaration for ",
