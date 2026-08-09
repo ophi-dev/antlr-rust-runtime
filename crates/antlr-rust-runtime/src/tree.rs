@@ -447,6 +447,33 @@ impl<'tree> Node<'tree> {
         (self.kind() == NodeKind::Error).then_some(ErrorNodeView { node: self })
     }
 
+    /// Child-token triage shared by every terminal-children iterator: real
+    /// terminals and recovered error-node terminals view as terminals, rule
+    /// nodes do not.
+    #[must_use]
+    pub(crate) fn terminal_view(self) -> Option<TerminalNodeView<'tree>> {
+        match self.kind() {
+            NodeKind::Terminal => self.as_terminal(),
+            NodeKind::Error => self.as_error().map(ErrorNodeView::terminal),
+            NodeKind::Rule => None,
+        }
+    }
+
+    /// Grammar-positional labeled-token triage: deleted input tokens are
+    /// skipped while inserted (synthetic) tokens are kept. See
+    /// [`ParserRuleContext::labeled_terminal_children`] for the rationale.
+    #[must_use]
+    pub(crate) fn labeled_terminal_view(self) -> Option<TerminalNodeView<'tree>> {
+        match self.kind() {
+            NodeKind::Terminal => self.as_terminal(),
+            NodeKind::Error => {
+                let terminal = self.as_error().map(ErrorNodeView::terminal)?;
+                terminal.symbol().is_synthetic().then_some(terminal)
+            }
+            NodeKind::Rule => None,
+        }
+    }
+
     #[must_use]
     pub fn children(self) -> NodeChildren<'tree> {
         NodeChildren {
@@ -766,11 +793,7 @@ impl<'tree> RuleNodeView<'tree> {
         token_type: i32,
     ) -> impl DoubleEndedIterator<Item = TerminalNodeView<'tree>> + 'tree {
         self.children().filter_map(move |child| {
-            let terminal = match child.kind() {
-                NodeKind::Terminal => child.as_terminal(),
-                NodeKind::Error => child.as_error().map(ErrorNodeView::terminal),
-                NodeKind::Rule => None,
-            }?;
+            let terminal = child.terminal_view()?;
             (terminal.symbol().token_type() == token_type).then_some(terminal)
         })
     }
@@ -778,11 +801,7 @@ impl<'tree> RuleNodeView<'tree> {
     pub fn terminal_children(
         self,
     ) -> impl DoubleEndedIterator<Item = TerminalNodeView<'tree>> + 'tree {
-        self.children().filter_map(|child| match child.kind() {
-            NodeKind::Terminal => child.as_terminal(),
-            NodeKind::Error => child.as_error().map(ErrorNodeView::terminal),
-            NodeKind::Rule => None,
-        })
+        self.children().filter_map(Node::terminal_view)
     }
 
     #[must_use]
@@ -1141,11 +1160,7 @@ impl ParserRuleContext {
         token_type: i32,
     ) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
         self.child_nodes(storage, tokens).filter_map(move |child| {
-            let terminal = match child.kind() {
-                NodeKind::Terminal => child.as_terminal(),
-                NodeKind::Error => child.as_error().map(ErrorNodeView::terminal),
-                NodeKind::Rule => None,
-            }?;
+            let terminal = child.terminal_view()?;
             (terminal.symbol().token_type() == token_type).then_some(terminal)
         })
     }
@@ -1156,11 +1171,7 @@ impl ParserRuleContext {
         tokens: &'a TokenStore,
     ) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
         self.child_nodes(storage, tokens)
-            .filter_map(|child| match child.kind() {
-                NodeKind::Terminal => child.as_terminal(),
-                NodeKind::Error => child.as_error().map(ErrorNodeView::terminal),
-                NodeKind::Rule => None,
-            })
+            .filter_map(Node::terminal_view)
     }
 
     /// Terminal children as a *grammar-positional* sequence: deleted input tokens
@@ -1178,14 +1189,7 @@ impl ParserRuleContext {
         tokens: &'a TokenStore,
     ) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
         self.child_nodes(storage, tokens)
-            .filter_map(|child| match child.kind() {
-                NodeKind::Terminal => child.as_terminal(),
-                NodeKind::Error => {
-                    let terminal = child.as_error().map(ErrorNodeView::terminal)?;
-                    terminal.symbol().is_synthetic().then_some(terminal)
-                }
-                NodeKind::Rule => None,
-            })
+            .filter_map(Node::labeled_terminal_view)
     }
 
     #[must_use]

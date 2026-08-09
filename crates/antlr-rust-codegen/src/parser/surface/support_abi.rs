@@ -15,10 +15,7 @@ impl GeneratedSupportBindings {
     }
 
     pub(crate) fn module_header(self) -> String {
-        debug_assert_eq!(
-            self.codegen_api,
-            antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
-        );
+        debug_assert_eq!(self.codegen_api, antlr4_runtime::__ANTLR4_RUST_CODEGEN_API);
         generated_module_header()
     }
 
@@ -503,7 +500,6 @@ pub(crate) fn build_embedded_parser_data(
 
     // Recognizer-surface facades the rendered bodies call.
     out.impl_items.push_str(&embedded_parser_facades());
-    out.module_items.push_str(EMBEDDED_INPUT_FACADE);
     if uses_antlr4rust_input {
         out.module_items.push_str(&render_antlr4rust_input_facade(
             &antlr4rust_input_facade,
@@ -650,10 +646,7 @@ fn embedded_context_accessor_translation_error(
 
 /// Parser modules carry the versioned packed ATN separately, so retaining the
 /// legacy serialized integer stream in metadata would duplicate the artifact.
-pub(crate) fn render_parser_metadata(
-    grammar_name: &str,
-    data: &ParserCodegenData<'_>,
-) -> String {
+pub(crate) fn render_parser_metadata(grammar_name: &str, data: &ParserCodegenData<'_>) -> String {
     render_metadata_with_atn(grammar_name, data, &[], &[], &[])
 }
 
