@@ -1,61 +1,18 @@
-const LABELED_TOKEN_CHILD_HELPERS: &str = r#"#[allow(dead_code)]
-fn __labeled_token_child(
-    child: antlr4_runtime::Node<'_>,
-) -> Option<RuntimeTerminalNode<'_>> {
-    match child.kind() {
-        antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
-        antlr4_runtime::NodeKind::Error => {
-            let terminal = child
-                .as_error()
-                .map(antlr4_runtime::ErrorNodeView::terminal)?;
-            terminal.symbol().is_synthetic().then_some(terminal)
-        }
-        antlr4_runtime::NodeKind::Rule => None,
-    }
-}
-
-#[allow(dead_code)]
-fn __labeled_token_children<'a>(
-    source: __GeneratedRuleContext<'a>,
-    token_type: i32,
-) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = __labeled_token_child(child)?;
-        (terminal.symbol().token_type() == token_type).then_some(terminal)
-    })
-}
-
-#[allow(dead_code)]
-fn __labeled_token_children_matching<'a>(
-    source: __GeneratedRuleContext<'a>,
-    token_types: &'static [i32],
-) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
-    __context_children(source).filter_map(move |child| {
-        let terminal = __labeled_token_child(child)?;
-        token_types
-            .contains(&terminal.symbol().token_type())
-            .then_some(terminal)
-    })
-}
-
-"#;
-
 fn render_validated_tree_support(surface_name: &str) -> String {
     let validated_tree = format!("{surface_name}ValidatedTree");
     let validation_error = format!("{surface_name}ValidationError");
     format!(
         r#"/// Marker carried by generated contexts whose required-child
 /// invariants were checked after a syntax-clean parse.
+///
+/// This marker stays module-local (unlike the runtime-owned support items)
+/// so rustc can prove it never implements the runtime's
+/// `__RecoveryContextState`, keeping the recovery-oriented and validated
+/// accessor impls coherent.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedTreeContext {{
     __private: (),
 }}
-
-#[allow(dead_code)]
-trait __RecoveryContextState {{}}
-
-impl __RecoveryContextState for StoredTreeContext {{}}
-impl __RecoveryContextState for __ActiveParserContext {{}}
 
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.

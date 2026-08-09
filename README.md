@@ -170,11 +170,12 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 7, which collapses the three
-remaining multi-line body motifs (sync-decision, subrule invocation, and token
-match accounting) into single-call runtime helpers. The runtime also accepts
-revisions 1 through 6 because their older generated recognizers use API
-surfaces that remain available.
+The bundled generator currently emits revision 9, which imports the
+grammar-independent generated support surface (the typed terminal/error-node
+wrappers, context child-iteration helpers, and embedded-action input facade)
+from the runtime's `generated` module instead of re-declaring it in every
+generated parser. The runtime also accepts revisions 1 through 8 because
+their older generated recognizers use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

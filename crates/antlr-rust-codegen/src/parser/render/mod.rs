@@ -38,8 +38,8 @@ pub(crate) fn render_parser_with_decision_report(
     let surface_model = build_parser_surface_model(data, &type_name, grammar_name, options)?;
     let embedded_data = surface_model.embedded_bindings();
     let structural_surface = surface_model.structural_bindings();
-    let embedded_step_render = embedded_data
-        .map(|embedded| embedded_step_render(embedded, &decision_classification));
+    let embedded_step_render =
+        embedded_data.map(|embedded| embedded_step_render(embedded, &decision_classification));
     let decision_routing = decision_routing_render(&decision_classification, options);
     let mut portable_local_data = if options.embedded {
         PortableLocalData::default()
@@ -161,8 +161,7 @@ pub(crate) fn render_parser_with_decision_report(
         embedded_step_render.is_some(),
         portable_step_render.map(|portable| portable.required_generated_rules),
     );
-    let adaptive_atn_preferred_rule_count =
-        routing_plan.adaptive_atn_preferred_rule_count();
+    let adaptive_atn_preferred_rule_count = routing_plan.adaptive_atn_preferred_rule_count();
     let generated_rule_dispatch = render_routing_plan(
         &routing_plan,
         generated_rules,
@@ -250,7 +249,7 @@ pub(crate) fn render_parser_with_decision_report(
         render_generated_rule_error(adaptive_atn_retry_variant, adaptive_atn_retry_into_error);
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\npub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, __GeneratedInput, __GeneratedTokenView};\n#[allow(unused_imports)]\nuse antlr4_runtime::generated::{__ActiveParserContext, __FromActiveRuleContext, __GeneratedRuleContext, __RecoveryContextState, __active_context_view, __active_context_view_with_attrs, __context_children, __labeled_token_children, __labeled_token_children_matching, __rule_children, __terminal_children, __token_children, __token_children_matching, __write_invocation_states};\n"
     } else {
         ""
     };
@@ -283,10 +282,7 @@ pub(crate) fn render_parser_with_decision_report(
         action_method,
         typed_parser_constructor,
     };
-    Ok((
-        render_parser_module(&render_model),
-        decision_report_rows,
-    ))
+    Ok((render_parser_module(&render_model), decision_report_rows))
 }
 
 fn render_parser_module(model: &ParserRenderModel) -> String {

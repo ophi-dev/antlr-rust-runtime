@@ -31,7 +31,6 @@ pub(crate) fn build_structural_parser_surface(
             "#[derive(Clone, Debug, Default)]\n#[allow(non_snake_case, dead_code)]\npub struct {struct_name} {{\n{fields}}}\n"
         );
     }
-    out.module_items.push_str(EMBEDDED_INPUT_FACADE);
     out.module_items.push_str(&render_embedded_context_types(
         grammar_name,
         data,

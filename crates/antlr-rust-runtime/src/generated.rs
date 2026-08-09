@@ -1,8 +1,17 @@
+use std::any::Any;
+use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use crate::atn::parser_atn::ParserAtn;
 use crate::atn::serialized::SerializedAtn;
+use crate::int_stream::IntStream;
 use crate::recognizer::{RecognizerData, RecognizerMetadata};
+use crate::token::{Token as _, TokenSource, TokenStore, TokenView};
+use crate::token_stream::CommonTokenStream;
+use crate::tree::{
+    ErrorNodeView, Node, NodeKind, ParseTreeStorage, ParserRuleContext, RuleNodeView,
+    TerminalNodeView,
+};
 use crate::vocabulary::Vocabulary;
 
 /// Defines the grammar-independent storage, conversion, and accessor mechanics
@@ -344,14 +353,17 @@ macro_rules! __antlr4_rust_context {
 /// ```
 ///
 /// where `<selector>` is `nth(<n>)` or `last_after(<n>)`. All names, indices,
-/// and token types are grammar data supplied by the generated invocation; the
-/// module-local support items (`__rule_children`, `__token_children`,
+/// and token types are grammar data supplied by the generated invocation. The
+/// support items (`__rule_children`, `__token_children`,
 /// `__labeled_token_children`, `__labeled_token_children_matching`,
-/// `TerminalNode`, `ValidatedTreeContext`, `__RecoveryContextState`, plus the
+/// `TerminalNode`, `__RecoveryContextState`) are runtime-owned
+/// [`crate::generated`] items the generated module imports by name;
+/// `ValidatedTreeContext` plus the
 /// `__from_child_node`/`__from_validated_child_node` constructors and the
-/// `__node`/`__invocation_states` context fields defined by
-/// `__antlr4_rust_context!`) are emitted per generated module, exactly as
-/// `__antlr4_rust_context!` relies on.
+/// `__node`/`__invocation_states` context fields stay emitted per generated
+/// module (the validated marker must remain crate-local for the two impl
+/// blocks below to be coherent), exactly as `__antlr4_rust_context!` relies
+/// on.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_context_accessors {
@@ -1278,6 +1290,346 @@ pub trait GeneratedParser {
     /// Borrows the validated packed ATN embedded by the matching generator.
     fn parser_atn() -> &'static ParserAtn;
 }
+
+// ---------------------------------------------------------------------------
+// Grammar-independent support surface imported by every generated parser
+// module. These items back the typed context views, listener/visitor bridges,
+// and embedded-action facades emitted by `antlr4-rust-gen`; the generated
+// module brings them into scope by name so the `__antlr4_rust_context!` /
+// `__antlr4_rust_context_accessors!` expansions resolve against them.
+// ---------------------------------------------------------------------------
+
+/// Token-stream facade backing embedded-action `$input` translation
+/// (`self.input().text()` / `.la(i)` / `.lt(i).text()`).
+#[doc(hidden)]
+pub struct __GeneratedInput<'a, L: TokenSource>(#[doc(hidden)] pub &'a mut CommonTokenStream<L>);
+
+impl<L: TokenSource> __GeneratedInput<'_, L> {
+    #[must_use]
+    #[inline]
+    pub fn text(&self) -> String {
+        self.0.text_all()
+    }
+
+    #[inline]
+    pub fn la(&mut self, offset: isize) -> i32 {
+        IntStream::la(self.0, offset)
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn lt(&self, offset: isize) -> __GeneratedTokenView {
+        __GeneratedTokenView {
+            text: self
+                .0
+                .lt(offset)
+                .map(|token| token.text_or_empty().to_owned())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl<L: TokenSource> fmt::Debug for __GeneratedInput<'_, L> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("__GeneratedInput").finish_non_exhaustive()
+    }
+}
+
+/// Owned token view returned by [`__GeneratedInput::lt`] and the generated
+/// contexts' `start()` accessors.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct __GeneratedTokenView {
+    #[doc(hidden)]
+    pub text: String,
+}
+
+impl __GeneratedTokenView {
+    #[must_use]
+    #[inline]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+/// Typed terminal wrapper exposed by generated listener, visitor, and context
+/// surfaces.
+///
+/// Recovery-inserted error nodes travel through the same surface; use
+/// [`TerminalNode::is_error`] and [`TerminalNode::is_missing`] to identify
+/// them.
+#[derive(Clone, Debug)]
+pub struct TerminalNode<'a> {
+    __node: TerminalNodeView<'a>,
+}
+
+impl<'a> TerminalNode<'a> {
+    #[doc(hidden)]
+    #[must_use]
+    #[inline]
+    pub const fn new(node: TerminalNodeView<'a>) -> Self {
+        Self { __node: node }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn symbol(&self) -> TokenView<'a> {
+        self.__node.symbol()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn is_error(&self) -> bool {
+        matches!(self.__node.node().kind(), NodeKind::Error)
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
+    }
+
+    /// The underlying parse-tree node.
+    #[doc(hidden)]
+    #[must_use]
+    #[inline]
+    pub const fn node(&self) -> Node<'a> {
+        self.__node.node()
+    }
+}
+
+impl fmt::Display for TerminalNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.__node.text())
+    }
+}
+
+/// Typed error-node wrapper exposed by generated listener and visitor
+/// surfaces.
+#[derive(Clone, Debug)]
+pub struct ErrorNode<'a> {
+    __node: ErrorNodeView<'a>,
+}
+
+impl<'a> ErrorNode<'a> {
+    #[doc(hidden)]
+    #[must_use]
+    #[inline]
+    pub const fn new(node: ErrorNodeView<'a>) -> Self {
+        Self { __node: node }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn symbol(&self) -> TokenView<'a> {
+        self.__node.symbol()
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn is_missing(&self) -> bool {
+        self.symbol().is_synthetic()
+    }
+
+    /// The underlying parse-tree node.
+    #[doc(hidden)]
+    #[must_use]
+    #[inline]
+    pub const fn node(&self) -> Node<'a> {
+        self.__node.node()
+    }
+}
+
+impl fmt::Display for ErrorNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.__node.text())
+    }
+}
+
+/// Child source of one generated context view: either a stored parse-tree
+/// node or the live parser context observed from an in-flight rule.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub enum __GeneratedRuleContext<'a> {
+    Stored(RuleNodeView<'a>),
+    Active {
+        context: &'a ParserRuleContext,
+        storage: &'a ParseTreeStorage,
+        tokens: &'a TokenStore,
+    },
+}
+
+/// Marker state for generated contexts borrowed from a stored parse tree.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct StoredTreeContext;
+
+/// Marker state for generated contexts observed from an in-flight parse.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct __ActiveParserContext;
+
+#[doc(hidden)]
+#[inline]
+pub fn __context_children(
+    source: __GeneratedRuleContext<'_>,
+) -> impl Iterator<Item = Node<'_>> + '_ {
+    let mut stored = match source {
+        __GeneratedRuleContext::Stored(node) => Some(node.children()),
+        __GeneratedRuleContext::Active { .. } => None,
+    };
+    let mut active = match source {
+        __GeneratedRuleContext::Stored(_) => None,
+        __GeneratedRuleContext::Active {
+            context,
+            storage,
+            tokens,
+        } => Some(context.child_nodes(storage, tokens)),
+    };
+    std::iter::from_fn(move || {
+        stored
+            .as_mut()
+            .and_then(Iterator::next)
+            .or_else(|| active.as_mut().and_then(Iterator::next))
+    })
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __rule_children(
+    source: __GeneratedRuleContext<'_>,
+    rule_index: usize,
+) -> impl Iterator<Item = RuleNodeView<'_>> + '_ {
+    __context_children(source).filter_map(move |child| {
+        let rule = child.as_rule()?;
+        (rule.rule_index() == rule_index).then_some(rule)
+    })
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __terminal_children(
+    source: __GeneratedRuleContext<'_>,
+) -> impl Iterator<Item = TerminalNodeView<'_>> + '_ {
+    __context_children(source).filter_map(Node::terminal_view)
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __token_children(
+    source: __GeneratedRuleContext<'_>,
+    token_type: i32,
+) -> impl Iterator<Item = TerminalNodeView<'_>> + '_ {
+    __terminal_children(source).filter(move |terminal| terminal.symbol().token_type() == token_type)
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
+    __terminal_children(source)
+        .filter(move |terminal| token_types.contains(&terminal.symbol().token_type()))
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __labeled_token_children(
+    source: __GeneratedRuleContext<'_>,
+    token_type: i32,
+) -> impl Iterator<Item = TerminalNodeView<'_>> + '_ {
+    __context_children(source).filter_map(move |child| {
+        let terminal = child.labeled_terminal_view()?;
+        (terminal.symbol().token_type() == token_type).then_some(terminal)
+    })
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __labeled_token_children_matching<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_types: &'static [i32],
+) -> impl Iterator<Item = TerminalNodeView<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = child.labeled_terminal_view()?;
+        token_types
+            .contains(&terminal.symbol().token_type())
+            .then_some(terminal)
+    })
+}
+
+/// Constructs a generated context view over a live parser context.
+/// Implemented by `__antlr4_rust_context!` for every generated context.
+#[doc(hidden)]
+pub trait __FromActiveRuleContext<'a>: Sized {
+    fn __from_active(
+        context: &'a ParserRuleContext,
+        live_attrs: Option<&dyn Any>,
+        invocation_states: Vec<isize>,
+        storage: &'a ParseTreeStorage,
+        tokens: &'a TokenStore,
+    ) -> Option<Self>;
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a ParserRuleContext,
+    invocation_states: Vec<isize>,
+    storage: &'a ParseTreeStorage,
+    tokens: &'a TokenStore,
+) -> Option<T> {
+    T::__from_active(context, None, invocation_states, storage, tokens)
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __active_context_view_with_attrs<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a ParserRuleContext,
+    live_attrs: &dyn Any,
+    invocation_states: Vec<isize>,
+    storage: &'a ParseTreeStorage,
+    tokens: &'a TokenStore,
+) -> Option<T> {
+    T::__from_active(
+        context,
+        Some(live_attrs),
+        invocation_states,
+        storage,
+        tokens,
+    )
+}
+
+/// Formats an invoking-state chain the way Java's `RuleContext.toString`
+/// renders it: `[13 6]`.
+#[doc(hidden)]
+pub fn __write_invocation_states(
+    f: &mut fmt::Formatter<'_>,
+    states: impl Iterator<Item = isize>,
+) -> fmt::Result {
+    f.write_str("[")?;
+    let mut separator = "";
+    for state in states {
+        write!(f, "{separator}{state}")?;
+        separator = " ";
+    }
+    f.write_str("]")
+}
+
+/// Bound on the recovery-oriented state markers accepted by generated
+/// context accessors.
+///
+/// The validated marker (`ValidatedTreeContext`) intentionally stays emitted
+/// per generated module: the accessors macro relies on rustc proving that the
+/// validated marker never implements this trait, and coherence only permits
+/// that negative reasoning while the marker type is local to the generated
+/// crate.
+#[doc(hidden)]
+pub trait __RecoveryContextState {}
+
+impl __RecoveryContextState for StoredTreeContext {}
+impl __RecoveryContextState for __ActiveParserContext {}
 
 #[cfg(test)]
 mod tests {

@@ -1859,7 +1859,10 @@ fn embedded_listener_forwards_error_nodes() {
     .expect("embedded parser should render");
 
     assert!(rendered.contains("ErrorNodeView as RuntimeErrorNode"));
-    assert!(rendered.contains("pub struct ErrorNode<'a>"));
+    assert!(rendered.contains(
+        "pub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, \
+         __GeneratedInput, __GeneratedTokenView};"
+    ));
     assert!(
         rendered.contains("fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E>")
     );
@@ -1919,12 +1922,12 @@ fn attrless_contexts_skip_generated_attrs_lookup() {
     );
     assert!(!attributed.contains("live_attrs.downcast_ref::<__RuleAttrs1>()"));
     assert!(
-        attributed.contains("T::__from_active(context, None, invocation_states, storage, tokens)"),
-        "native embedded actions must retain the original active-context helper"
+        attributed.contains("__active_context_view,"),
+        "native embedded actions must import the runtime active-context helper"
     );
     assert!(
-        attributed.contains("T::__from_active(\n        context,\n        Some(live_attrs),"),
-        "compatibility lowering must have a live-attribute helper"
+        attributed.contains("__active_context_view_with_attrs,"),
+        "compatibility lowering must import the runtime live-attribute helper"
     );
 }
 
