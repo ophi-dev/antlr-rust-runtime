@@ -24,7 +24,7 @@ fn adaptive_atn_routing_generated_path_compiles() {
     let parser = fs::read_to_string(out.join("adaptive_routing_parser.rs"))
         .expect("parser should be emitted");
     assert!(
-        parser.contains("adaptive_atn_preferred_rules"),
+        parser.contains("adaptive_atn.preferred_rules"),
         "structural candidate should emit adaptive ATN routing"
     );
     assert!(

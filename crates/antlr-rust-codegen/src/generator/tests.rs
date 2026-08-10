@@ -1138,30 +1138,28 @@ fn renders_adaptive_atn_preference_after_prediction_becomes_expensive() {
             "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
         ));
     assert!(rendered.contains(
-            "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
+            "0 if !self.adaptive_atn.preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
         ));
     assert!(rendered.contains(
-            "ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
+            "ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn.preference_starts[0], __adaptive_after)"
         ));
     assert!(rendered.contains(
-        "self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[0]"
+        "self.base.number_of_syntax_errors() == self.adaptive_atn.syntax_error_starts[0]"
     ));
-    assert!(rendered.contains(
-        "retry [self.adaptive_atn_retry_slot.is_some() => GeneratedRuleError::AdaptiveRetry];"
-    ));
+    assert!(rendered.contains("retry [adaptive];"));
     assert!(rendered.contains(
             "return self.parse_rule_precedence_from_generated(0, precedence).map_err(GeneratedRuleError::Interpreted);"
         ));
     assert!(rendered.contains("self.parse_generated_rule_1_adaptive_probe_dispatch(0, false)"));
     assert!(rendered.contains(
-            "1 if !self.adaptive_atn_preferred_rules[1] => Some(self.parse_generated_rule_1_adaptive_dispatch(precedence, allow_fallback, None))"
+            "1 if !self.adaptive_atn.preferred_rules[1] => Some(self.parse_generated_rule_1_adaptive_dispatch(precedence, allow_fallback, None))"
         ));
     assert!(rendered.contains(
-            "ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[0], __adaptive_after)"
+            "ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn.preference_starts[0], __adaptive_after)"
         ));
     assert!(
         rendered.contains("if __adaptive_expensive {")
-            && rendered.contains("self.adaptive_atn_retry_slot = Some(0);"),
+            && rendered.contains("self.adaptive_atn.retry_slot = Some(0);"),
         "an expensive outermost candidate must retry on the same invocation"
     );
     assert!(
@@ -1180,12 +1178,7 @@ fn parser_facade_declares_optional_state_reset_once() {
     let facade = rendered_facade_declaration(&rendered, "__antlr4_rust_parser_facade");
 
     insta::assert_snapshot!("generated_parser_optional_state_facade", facade);
-    assert_eq!(
-        facade
-            .matches("parser.adaptive_atn_preferred_rules.fill(false);")
-            .count(),
-        1
-    );
+    assert_eq!(facade.matches("parser.adaptive_atn.reset();").count(), 1);
 }
 
 #[test]
@@ -1199,11 +1192,11 @@ fn renders_bare_left_recursive_seed_retry_on_same_invocation() {
     let rendered = render_generated_rule_dispatch(&rules, &[true], &BTreeMap::new(), false);
 
     assert!(rendered.contains(
-            "0 if !self.adaptive_atn_preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
+            "0 if !self.adaptive_atn.preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
         ));
     assert!(
         rendered.contains("if __adaptive_expensive {")
-            && rendered.contains("self.adaptive_atn_retry_slot = Some(0);")
+            && rendered.contains("self.adaptive_atn.retry_slot = Some(0);")
             && rendered.contains("__result = Err(GeneratedRuleError::AdaptiveRetry);"),
         "a bare seed must replay through the interpreter as soon as measured work is expensive"
     );
@@ -1691,7 +1684,7 @@ fn adaptive_atn_preferred_child_starts_with_direct_generated_dispatch() {
     let rendered = render_call_rule_step(&[true, true], &[], &[None, Some(0)]);
 
     assert!(rendered.contains(
-            "if self.adaptive_atn_preferred_rules[0] { self.parse_rule_precedence_from_generated(1, 0) } else { self.parse_generated_rule_1_adaptive_dispatch(0, false, Some(4isize)).map_err(GeneratedRuleError::into_error) }"
+            "if self.adaptive_atn.preferred_rules[0] { self.parse_rule_precedence_from_generated(1, 0) } else { self.parse_generated_rule_1_adaptive_dispatch(0, false, Some(4isize)).map_err(GeneratedRuleError::into_error) }"
         ));
 }
 
@@ -1747,8 +1740,10 @@ fn parse_rule_fallback_runs_parser_actions() {
     assert!(fallback.contains(
             "rule_args: &[antlr4_runtime::ParserRuleArg { source_state: 4, rule_index: 2, value: 17, inherit_local: false }]"
         ));
-    assert!(fallback.contains("for action in actions { self.run_action(action, tree); }"));
-    assert!(fallback.contains("Ok(tree)"));
+    // The action-dispatch loop is uniform driver-macro machinery now; the
+    // rendered fallback only composes the options-carrying call.
+    assert!(!fallback.contains("for action in actions"));
+    assert!(fallback.starts_with("        parser.base."));
 }
 
 #[test]
@@ -2952,7 +2947,9 @@ fn generated_parser_handles_diagnostic_reporting() {
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
     assert!(!rendered.contains("if !self.base.report_diagnostic_errors() || __generated_only"));
-    assert!(rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?"));
+    // Entry diagnostics and the interpreted fallback are driver-macro
+    // machinery; the module only wires the macro invocation.
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_driver! {"));
 }
 
 #[test]
@@ -2960,9 +2957,10 @@ fn generated_only_mode_disables_missing_rule_fallback() {
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
     assert!(rendered.contains("ANTLR4_RUST_GENERATED_ONLY"));
-    assert!(rendered.contains("let __generated_only = self.generated_only();"));
+    // The generated-only gate and missing-rule error live in the runtime's
+    // driver macro; the module delegates through its invocation.
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_driver! {"));
     assert!(!rendered.contains("GeneratedRuleError::Recoverable"));
-    assert!(rendered.contains("generated parser did not emit rule {}"));
 }
 
 #[test]
@@ -3035,7 +3033,7 @@ fn renders_lex_convenience_without_a_parser() {
     )
     .expect("lexer should render");
 
-    let convenience = render_lexer_lex_convenience("TLexer");
+    let convenience = render_lexer_lex_convenience();
     insta::assert_snapshot!("lexer_lex_convenience", &convenience);
     assert!(rendered.contains(&convenience));
 }
@@ -3048,38 +3046,15 @@ fn renders_parse_convenience_without_replacing_manual_constructor() {
         "parser_parse_convenience",
         render_parser_parse_convenience("TParser", "T")
     );
-    assert!(rendered.contains("pub struct TParserParseOutput<R, L>"));
-    assert!(rendered.contains("pub result: R,"));
-    assert!(rendered.contains("pub parser: TParser<L>,"));
-    assert!(rendered.contains("pub fn parse<L: TokenSource>("));
-    assert!(rendered.contains("pub fn parse_with_parser<L: TokenSource, R>("));
-    assert!(
-        rendered.contains("pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(")
-    );
-    assert!(rendered.contains(
-        "pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R>("
-    ));
-    assert!(
-        !rendered
-            .contains(") -> Result<R, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,")
-    );
-    assert!(!rendered.contains(
-            ") -> Result<TParserParseOutput<R, L>, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,"
-        ));
-    assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
-    assert!(
-        rendered.contains(
-            "parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)"
-        )
-    );
-    assert!(rendered.contains("let lexer = lexer(input);"));
-    assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
-    assert!(rendered.contains("let result = entry(&mut parser)?;"));
-    assert!(rendered.contains("Ok(TParserParseOutput { result, parser })"));
-    assert!(rendered.contains(
-        "parse_stream_with_parser(\n        antlr4_runtime::InputStream::new(input.as_ref()),"
-    ));
-    assert!(rendered.contains("Ok(parser.into_parsed_file(result))"));
+    // The whole parse-convenience surface expands from the runtime macro; the
+    // module only wires the grammar-specific names into the invocation.
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_entry_points! {"));
+    assert!(rendered.contains("parser: TParser,"));
+    assert!(rendered.contains("output: TParserParseOutput,"));
+    assert!(rendered.contains("validated_tree: TValidatedTree,"));
+    assert!(rendered.contains("validation_error: TValidationError,"));
+    assert!(rendered.contains("validate_tree: validate_tree_structure,"));
+    // The parser constructors remain module-emitted next to the invocation.
     assert!(rendered.contains("pub fn new(input: CommonTokenStream<L>) -> Self"));
     assert!(rendered.contains("pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self"));
 }
@@ -3092,7 +3067,8 @@ fn validated_parse_names_match_lowercase_grammar_surface() {
         "pub type uValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;"
     ));
     assert!(rendered.contains("pub type uValidationError = antlr4_runtime::ValidationError;"));
-    assert!(rendered.contains("pub fn validate(self) -> Result<uValidatedTree, uValidationError>"));
+    assert!(rendered.contains("validated_tree: uValidatedTree,"));
+    assert!(rendered.contains("validation_error: uValidationError,"));
     assert!(!rendered.contains("UValidatedTree"));
     assert!(!rendered.contains("UValidationError"));
 }
@@ -3102,21 +3078,17 @@ fn generated_parse_output_name_does_not_collide_with_parser_type() {
     let rendered =
         render_parser("ParseOutput", &minimal_parser_data()).expect("parser should render");
 
-    assert!(rendered.contains("pub struct ParseOutputParseOutput<R, L>"));
-    assert!(rendered.contains("pub parser: ParseOutput<L>,"));
-    assert!(
-        rendered.contains(") -> Result<ParseOutputParseOutput<R, L>, antlr4_runtime::AntlrError>")
-    );
-    assert!(rendered.contains("Ok(ParseOutputParseOutput { result, parser })"));
+    assert!(rendered.contains("parser: ParseOutput,"));
+    assert!(rendered.contains("output: ParseOutputParseOutput,"));
 }
 
 #[test]
 fn generated_parser_reports_diagnostics_at_outer_boundaries() {
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
-    assert!(rendered.contains("if allow_generated_fallback {"));
-    assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
-    assert!(rendered.contains("self.base.report_unrecovered_parser_error(&error);"));
+    // Boundary diagnostics dispatch is owned by the runtime driver macro; the
+    // module wires it next to the facade.
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_driver! {"));
     assert!(rendered.contains("antlr4_runtime::__antlr4_rust_parser_facade!"));
     assert!(!rendered.contains("self.base.report_token_source_errors();"));
 }
@@ -5969,7 +5941,11 @@ fn generated_top_level_entry_surfaces_unknown_semantic_error() {
     // The public generated entry must surface Error-policy coordinates the
     // generated-direct predicate path recorded, or a parse that consulted an
     // unimplemented hook predicate returns a recovered Ok tree instead of
-    // AntlrError::Unsupported.
+    // AntlrError::Unsupported. The surfacing order itself is uniform
+    // driver-macro machinery pinned by the runtime's
+    // `parser_driver_entry_ordering_invariants` test; this test pins the
+    // module wiring: the driver invocation plus an options-carrying fallback
+    // that routes the configured policy through the interpreter.
     let module = render_parser_with_options(
         "SParser",
         &predicate_parser_data(),
@@ -5982,17 +5958,12 @@ fn generated_top_level_entry_surfaces_unknown_semantic_error() {
         },
     )
     .expect("parser should render");
-    let surface_at = module
-        .find("if let Some(error) = self.base.take_unknown_semantic_error()")
-        .expect("generated top-level entry must surface recorded unknown-semantic coordinates");
-    // Guarded by the public entry only, not the nested (from-generated) path.
-    assert!(module.contains("if allow_generated_fallback {"));
-    // The fail-loud check must run before the generated entry can return Ok.
-    let ok_at = module[surface_at..]
-        .find("Ok(__tree)")
-        .map(|offset| surface_at + offset)
-        .expect("generated entry returns the tree after semantic checks");
-    assert!(surface_at < ok_at);
+    assert!(module.contains("antlr4_runtime::__antlr4_rust_parser_driver! {"));
+    assert!(
+        module.contains(
+            "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"
+        )
+    );
 }
 
 #[test]
@@ -6000,11 +5971,12 @@ fn generated_rule_error_drains_diagnostics_before_recorded_overrides() {
     // When a generated-direct predicate consulted an unimplemented hook
     // (returning None under the Error policy), the alternative fails and
     // `parse_generated_rule` returns a generic `failed_predicate_error`. The
-    // top-level `Err` arm must first drain any recorded fail-loud coordinate
-    // and return that `AntlrError::Unsupported`, otherwise the documented
-    // fail-loud error is shadowed by the generic rule error. The check is
-    // gated on `allow_generated_fallback` so a nested child keeps its hits for
-    // the generated parent to surface at its own boundary.
+    // top-level `Err` arm drains retained diagnostics, then parser aborts,
+    // then recorded semantic misses — that ordering is uniform driver-macro
+    // machinery pinned by the runtime's
+    // `parser_driver_entry_ordering_invariants` test. This test pins the
+    // module wiring: the runtime `GeneratedRuleError` import feeding the
+    // driver invocation.
     let module = render_parser_with_options(
         "SParser",
         &predicate_parser_data(),
@@ -6018,33 +5990,9 @@ fn generated_rule_error_drains_diagnostics_before_recorded_overrides() {
     )
     .expect("parser should render");
 
-    // Locate the generated-rule `Err` arm's generic return.
-    let error_conversion_at = module
-        .find("let error = error.into_error();")
-        .expect("generated-rule Err arm converts the generic rule error");
-    let generic_return_at = module[error_conversion_at..]
-        .find("return Err(error);")
-        .map(|offset| error_conversion_at + offset)
-        .expect("generated-rule Err arm returns the generic rule error");
-    // The fail-loud drain must appear inside that arm, before the generic
-    // return, under the top-level gate.
-    let arm_start = module[..generic_return_at]
-        .rfind("Err(error) => {")
-        .expect("generic return lives in the Err arm");
-    let arm = &module[arm_start..generic_return_at];
-    let diagnostics_at = arm
-        .find("self.base.report_generated_parser_diagnostics();")
-        .expect("the fatal Err arm drains retained diagnostics");
-    let semantic_at = arm
-        .find("if let Some(semantic_error) = self.base.take_unknown_semantic_error()")
-        .expect("the Err arm drains a recorded semantic error");
-    let abort_at = arm
-        .find("if let Some(abort) = self.base.take_parse_abort()")
-        .expect("the Err arm drains a recorded parser abort");
-    assert!(
-        diagnostics_at < abort_at && abort_at < semantic_at,
-        "retained diagnostics must dispatch first, then parser aborts must precede semantic misses"
-    );
+    assert!(module.contains("use antlr4_runtime::generated::GeneratedRuleError;"));
+    assert!(module.contains("antlr4_runtime::__antlr4_rust_parser_driver! {"));
+    assert!(module.contains("fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>>"));
 }
 
 #[test]
@@ -6052,17 +6000,11 @@ fn interpreted_fallback_action_miss_is_surfaced_at_public_entry() {
     // A public entry that falls back to the interpreted ATN path runs the
     // non-buffered `run_action` loop immediately (an untranslated action
     // routed to `parser_action_hook` records an `unhandled_action_hit` under
-    // the Error policy). The top-level surfacing check that drains those hits
-    // is gated on the SAME `allow_generated_fallback` condition as the branch
-    // that runs the interpreted fallback, so the miss cannot escape as `Ok`.
-    // (Verified end-to-end: parsing an untranslated action through the
-    // interpreted path under `--sem-unknown=hook` with a declining hook
-    // returns `AntlrError::Unsupported("unhandled semantic action: ...")`.)
-    //
-    // Emitting a *separate* check inside `parse_interpreted_rule_precedence`
-    // would be both dead (the outer check already drains the hits) and
-    // unsafe: an early `return Err` there would bypass the caller's ordinary
-    // generated-rule cleanup and error reporting path.
+    // the Error policy). The driver macro gates the interpreted fallback and
+    // the surfacing check on the same `allow_generated_fallback` condition —
+    // pinned by the runtime's `parser_driver_entry_ordering_invariants` test.
+    // This test pins the module wiring: the fallback binder block inside the
+    // driver invocation composes the options-carrying interpreter call.
     let module = render_parser_with_options(
         "SParser",
         &predicate_parser_data(),
@@ -6076,29 +6018,17 @@ fn interpreted_fallback_action_miss_is_surfaced_at_public_entry() {
     )
     .expect("parser should render");
 
-    // The interpreted call site in the top-level entry and the surfacing check
-    // share the `allow_generated_fallback` gate, so the surfacing check follows
-    // the interpreted call and drains any action-hook miss (or predicate miss)
-    // the fallback recorded.
-    let interpreted_call_at = module
-        .find("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
-        .expect("top-level entry runs the interpreted fallback under allow_generated_fallback");
-    let surface_at = module[interpreted_call_at..]
-        .find("if let Some(error) = self.base.take_unknown_semantic_error()")
-        .map(|offset| interpreted_call_at + offset)
-        .expect("the public entry must drain recorded semantic misses after the fallback");
-    // Between the interpreted fallback call and the surfacing check the entry
-    // must not return `Ok`, or an action-hook miss recorded by the immediate
-    // `run_action` loop would escape as a recovered success.
+    let driver_at = module
+        .find("antlr4_runtime::__antlr4_rust_parser_driver! {")
+        .expect("module delegates the parse driver to the runtime macro");
+    let fallback_at = module[driver_at..]
+        .find("fallback(parser, rule_index, precedence) {")
+        .map(|offset| driver_at + offset)
+        .expect("driver invocation supplies the interpreted-fallback binder block");
     assert!(
-        !module[interpreted_call_at..surface_at].contains("Ok(__tree)"),
-        "the entry must not return Ok between the interpreted fallback and the surfacing check"
-    );
-    // Both are under the same gate: the branch that runs the fallback and the
-    // check that drains its misses share `if allow_generated_fallback {`.
-    assert!(
-        module[..interpreted_call_at].contains("} else {"),
-        "the interpreted fallback remains the non-generated fallback path"
+        module[fallback_at..]
+            .contains("parser.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"),
+        "the fallback binder must route through the options-carrying interpreter call"
     );
 }
 
@@ -6204,7 +6134,7 @@ fn non_default_policy_disables_adaptive_direct_gate() {
     })
     .expect("parser should render under default policy");
     assert!(
-        default_module.contains("&& true && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
+        default_module.contains("adaptive_direct: true,"),
         "the predicate-free fixture must allow adaptive-direct by default, or this test proves nothing"
     );
 
@@ -6222,7 +6152,7 @@ fn non_default_policy_disables_adaptive_direct_gate() {
         )
         .expect("parser should render under a non-default policy");
         assert!(
-            module.contains("&& false && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
+            module.contains("adaptive_direct: false,"),
             "policy {policy:?} must disable the adaptive-direct gate"
         );
     }

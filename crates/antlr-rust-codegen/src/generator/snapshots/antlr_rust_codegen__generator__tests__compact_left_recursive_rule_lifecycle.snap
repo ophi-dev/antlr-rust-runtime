@@ -16,7 +16,7 @@ expression: rendered_generated_rule_methods(&rendered)
     fn parse_generated_rule_0_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
         antlr4_runtime::__antlr4_rust_generated_rule! {
             recursive self, 0isize, 0, __precedence, allow_fallback, atn(), GeneratedRuleError::Fatal;
-            retry [none];
+            retry [adaptive];
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {

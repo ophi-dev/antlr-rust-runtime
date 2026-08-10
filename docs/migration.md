@@ -7,10 +7,37 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 10: the validated-parse surface every
+The current generator emits revision 11: the parse-driver core and entry-point
+scaffolding every generated parser used to re-declare is now owned by the
+runtime. The driver methods (`parse_rule`, `parse_rule_precedence`,
+`parse_rule_precedence_from_generated`, `parse_rule_precedence_inner`,
+`parse_interpreted_rule`, `parse_interpreted_rule_precedence`) expand from the
+runtime's `__antlr4_rust_parser_driver!` macro; the generated module supplies
+only its interpreted-fallback call as a binder block, and action dispatch is
+uniform — the driver always routes deferred actions through the module's
+`run_action`, which is an empty method for grammars without action states.
+The `parse` / `parse_validated` / `parse_with_parser` / `parse_stream` /
+`parse_stream_validated` / `parse_stream_with_parser` functions and the
+validation bridge expand from `__antlr4_rust_parser_entry_points!`, and
+`<Grammar>ParserParseOutput` is now a type alias of the runtime's
+`GeneratedParseOutput<R, P>` (`pub type TomlParserParseOutput<R, L> =
+antlr4_runtime::GeneratedParseOutput<R, TomlParser<L>>;`) whose `validate()`
+dispatches through the doc-hidden `__GeneratedParserValidate` trait the module
+implements for its parser. `GeneratedRuleError` moved to the runtime as a
+grammar-agnostic type whose `AdaptiveRetry` variant always exists, the
+adaptive-ATN retry state bundle became the runtime's
+`AdaptiveAtnRetryState<const RULES: usize>` enabled by a const knob
+(`AdaptiveAtnRetryState<0>` for grammars without residual adaptive routing;
+its `retry_pending()` check constant-folds to `false`), and the generated
+lexer `lex` / `lex_stream` functions are re-exports of the runtime's generic
+functions. Public generated names, signatures, and behavior are preserved;
+struct-literal construction and destructuring of `<Grammar>ParserParseOutput`
+keep working through the alias.
+
+Revision 10 moved the validated-parse surface every
 generated parser used to re-declare (the validated-tree and validated-rule-node
 types, the `FromValidatedRuleNode` trait, and the validation-error enum with
-its `Display`/`Error`/`From` machinery) is now owned by the runtime as
+its `Display`/`Error`/`From` machinery) into the runtime as
 `ValidatedTree<Grammar>`, `ValidatedRuleNode<'a, Grammar>`,
 `FromValidatedRuleNode`, and `ValidationError`. Generated modules keep their
 public names as type aliases branded with the module-local
@@ -43,7 +70,7 @@ infallible validated accessors panic.
 Revision 9 moved the grammar-independent support preamble (the typed
 `TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
 the embedded-action `__GeneratedInput` facade) into the runtime's `generated`
-module the same way. This runtime continues to accept revisions 1 through 9
+module the same way. This runtime continues to accept revisions 1 through 10
 because their required APIs remain supported; a checked-in frozen revision-9
 module is compiled against the runtime in CI to enforce that claim.
 

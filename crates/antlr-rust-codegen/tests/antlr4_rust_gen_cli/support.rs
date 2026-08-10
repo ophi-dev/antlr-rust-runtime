@@ -260,6 +260,29 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
             .map(|name| format!("fn {name}")),
         );
     }
+    if source.contains("antlr4_runtime::__antlr4_rust_parser_entry_points!") {
+        // The parse entry points and validation bridge expand from the
+        // runtime macro; surface them like the facade methods above.
+        api.extend(
+            [
+                "parse",
+                "parse_stream",
+                "parse_stream_validated",
+                "parse_stream_with_parser",
+                "parse_validated",
+                "parse_with_parser",
+                "validate",
+            ]
+            .map(|name| format!("fn {name}")),
+        );
+        if let Some(output) = source.lines().find_map(|line| {
+            line.trim()
+                .strip_prefix("output: ")
+                .map(|rest| rest.trim_end_matches(','))
+        }) {
+            api.insert(format!("type {output}"));
+        }
+    }
     let mut context_methods = false;
     let mut context_accessors = false;
     for line in source.lines().map(str::trim) {

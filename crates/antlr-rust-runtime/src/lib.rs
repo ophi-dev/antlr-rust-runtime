@@ -4,7 +4,7 @@ extern crate self as antlr4_runtime;
 
 /// Current generated-source/runtime contract revision emitted by the bundled generator.
 #[doc(hidden)]
-pub const __ANTLR4_RUST_CODEGEN_API: u32 = 10;
+pub const __ANTLR4_RUST_CODEGEN_API: u32 = 11;
 
 /// Verifies that generated source is compatible with the selected runtime.
 #[doc(hidden)]
@@ -20,6 +20,7 @@ macro_rules! __antlr4_rust_require_codegen_api {
     (8, $generator_version:literal) => {};
     (9, $generator_version:literal) => {};
     (10, $generator_version:literal) => {};
+    (11, $generator_version:literal) => {};
     ($requested:literal, $generator_version:literal) => {
         compile_error!(concat!(
             "antlr4-rust generated-code API mismatch: antlr4-rust-gen v",
@@ -27,8 +28,8 @@ macro_rules! __antlr4_rust_require_codegen_api {
             " emitted generated-code API revision ",
             stringify!($requested),
             ", but the selected antlr-rust-runtime supports revisions 1, 2, 3, 4, 5, 6, 7, 8, \
-             9, and 10; regenerate this recognizer with a compatible antlr4-rust-gen or select \
-             a compatible antlr-rust-runtime dependency"
+             9, 10, and 11; regenerate this recognizer with a compatible antlr4-rust-gen or \
+             select a compatible antlr-rust-runtime dependency"
         ));
     };
 }
@@ -60,7 +61,7 @@ pub use byte_stream::ByteStream;
 pub use char_stream::{CharStream, InputStream, PositionSummary, TextInterval};
 pub use dfa::{DfaStateId, DfaTransition, ParserDfa, ParserDfaStateView, ParserDfaStats};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener, SyntaxErrorEvent};
-pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
+pub use generated::{GeneratedLexer, GeneratedParseOutput, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 pub use lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerLifecycleCtx, LexerMode, LexerPredicate, LexerSemCtx,

@@ -13,7 +13,7 @@ expression: rendered_generated_rule_methods(&rendered)
         let _ = __precedence;
         antlr4_runtime::__antlr4_rust_generated_rule! {
             ordinary self, 0isize, 0, allow_fallback, atn(), GeneratedRuleError::Fatal;
-            retry [none];
+            retry [adaptive];
             bind (__ctx, __rule_start, __consumed_eof, __sync_error);
             setup {}
             body {

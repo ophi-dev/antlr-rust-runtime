@@ -18,5 +18,6 @@ Parser::with_hooks
             base,
             simulator: None,
             generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
+            adaptive_atn: antlr4_runtime::generated::AdaptiveAtnRetryState::new(),
         }
     }

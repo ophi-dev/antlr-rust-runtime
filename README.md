@@ -170,7 +170,18 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 10, which stops re-declaring
+The bundled generator currently emits revision 11, which stops re-declaring
+the parse-driver core and entry-point scaffolding in every generated parser:
+the driver methods (`parse_rule*`, `parse_interpreted_rule*`) expand from the
+runtime's `__antlr4_rust_parser_driver!` macro with the module's interpreted
+fallback supplied as a binder block, the `parse*` / `parse_stream*` functions
+and the `<Grammar>ParserParseOutput` alias of the runtime's
+`GeneratedParseOutput` expand from `__antlr4_rust_parser_entry_points!`,
+`GeneratedRuleError` is the runtime's grammar-agnostic type (its
+`AdaptiveRetry` variant always exists), the adaptive-ATN retry state is the
+runtime's `AdaptiveAtnRetryState<N>` sized by a const knob (0 for grammars
+without residual adaptive routing), and the lexer `lex` / `lex_stream`
+functions are re-exports of runtime generics. Revision 10 stops re-declaring
 the validated-parse surface in every generated parser: `<Grammar>ValidatedTree`
 is a type alias of the runtime's `ValidatedTree` branded with the module-local
 `ValidatedTreeContext` marker (likewise the module's `ValidatedRuleNode`
@@ -182,7 +193,7 @@ error name must collapse into one; see `docs/migration.md`). Revision 9
 similarly imports the grammar-independent generated support surface (the typed
 terminal/error-node wrappers, context child-iteration helpers, and
 embedded-action input facade) from the runtime's `generated` module. The
-runtime also accepts revisions 1 through 9 because their older generated
+runtime also accepts revisions 1 through 10 because their older generated
 recognizers use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected

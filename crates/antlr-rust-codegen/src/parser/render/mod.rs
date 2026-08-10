@@ -238,15 +238,6 @@ pub(crate) fn render_parser_with_decision_report(
         embedded_impl_items,
     ) = embedded_render_slots(surface_model.bindings());
     let support_bindings = GeneratedSupportBindings::current();
-    let AdaptiveAtnParserRenderSlots {
-        struct_field: adaptive_atn_preference_struct_field,
-        field_init: adaptive_atn_preference_field_init,
-        reset: adaptive_atn_preference_reset,
-        retry_variant: adaptive_atn_retry_variant,
-        retry_into_error: adaptive_atn_retry_into_error,
-    } = adaptive_atn_parser_render_slots(adaptive_atn_preferred_rule_count);
-    let generated_rule_error =
-        render_generated_rule_error(adaptive_atn_retry_variant, adaptive_atn_retry_into_error);
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
         "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\npub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, __GeneratedInput, __GeneratedTokenView};\n#[allow(unused_imports)]\nuse antlr4_runtime::generated::{__ActiveParserContext, __FromActiveRuleContext, __GeneratedRuleContext, __RecoveryContextState, __active_context_view, __active_context_view_with_attrs, __context_children, __labeled_token_children, __labeled_token_children_matching, __rule_children, __terminal_children, __token_children, __token_children_matching, __write_invocation_states};\n"
@@ -267,13 +258,10 @@ pub(crate) fn render_parser_with_decision_report(
         parse_convenience,
         parser_rustdoc,
         type_name,
-        adaptive_atn_preference_struct_field,
-        generated_rule_error,
+        adaptive_atn_preferred_rule_count,
         base_initialization,
-        adaptive_atn_preference_field_init,
         embedded_struct_fields,
         embedded_field_inits,
-        adaptive_atn_preference_reset,
         adaptive_direct_allowed,
         parse_rule_fallback,
         generated_rule_dispatch,
@@ -301,13 +289,10 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         parse_convenience,
         parser_rustdoc,
         type_name,
-        adaptive_atn_preference_struct_field,
-        generated_rule_error,
+        adaptive_atn_preferred_rule_count,
         base_initialization,
-        adaptive_atn_preference_field_init,
         embedded_struct_fields,
         embedded_field_inits,
-        adaptive_atn_preference_reset,
         adaptive_direct_allowed,
         parse_rule_fallback,
         generated_rule_dispatch,
@@ -321,6 +306,7 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         r#"{generated_header}use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
 use antlr4_runtime::atn::parser_atn::ParserAtn;
+use antlr4_runtime::generated::GeneratedRuleError;
 use antlr4_runtime::{{BaseParser, GrammarMetadata, Parser, Recognizer}};
 use std::sync::OnceLock;
 {embedded_imports}
@@ -360,9 +346,9 @@ where
     base: BaseParser<L, H>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
     generated_only: bool,
-{adaptive_atn_preference_struct_field}{embedded_struct_fields}}}
+    adaptive_atn: antlr4_runtime::generated::AdaptiveAtnRetryState<{adaptive_atn_preferred_rule_count}>,
+{embedded_struct_fields}}}
 
-{generated_rule_error}
 impl<L> {type_name}<L, antlr4_runtime::NoSemanticHooks>
 where
     L: TokenSource,
@@ -385,118 +371,8 @@ where
             base,
             simulator: None,
             generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
-{adaptive_atn_preference_field_init}{embedded_field_inits}        }}
-    }}
-
-    #[allow(dead_code)]
-    fn parse_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        self.parse_rule_precedence(rule_index, 0)
-    }}
-
-    #[allow(dead_code)]
-    fn parse_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        self.parse_rule_precedence_inner(rule_index, precedence, true)
-    }}
-
-    #[allow(dead_code)]
-    fn parse_rule_precedence_from_generated(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        self.parse_rule_precedence_inner(rule_index, precedence, false)
-    }}
-
-    #[allow(dead_code)]
-    fn parse_rule_precedence_inner(&mut self, rule_index: usize, precedence: i32, allow_generated_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        if allow_generated_fallback {{
-            // True top-level entry: drop any fail-loud coordinates left by a
-            // previous parse so a reused parser starts clean. Mid-parse the hits
-            // are preserved so a generated parent can surface a recovered child's
-            // fail-loud coordinate at this boundary.
-            self.base.reset_unknown_semantic_hits();
-            // Likewise drop stale sticky aborts (depth-cap violation,
-            // parse-listener abort): entry rules share one parser instance,
-            // and the flags must not poison the next parse when the previous
-            // one exited through an error path.
-            let _ = self.base.take_parse_abort();
-        }}
-        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
-        let __generated_only = self.generated_only();
-        let __tree = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
-            match result {{
-                Ok(tree) => tree,
-                Err(error) => {{
-                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
-                    let __report_error =
-                        matches!(&error, GeneratedRuleError::Fatal(_));
-                    // A fatal unwind retains recovery diagnostics committed
-                    // earlier in this entry. Dispatch them before a semantic
-                    // or parser-abort override can return, or they would leak
-                    // into the next entry on a reused parser.
-                    if allow_generated_fallback && __report_error {{
-                        self.base.report_generated_parser_diagnostics();
-                    }}
-                    if allow_generated_fallback {{
-                        // A sticky abort (depth cap, listener) wins over an
-                        // error or semantic miss derived after recovery absorbed
-                        // the aborted rule. Drain any masked semantic miss too,
-                        // so neither condition poisons the next entry.
-                        if let Some(abort) = self.base.take_parse_abort() {{
-                            let _ = self.base.take_unknown_semantic_error();
-                            return Err(abort);
-                        }}
-                        // A generated predicate that consulted an unimplemented
-                        // hook fails the alternative and surfaces here as a generic
-                        // failed-predicate/rule error. Prefer the recorded fail-loud
-                        // semantic error when no parser abort occurred.
-                        if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
-                            return Err(semantic_error);
-                        }}
-                    }}
-                    let error = error.into_error();
-                    if allow_generated_fallback && __report_error {{
-                        self.base.report_unrecovered_parser_error(&error);
-                    }}
-                    return Err(error);
-                }}
-            }}
-        }} else if __generated_only {{
-            return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
-        }} else {{
-            self.parse_interpreted_rule_precedence(rule_index, precedence)?
-        }};
-        if allow_generated_fallback {{
-            self.base.report_generated_parser_diagnostics();
-            // A sticky abort (depth-cap violation, listener abort) is not a
-            // syntax error: rule-level recovery may have produced a tree
-            // and semantic miss anyway, but the abort is the root cause. Drain
-            // both sticky conditions before returning so parser reuse is clean.
-            if let Some(error) = self.base.take_parse_abort() {{
-                let _ = self.base.take_unknown_semantic_error();
-                return Err(error);
-            }}
-            // Surface unknown predicate/action coordinates recorded under the
-            // Error policy only after parser aborts have been ruled out.
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
-            }}
-        }}
-        Ok(__tree)
-    }}
-
-    #[allow(dead_code)]
-    fn parse_interpreted_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        self.parse_interpreted_rule_precedence(rule_index, 0)
-    }}
-
-    #[allow(dead_code)]
-    fn parse_interpreted_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        if precedence == 0 && {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
-            let simulator = self
-                .simulator
-                .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
-            self.base
-                .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
-        }} else {{
-{parse_rule_fallback}
-        }}
+            adaptive_atn: antlr4_runtime::generated::AdaptiveAtnRetryState::new(),
+{embedded_field_inits}        }}
     }}
 
 {generated_rule_dispatch}
@@ -505,6 +381,19 @@ where
 {rule_methods}
 
 {action_method}
+}}
+
+antlr4_runtime::__antlr4_rust_parser_driver! {{
+    type: {type_name}<L, H>,
+    fields: {{
+        base: base,
+        simulator: simulator,
+    }},
+    atn: atn,
+    adaptive_direct: {adaptive_direct_allowed},
+    fallback(parser, rule_index, precedence) {{
+{parse_rule_fallback}
+    }}
 }}
 
 {typed_parser_constructor}
@@ -519,7 +408,8 @@ antlr4_runtime::__antlr4_rust_parser_facade! {{
     metadata: metadata,
     parser_atn: parser_atn,
     reset(parser) {{
-{adaptive_atn_preference_reset}    }}
+        parser.adaptive_atn.reset();
+    }}
 }}
 {generated_footer}"#
     )

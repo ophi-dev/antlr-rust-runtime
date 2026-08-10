@@ -30,13 +30,10 @@ pub(crate) struct ParserRenderModel {
     pub(crate) parse_convenience: String,
     pub(crate) parser_rustdoc: String,
     pub(crate) type_name: String,
-    pub(crate) adaptive_atn_preference_struct_field: String,
-    pub(crate) generated_rule_error: String,
+    pub(crate) adaptive_atn_preferred_rule_count: usize,
     pub(crate) base_initialization: String,
-    pub(crate) adaptive_atn_preference_field_init: String,
     pub(crate) embedded_struct_fields: String,
     pub(crate) embedded_field_inits: String,
-    pub(crate) adaptive_atn_preference_reset: &'static str,
     pub(crate) adaptive_direct_allowed: bool,
     pub(crate) parse_rule_fallback: String,
     pub(crate) generated_rule_dispatch: String,
@@ -452,7 +449,6 @@ fn parser_action_routing(
     })
 }
 
-
 /// Renders stable authored parser-action coordinates for committed fallback.
 fn render_parser_action_index_array(action_indices: &[(usize, usize)]) -> String {
     let items = action_indices
@@ -518,136 +514,22 @@ fn render_parser_base_initialization(
 
 /// Renders parser-module conveniences that wire text or a caller-provided
 /// character stream through the lexer, token stream, parser, and entry rule.
+///
+/// The whole surface (the `<Type>ParseOutput` alias, the validation bridge,
+/// and the `parse*` / `parse_stream*` functions) is owned by the runtime's
+/// `__antlr4_rust_parser_entry_points!` macro; this renderer only wires the
+/// module's grammar-specific names into the invocation.
 pub(crate) fn render_parser_parse_convenience(type_name: &str, surface_name: &str) -> String {
     let output_type_name = format!("{type_name}ParseOutput");
     let validated_tree_name = format!("{surface_name}ValidatedTree");
     let validation_error_name = format!("{surface_name}ValidationError");
     format!(
-        r#"/// Result from [`parse_with_parser`] or [`parse_stream_with_parser`].
-///
-/// Keeps the generated parser available after the entry rule runs so callers
-/// can inspect diagnostics or recover the parser-owned token stream.
-#[derive(Debug)]
-pub struct {output_type_name}<R, L>
-where
-    L: TokenSource,
-{{
-    pub result: R,
-    pub parser: {type_name}<L>,
-}}
-
-impl<L: TokenSource> {output_type_name}<antlr4_runtime::NodeId, L> {{
-    /// Validates a completed parse and changes its generated context surface.
-    ///
-    /// Validation rejects lexer diagnostics, parser recovery, recovered error
-    /// nodes, and missing generated required children before constructing the
-    /// validated-tree type boundary.
-    pub fn validate(self) -> Result<{validated_tree_name}, {validation_error_name}> {{
-        let lexer = self.parser.token_stream().number_of_source_errors();
-        let parser = self.parser.number_of_syntax_errors();
-        if lexer != 0 || parser != 0 {{
-            return Err({validation_error_name}::SyntaxErrors {{ lexer, parser }});
-        }}
-        let parsed = self.parser.into_parsed_file(self.result);
-        validate_tree_structure(&parsed)?;
-        Ok({validated_tree_name}::__new(parsed))
-    }}
-}}
-
-/// Parses UTF-8 text by constructing the lexer, token stream, parser, and
-/// caller-selected entry rule in one call.
-///
-/// Pass the generated lexer constructor and a parser entry rule, for example
-/// `parse(src, MyGrammarLexer::new, {type_name}::file)`.
-///
-/// The returned [`antlr4_runtime::ParsedFile`] owns the canonical token store,
-/// flat CST storage, and entry-rule root.
-/// Use [`parse_with_parser`] instead when the caller also needs parser
-/// diagnostics after the entry rule runs.
-pub fn parse<L: TokenSource>(
-    input: impl AsRef<str>,
-    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
-) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
-{{
-    parse_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer, entry)
-}}
-
-/// Parses UTF-8 text and returns a typed tree whose required generated child
-/// accessors are infallible.
-pub fn parse_validated<L: TokenSource>(
-    input: impl AsRef<str>,
-    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
-) -> Result<{validated_tree_name}, {validation_error_name}>
-{{
-    parse_stream_validated(
-        antlr4_runtime::InputStream::new(input.as_ref()),
-        lexer,
-        entry,
-    )
-}}
-
-/// Parses UTF-8 text like [`parse`] while returning the parser after the entry
-/// rule has run.
-///
-/// This keeps the compact generated setup path available for callers that also
-/// need `Parser::number_of_syntax_errors()` or `{type_name}::into_token_stream()`.
-pub fn parse_with_parser<L: TokenSource, R>(
-    input: impl AsRef<str>,
-    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
-) -> Result<{output_type_name}<R, L>, antlr4_runtime::AntlrError>
-{{
-    parse_stream_with_parser(
-        antlr4_runtime::InputStream::new(input.as_ref()),
-        lexer,
-        entry,
-    )
-}}
-
-/// Parses a caller-provided character stream by constructing the lexer, token
-/// stream, parser, and caller-selected entry rule in one call.
-///
-/// Unlike [`parse`], this accepts any [`antlr4_runtime::CharStream`], including
-/// a named [`antlr4_runtime::InputStream`] or a byte-oriented
-/// [`antlr4_runtime::ByteStream`].
-pub fn parse_stream<I: antlr4_runtime::CharStream, L: TokenSource>(
-    input: I,
-    lexer: impl FnOnce(I) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
-) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
-{{
-    let {output_type_name} {{ result, parser }} =
-        parse_stream_with_parser(input, lexer, entry)?;
-    Ok(parser.into_parsed_file(result))
-}}
-
-/// Parses a caller-provided character stream and validates the completed tree.
-pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>(
-    input: I,
-    lexer: impl FnOnce(I) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
-) -> Result<{validated_tree_name}, {validation_error_name}>
-{{
-    let output = parse_stream_with_parser(input, lexer, entry)
-        .map_err({validation_error_name}::Recognition)?;
-    output.validate()
-}}
-
-/// Parses a caller-provided character stream like [`parse_stream`] while
-/// returning the parser after the entry rule has run.
-pub fn parse_stream_with_parser<I: antlr4_runtime::CharStream, L: TokenSource, R>(
-    input: I,
-    lexer: impl FnOnce(I) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
-) -> Result<{output_type_name}<R, L>, antlr4_runtime::AntlrError>
-{{
-    let lexer = lexer(input);
-    let tokens = CommonTokenStream::new(lexer);
-    let mut parser = {type_name}::new(tokens);
-    let result = entry(&mut parser)?;
-    Ok({output_type_name} {{ result, parser }})
-}}"#
+        r"antlr4_runtime::__antlr4_rust_parser_entry_points! {{
+    parser: {type_name},
+    output: {output_type_name},
+    validated_tree: {validated_tree_name},
+    validation_error: {validation_error_name},
+    validate_tree: validate_tree_structure,
+}}"
     )
 }
