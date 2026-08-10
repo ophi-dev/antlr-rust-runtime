@@ -170,15 +170,20 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 10, which aliases the
-generated validated-parse surface (`<Grammar>ValidatedTree`,
-`<Grammar>ValidationError`, `ValidatedRuleNode`, `FromValidatedRuleNode`) to
-grammar-agnostic types owned by the runtime instead of re-declaring them in
-every generated parser. Revision 9 similarly imports the grammar-independent
-generated support surface (the typed terminal/error-node wrappers, context
-child-iteration helpers, and embedded-action input facade) from the runtime's
-`generated` module. The runtime also accepts revisions 1 through 9 because
-their older generated recognizers use API surfaces that remain available.
+The bundled generator currently emits revision 10, which stops re-declaring
+the validated-parse surface in every generated parser: `<Grammar>ValidatedTree`
+is a type alias of the runtime's `ValidatedTree` branded with the module-local
+`ValidatedTreeContext` marker (likewise the module's `ValidatedRuleNode`
+alias), `FromValidatedRuleNode` is a re-export of the runtime trait, and
+`<Grammar>ValidationError` is an unbranded alias of the runtime's shared
+`ValidationError` — so validated trees of different grammars stay distinct
+types while all grammars share one error type (per-grammar trait impls on the
+error name must collapse into one; see `docs/migration.md`). Revision 9
+similarly imports the grammar-independent generated support surface (the typed
+terminal/error-node wrappers, context child-iteration helpers, and
+embedded-action input facade) from the runtime's `generated` module. The
+runtime also accepts revisions 1 through 9 because their older generated
+recognizers use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

@@ -80,4 +80,5 @@ expression: api
     "type ConfiguredMutualEntryValidationError",
     "type ParseTreeWalker",
     "type ValidatedParseTreeWalker",
+    "type ValidatedRuleNode",
 ]

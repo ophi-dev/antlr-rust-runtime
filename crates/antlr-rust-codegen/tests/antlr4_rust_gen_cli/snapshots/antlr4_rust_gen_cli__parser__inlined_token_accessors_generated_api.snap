@@ -99,4 +99,5 @@ expression: generated_parser_api(&parser)
     "type InlinedTokensValidationError",
     "type ParseTreeWalker",
     "type ValidatedParseTreeWalker",
+    "type ValidatedRuleNode",
 ]

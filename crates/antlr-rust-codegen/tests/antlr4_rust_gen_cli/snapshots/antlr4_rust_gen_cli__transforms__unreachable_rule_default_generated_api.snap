@@ -115,4 +115,5 @@ expression: generated_parser_api(&parser)
     "type ReachabilityValidatedTree",
     "type ReachabilityValidationError",
     "type ValidatedParseTreeWalker",
+    "type ValidatedRuleNode",
 ]

@@ -14,7 +14,6 @@ use std::sync::OnceLock;
 use std::io::Write as _;
 #[allow(unused_imports)]
 use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};
-pub use antlr4_runtime::{FromValidatedRuleNode, ValidatedRuleNode};
 pub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, __GeneratedInput, __GeneratedTokenView};
 #[allow(unused_imports)]
 use antlr4_runtime::generated::{__ActiveParserContext, __FromActiveRuleContext, __GeneratedRuleContext, __RecoveryContextState, __active_context_view, __active_context_view_with_attrs, __context_children, __labeled_token_children, __labeled_token_children_matching, __rule_children, __terminal_children, __token_children, __token_children_matching, __write_invocation_states};
@@ -388,12 +387,14 @@ fn parser_semantics() -> &'static antlr4_runtime::ParserSemantics {
 
 
 /// Marker carried by generated contexts whose required-child
-/// invariants were checked after a syntax-clean parse.
+/// invariants were checked after a syntax-clean parse, and grammar brand of
+/// this module's validated tree and rule-node types.
 ///
 /// This marker stays module-local (unlike the runtime-owned support items)
 /// so rustc can prove it never implements the runtime's
 /// `__RecoveryContextState`, keeping the recovery-oriented and validated
-/// accessor impls coherent.
+/// accessor impls coherent — and so the runtime's branded validated types
+/// stay nominally distinct per grammar.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedTreeContext {
     __private: (),
@@ -402,14 +403,24 @@ pub struct ValidatedTreeContext {
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidatedTree`; the
-/// validated-parse types of every generated parser are interchangeable.
-pub type RustValidatedTree = antlr4_runtime::ValidatedTree;
+/// Alias of the runtime's grammar-agnostic `antlr4_runtime::ValidatedTree`
+/// branded with this module's [`ValidatedTreeContext`] marker, so validated
+/// trees of different grammars remain distinct types.
+pub type RustValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;
+
+/// A rule node borrowed from a [`RustValidatedTree`].
+///
+/// Alias of the runtime's `antlr4_runtime::ValidatedRuleNode` branded with
+/// this module's [`ValidatedTreeContext`] marker.
+pub type ValidatedRuleNode<'a> = antlr4_runtime::ValidatedRuleNode<'a, ValidatedTreeContext>;
+
+pub use antlr4_runtime::FromValidatedRuleNode;
 
 /// Failure to recognize or validate a strict generated parse.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; the
-/// validated-parse types of every generated parser are interchangeable.
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; unlike
+/// the branded tree types, the validation errors of every generated parser
+/// are deliberately one shared type.
 pub type RustValidationError = antlr4_runtime::ValidationError;
 
 #[allow(dead_code)]
@@ -430,6 +441,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CrateContext {
         rule_index: 0,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -453,6 +465,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ModBodyContext {
         rule_index: 1,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -476,6 +489,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct VisibilityContext {
         rule_index: 2,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -498,6 +512,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct VisibilityRestrictionContext {
         rule_index: 3,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -520,6 +535,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ItemContext {
         rule_index: 4,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -547,6 +563,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PubItemContext {
         rule_index: 5,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -584,6 +601,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExternCrateContext {
         rule_index: 6,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -607,6 +625,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UseDeclContext {
         rule_index: 7,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -629,6 +648,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UsePathContext {
         rule_index: 8,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -653,6 +673,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UseSuffixContext {
         rule_index: 9,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -676,6 +697,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UseItemContext {
         rule_index: 10,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -700,6 +722,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UseItemListContext {
         rule_index: 11,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -722,6 +745,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RenameContext {
         rule_index: 12,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -744,6 +768,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ModDeclShortContext {
         rule_index: 13,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -766,6 +791,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ModDeclContext {
         rule_index: 14,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -789,6 +815,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExternModContext {
         rule_index: 15,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -813,6 +840,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ForeignItemContext {
         rule_index: 16,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -838,6 +866,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ForeignItemTailContext {
         rule_index: 17,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -866,6 +895,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StaticDeclContext {
         rule_index: 18,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -890,6 +920,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AssociatedStaticDeclContext {
         rule_index: 19,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -913,6 +944,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ConstDeclContext {
         rule_index: 20,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -937,6 +969,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AssociatedConstDeclContext {
         rule_index: 21,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -960,6 +993,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FnDeclContext {
         rule_index: 22,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -986,6 +1020,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MethodDeclContext {
         rule_index: 23,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1012,6 +1047,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitMethodDeclContext {
         rule_index: 24,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1038,6 +1074,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ForeignFnDeclContext {
         rule_index: 25,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1064,6 +1101,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroDeclContext {
         rule_index: 26,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1089,6 +1127,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroHeadContext {
         rule_index: 27,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1112,6 +1151,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FnHeadContext {
         rule_index: 28,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1136,6 +1176,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ParamContext {
         rule_index: 29,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1163,6 +1204,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ParamTyContext {
         rule_index: 30,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1186,6 +1228,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ParamListContext {
         rule_index: 31,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1211,6 +1254,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct VariadicParamListContext {
         rule_index: 32,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1234,6 +1278,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct VariadicParamListNamesOptionalContext {
         rule_index: 33,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1257,6 +1302,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SelfParamContext {
         rule_index: 34,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1280,6 +1326,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MethodParamListContext {
         rule_index: 35,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1303,6 +1350,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitMethodParamContext {
         rule_index: 36,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1327,6 +1375,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RestrictedPatContext {
         rule_index: 37,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1349,6 +1398,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitMethodParamListContext {
         rule_index: 38,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1373,6 +1423,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RtypeContext {
         rule_index: 39,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1395,6 +1446,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FnRtypeContext {
         rule_index: 40,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1418,6 +1470,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeDeclContext {
         rule_index: 41,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1445,6 +1498,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StructDeclContext {
         rule_index: 42,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1469,6 +1523,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StructTailContext {
         rule_index: 43,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1493,6 +1548,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TupleStructFieldContext {
         rule_index: 44,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1517,6 +1573,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TupleStructFieldListContext {
         rule_index: 45,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1539,6 +1596,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FieldDeclContext {
         rule_index: 46,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1564,6 +1622,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FieldDeclListContext {
         rule_index: 47,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1586,6 +1645,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumDeclContext {
         rule_index: 48,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1611,6 +1671,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumVariantContext {
         rule_index: 49,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1636,6 +1697,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumVariantListContext {
         rule_index: 50,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1658,6 +1720,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumVariantMainContext {
         rule_index: 51,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1683,6 +1746,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumTupleFieldContext {
         rule_index: 52,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1706,6 +1770,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumTupleFieldListContext {
         rule_index: 53,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1728,6 +1793,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumFieldDeclContext {
         rule_index: 54,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1753,6 +1819,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EnumFieldDeclListContext {
         rule_index: 55,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1775,6 +1842,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UnionDeclContext {
         rule_index: 56,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1800,6 +1868,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitDeclContext {
         rule_index: 57,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1827,6 +1896,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitAliasContext {
         rule_index: 58,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1852,6 +1922,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitItemContext {
         rule_index: 59,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1886,6 +1957,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TyDefaultContext {
         rule_index: 60,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1908,6 +1980,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ConstDefaultContext {
         rule_index: 61,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1930,6 +2003,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplBlockContext {
         rule_index: 62,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1956,6 +2030,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplWhatContext {
         rule_index: 63,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1980,6 +2055,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplItemContext {
         rule_index: 64,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2005,6 +2081,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplItemTailContext {
         rule_index: 65,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2037,6 +2114,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AttrContext {
         rule_index: 66,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2059,6 +2137,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct InnerAttrContext {
         rule_index: 67,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2081,6 +2160,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TtContext {
         rule_index: 68,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2103,6 +2183,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TtDelimitedContext {
         rule_index: 69,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2127,6 +2208,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TtParensContext {
         rule_index: 70,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2149,6 +2231,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TtBracketsContext {
         rule_index: 71,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2171,6 +2254,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TtBlockContext {
         rule_index: 72,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2193,6 +2277,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroTailContext {
         rule_index: 73,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2215,6 +2300,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PathContext {
         rule_index: 74,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2238,6 +2324,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PathParentContext {
         rule_index: 75,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2263,6 +2350,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AsTraitContext {
         rule_index: 76,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2285,6 +2373,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PathSegmentContext {
         rule_index: 77,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2307,6 +2396,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PathSegmentNoSuperContext {
         rule_index: 78,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2330,6 +2420,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SimplePathContext {
         rule_index: 79,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2352,6 +2443,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SimplePathSegmentContext {
         rule_index: 80,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2374,6 +2466,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ForLifetimesContext {
         rule_index: 81,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2396,6 +2489,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeDefListContext {
         rule_index: 82,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2418,6 +2512,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeDefContext {
         rule_index: 83,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2442,6 +2537,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeBoundContext {
         rule_index: 84,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2465,6 +2561,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypePathMainContext {
         rule_index: 85,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2488,6 +2585,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TyPathTailContext {
         rule_index: 86,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2513,6 +2611,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TyPathParentContext {
         rule_index: 87,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2538,6 +2637,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypePathSegmentContext {
         rule_index: 88,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2560,6 +2660,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TyPathSegmentNoSuperContext {
         rule_index: 89,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2583,6 +2684,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct WhereClauseContext {
         rule_index: 90,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2605,6 +2707,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct WhereBoundListContext {
         rule_index: 91,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2627,6 +2730,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct WhereBoundContext {
         rule_index: 92,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2653,6 +2757,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EmptyOkColonBoundContext {
         rule_index: 93,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2675,6 +2780,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ColonBoundContext {
         rule_index: 94,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2697,6 +2803,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BoundContext {
         rule_index: 95,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2722,6 +2829,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PrimBoundContext {
         rule_index: 96,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2746,6 +2854,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeContext {
         rule_index: 97,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2773,6 +2882,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeNoBoundsContext {
         rule_index: 98,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2805,6 +2915,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct InferredTypeContext {
         rule_index: 99,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2826,6 +2937,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ArrayOrSliceTypeContext {
         rule_index: 100,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2849,6 +2961,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ReferenceTypeContext {
         rule_index: 101,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2872,6 +2985,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RawPointerTypeContext {
         rule_index: 102,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2895,6 +3009,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct NeverTypeContext {
         rule_index: 103,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2916,6 +3031,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TupleTypeContext {
         rule_index: 104,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2939,6 +3055,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplTraitTypeContext {
         rule_index: 105,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2961,6 +3078,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ImplTraitTypeOneBoundContext {
         rule_index: 106,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -2983,6 +3101,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitObjectTypeOneBoundContext {
         rule_index: 107,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3005,6 +3124,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeParamBoundsContext {
         rule_index: 108,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3027,6 +3147,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeParamBoundContext {
         rule_index: 109,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3051,6 +3172,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitObjectTypeContext {
         rule_index: 110,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3073,6 +3195,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TraitBoundContext {
         rule_index: 111,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3096,6 +3219,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BareFunctionTypeContext {
         rule_index: 112,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3121,6 +3245,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MutOrConstContext {
         rule_index: 113,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3142,6 +3267,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExternAbiContext {
         rule_index: 114,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3164,6 +3290,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeArgumentsContext {
         rule_index: 115,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3187,6 +3314,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeArgumentContext {
         rule_index: 116,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3219,6 +3347,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TySumContext {
         rule_index: 117,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3242,6 +3371,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TySumListContext {
         rule_index: 118,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3264,6 +3394,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeParametersContext {
         rule_index: 119,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3288,6 +3419,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeParamContext {
         rule_index: 120,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3312,6 +3444,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeParamListContext {
         rule_index: 121,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3334,6 +3467,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeParameterContext {
         rule_index: 122,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3362,6 +3496,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TypeParameterListContext {
         rule_index: 123,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3384,6 +3519,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatternContext {
         rule_index: 124,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3406,6 +3542,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatternNoTopAltContext {
         rule_index: 125,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3430,6 +3567,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatIdentContext {
         rule_index: 126,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3452,6 +3590,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatternWithoutMutContext {
         rule_index: 127,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3485,6 +3624,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatRangeEndContext {
         rule_index: 128,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3508,6 +3648,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatLitContext {
         rule_index: 129,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3530,6 +3671,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatListContext {
         rule_index: 130,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3552,6 +3694,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatListWithDotsContext {
         rule_index: 131,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3576,6 +3719,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatListDotsTailContext {
         rule_index: 132,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3598,6 +3742,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatFieldsLeftContext {
         rule_index: 133,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3622,6 +3767,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatFieldsContext {
         rule_index: 134,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3646,6 +3792,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PatFieldContext {
         rule_index: 135,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3670,6 +3817,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExprContext {
         rule_index: 136,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3693,6 +3841,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExprNoStructContext {
         rule_index: 137,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3716,6 +3865,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExprListContext {
         rule_index: 138,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3738,6 +3888,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockContext {
         rule_index: 139,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3761,6 +3912,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockWithInnerAttrsContext {
         rule_index: 140,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3785,6 +3937,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StmtContext {
         rule_index: 141,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3814,6 +3967,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockyExprContext {
         rule_index: 142,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3844,6 +3998,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct IfCondOrPatContext {
         rule_index: 143,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3869,6 +4024,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct WhileCondOrPatContext {
         rule_index: 144,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3894,6 +4050,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LetChainContext {
         rule_index: 145,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3918,6 +4075,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LetChainOperandContext {
         rule_index: 146,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3941,6 +4099,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LetChainLetContext {
         rule_index: 147,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3964,6 +4123,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LoopLabelContext {
         rule_index: 148,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -3986,6 +4146,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MatchArmsContext {
         rule_index: 149,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4011,6 +4172,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MatchArmIntroContext {
         rule_index: 150,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4035,6 +4197,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MatchPatternContext {
         rule_index: 151,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4057,6 +4220,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MatchIfClauseContext {
         rule_index: 152,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4079,6 +4243,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExprAttrsContext {
         rule_index: 153,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4101,6 +4266,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExprInnerAttrsContext {
         rule_index: 154,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4123,6 +4289,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PrimExprContext {
         rule_index: 155,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4148,6 +4315,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PrimExprNoStructContext {
         rule_index: 156,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4181,6 +4349,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LitContext {
         rule_index: 157,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4210,6 +4379,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ClosureParamsContext {
         rule_index: 158,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4232,6 +4402,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ClosureParamContext {
         rule_index: 159,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4256,6 +4427,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ClosureParamListContext {
         rule_index: 160,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4278,6 +4450,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ClosureTailContext {
         rule_index: 161,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4302,6 +4475,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeOrExprContext {
         rule_index: 162,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4325,6 +4499,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FieldsContext {
         rule_index: 163,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4348,6 +4523,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StructUpdateBaseContext {
         rule_index: 164,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4370,6 +4546,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FieldContext {
         rule_index: 165,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4395,6 +4572,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FieldNameContext {
         rule_index: 166,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4418,6 +4596,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PostExprContext {
         rule_index: 167,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4442,6 +4621,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PostExprTailContext {
         rule_index: 168,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4469,6 +4649,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PreExprContext {
         rule_index: 169,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4496,6 +4677,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CastExprContext {
         rule_index: 170,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4520,6 +4702,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MulExprContext {
         rule_index: 171,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4543,6 +4726,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AddExprContext {
         rule_index: 172,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4566,6 +4750,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ShiftExprContext {
         rule_index: 173,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4589,6 +4774,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitAndExprContext {
         rule_index: 174,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4612,6 +4798,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitXorExprContext {
         rule_index: 175,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4635,6 +4822,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitOrExprContext {
         rule_index: 176,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4658,6 +4846,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CmpExprContext {
         rule_index: 177,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4680,6 +4869,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AndExprContext {
         rule_index: 178,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4703,6 +4893,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct OrExprContext {
         rule_index: 179,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4726,6 +4917,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RangeExprContext {
         rule_index: 180,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4748,6 +4940,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AssignExprContext {
         rule_index: 181,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4771,6 +4964,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PostExprNoStructContext {
         rule_index: 182,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4795,6 +4989,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PreExprNoStructContext {
         rule_index: 183,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4820,6 +5015,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CastExprNoStructContext {
         rule_index: 184,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4844,6 +5040,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MulExprNoStructContext {
         rule_index: 185,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4867,6 +5064,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AddExprNoStructContext {
         rule_index: 186,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4890,6 +5088,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ShiftExprNoStructContext {
         rule_index: 187,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4913,6 +5112,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitAndExprNoStructContext {
         rule_index: 188,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4936,6 +5136,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitXorExprNoStructContext {
         rule_index: 189,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4959,6 +5160,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BitOrExprNoStructContext {
         rule_index: 190,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -4982,6 +5184,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CmpExprNoStructContext {
         rule_index: 191,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5005,6 +5208,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AndExprNoStructContext {
         rule_index: 192,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5028,6 +5232,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct OrExprNoStructContext {
         rule_index: 193,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5051,6 +5256,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RangeExprNoStructContext {
         rule_index: 194,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5073,6 +5279,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AssignExprNoStructContext {
         rule_index: 195,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5096,6 +5303,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct IdentContext {
         rule_index: 196,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5119,6 +5327,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AnyIdentContext {
         rule_index: 197,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5141,6 +5350,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TokensNoDelimitersCashContext {
         rule_index: 198,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5162,6 +5372,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TokensNoDelimitersRepetitionOperatorsContext {
         rule_index: 199,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5183,6 +5394,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroItermContext {
         rule_index: 200,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5206,6 +5418,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRulesDefinitionContext {
         rule_index: 201,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5228,6 +5441,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRulesDefContext {
         rule_index: 202,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5250,6 +5464,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRulesContext {
         rule_index: 203,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5272,6 +5487,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRuleContext {
         rule_index: 204,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5295,6 +5511,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroMatcherContext {
         rule_index: 205,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5317,6 +5534,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroMatchContext {
         rule_index: 206,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5345,6 +5563,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroFragSpecContext {
         rule_index: 207,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5366,6 +5585,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRepSepContext {
         rule_index: 208,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5388,6 +5608,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroRepOpContext {
         rule_index: 209,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5409,6 +5630,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroTranscriberContext {
         rule_index: 210,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5431,6 +5653,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DelimTokenTreeContext {
         rule_index: 211,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5453,6 +5676,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroInvocationSemiContext {
         rule_index: 212,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5476,6 +5700,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct MacroInvocationContext {
         rule_index: 213,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5499,6 +5724,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LifetimeContext {
         rule_index: 214,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -5549,8 +5775,8 @@ pub fn validate_tree_structure(
                 match __context_kind(context) {
                 0 => {
                     let context = CrateContext::__from_listener_node(context, None);
-        let _ = context.mod_body().map_err(RustValidationError::MissingChild)?;
-        let _ = context.eof_token().map_err(RustValidationError::MissingChild)?;
+        context.mod_body()?;
+        context.eof_token()?;
                 },
                 1 => {
                 },
@@ -5566,7 +5792,7 @@ pub fn validate_tree_structure(
                 },
                 7 => {
                     let context = UseDeclContext::__from_listener_node(context, None);
-        let _ = context.use_path().map_err(RustValidationError::MissingChild)?;
+        context.use_path()?;
                 },
                 8 => {
                 },
@@ -5582,16 +5808,16 @@ pub fn validate_tree_structure(
                 },
                 13 => {
                     let context = ModDeclShortContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 14 => {
                     let context = ModDeclContext::__from_listener_node(context, None);
-        let _ = context.mod_body().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.mod_body()?;
+        context.ident()?;
                 },
                 15 => {
                     let context = ExternModContext::__from_listener_node(context, None);
-        let _ = context.extern_abi().map_err(RustValidationError::MissingChild)?;
+        context.extern_abi()?;
                 },
                 16 => {
                 },
@@ -5599,52 +5825,52 @@ pub fn validate_tree_structure(
                 },
                 18 => {
                     let context = StaticDeclContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
-        let _ = context.expr().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
+        context.expr()?;
+        context.ident()?;
                 },
                 19 => {
                     let context = AssociatedStaticDeclContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
+        context.ident()?;
                 },
                 20 => {
                     let context = ConstDeclContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
-        let _ = context.expr().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
+        context.expr()?;
                 },
                 21 => {
                     let context = AssociatedConstDeclContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 22 => {
                     let context = FnDeclContext::__from_listener_node(context, None);
-        let _ = context.fn_head().map_err(RustValidationError::MissingChild)?;
+        context.fn_head()?;
                 },
                 23 => {
                     let context = MethodDeclContext::__from_listener_node(context, None);
-        let _ = context.fn_head().map_err(RustValidationError::MissingChild)?;
+        context.fn_head()?;
                 },
                 24 => {
                     let context = TraitMethodDeclContext::__from_listener_node(context, None);
-        let _ = context.fn_head().map_err(RustValidationError::MissingChild)?;
+        context.fn_head()?;
                 },
                 25 => {
                     let context = ForeignFnDeclContext::__from_listener_node(context, None);
-        let _ = context.fn_head().map_err(RustValidationError::MissingChild)?;
+        context.fn_head()?;
                 },
                 26 => {
                     let context = MacroDeclContext::__from_listener_node(context, None);
-        let _ = context.macro_head().map_err(RustValidationError::MissingChild)?;
+        context.macro_head()?;
         antlr4_runtime::require_min_count(context.tt_children().count(), 1, "MacroDeclContext", "tt")?;
                 },
                 27 => {
                     let context = MacroHeadContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 28 => {
                     let context = FnHeadContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 29 => {
                 },
@@ -5674,24 +5900,24 @@ pub fn validate_tree_structure(
                 },
                 39 => {
                     let context = RtypeContext::__from_listener_node(context, None);
-        let _ = context.r#type().map_err(RustValidationError::MissingChild)?;
+        context.r#type()?;
                 },
                 40 => {
                 },
                 41 => {
                     let context = TypeDeclContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 42 => {
                     let context = StructDeclContext::__from_listener_node(context, None);
-        let _ = context.struct_tail().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.struct_tail()?;
+        context.ident()?;
                 },
                 43 => {
                 },
                 44 => {
                     let context = TupleStructFieldContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
                 },
                 45 => {
                     let context = TupleStructFieldListContext::__from_listener_node(context, None);
@@ -5699,8 +5925,8 @@ pub fn validate_tree_structure(
                 },
                 46 => {
                     let context = FieldDeclContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
+        context.ident()?;
                 },
                 47 => {
                     let context = FieldDeclListContext::__from_listener_node(context, None);
@@ -5708,11 +5934,11 @@ pub fn validate_tree_structure(
                 },
                 48 => {
                     let context = EnumDeclContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 49 => {
                     let context = EnumVariantContext::__from_listener_node(context, None);
-        let _ = context.enum_variant_main().map_err(RustValidationError::MissingChild)?;
+        context.enum_variant_main()?;
                 },
                 50 => {
                     let context = EnumVariantListContext::__from_listener_node(context, None);
@@ -5720,11 +5946,11 @@ pub fn validate_tree_structure(
                 },
                 51 => {
                     let context = EnumVariantMainContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 52 => {
                     let context = EnumTupleFieldContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
                 },
                 53 => {
                     let context = EnumTupleFieldListContext::__from_listener_node(context, None);
@@ -5732,8 +5958,8 @@ pub fn validate_tree_structure(
                 },
                 54 => {
                     let context = EnumFieldDeclContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
+        context.ident()?;
                 },
                 55 => {
                     let context = EnumFieldDeclListContext::__from_listener_node(context, None);
@@ -5741,36 +5967,36 @@ pub fn validate_tree_structure(
                 },
                 56 => {
                     let context = UnionDeclContext::__from_listener_node(context, None);
-        let _ = context.field_decl_list().map_err(RustValidationError::MissingChild)?;
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.field_decl_list()?;
+        context.ident()?;
                 },
                 57 => {
                     let context = TraitDeclContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 58 => {
                     let context = TraitAliasContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 59 => {
                 },
                 60 => {
                     let context = TyDefaultContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
                 },
                 61 => {
                     let context = ConstDefaultContext::__from_listener_node(context, None);
-        let _ = context.expr().map_err(RustValidationError::MissingChild)?;
+        context.expr()?;
                 },
                 62 => {
                     let context = ImplBlockContext::__from_listener_node(context, None);
-        let _ = context.impl_what().map_err(RustValidationError::MissingChild)?;
+        context.impl_what()?;
                 },
                 63 => {
                 },
                 64 => {
                     let context = ImplItemContext::__from_listener_node(context, None);
-        let _ = context.impl_item_tail().map_err(RustValidationError::MissingChild)?;
+        context.impl_item_tail()?;
                 },
                 65 => {
                 },
@@ -5790,23 +6016,23 @@ pub fn validate_tree_structure(
                 },
                 73 => {
                     let context = MacroTailContext::__from_listener_node(context, None);
-        let _ = context.tt_delimited().map_err(RustValidationError::MissingChild)?;
+        context.tt_delimited()?;
                 },
                 74 => {
                     let context = PathContext::__from_listener_node(context, None);
-        let _ = context.path_segment_no_super().map_err(RustValidationError::MissingChild)?;
+        context.path_segment_no_super()?;
                 },
                 75 => {
                 },
                 76 => {
                     let context = AsTraitContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
                 },
                 77 => {
                 },
                 78 => {
                     let context = PathSegmentNoSuperContext::__from_listener_node(context, None);
-        let _ = context.simple_path_segment().map_err(RustValidationError::MissingChild)?;
+        context.simple_path_segment()?;
                 },
                 79 => {
                     let context = SimplePathContext::__from_listener_node(context, None);
@@ -5822,15 +6048,15 @@ pub fn validate_tree_structure(
                 },
                 83 => {
                     let context = LifetimeDefContext::__from_listener_node(context, None);
-        let _ = context.lifetime().map_err(RustValidationError::MissingChild)?;
+        context.lifetime()?;
                 },
                 84 => {
                     let context = LifetimeBoundContext::__from_listener_node(context, None);
-        let _ = context.lifetime().map_err(RustValidationError::MissingChild)?;
+        context.lifetime()?;
                 },
                 85 => {
                     let context = TypePathMainContext::__from_listener_node(context, None);
-        let _ = context.ty_path_tail().map_err(RustValidationError::MissingChild)?;
+        context.ty_path_tail()?;
                 },
                 86 => {
                 },
@@ -5852,7 +6078,7 @@ pub fn validate_tree_structure(
                 },
                 94 => {
                     let context = ColonBoundContext::__from_listener_node(context, None);
-        let _ = context.bound().map_err(RustValidationError::MissingChild)?;
+        context.bound()?;
                 },
                 95 => {
                 },
@@ -5866,16 +6092,16 @@ pub fn validate_tree_structure(
                 },
                 100 => {
                     let context = ArrayOrSliceTypeContext::__from_listener_node(context, None);
-        let _ = context.ty_sum().map_err(RustValidationError::MissingChild)?;
+        context.ty_sum()?;
                 },
                 101 => {
                     let context = ReferenceTypeContext::__from_listener_node(context, None);
-        let _ = context.r#type().map_err(RustValidationError::MissingChild)?;
+        context.r#type()?;
                 },
                 102 => {
                     let context = RawPointerTypeContext::__from_listener_node(context, None);
-        let _ = context.r#type().map_err(RustValidationError::MissingChild)?;
-        let _ = context.mut_or_const().map_err(RustValidationError::MissingChild)?;
+        context.r#type()?;
+        context.mut_or_const()?;
                 },
                 103 => {
                 },
@@ -5883,15 +6109,15 @@ pub fn validate_tree_structure(
                 },
                 105 => {
                     let context = ImplTraitTypeContext::__from_listener_node(context, None);
-        let _ = context.type_param_bounds().map_err(RustValidationError::MissingChild)?;
+        context.type_param_bounds()?;
                 },
                 106 => {
                     let context = ImplTraitTypeOneBoundContext::__from_listener_node(context, None);
-        let _ = context.trait_bound().map_err(RustValidationError::MissingChild)?;
+        context.trait_bound()?;
                 },
                 107 => {
                     let context = TraitObjectTypeOneBoundContext::__from_listener_node(context, None);
-        let _ = context.trait_bound().map_err(RustValidationError::MissingChild)?;
+        context.trait_bound()?;
                 },
                 108 => {
                     let context = TypeParamBoundsContext::__from_listener_node(context, None);
@@ -5903,7 +6129,7 @@ pub fn validate_tree_structure(
                 },
                 111 => {
                     let context = TraitBoundContext::__from_listener_node(context, None);
-        let _ = context.type_path_main().map_err(RustValidationError::MissingChild)?;
+        context.type_path_main()?;
                 },
                 112 => {
                 },
@@ -5917,7 +6143,7 @@ pub fn validate_tree_structure(
                 },
                 117 => {
                     let context = TySumContext::__from_listener_node(context, None);
-        let _ = context.r#type().map_err(RustValidationError::MissingChild)?;
+        context.r#type()?;
                 },
                 118 => {
                     let context = TySumListContext::__from_listener_node(context, None);
@@ -5927,7 +6153,7 @@ pub fn validate_tree_structure(
                 },
                 120 => {
                     let context = LifetimeParamContext::__from_listener_node(context, None);
-        let _ = context.lifetime().map_err(RustValidationError::MissingChild)?;
+        context.lifetime()?;
                 },
                 121 => {
                     let context = LifetimeParamListContext::__from_listener_node(context, None);
@@ -5953,7 +6179,7 @@ pub fn validate_tree_structure(
                 },
                 129 => {
                     let context = PatLitContext::__from_listener_node(context, None);
-        let _ = context.lit().map_err(RustValidationError::MissingChild)?;
+        context.lit()?;
                 },
                 130 => {
                     let context = PatListContext::__from_listener_node(context, None);
@@ -5969,15 +6195,15 @@ pub fn validate_tree_structure(
                 },
                 135 => {
                     let context = PatFieldContext::__from_listener_node(context, None);
-        let _ = context.ident().map_err(RustValidationError::MissingChild)?;
+        context.ident()?;
                 },
                 136 => {
                     let context = ExprContext::__from_listener_node(context, None);
-        let _ = context.assign_expr().map_err(RustValidationError::MissingChild)?;
+        context.assign_expr()?;
                 },
                 137 => {
                     let context = ExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.assign_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.assign_expr_no_struct()?;
                 },
                 138 => {
                     let context = ExprListContext::__from_listener_node(context, None);
@@ -5997,26 +6223,26 @@ pub fn validate_tree_structure(
                 },
                 145 => {
                     let context = LetChainContext::__from_listener_node(context, None);
-        let _ = context.let_chain_let().map_err(RustValidationError::MissingChild)?;
+        context.let_chain_let()?;
                 },
                 146 => {
                 },
                 147 => {
                     let context = LetChainLetContext::__from_listener_node(context, None);
-        let _ = context.pattern().map_err(RustValidationError::MissingChild)?;
-        let _ = context.cmp_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.pattern()?;
+        context.cmp_expr_no_struct()?;
                 },
                 148 => {
                     let context = LoopLabelContext::__from_listener_node(context, None);
-        let _ = context.lifetime().map_err(RustValidationError::MissingChild)?;
+        context.lifetime()?;
                 },
                 149 => {
                     let context = MatchArmsContext::__from_listener_node(context, None);
-        let _ = context.match_arm_intro().map_err(RustValidationError::MissingChild)?;
+        context.match_arm_intro()?;
                 },
                 150 => {
                     let context = MatchArmIntroContext::__from_listener_node(context, None);
-        let _ = context.match_pattern().map_err(RustValidationError::MissingChild)?;
+        context.match_pattern()?;
                 },
                 151 => {
                     let context = MatchPatternContext::__from_listener_node(context, None);
@@ -6024,7 +6250,7 @@ pub fn validate_tree_structure(
                 },
                 152 => {
                     let context = MatchIfClauseContext::__from_listener_node(context, None);
-        let _ = context.expr().map_err(RustValidationError::MissingChild)?;
+        context.expr()?;
                 },
                 153 => {
                     let context = ExprAttrsContext::__from_listener_node(context, None);
@@ -6044,7 +6270,7 @@ pub fn validate_tree_structure(
                 },
                 159 => {
                     let context = ClosureParamContext::__from_listener_node(context, None);
-        let _ = context.pattern_no_top_alt().map_err(RustValidationError::MissingChild)?;
+        context.pattern_no_top_alt()?;
                 },
                 160 => {
                     let context = ClosureParamListContext::__from_listener_node(context, None);
@@ -6058,7 +6284,7 @@ pub fn validate_tree_structure(
                 },
                 164 => {
                     let context = StructUpdateBaseContext::__from_listener_node(context, None);
-        let _ = context.expr().map_err(RustValidationError::MissingChild)?;
+        context.expr()?;
                 },
                 165 => {
                 },
@@ -6074,27 +6300,27 @@ pub fn validate_tree_structure(
                 },
                 171 => {
                     let context = MulExprContext::__from_listener_node(context, None);
-        let _ = context.cast_expr().map_err(RustValidationError::MissingChild)?;
+        context.cast_expr()?;
                 },
                 172 => {
                     let context = AddExprContext::__from_listener_node(context, None);
-        let _ = context.mul_expr().map_err(RustValidationError::MissingChild)?;
+        context.mul_expr()?;
                 },
                 173 => {
                     let context = ShiftExprContext::__from_listener_node(context, None);
-        let _ = context.add_expr().map_err(RustValidationError::MissingChild)?;
+        context.add_expr()?;
                 },
                 174 => {
                     let context = BitAndExprContext::__from_listener_node(context, None);
-        let _ = context.shift_expr().map_err(RustValidationError::MissingChild)?;
+        context.shift_expr()?;
                 },
                 175 => {
                     let context = BitXorExprContext::__from_listener_node(context, None);
-        let _ = context.bit_and_expr().map_err(RustValidationError::MissingChild)?;
+        context.bit_and_expr()?;
                 },
                 176 => {
                     let context = BitOrExprContext::__from_listener_node(context, None);
-        let _ = context.bit_xor_expr().map_err(RustValidationError::MissingChild)?;
+        context.bit_xor_expr()?;
                 },
                 177 => {
                     let context = CmpExprContext::__from_listener_node(context, None);
@@ -6102,11 +6328,11 @@ pub fn validate_tree_structure(
                 },
                 178 => {
                     let context = AndExprContext::__from_listener_node(context, None);
-        let _ = context.cmp_expr().map_err(RustValidationError::MissingChild)?;
+        context.cmp_expr()?;
                 },
                 179 => {
                     let context = OrExprContext::__from_listener_node(context, None);
-        let _ = context.and_expr().map_err(RustValidationError::MissingChild)?;
+        context.and_expr()?;
                 },
                 180 => {
                 },
@@ -6120,27 +6346,27 @@ pub fn validate_tree_structure(
                 },
                 185 => {
                     let context = MulExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.cast_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.cast_expr_no_struct()?;
                 },
                 186 => {
                     let context = AddExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.mul_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.mul_expr_no_struct()?;
                 },
                 187 => {
                     let context = ShiftExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.add_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.add_expr_no_struct()?;
                 },
                 188 => {
                     let context = BitAndExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.shift_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.shift_expr_no_struct()?;
                 },
                 189 => {
                     let context = BitXorExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.bit_and_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.bit_and_expr_no_struct()?;
                 },
                 190 => {
                     let context = BitOrExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.bit_xor_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.bit_xor_expr_no_struct()?;
                 },
                 191 => {
                     let context = CmpExprNoStructContext::__from_listener_node(context, None);
@@ -6148,11 +6374,11 @@ pub fn validate_tree_structure(
                 },
                 192 => {
                     let context = AndExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.cmp_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.cmp_expr_no_struct()?;
                 },
                 193 => {
                     let context = OrExprNoStructContext::__from_listener_node(context, None);
-        let _ = context.and_expr_no_struct().map_err(RustValidationError::MissingChild)?;
+        context.and_expr_no_struct()?;
                 },
                 194 => {
                 },
@@ -6170,7 +6396,7 @@ pub fn validate_tree_structure(
                 },
                 201 => {
                     let context = MacroRulesDefinitionContext::__from_listener_node(context, None);
-        let _ = context.macro_rules_def().map_err(RustValidationError::MissingChild)?;
+        context.macro_rules_def()?;
                 },
                 202 => {
                 },
@@ -6180,8 +6406,8 @@ pub fn validate_tree_structure(
                 },
                 204 => {
                     let context = MacroRuleContext::__from_listener_node(context, None);
-        let _ = context.macro_matcher().map_err(RustValidationError::MissingChild)?;
-        let _ = context.macro_transcriber().map_err(RustValidationError::MissingChild)?;
+        context.macro_matcher()?;
+        context.macro_transcriber()?;
                 },
                 205 => {
                 },
@@ -6191,24 +6417,24 @@ pub fn validate_tree_structure(
                 },
                 208 => {
                     let context = MacroRepSepContext::__from_listener_node(context, None);
-        let _ = context.tokens_no_delimiters_repetition_operators().map_err(RustValidationError::MissingChild)?;
+        context.tokens_no_delimiters_repetition_operators()?;
                 },
                 209 => {
                 },
                 210 => {
                     let context = MacroTranscriberContext::__from_listener_node(context, None);
-        let _ = context.delim_token_tree().map_err(RustValidationError::MissingChild)?;
+        context.delim_token_tree()?;
                 },
                 211 => {
                 },
                 212 => {
                     let context = MacroInvocationSemiContext::__from_listener_node(context, None);
-        let _ = context.simple_path().map_err(RustValidationError::MissingChild)?;
+        context.simple_path()?;
                 },
                 213 => {
                     let context = MacroInvocationContext::__from_listener_node(context, None);
-        let _ = context.simple_path().map_err(RustValidationError::MissingChild)?;
-        let _ = context.delim_token_tree().map_err(RustValidationError::MissingChild)?;
+        context.simple_path()?;
+        context.delim_token_tree()?;
                 },
                 214 => {
                 },

@@ -552,7 +552,9 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
     );
     let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
     for expected in [
-        "pub type TValidatedTree = antlr4_runtime::ValidatedTree;",
+        "pub type TValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;",
+        "pub type ValidatedRuleNode<'a> = antlr4_runtime::ValidatedRuleNode<'a, ValidatedTreeContext>;",
+        "pub use antlr4_runtime::FromValidatedRuleNode;",
         "pub type TValidationError = antlr4_runtime::ValidationError;",
         "pub fn parse_validated<L: TokenSource>",
         "pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>",
@@ -565,7 +567,7 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
         "rule optional_rule: optional(OptionalRuleContext[",
         "rule atom_children: many(AtomContext[",
         "label_token tails: many(skip(0), [",
-        "let _ = context.required_rule().map_err(TValidationError::MissingChild)?;",
+        "context.required_rule()?;",
         "antlr4_runtime::require_min_count(context.atom_children().count(), 1, \"StartContext\", \"atom\")?;",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
@@ -1521,4 +1523,89 @@ fn colliding_context_accessor_names_compile() {
         utf8(&output.stderr)
     );
     assert_generated_modules_compile(temp.path(), &["t.rs"]);
+}
+
+#[test]
+fn validated_rule_nodes_of_different_grammars_do_not_cross_downcast() {
+    // The shared runtime validated surface is branded with each module's
+    // `ValidatedTreeContext` marker, so downcasting one grammar's validated
+    // node into another grammar's context must stay a type error (rule
+    // indexes and context kinds are grammar-local numbers).
+    let temp = temporary_directory("validated-cross-grammar");
+    let out = temp.path().join("generated");
+    for name in ["A", "B"] {
+        let grammar = temp.path().join(format!("{name}.g4"));
+        fs::write(
+            &grammar,
+            format!(
+                "grammar {name};\n\
+                 root : ID EOF ;\n\
+                 ID : [a-z]+ ;\n\
+                 WS : [ \\t\\r\\n]+ -> skip ;\n"
+            ),
+        )
+        .expect("grammar should be writable");
+        let output = run_antlr4_rust_gen(&[
+            grammar.as_os_str(),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ]);
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+    }
+    let modules = ["a_lexer.rs", "a_parser.rs", "b_lexer.rs", "b_parser.rs"];
+
+    let output = run_generated_project(
+        temp.path(),
+        &modules,
+        r#"
+#[allow(dead_code)]
+fn cross_grammar_downcast(node: crate::a_parser::ValidatedRuleNode<'_>) {
+    let _ = node.downcast_ref::<crate::b_parser::RootContext<
+        '_,
+        crate::b_parser::ValidatedTreeContext,
+    >>();
+}
+"#,
+    );
+    assert!(
+        !output.status.success(),
+        "cross-grammar validated downcast unexpectedly compiled"
+    );
+    assert!(
+        utf8(&output.stderr).contains("error[E0271]"),
+        "expected a Grammar associated-type mismatch, got: {}",
+        utf8(&output.stderr)
+    );
+
+    assert_generated_project(
+        temp.path(),
+        &modules,
+        r#"
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn same_grammar_downcast_still_resolves() {
+        use crate::a_lexer::ALexer;
+        use crate::a_parser::{AParser, RootContext, ValidatedTreeContext};
+
+        let validated = crate::a_parser::parse_validated(
+            "hello",
+            ALexer::new,
+            AParser::root,
+        )
+        .expect("clean parse should validate");
+        let root = validated
+            .tree()
+            .downcast_ref::<RootContext<'_, ValidatedTreeContext>>()
+            .expect("entry rule downcasts within its own grammar");
+        assert!(root.text().starts_with("hello"));
+    }
+}
+"#,
+    );
 }

@@ -3,12 +3,14 @@ fn render_validated_tree_support(surface_name: &str) -> String {
     let validation_error = format!("{surface_name}ValidationError");
     format!(
         r#"/// Marker carried by generated contexts whose required-child
-/// invariants were checked after a syntax-clean parse.
+/// invariants were checked after a syntax-clean parse, and grammar brand of
+/// this module's validated tree and rule-node types.
 ///
 /// This marker stays module-local (unlike the runtime-owned support items)
 /// so rustc can prove it never implements the runtime's
 /// `__RecoveryContextState`, keeping the recovery-oriented and validated
-/// accessor impls coherent.
+/// accessor impls coherent — and so the runtime's branded validated types
+/// stay nominally distinct per grammar.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedTreeContext {{
     __private: (),
@@ -17,14 +19,24 @@ pub struct ValidatedTreeContext {{
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidatedTree`; the
-/// validated-parse types of every generated parser are interchangeable.
-pub type {validated_tree} = antlr4_runtime::ValidatedTree;
+/// Alias of the runtime's grammar-agnostic `antlr4_runtime::ValidatedTree`
+/// branded with this module's [`ValidatedTreeContext`] marker, so validated
+/// trees of different grammars remain distinct types.
+pub type {validated_tree} = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;
+
+/// A rule node borrowed from a [`{validated_tree}`].
+///
+/// Alias of the runtime's `antlr4_runtime::ValidatedRuleNode` branded with
+/// this module's [`ValidatedTreeContext`] marker.
+pub type ValidatedRuleNode<'a> = antlr4_runtime::ValidatedRuleNode<'a, ValidatedTreeContext>;
+
+pub use antlr4_runtime::FromValidatedRuleNode;
 
 /// Failure to recognize or validate a strict generated parse.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; the
-/// validated-parse types of every generated parser are interchangeable.
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; unlike
+/// the branded tree types, the validation errors of every generated parser
+/// are deliberately one shared type.
 pub type {validation_error} = antlr4_runtime::ValidationError;
 
 "#

@@ -14,7 +14,6 @@ use std::sync::OnceLock;
 use std::io::Write as _;
 #[allow(unused_imports)]
 use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};
-pub use antlr4_runtime::{FromValidatedRuleNode, ValidatedRuleNode};
 pub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, __GeneratedInput, __GeneratedTokenView};
 #[allow(unused_imports)]
 use antlr4_runtime::generated::{__ActiveParserContext, __FromActiveRuleContext, __GeneratedRuleContext, __RecoveryContextState, __active_context_view, __active_context_view_with_attrs, __context_children, __labeled_token_children, __labeled_token_children_matching, __rule_children, __terminal_children, __token_children, __token_children_matching, __write_invocation_states};
@@ -198,12 +197,14 @@ fn parser_semantics() -> &'static antlr4_runtime::ParserSemantics {
 
 
 /// Marker carried by generated contexts whose required-child
-/// invariants were checked after a syntax-clean parse.
+/// invariants were checked after a syntax-clean parse, and grammar brand of
+/// this module's validated tree and rule-node types.
 ///
 /// This marker stays module-local (unlike the runtime-owned support items)
 /// so rustc can prove it never implements the runtime's
 /// `__RecoveryContextState`, keeping the recovery-oriented and validated
-/// accessor impls coherent.
+/// accessor impls coherent — and so the runtime's branded validated types
+/// stay nominally distinct per grammar.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedTreeContext {
     __private: (),
@@ -212,14 +213,24 @@ pub struct ValidatedTreeContext {
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidatedTree`; the
-/// validated-parse types of every generated parser are interchangeable.
-pub type ANTLRv4ValidatedTree = antlr4_runtime::ValidatedTree;
+/// Alias of the runtime's grammar-agnostic `antlr4_runtime::ValidatedTree`
+/// branded with this module's [`ValidatedTreeContext`] marker, so validated
+/// trees of different grammars remain distinct types.
+pub type ANTLRv4ValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;
+
+/// A rule node borrowed from a [`ANTLRv4ValidatedTree`].
+///
+/// Alias of the runtime's `antlr4_runtime::ValidatedRuleNode` branded with
+/// this module's [`ValidatedTreeContext`] marker.
+pub type ValidatedRuleNode<'a> = antlr4_runtime::ValidatedRuleNode<'a, ValidatedTreeContext>;
+
+pub use antlr4_runtime::FromValidatedRuleNode;
 
 /// Failure to recognize or validate a strict generated parse.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; the
-/// validated-parse types of every generated parser are interchangeable.
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; unlike
+/// the branded tree types, the validation errors of every generated parser
+/// are deliberately one shared type.
 pub type ANTLRv4ValidationError = antlr4_runtime::ValidationError;
 
 #[allow(dead_code)]
@@ -240,6 +251,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct GrammarSpecContext {
         rule_index: 0,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -266,6 +278,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct GrammarDeclContext {
         rule_index: 1,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -290,6 +303,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct GrammarTypeContext {
         rule_index: 2,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -314,6 +328,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PrequelConstructContext {
         rule_index: 3,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -340,6 +355,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct OptionsSpecContext {
         rule_index: 4,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -365,6 +381,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct OptionContext {
         rule_index: 5,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -389,6 +406,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct OptionValueContext {
         rule_index: 6,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -415,6 +433,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DelegateGrammarsContext {
         rule_index: 7,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -440,6 +459,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DelegateGrammarContext {
         rule_index: 8,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -463,6 +483,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TokensSpecContext {
         rule_index: 9,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -487,6 +508,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ChannelsSpecContext {
         rule_index: 10,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -511,6 +533,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct IdListContext {
         rule_index: 11,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -534,6 +557,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ActionContext {
         rule_index: 12,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -560,6 +584,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ActionScopeNameContext {
         rule_index: 13,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -584,6 +609,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ActionBlockContext {
         rule_index: 14,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -606,6 +632,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ArgActionBlockContext {
         rule_index: 15,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -630,6 +657,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ModeSpecContext {
         rule_index: 16,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -655,6 +683,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RulesContext {
         rule_index: 17,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -677,6 +706,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleSpecContext {
         rule_index: 18,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -700,6 +730,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ParserRuleSpecContext {
         rule_index: 19,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -732,6 +763,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExceptionGroupContext {
         rule_index: 20,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -755,6 +787,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExceptionHandlerContext {
         rule_index: 21,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -779,6 +812,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FinallyClauseContext {
         rule_index: 22,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -802,6 +836,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RulePrequelContext {
         rule_index: 23,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -825,6 +860,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleReturnsContext {
         rule_index: 24,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -848,6 +884,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ThrowsSpecContext {
         rule_index: 25,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -872,6 +909,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LocalsSpecContext {
         rule_index: 26,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -895,6 +933,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleActionContext {
         rule_index: 27,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -919,6 +958,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleModifiersContext {
         rule_index: 28,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -941,6 +981,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleModifierContext {
         rule_index: 29,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -966,6 +1007,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleBlockContext {
         rule_index: 30,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -988,6 +1030,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RuleAltListContext {
         rule_index: 31,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1011,6 +1054,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LabeledAltContext {
         rule_index: 32,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1035,6 +1079,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerRuleSpecContext {
         rule_index: 33,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1062,6 +1107,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerRuleBlockContext {
         rule_index: 34,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1084,6 +1130,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerAltListContext {
         rule_index: 35,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1107,6 +1154,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerAltContext {
         rule_index: 36,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1130,6 +1178,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerElementsContext {
         rule_index: 37,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1152,6 +1201,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerElementContext {
         rule_index: 38,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1178,6 +1228,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerBlockContext {
         rule_index: 39,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1202,6 +1253,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerCommandsContext {
         rule_index: 40,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1226,6 +1278,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerCommandContext {
         rule_index: 41,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1251,6 +1304,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerCommandNameContext {
         rule_index: 42,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1274,6 +1328,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerCommandExprContext {
         rule_index: 43,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1297,6 +1352,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AltListContext {
         rule_index: 44,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1320,6 +1376,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AlternativeContext {
         rule_index: 45,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1343,6 +1400,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ElementContext {
         rule_index: 46,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1371,6 +1429,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PredicateOptionsContext {
         rule_index: 47,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1396,6 +1455,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct PredicateOptionContext {
         rule_index: 48,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1423,6 +1483,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LabeledElementContext {
         rule_index: 49,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1449,6 +1510,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EbnfContext {
         rule_index: 50,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1472,6 +1534,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockSuffixContext {
         rule_index: 51,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1494,6 +1557,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct EbnfSuffixContext {
         rule_index: 52,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1518,6 +1582,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct LexerAtomContext {
         rule_index: 53,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1545,6 +1610,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct AtomContext {
         rule_index: 54,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1570,6 +1636,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct WildcardContext {
         rule_index: 55,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1593,6 +1660,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct NotSetContext {
         rule_index: 56,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1617,6 +1685,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockSetContext {
         rule_index: 57,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1642,6 +1711,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SetElementContext {
         rule_index: 58,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1668,6 +1738,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BlockContext {
         rule_index: 59,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1695,6 +1766,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct RulerefContext {
         rule_index: 60,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1719,6 +1791,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CharacterRangeContext {
         rule_index: 61,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1742,6 +1815,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TerminalDefContext {
         rule_index: 62,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1766,6 +1840,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ElementOptionsContext {
         rule_index: 63,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1791,6 +1866,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ElementOptionContext {
         rule_index: 64,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1817,6 +1893,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct IdentifierContext {
         rule_index: 65,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1840,6 +1917,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct QualifiedIdentifierContext {
         rule_index: 66,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -1891,40 +1969,40 @@ pub fn validate_tree_structure(
                 match __context_kind(context) {
                 0 => {
                     let context = GrammarSpecContext::__from_listener_node(context, None);
-        let _ = context.grammar_decl().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rules().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.eof_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.grammar_decl()?;
+        context.rules()?;
+        context.eof_token()?;
                 },
                 1 => {
                     let context = GrammarDeclContext::__from_listener_node(context, None);
-        let _ = context.grammar_type().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.semi_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.grammar_type()?;
+        context.identifier()?;
+        context.semi_token()?;
                 },
                 2 => {
                     let context = GrammarTypeContext::__from_listener_node(context, None);
-        let _ = context.grammar_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.grammar_token()?;
                 },
                 3 => {
                 },
                 4 => {
                     let context = OptionsSpecContext::__from_listener_node(context, None);
-        let _ = context.options_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rbrace_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.options_token()?;
+        context.rbrace_token()?;
                 },
                 5 => {
                     let context = OptionContext::__from_listener_node(context, None);
-        let _ = context.option_value().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.assign_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.option_value()?;
+        context.identifier()?;
+        context.assign_token()?;
                 },
                 6 => {
                 },
                 7 => {
                     let context = DelegateGrammarsContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.delegate_grammar_children().count(), 1, "DelegateGrammarsContext", "delegateGrammar")?;
-        let _ = context.import_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.semi_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.import_token()?;
+        context.semi_token()?;
                 },
                 8 => {
                     let context = DelegateGrammarContext::__from_listener_node(context, None);
@@ -1932,13 +2010,13 @@ pub fn validate_tree_structure(
                 },
                 9 => {
                     let context = TokensSpecContext::__from_listener_node(context, None);
-        let _ = context.tokens_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rbrace_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.tokens_token()?;
+        context.rbrace_token()?;
                 },
                 10 => {
                     let context = ChannelsSpecContext::__from_listener_node(context, None);
-        let _ = context.channels_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rbrace_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.channels_token()?;
+        context.rbrace_token()?;
                 },
                 11 => {
                     let context = IdListContext::__from_listener_node(context, None);
@@ -1946,26 +2024,26 @@ pub fn validate_tree_structure(
                 },
                 12 => {
                     let context = ActionContext::__from_listener_node(context, None);
-        let _ = context.action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.at_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.action_block()?;
+        context.identifier()?;
+        context.at_token()?;
                 },
                 13 => {
                 },
                 14 => {
                     let context = ActionBlockContext::__from_listener_node(context, None);
-        let _ = context.action_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.action_token()?;
                 },
                 15 => {
                     let context = ArgActionBlockContext::__from_listener_node(context, None);
-        let _ = context.begin_argument_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.end_argument_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.begin_argument_token()?;
+        context.end_argument_token()?;
                 },
                 16 => {
                     let context = ModeSpecContext::__from_listener_node(context, None);
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.mode_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.semi_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.identifier()?;
+        context.mode_token()?;
+        context.semi_token()?;
                 },
                 17 => {
                 },
@@ -1973,47 +2051,47 @@ pub fn validate_tree_structure(
                 },
                 19 => {
                     let context = ParserRuleSpecContext::__from_listener_node(context, None);
-        let _ = context.exception_group().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rule_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rule_ref_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.colon_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.semi_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.exception_group()?;
+        context.rule_block()?;
+        context.rule_ref_token()?;
+        context.colon_token()?;
+        context.semi_token()?;
                 },
                 20 => {
                 },
                 21 => {
                     let context = ExceptionHandlerContext::__from_listener_node(context, None);
-        let _ = context.action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.arg_action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.catch_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.action_block()?;
+        context.arg_action_block()?;
+        context.catch_token()?;
                 },
                 22 => {
                     let context = FinallyClauseContext::__from_listener_node(context, None);
-        let _ = context.action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.finally_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.action_block()?;
+        context.finally_token()?;
                 },
                 23 => {
                 },
                 24 => {
                     let context = RuleReturnsContext::__from_listener_node(context, None);
-        let _ = context.arg_action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.returns_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.arg_action_block()?;
+        context.returns_token()?;
                 },
                 25 => {
                     let context = ThrowsSpecContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.qualified_identifier_children().count(), 1, "ThrowsSpecContext", "qualifiedIdentifier")?;
-        let _ = context.throws_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.throws_token()?;
                 },
                 26 => {
                     let context = LocalsSpecContext::__from_listener_node(context, None);
-        let _ = context.arg_action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.locals_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.arg_action_block()?;
+        context.locals_token()?;
                 },
                 27 => {
                     let context = RuleActionContext::__from_listener_node(context, None);
-        let _ = context.action_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.at_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.action_block()?;
+        context.identifier()?;
+        context.at_token()?;
                 },
                 28 => {
                     let context = RuleModifiersContext::__from_listener_node(context, None);
@@ -2023,7 +2101,7 @@ pub fn validate_tree_structure(
                 },
                 30 => {
                     let context = RuleBlockContext::__from_listener_node(context, None);
-        let _ = context.rule_alt_list().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.rule_alt_list()?;
                 },
                 31 => {
                     let context = RuleAltListContext::__from_listener_node(context, None);
@@ -2031,18 +2109,18 @@ pub fn validate_tree_structure(
                 },
                 32 => {
                     let context = LabeledAltContext::__from_listener_node(context, None);
-        let _ = context.alternative().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.alternative()?;
                 },
                 33 => {
                     let context = LexerRuleSpecContext::__from_listener_node(context, None);
-        let _ = context.lexer_rule_block().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.token_ref_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.colon_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.semi_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lexer_rule_block()?;
+        context.token_ref_token()?;
+        context.colon_token()?;
+        context.semi_token()?;
                 },
                 34 => {
                     let context = LexerRuleBlockContext::__from_listener_node(context, None);
-        let _ = context.lexer_alt_list().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lexer_alt_list()?;
                 },
                 35 => {
                     let context = LexerAltListContext::__from_listener_node(context, None);
@@ -2056,18 +2134,18 @@ pub fn validate_tree_structure(
                 },
                 39 => {
                     let context = LexerBlockContext::__from_listener_node(context, None);
-        let _ = context.lexer_alt_list().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.lparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lexer_alt_list()?;
+        context.lparen_token()?;
+        context.rparen_token()?;
                 },
                 40 => {
                     let context = LexerCommandsContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.lexer_command_children().count(), 1, "LexerCommandsContext", "lexerCommand")?;
-        let _ = context.rarrow_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.rarrow_token()?;
                 },
                 41 => {
                     let context = LexerCommandContext::__from_listener_node(context, None);
-        let _ = context.lexer_command_name().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lexer_command_name()?;
                 },
                 42 => {
                 },
@@ -2084,22 +2162,22 @@ pub fn validate_tree_structure(
                 47 => {
                     let context = PredicateOptionsContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.predicate_option_children().count(), 1, "PredicateOptionsContext", "predicateOption")?;
-        let _ = context.lt_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.gt_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lt_token()?;
+        context.gt_token()?;
                 },
                 48 => {
                 },
                 49 => {
                     let context = LabeledElementContext::__from_listener_node(context, None);
-        let _ = context.identifier().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.identifier()?;
                 },
                 50 => {
                     let context = EbnfContext::__from_listener_node(context, None);
-        let _ = context.block().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.block()?;
                 },
                 51 => {
                     let context = BlockSuffixContext::__from_listener_node(context, None);
-        let _ = context.ebnf_suffix().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.ebnf_suffix()?;
                 },
                 52 => {
                 },
@@ -2109,42 +2187,42 @@ pub fn validate_tree_structure(
                 },
                 55 => {
                     let context = WildcardContext::__from_listener_node(context, None);
-        let _ = context.dot_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.dot_token()?;
                 },
                 56 => {
                     let context = NotSetContext::__from_listener_node(context, None);
-        let _ = context.not_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.not_token()?;
                 },
                 57 => {
                     let context = BlockSetContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.set_element_children().count(), 1, "BlockSetContext", "setElement")?;
-        let _ = context.lparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lparen_token()?;
+        context.rparen_token()?;
                 },
                 58 => {
                 },
                 59 => {
                     let context = BlockContext::__from_listener_node(context, None);
-        let _ = context.alt_list().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.lparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.rparen_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.alt_list()?;
+        context.lparen_token()?;
+        context.rparen_token()?;
                 },
                 60 => {
                     let context = RulerefContext::__from_listener_node(context, None);
-        let _ = context.rule_ref_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.rule_ref_token()?;
                 },
                 61 => {
                     let context = CharacterRangeContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.string_literal_tokens().count(), 2, "CharacterRangeContext", "STRING_LITERAL")?;
-        let _ = context.range_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.range_token()?;
                 },
                 62 => {
                 },
                 63 => {
                     let context = ElementOptionsContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.element_option_children().count(), 1, "ElementOptionsContext", "elementOption")?;
-        let _ = context.lt_token().map_err(ANTLRv4ValidationError::MissingChild)?;
-        let _ = context.gt_token().map_err(ANTLRv4ValidationError::MissingChild)?;
+        context.lt_token()?;
+        context.gt_token()?;
                 },
                 64 => {
                 },

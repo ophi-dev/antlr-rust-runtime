@@ -644,15 +644,8 @@ struct RenderedContextAccessors {
     compatibility: String,
 }
 
-fn render_required_accessor_validation(
-    out: &mut String,
-    method: &str,
-    validation_error_name: &str,
-) {
-    let _ = writeln!(
-        out,
-        "        let _ = context.{method}().map_err({validation_error_name}::MissingChild)?;"
-    );
+fn render_required_accessor_validation(out: &mut String, method: &str) {
+    let _ = writeln!(out, "        context.{method}()?;");
 }
 
 fn render_repeated_accessor_validation(
@@ -886,7 +879,6 @@ struct RuleLabelAccessorRender<'a> {
     child_view: &'a str,
     child_index: usize,
     label: &'a ContextLabelAccessor,
-    validation_error_name: &'a str,
 }
 
 fn render_rule_label_accessor(
@@ -899,7 +891,6 @@ fn render_rule_label_accessor(
         child_view,
         child_index,
         label,
-        validation_error_name,
     } = context;
     if let ContextLabelSelector::AllAfter(skip) = label.selector {
         let _ = writeln!(
@@ -929,7 +920,6 @@ fn render_rule_label_accessor(
         render_required_accessor_validation(
             &mut rendered.validation,
             method,
-            validation_error_name,
         );
     } else {
         let _ = writeln!(
@@ -944,7 +934,6 @@ fn render_token_label_accessor(
     method: &str,
     view_name: &str,
     label: &ContextLabelAccessor,
-    validation_error_name: &str,
 ) {
     let token_types = label
         .token_types
@@ -980,7 +969,6 @@ fn render_token_label_accessor(
         render_required_accessor_validation(
             &mut rendered.validation,
             method,
-            validation_error_name,
         );
     } else {
         let _ = writeln!(
@@ -998,7 +986,6 @@ struct ContextAccessorsRender<'a> {
     token_accessors: &'a [(String, i32)],
     child_cardinalities: &'a BTreeMap<String, embedded::ChildCardinality>,
     label_accessors: &'a [ContextLabelAccessor],
-    validation_error_name: &'a str,
     antlr4rust_compat: bool,
     antlr4rust_context_wrapper: &'a str,
     common_methods: &'a ContextCommonMethodNames,
@@ -1012,7 +999,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         token_accessors,
         child_cardinalities,
         label_accessors,
-        validation_error_name,
         antlr4rust_compat,
         antlr4rust_context_wrapper,
         common_methods,
@@ -1081,7 +1067,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             render_required_accessor_validation(
                 &mut rendered.validation,
                 &method,
-                validation_error_name,
             );
         } else {
             let _ = writeln!(
@@ -1153,7 +1138,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
             render_required_accessor_validation(
                 &mut rendered.validation,
                 &method,
-                validation_error_name,
             );
             if antlr4rust_compat {
                 render_antlr4rust_single_token_accessor(
@@ -1202,7 +1186,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
                     child_view,
                     child_index,
                     label,
-                    validation_error_name,
                 },
             );
             continue;
@@ -1210,13 +1193,7 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
         if label.token_types.is_empty() {
             continue;
         }
-        render_token_label_accessor(
-            &mut rendered,
-            &method,
-            view_name,
-            label,
-            validation_error_name,
-        );
+        render_token_label_accessor(&mut rendered, &method, view_name, label);
     }
     rendered
 }

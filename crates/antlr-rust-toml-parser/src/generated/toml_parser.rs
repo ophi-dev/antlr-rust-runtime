@@ -14,7 +14,6 @@ use std::sync::OnceLock;
 use std::io::Write as _;
 #[allow(unused_imports)]
 use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};
-pub use antlr4_runtime::{FromValidatedRuleNode, ValidatedRuleNode};
 pub use antlr4_runtime::generated::{ErrorNode, StoredTreeContext, TerminalNode, __GeneratedInput, __GeneratedTokenView};
 #[allow(unused_imports)]
 use antlr4_runtime::generated::{__ActiveParserContext, __FromActiveRuleContext, __GeneratedRuleContext, __RecoveryContextState, __active_context_view, __active_context_view_with_attrs, __context_children, __labeled_token_children, __labeled_token_children_matching, __rule_children, __terminal_children, __token_children, __token_children_matching, __write_invocation_states};
@@ -112,12 +111,14 @@ fn parser_semantics() -> &'static antlr4_runtime::ParserSemantics {
 
 
 /// Marker carried by generated contexts whose required-child
-/// invariants were checked after a syntax-clean parse.
+/// invariants were checked after a syntax-clean parse, and grammar brand of
+/// this module's validated tree and rule-node types.
 ///
 /// This marker stays module-local (unlike the runtime-owned support items)
 /// so rustc can prove it never implements the runtime's
 /// `__RecoveryContextState`, keeping the recovery-oriented and validated
-/// accessor impls coherent.
+/// accessor impls coherent — and so the runtime's branded validated types
+/// stay nominally distinct per grammar.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedTreeContext {
     __private: (),
@@ -126,14 +127,24 @@ pub struct ValidatedTreeContext {
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidatedTree`; the
-/// validated-parse types of every generated parser are interchangeable.
-pub type TomlValidatedTree = antlr4_runtime::ValidatedTree;
+/// Alias of the runtime's grammar-agnostic `antlr4_runtime::ValidatedTree`
+/// branded with this module's [`ValidatedTreeContext`] marker, so validated
+/// trees of different grammars remain distinct types.
+pub type TomlValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;
+
+/// A rule node borrowed from a [`TomlValidatedTree`].
+///
+/// Alias of the runtime's `antlr4_runtime::ValidatedRuleNode` branded with
+/// this module's [`ValidatedTreeContext`] marker.
+pub type ValidatedRuleNode<'a> = antlr4_runtime::ValidatedRuleNode<'a, ValidatedTreeContext>;
+
+pub use antlr4_runtime::FromValidatedRuleNode;
 
 /// Failure to recognize or validate a strict generated parse.
 ///
-/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; the
-/// validated-parse types of every generated parser are interchangeable.
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; unlike
+/// the branded tree types, the validation errors of every generated parser
+/// are deliberately one shared type.
 pub type TomlValidationError = antlr4_runtime::ValidationError;
 
 #[allow(dead_code)]
@@ -154,6 +165,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DocumentContext {
         rule_index: 0,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -178,6 +190,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ExpressionContext {
         rule_index: 1,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -202,6 +215,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CommentContext {
         rule_index: 2,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -224,6 +238,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct KeyValueContext {
         rule_index: 3,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -248,6 +263,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct KeyContext {
         rule_index: 4,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -271,6 +287,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SimpleKeyContext {
         rule_index: 5,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -294,6 +311,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct UnquotedKeyContext {
         rule_index: 6,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -316,6 +334,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct QuotedKeyContext {
         rule_index: 7,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -339,6 +358,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DottedKeyContext {
         rule_index: 8,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -362,6 +382,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ValueContext {
         rule_index: 9,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -390,6 +411,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StringContext {
         rule_index: 10,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -415,6 +437,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct IntegerContext {
         rule_index: 11,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -440,6 +463,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FloatingPointContext {
         rule_index: 12,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -464,6 +488,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct BoolContext {
         rule_index: 13,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -486,6 +511,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct DateTimeContext {
         rule_index: 14,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -511,6 +537,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ArrayContext {
         rule_index: 15,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -536,6 +563,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ArrayValuesContext {
         rule_index: 16,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -561,6 +589,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct CommentOrNlContext {
         rule_index: 17,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -584,6 +613,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct TableContext {
         rule_index: 18,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -607,6 +637,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct StandardTableContext {
         rule_index: 19,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -631,6 +662,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableContext {
         rule_index: 20,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -656,6 +688,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableKeyvalsContext {
         rule_index: 21,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -678,6 +711,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct InlineTableKeyvalsNonEmptyContext {
         rule_index: 22,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -705,6 +739,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct ArrayTableContext {
         rule_index: 23,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -758,19 +793,19 @@ pub fn validate_tree_structure(
                 0 => {
                     let context = DocumentContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.expression_children().count(), 1, "DocumentContext", "expression")?;
-        let _ = context.eof_token().map_err(TomlValidationError::MissingChild)?;
+        context.eof_token()?;
                 },
                 1 => {
                     let context = ExpressionContext::__from_listener_node(context, None);
-        let _ = context.comment().map_err(TomlValidationError::MissingChild)?;
+        context.comment()?;
                 },
                 2 => {
                 },
                 3 => {
                     let context = KeyValueContext::__from_listener_node(context, None);
-        let _ = context.key().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.value().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.equals_token().map_err(TomlValidationError::MissingChild)?;
+        context.key()?;
+        context.value()?;
+        context.equals_token()?;
                 },
                 4 => {
                 },
@@ -778,7 +813,7 @@ pub fn validate_tree_structure(
                 },
                 6 => {
                     let context = UnquotedKeyContext::__from_listener_node(context, None);
-        let _ = context.unquoted_key_token().map_err(TomlValidationError::MissingChild)?;
+        context.unquoted_key_token()?;
                 },
                 7 => {
                 },
@@ -797,19 +832,19 @@ pub fn validate_tree_structure(
                 },
                 13 => {
                     let context = BoolContext::__from_listener_node(context, None);
-        let _ = context.boolean_token().map_err(TomlValidationError::MissingChild)?;
+        context.boolean_token()?;
                 },
                 14 => {
                 },
                 15 => {
                     let context = ArrayContext::__from_listener_node(context, None);
-        let _ = context.comment_or_nl().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.l_bracket_token().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.r_bracket_token().map_err(TomlValidationError::MissingChild)?;
+        context.comment_or_nl()?;
+        context.l_bracket_token()?;
+        context.r_bracket_token()?;
                 },
                 16 => {
                     let context = ArrayValuesContext::__from_listener_node(context, None);
-        let _ = context.value().map_err(TomlValidationError::MissingChild)?;
+        context.value()?;
         antlr4_runtime::require_min_count(context.comment_or_nl_children().count(), 2, "ArrayValuesContext", "comment_or_nl")?;
                 },
                 17 => {
@@ -818,31 +853,31 @@ pub fn validate_tree_structure(
                 },
                 19 => {
                     let context = StandardTableContext::__from_listener_node(context, None);
-        let _ = context.key().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.l_bracket_token().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.r_bracket_token().map_err(TomlValidationError::MissingChild)?;
+        context.key()?;
+        context.l_bracket_token()?;
+        context.r_bracket_token()?;
                 },
                 20 => {
                     let context = InlineTableContext::__from_listener_node(context, None);
         antlr4_runtime::require_min_count(context.comment_or_nl_children().count(), 2, "InlineTableContext", "comment_or_nl")?;
-        let _ = context.inline_table_keyvals().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.l_brace_token().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.r_brace_token().map_err(TomlValidationError::MissingChild)?;
+        context.inline_table_keyvals()?;
+        context.l_brace_token()?;
+        context.r_brace_token()?;
                 },
                 21 => {
                 },
                 22 => {
                     let context = InlineTableKeyvalsNonEmptyContext::__from_listener_node(context, None);
-        let _ = context.key().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.value().map_err(TomlValidationError::MissingChild)?;
+        context.key()?;
+        context.value()?;
         antlr4_runtime::require_min_count(context.comment_or_nl_children().count(), 1, "InlineTableKeyvalsNonEmptyContext", "comment_or_nl")?;
-        let _ = context.equals_token().map_err(TomlValidationError::MissingChild)?;
+        context.equals_token()?;
                 },
                 23 => {
                     let context = ArrayTableContext::__from_listener_node(context, None);
-        let _ = context.key().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.double_l_bracket_token().map_err(TomlValidationError::MissingChild)?;
-        let _ = context.double_r_bracket_token().map_err(TomlValidationError::MissingChild)?;
+        context.key()?;
+        context.double_l_bracket_token()?;
+        context.double_r_bracket_token()?;
                 },
                     _ => {
                         return Err(TomlValidationError::UnknownRule {

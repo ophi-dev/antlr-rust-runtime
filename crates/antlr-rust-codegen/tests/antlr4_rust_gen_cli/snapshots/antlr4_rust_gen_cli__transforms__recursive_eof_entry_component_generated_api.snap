@@ -88,4 +88,5 @@ expression: api
     "type RecursiveEntriesValidatedTree",
     "type RecursiveEntriesValidationError",
     "type ValidatedParseTreeWalker",
+    "type ValidatedRuleNode",
 ]

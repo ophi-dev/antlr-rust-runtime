@@ -6,6 +6,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct SContext {
         rule_index: 0,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
         },
         methods: {
@@ -22,6 +23,7 @@ antlr4_runtime::__antlr4_rust_context! {
     pub struct FlagContext {
         rule_index: 1,
         context_kind: any,
+        validated_downcast: branded,
         attributes: {
             __RuleAttrs1 {
                 enabled: bool,

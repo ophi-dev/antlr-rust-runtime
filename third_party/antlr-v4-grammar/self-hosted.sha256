@@ -3,4 +3,4 @@
 c7114545a75ab294215819962e92e570383dc830fd5768463dab04e6733bcb80  third_party/antlr-v4-grammar/predefined.tokens
 5803594bd2c8dd2d5180f1ca08fc70dfc80308479d18a7c4a1b743fa523b55ec  third_party/antlr-v4-grammar/antlr-v4.toml
 b372a337ce282725243aab070cb23170d82e4ac1ee15f9ad4824b12e5c5f5cf8  crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs
-f3e0191c2f68f61feb7617d1dbed34ed14c9c8519f197f772f8271719db88b87  crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs
+1a2e0716c6526ff2931d970aae39cdeb96ff39dfb29cc057cab23060852554f3  crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs

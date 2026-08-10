@@ -225,4 +225,5 @@ expression: api
     "type LadderValidationError",
     "type ParseTreeWalker",
     "type ValidatedParseTreeWalker",
+    "type ValidatedRuleNode",
 ]
