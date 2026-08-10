@@ -7,13 +7,45 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 9: the grammar-independent support
-preamble every generated parser used to re-declare (the typed
+The current generator emits revision 10: the validated-parse surface every
+generated parser used to re-declare (the validated-tree and validated-rule-node
+types, the `FromValidatedRuleNode` trait, and the validation-error enum with
+its `Display`/`Error`/`From` machinery) is now owned by the runtime as
+`ValidatedTree<Grammar>`, `ValidatedRuleNode<'a, Grammar>`,
+`FromValidatedRuleNode`, and `ValidationError`. Generated modules keep their
+public names as type aliases branded with the module-local
+`ValidatedTreeContext` marker
+(`pub type TomlValidatedTree = antlr4_runtime::ValidatedTree<ValidatedTreeContext>;`),
+plus a re-export of the `FromValidatedRuleNode` trait. Because of the brand,
+validated trees and rule nodes of different grammars remain distinct types and
+`downcast_ref` still cannot resolve a node against another grammar's contexts.
+
+`ValidationError` is deliberately unbranded: every grammar's
+`<Grammar>ValidationError` is now one shared runtime type, so a binary linking
+several generated parsers compiles one copy of the error machinery and can
+handle all their validation errors uniformly. The flip side: downstream code
+that wrote one impl per grammar for these names — for example a `thiserror`
+enum with separate `#[from]` variants for `TomlValidationError` and
+`JavaValidationError`, or two `impl MyTrait for <Grammar>ValidationError`
+blocks in one crate — now fails with `E0119` (conflicting implementations)
+and must collapse those into a single impl of the shared type. Grammar-specific
+detail (context and child names) stays in generated code as error-variant
+data, and generated `validate_tree_structure` implementations delegate
+repeated-child minimums to the runtime's `require_min_count` helper.
+
+One known limitation of hoisting the types across the crate boundary: the
+doc-hidden `ValidatedTree::__new`/`ValidatedRuleNode::__new` constructors used
+by generated code are technically callable from any crate, whereas revision-9
+modules kept them module-private. They are a contract, not a sealed boundary —
+hand-constructing a validated value over an unvalidated parse makes the
+infallible validated accessors panic.
+
+Revision 9 moved the grammar-independent support preamble (the typed
 `TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
-the embedded-action `__GeneratedInput` facade) is now owned by the runtime's
-`generated` module and imported by generated modules, so it exists once in
-source and once in a linked binary. This runtime continues to accept
-revisions 1 through 8 because their required APIs remain supported.
+the embedded-action `__GeneratedInput` facade) into the runtime's `generated`
+module the same way. This runtime continues to accept revisions 1 through 9
+because their required APIs remain supported; a checked-in frozen revision-9
+module is compiled against the runtime in CI to enforce that claim.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when

@@ -1,0 +1,11 @@
+---
+source: crates/antlr-rust-runtime/src/validated.rs
+expression: rendered
+---
+parse failed: lexer error at 3:7: token recognition error at: '#'
+parse produced 1 lexer and 2 parser syntax errors
+required child atom is missing from StartContext
+required child atom occurs 1 times in StartContext; expected at least 2
+recovered error node at 4:9: <missing ';'>
+validated parse root is not a rule node
+parse tree contains unknown rule index 41

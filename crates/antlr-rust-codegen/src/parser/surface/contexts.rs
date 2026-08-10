@@ -118,7 +118,7 @@ impl<T> std::ops::Deref for {antlr4rust_context_wrapper}<T> {{
         }
         let _ = writeln!(
             out,
-            "antlr4_runtime::__antlr4_rust_context! {{\n    pub struct {view_name} {{\n        rule_index: {rule_index},\n        context_kind: {context_kind_match},\n        attributes: {{\n{attributes}        }},\n        methods: {{\n            rule_node: {rule_node_method},\n            child_count: {child_count},\n            direct_terminals: {direct_terminals},\n            start: {start},\n            text: {text},\n        }}\n    }}\n}}\n",
+            "antlr4_runtime::__antlr4_rust_context! {{\n    pub struct {view_name} {{\n        rule_index: {rule_index},\n        context_kind: {context_kind_match},\n        validated_downcast: branded,\n        attributes: {{\n{attributes}        }},\n        methods: {{\n            rule_node: {rule_node_method},\n            child_count: {child_count},\n            direct_terminals: {direct_terminals},\n            start: {start},\n            text: {text},\n        }}\n    }}\n}}\n",
             child_count = common_methods.child_count,
             direct_terminals = common_methods.direct_terminals,
             start = common_methods.start,
@@ -131,7 +131,6 @@ impl<T> std::ops::Deref for {antlr4rust_context_wrapper}<T> {{
             token_accessors: &token_accessors,
             child_cardinalities: &child_cardinalities,
             label_accessors: &label_accessors,
-            validation_error_name: &validation_error,
             antlr4rust_compat,
             antlr4rust_context_wrapper,
             common_methods: &common_methods,

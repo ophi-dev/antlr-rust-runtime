@@ -16,6 +16,12 @@ use crate::vocabulary::Vocabulary;
 
 /// Defines the grammar-independent storage, conversion, and accessor mechanics
 /// for one generated typed parser context.
+///
+/// The optional `validated_downcast: branded,` field selects the revision-10
+/// validated-downcast impl against the runtime-owned branded
+/// [`crate::validated`] surface; without it the expansion targets the
+/// module-local validated types that generated-code API revisions 9 and
+/// earlier declare themselves.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_context {
@@ -23,6 +29,7 @@ macro_rules! __antlr4_rust_context {
         pub struct $context:ident {
             rule_index: $rule_index:expr,
             context_kind: $kind_mode:ident $(($kind:expr))?,
+            $(validated_downcast: $validated_downcast:ident,)?
             attributes: {
                 $(
                     $attrs:ident {
@@ -125,19 +132,12 @@ macro_rules! __antlr4_rust_context {
             }
         }
 
-        impl<'a> FromValidatedRuleNode<'a> for $context<'a, ValidatedTreeContext> {
-            fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self> {
-                let node = node.rule_node();
-                if node.rule_index() != $rule_index
-                    || $crate::__antlr4_rust_context!(
-                        @stored_kind_mismatch $kind_mode $(($kind))?, node
-                    )
-                {
-                    return None;
-                }
-                Some(Self::__from_validated_node(node))
-            }
-        }
+        $crate::__antlr4_rust_context!(
+            @from_validated $($validated_downcast)?,
+            $context,
+            $rule_index,
+            $kind_mode $(($kind))?
+        );
 
         impl<'a> $crate::AsRuleNode<'a> for $context<'a, ValidatedTreeContext> {
             fn as_rule_node(&self) -> $crate::RuleNodeView<'a> {
@@ -315,6 +315,48 @@ macro_rules! __antlr4_rust_context {
             }
         }
     };
+    // Legacy validated-downcast impl (generated-code API revisions 9 and
+    // earlier): `FromValidatedRuleNode` and `ValidatedRuleNode` resolve to the
+    // invoking module's own definitions.
+    (@from_validated , $context:ident, $rule_index:expr, $kind_mode:ident $(($kind:expr))?) => {
+        impl<'a> FromValidatedRuleNode<'a> for $context<'a, ValidatedTreeContext> {
+            fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self> {
+                let node = node.rule_node();
+                if node.rule_index() != $rule_index
+                    || $crate::__antlr4_rust_context!(
+                        @stored_kind_mismatch $kind_mode $(($kind))?, node
+                    )
+                {
+                    return None;
+                }
+                Some(Self::__from_validated_node(node))
+            }
+        }
+    };
+    // Branded validated-downcast impl (revision 10 and later): the runtime
+    // owns the trait and node type, and the module-local
+    // `ValidatedTreeContext` marker brands them for this grammar so
+    // `downcast_ref` cannot resolve a node against another grammar's
+    // contexts.
+    (@from_validated branded, $context:ident, $rule_index:expr, $kind_mode:ident $(($kind:expr))?) => {
+        impl<'a> $crate::FromValidatedRuleNode<'a> for $context<'a, ValidatedTreeContext> {
+            type Grammar = ValidatedTreeContext;
+
+            fn from_validated_rule_node(
+                node: $crate::ValidatedRuleNode<'a, ValidatedTreeContext>,
+            ) -> Option<Self> {
+                let node = node.rule_node();
+                if node.rule_index() != $rule_index
+                    || $crate::__antlr4_rust_context!(
+                        @stored_kind_mismatch $kind_mode $(($kind))?, node
+                    )
+                {
+                    return None;
+                }
+                Some(Self::__from_validated_node(node))
+            }
+        }
+    };
     (@stored_kind_mismatch any, $node:expr) => {
         false
     };
@@ -357,8 +399,13 @@ macro_rules! __antlr4_rust_context {
 /// support items (`__rule_children`, `__token_children`,
 /// `__labeled_token_children`, `__labeled_token_children_matching`,
 /// `TerminalNode`, `__RecoveryContextState`) are runtime-owned
-/// [`crate::generated`] items the generated module imports by name;
-/// `ValidatedTreeContext` plus the
+/// [`crate::generated`] items the generated module imports by name, and
+/// `ValidatedRuleNode`/`FromValidatedRuleNode` resolve in the generated
+/// module's scope (module-local definitions through generated-code API
+/// revision 9; from revision 10, a module-local alias of
+/// [`crate::validated::ValidatedRuleNode`] branded with the module's
+/// `ValidatedTreeContext` marker, plus a re-export of
+/// [`crate::validated::FromValidatedRuleNode`]); `ValidatedTreeContext` plus the
 /// `__from_child_node`/`__from_validated_child_node` constructors and the
 /// `__node`/`__invocation_states` context fields stay emitted per generated
 /// module (the validated marker must remain crate-local for the two impl
