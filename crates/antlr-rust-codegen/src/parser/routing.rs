@@ -88,58 +88,6 @@ impl RoutingPlan {
     }
 }
 
-pub(crate) struct AdaptiveAtnParserRenderSlots {
-    pub(crate) struct_field: String,
-    pub(crate) field_init: String,
-    pub(crate) reset: &'static str,
-    pub(crate) retry_variant: &'static str,
-    pub(crate) retry_into_error: &'static str,
-}
-
-pub(crate) fn adaptive_atn_parser_render_slots(
-    preferred_rule_count: usize,
-) -> AdaptiveAtnParserRenderSlots {
-    if preferred_rule_count == 0 {
-        return AdaptiveAtnParserRenderSlots {
-            struct_field: String::new(),
-            field_init: String::new(),
-            reset: "",
-            retry_variant: "",
-            retry_into_error: "",
-        };
-    }
-    AdaptiveAtnParserRenderSlots {
-        struct_field: format!(
-            "    adaptive_atn_preferred_rules: [bool; {preferred_rule_count}],\n    adaptive_atn_preference_depths: [usize; {preferred_rule_count}],\n    adaptive_atn_preference_starts: [(usize, usize); {preferred_rule_count}],\n    adaptive_atn_syntax_error_starts: [usize; {preferred_rule_count}],\n    adaptive_atn_retry_slot: Option<usize>,\n"
-        ),
-        field_init: format!(
-            "            adaptive_atn_preferred_rules: [false; {preferred_rule_count}],\n            adaptive_atn_preference_depths: [0; {preferred_rule_count}],\n            adaptive_atn_preference_starts: [(0, 0); {preferred_rule_count}],\n            adaptive_atn_syntax_error_starts: [0; {preferred_rule_count}],\n            adaptive_atn_retry_slot: None,\n"
-        ),
-        reset: "        parser.adaptive_atn_preferred_rules.fill(false);\n        parser.adaptive_atn_preference_depths.fill(0);\n        parser.adaptive_atn_preference_starts.fill((0, 0));\n        parser.adaptive_atn_syntax_error_starts.fill(0);\n        parser.adaptive_atn_retry_slot = None;\n",
-        retry_variant: "    AdaptiveRetry,\n",
-        retry_into_error: "            Self::AdaptiveRetry => antlr4_runtime::AntlrError::Unsupported(\"internal adaptive ATN retry escaped its routing boundary\".to_owned()),\n",
-    }
-}
-
-pub(crate) fn render_generated_rule_error(retry_variant: &str, retry_into_error: &str) -> String {
-    format!(
-        r#"#[allow(dead_code)]
-#[derive(Debug)]
-enum GeneratedRuleError {{
-    Fatal(antlr4_runtime::AntlrError),
-    Interpreted(antlr4_runtime::AntlrError),
-{retry_variant}}}
-
-impl GeneratedRuleError {{
-    fn into_error(self) -> antlr4_runtime::AntlrError {{
-        match self {{
-            Self::Fatal(error) | Self::Interpreted(error) => error,
-{retry_into_error}        }}
-    }}
-}}"#
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_routing_plan(
     plan: &RoutingPlan,
@@ -197,7 +145,7 @@ pub(crate) fn render_routing_plan(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "            {index} if !self.adaptive_atn_preferred_rules[{slot}] => Some(self.parse_generated_rule_{index}_adaptive_dispatch(precedence, allow_fallback, None)),"
+                "            {index} if !self.adaptive_atn.preferred_rules[{slot}] => Some(self.parse_generated_rule_{index}_adaptive_dispatch(precedence, allow_fallback, None)),"
             )
             .expect("writing to a string cannot fail");
         } else {
@@ -242,7 +190,7 @@ pub(crate) fn render_routing_plan(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        if __result.is_ok() && self.adaptive_atn_retry_slot.is_none() {{\n            \
+                "        if __result.is_ok() && self.adaptive_atn.retry_slot.is_none() {{\n            \
                  if let Some(__adaptive_after) = self.simulator\n                \
                      .as_ref()\n                \
                      .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n            \
@@ -252,13 +200,13 @@ pub(crate) fn render_routing_plan(
             for slot in probe_slots {
                 writeln!(
                 out,
-                "                if self.adaptive_atn_preference_depths[{slot}] != 0\n                    \
-                     && !self.adaptive_atn_preferred_rules[{slot}]\n                    \
-                     && self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[{slot}]\n                    \
-                     && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn_preference_starts[{slot}], __adaptive_after)\n                \
+                "                if self.adaptive_atn.preference_depths[{slot}] != 0\n                    \
+                     && !self.adaptive_atn.preferred_rules[{slot}]\n                    \
+                     && self.base.number_of_syntax_errors() == self.adaptive_atn.syntax_error_starts[{slot}]\n                    \
+                     && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_decisive(self.adaptive_atn.preference_starts[{slot}], __adaptive_after)\n                \
                      {{\n                    \
-                         self.adaptive_atn_preferred_rules[{slot}] = true;\n                    \
-                         self.adaptive_atn_retry_slot = Some({slot});\n                    \
+                         self.adaptive_atn.preferred_rules[{slot}] = true;\n                    \
+                         self.adaptive_atn.retry_slot = Some({slot});\n                    \
                          return Err(GeneratedRuleError::AdaptiveRetry);\n                \
                      }}"
                 )
@@ -283,7 +231,7 @@ pub(crate) fn render_routing_plan(
                 "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() {{\n            \
                  return self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
                  }}\n        \
-                 let __adaptive_outermost = self.adaptive_atn_preference_depths[{slot}] == 0;\n        \
+                 let __adaptive_outermost = self.adaptive_atn.preference_depths[{slot}] == 0;\n        \
                  let __adaptive_rule_start = antlr4_runtime::IntStream::index(self.base.input());\n        \
                  let __adaptive_parser_state = self.base.state();\n        \
                  let __adaptive_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
@@ -292,39 +240,39 @@ pub(crate) fn render_routing_plan(
             writeln!(
                 out,
                 "        if __adaptive_outermost {{\n            \
-                 self.adaptive_atn_preference_starts[{slot}] = self.simulator\n                \
+                 self.adaptive_atn.preference_starts[{slot}] = self.simulator\n                \
                      .as_ref()\n                \
                      .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n                \
                      .unwrap_or((0, 0));\n        \
-                 self.adaptive_atn_syntax_error_starts[{slot}] = self.base.number_of_syntax_errors();\n        \
+                 self.adaptive_atn.syntax_error_starts[{slot}] = self.base.number_of_syntax_errors();\n        \
                  }}\n        \
-                 self.adaptive_atn_preference_depths[{slot}] += 1;\n        \
+                 self.adaptive_atn.preference_depths[{slot}] += 1;\n        \
                  let mut __result = self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
-                 self.adaptive_atn_preference_depths[{slot}] -= 1;"
+                 self.adaptive_atn.preference_depths[{slot}] -= 1;"
             )
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        if !self.adaptive_atn_preferred_rules[{slot}] {{\n            \
+                "        if !self.adaptive_atn.preferred_rules[{slot}] {{\n            \
                  if let Some(__adaptive_after) = self.simulator\n                \
                      .as_ref()\n                \
                      .and_then(antlr4_runtime::ParserAtnSimulator::adaptive_prediction_work)\n            \
                  {{\n                \
                      let __adaptive_expensive = __result.is_ok()\n                        \
-                         && self.base.number_of_syntax_errors() == self.adaptive_atn_syntax_error_starts[{slot}]\n                        \
-                         && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn_preference_starts[{slot}], __adaptive_after);\n                \
-                     self.adaptive_atn_preferred_rules[{slot}] = __adaptive_expensive;\n                \
+                         && self.base.number_of_syntax_errors() == self.adaptive_atn.syntax_error_starts[{slot}]\n                        \
+                         && antlr4_runtime::ParserAtnSimulator::adaptive_prediction_delta_is_expensive(self.adaptive_atn.preference_starts[{slot}], __adaptive_after);\n                \
+                     self.adaptive_atn.preferred_rules[{slot}] = __adaptive_expensive;\n                \
                      if __adaptive_expensive {{\n                    \
-                         self.adaptive_atn_retry_slot = Some({slot});\n                    \
+                         self.adaptive_atn.retry_slot = Some({slot});\n                    \
                          __result = Err(GeneratedRuleError::AdaptiveRetry);\n                \
                      }}\n            \
                  }}\n        \
                  }}\n        \
                  if __adaptive_outermost\n            \
-                     && self.adaptive_atn_retry_slot == Some({slot})\n            \
+                     && self.adaptive_atn.retry_slot == Some({slot})\n            \
                      && matches!(&__result, Err(GeneratedRuleError::AdaptiveRetry))\n        \
                  {{\n            \
-                     self.adaptive_atn_retry_slot = None;\n            \
+                     self.adaptive_atn.retry_slot = None;\n            \
                      self.base.restore_generated_diagnostics(__adaptive_diagnostic_marker);\n            \
                      antlr4_runtime::IntStream::seek(self.base.input(), __adaptive_rule_start);\n            \
                      self.base.set_state(__adaptive_parser_state);\n            \

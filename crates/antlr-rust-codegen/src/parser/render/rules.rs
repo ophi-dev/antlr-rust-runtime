@@ -58,19 +58,10 @@ fn render_generated_rule_lifecycle(
         )
         .expect("writing to a string cannot fail");
     }
-    if step_render_context
-        .adaptive_atn_preferred_rule_slots
-        .iter()
-        .any(Option::is_some)
-    {
-        writeln!(
-            out,
-            "            retry [self.adaptive_atn_retry_slot.is_some() => GeneratedRuleError::AdaptiveRetry];"
-        )
-        .expect("writing to a string cannot fail");
-    } else {
-        writeln!(out, "            retry [none];").expect("writing to a string cannot fail");
-    }
+    // Uniform retry clause: the runtime's `[adaptive]` arm checks the fixed
+    // `adaptive_atn` state, whose `retry_pending()` constant-folds to `false`
+    // for grammars without adaptive retry slots.
+    writeln!(out, "            retry [adaptive];").expect("writing to a string cannot fail");
     writeln!(
         out,
         "            bind (__ctx, __rule_start, __consumed_eof, __sync_error);"
@@ -343,7 +334,7 @@ pub(crate) fn render_generated_step(
                 .flatten()
             {
                 format!(
-                    "if self.adaptive_atn_preferred_rules[{slot}] {{ {from_generated_call} }} else {{ self.parse_generated_rule_{rule_index}_adaptive_dispatch({precedence}, false, Some({source_state}isize)).map_err(GeneratedRuleError::into_error) }}"
+                    "if self.adaptive_atn.preferred_rules[{slot}] {{ {from_generated_call} }} else {{ self.parse_generated_rule_{rule_index}_adaptive_dispatch({precedence}, false, Some({source_state}isize)).map_err(GeneratedRuleError::into_error) }}"
                 )
             } else {
                 generated_child_call

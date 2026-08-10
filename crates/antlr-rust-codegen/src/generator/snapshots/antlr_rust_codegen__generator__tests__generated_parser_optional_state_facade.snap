@@ -12,10 +12,6 @@ antlr4_runtime::__antlr4_rust_parser_facade! {
     metadata: metadata,
     parser_atn: parser_atn,
     reset(parser) {
-        parser.adaptive_atn_preferred_rules.fill(false);
-        parser.adaptive_atn_preference_depths.fill(0);
-        parser.adaptive_atn_preference_starts.fill((0, 0));
-        parser.adaptive_atn_syntax_error_starts.fill(0);
-        parser.adaptive_atn_retry_slot = None;
+        parser.adaptive_atn.reset();
     }
 }

@@ -30,5 +30,6 @@ antlr4_runtime::__antlr4_rust_parser_facade! {
     metadata: metadata,
     parser_atn: parser_atn,
     reset(parser) {
+        parser.adaptive_atn.reset();
     }
 }

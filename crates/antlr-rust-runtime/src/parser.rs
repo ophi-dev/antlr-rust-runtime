@@ -286,11 +286,32 @@ macro_rules! __antlr4_rust_generated_rule {
     ) => {};
     (
         @retry
+        [adaptive]
+        parser $parser:ident;
+        marker $marker:ident;
+        abort $abort:ident;
+    ) => {
+        // Uniform adaptive-ATN retry unwind against the generated parser's
+        // fixed `adaptive_atn` state; `retry_pending()` constant-folds to
+        // `false` for grammars without adaptive retry slots.
+        if $parser.adaptive_atn.retry_pending() {
+            $parser.base.$abort();
+            $parser.base.restore_generated_diagnostics($marker);
+            return Err($crate::generated::GeneratedRuleError::AdaptiveRetry);
+        }
+    };
+    (
+        @retry
         [$condition:expr => $retry_error:expr]
         parser $parser:ident;
         marker $marker:ident;
         abort $abort:ident;
     ) => {
+        // Back-compat only: generated-code API revisions <= 10 spell the
+        // adaptive retry unwind as an explicit condition/error pair. The
+        // bundled generator emits `retry [adaptive]` since revision 11; keep
+        // this arm while those revisions remain accepted by
+        // `__antlr4_rust_require_codegen_api!`.
         if $condition {
             $parser.base.$abort();
             $parser.base.restore_generated_diagnostics($marker);

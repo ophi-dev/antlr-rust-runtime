@@ -35,54 +35,12 @@ impl<'a> LexerRenderModel<'a> {
 
 /// Renders lexer-module conveniences that buffer text or a caller-provided
 /// character stream without constructing a parser.
-pub(crate) fn render_lexer_lex_convenience(type_name: &str) -> String {
-    format!(
-        r#"/// Lexes UTF-8 text into an eagerly filled token stream without constructing
-/// a parser.
 ///
-/// The stream retains every emitted token, including EOF and tokens on hidden
-/// or custom channels. Lexer rules using `skip` do not emit tokens.
-///
-/// With `use antlr4_runtime::Token as _;`, print each token's vocabulary name,
-/// numeric channel, and text:
-/// `let vocabulary = metadata().vocabulary(); for token in lex(src, {type_name}::new).tokens() {{ println!("type={{}} channel={{}} text={{:?}}", vocabulary.display_name(token.token_type()), token.channel(), token.text()); }}`
-///
-/// `number_of_source_errors()` reports buffered lexer diagnostics. After
-/// iterating `tokens()`, `drain_source_errors()` retrieves those diagnostics.
-///
-/// # Panics
-///
-/// Panics if buffering returns an [`antlr4_runtime::TokenStoreError`]. Construct
-/// the lexer and call [`antlr4_runtime::CommonTokenStream::try_new`] to handle
-/// that error instead.
-pub fn lex<L: antlr4_runtime::TokenSource>(
-    input: impl AsRef<str>,
-    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
-) -> antlr4_runtime::CommonTokenStream<L> {{
-    lex_stream(antlr4_runtime::InputStream::new(input.as_ref()), lexer)
-}}
-
-/// Lexes a caller-provided character stream without constructing a parser.
-///
-/// Unlike [`lex`], this accepts any [`antlr4_runtime::CharStream`], including a
-/// named [`antlr4_runtime::InputStream`] or a byte-oriented
-/// [`antlr4_runtime::ByteStream`].
-///
-/// `number_of_source_errors()` reports buffered lexer diagnostics. After
-/// iterating `tokens()`, `drain_source_errors()` retrieves those diagnostics.
-///
-/// # Panics
-///
-/// Panics if buffering returns an [`antlr4_runtime::TokenStoreError`]. Call
-/// [`antlr4_runtime::CommonTokenStream::try_new`] with the constructed lexer to
-/// handle that error instead.
-pub fn lex_stream<I: antlr4_runtime::CharStream, L: antlr4_runtime::TokenSource>(
-    input: I,
-    lexer: impl FnOnce(I) -> L,
-) -> antlr4_runtime::CommonTokenStream<L> {{
-    antlr4_runtime::CommonTokenStream::new(lexer(input))
-}}"#
-    )
+/// `lex` and `lex_stream` are grammar-independent generic functions owned by
+/// the runtime's `generated` module; the lexer module re-exports them so the
+/// established `my_lexer::lex(...)` call sites keep resolving.
+pub(crate) fn render_lexer_lex_convenience() -> String {
+    "pub use antlr4_runtime::generated::{lex, lex_stream};".to_owned()
 }
 
 /// Renders the lexer-owned grammar metadata table.
@@ -93,10 +51,7 @@ pub(crate) fn render_lexer_metadata(grammar_name: &str, data: &LexerCodegenData<
         render_lexer_str_slice(&data.rule_names),
         render_lexer_option_str_slice(&data.literal_names),
         render_lexer_option_str_slice(&data.symbolic_names),
-        render_lexer_empty_option_str_slice(max_len(
-            &data.literal_names,
-            &data.symbolic_names
-        )),
+        render_lexer_empty_option_str_slice(max_len(&data.literal_names, &data.symbolic_names)),
         render_lexer_str_slice(&data.channel_names),
         render_lexer_str_slice(&data.mode_names),
         render_lexer_i32_slice(&data.lexer_atn_words)
@@ -114,8 +69,10 @@ fn render_lexer_prefixed_constants<N: Copy + Ord + std::fmt::Display>(
     numbers: &BTreeMap<String, N>,
     used: &mut BTreeSet<String>,
 ) -> String {
-    let mut declaration_order: Vec<(&String, N)> =
-        numbers.iter().map(|(name, number)| (name, *number)).collect();
+    let mut declaration_order: Vec<(&String, N)> = numbers
+        .iter()
+        .map(|(name, number)| (name, *number))
+        .collect();
     declaration_order.sort_by_key(|&(_, number)| number);
     let idents: BTreeMap<&String, String> = declaration_order
         .into_iter()

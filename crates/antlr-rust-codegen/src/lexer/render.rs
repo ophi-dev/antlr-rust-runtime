@@ -34,7 +34,7 @@ pub(crate) fn render_lexer_model(model: &LexerRenderModel<'_>) -> io::Result<Str
     let embedded = model.embedded;
     let type_name = rust_type_name(grammar_name);
     let metadata = render_lexer_metadata(grammar_name, data);
-    let lex_convenience = render_lexer_lex_convenience(&type_name);
+    let lex_convenience = render_lexer_lex_convenience();
     // Every constant in the generated module shares one Rust value
     // namespace; allocation order matches emission order (tokens first).
     let mut const_names = BTreeSet::new();

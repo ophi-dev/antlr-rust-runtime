@@ -4,14 +4,17 @@ use std::sync::{Arc, OnceLock};
 
 use crate::atn::parser_atn::ParserAtn;
 use crate::atn::serialized::SerializedAtn;
+use crate::char_stream::{CharStream, InputStream};
+use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::recognizer::{RecognizerData, RecognizerMetadata};
 use crate::token::{Token as _, TokenSource, TokenStore, TokenView};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{
-    ErrorNodeView, Node, NodeKind, ParseTreeStorage, ParserRuleContext, RuleNodeView,
+    ErrorNodeView, Node, NodeId, NodeKind, ParseTreeStorage, ParserRuleContext, RuleNodeView,
     TerminalNodeView,
 };
+use crate::validated::ValidationError;
 use crate::vocabulary::Vocabulary;
 
 /// Defines the grammar-independent storage, conversion, and accessor mechanics
@@ -1223,6 +1226,391 @@ macro_rules! __antlr4_rust_parser_facade {
     };
 }
 
+/// Defines the grammar-independent parse-driver core for one generated
+/// parser: entry/reset bookkeeping, generated-vs-interpreted engine routing,
+/// sticky-abort and fail-loud semantic-error draining, and the interpreted
+/// fallback with uniform action dispatch through the module's `run_action`.
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API. The `fallback` binder block supplied by generated
+/// code composes the grammar's `ParserRuntimeOptions` (semantics table,
+/// action indices, policy) and must evaluate to
+/// `Result<(ParseTree, Vec<ParserAction>), AntlrError>`; this macro owns
+/// everything else.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __antlr4_rust_parser_driver {
+    (
+        type: $parser:ident<$source:ident, $hooks:ident>,
+        fields: {
+            base: $base:ident,
+            simulator: $simulator:ident $(,)?
+        },
+        atn: $atn:path,
+        adaptive_direct: $adaptive_direct:expr,
+        fallback($this:ident, $rule_index:ident, $precedence:ident) $fallback:block
+        $(,)?
+    ) => {
+        impl<$source, $hooks> $parser<$source, $hooks>
+        where
+            $source: $crate::token::TokenSource,
+            $hooks: $crate::parser::SemanticHooks,
+        {
+            #[allow(dead_code)]
+            fn parse_rule(
+                &mut self,
+                rule_index: usize,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                self.parse_rule_precedence(rule_index, 0)
+            }
+
+            #[allow(dead_code)]
+            fn parse_rule_precedence(
+                &mut self,
+                rule_index: usize,
+                precedence: i32,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                self.parse_rule_precedence_inner(rule_index, precedence, true)
+            }
+
+            #[allow(dead_code)]
+            fn parse_rule_precedence_from_generated(
+                &mut self,
+                rule_index: usize,
+                precedence: i32,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                self.parse_rule_precedence_inner(rule_index, precedence, false)
+            }
+
+            #[allow(dead_code)]
+            fn parse_rule_precedence_inner(
+                &mut self,
+                rule_index: usize,
+                precedence: i32,
+                allow_generated_fallback: bool,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                if allow_generated_fallback {
+                    // True top-level entry: drop any fail-loud coordinates left by a
+                    // previous parse so a reused parser starts clean. Mid-parse the hits
+                    // are preserved so a generated parent can surface a recovered child's
+                    // fail-loud coordinate at this boundary.
+                    self.$base.reset_unknown_semantic_hits();
+                    // Likewise drop stale sticky aborts (depth-cap violation,
+                    // parse-listener abort): entry rules share one parser instance,
+                    // and the flags must not poison the next parse when the previous
+                    // one exited through an error path.
+                    let _ = self.$base.take_parse_abort();
+                }
+                let __rule_start = $crate::int_stream::IntStream::index(self.$base.input());
+                let __generated_only = self.generated_only();
+                let __tree = if let ::core::option::Option::Some(result) =
+                    self.parse_generated_rule(rule_index, precedence, allow_generated_fallback)
+                {
+                    match result {
+                        ::core::result::Result::Ok(tree) => tree,
+                        ::core::result::Result::Err(error) => {
+                            $crate::int_stream::IntStream::seek(self.$base.input(), __rule_start);
+                            let __report_error = ::core::matches!(
+                                &error,
+                                $crate::generated::GeneratedRuleError::Fatal(_)
+                            );
+                            // A fatal unwind retains recovery diagnostics committed
+                            // earlier in this entry. Dispatch them before a semantic
+                            // or parser-abort override can return, or they would leak
+                            // into the next entry on a reused parser.
+                            if allow_generated_fallback && __report_error {
+                                self.$base.report_generated_parser_diagnostics();
+                            }
+                            if allow_generated_fallback {
+                                // A sticky abort (depth cap, listener) wins over an
+                                // error or semantic miss derived after recovery absorbed
+                                // the aborted rule. Drain any masked semantic miss too,
+                                // so neither condition poisons the next entry.
+                                if let ::core::option::Option::Some(abort) =
+                                    self.$base.take_parse_abort()
+                                {
+                                    let _ = self.$base.take_unknown_semantic_error();
+                                    return ::core::result::Result::Err(abort);
+                                }
+                                // A generated predicate that consulted an unimplemented
+                                // hook fails the alternative and surfaces here as a generic
+                                // failed-predicate/rule error. Prefer the recorded fail-loud
+                                // semantic error when no parser abort occurred.
+                                if let ::core::option::Option::Some(semantic_error) =
+                                    self.$base.take_unknown_semantic_error()
+                                {
+                                    return ::core::result::Result::Err(semantic_error);
+                                }
+                            }
+                            let error = error.into_error();
+                            if allow_generated_fallback && __report_error {
+                                self.$base.report_unrecovered_parser_error(&error);
+                            }
+                            return ::core::result::Result::Err(error);
+                        }
+                    }
+                } else if __generated_only {
+                    return ::core::result::Result::Err($crate::errors::AntlrError::Unsupported(
+                        ::std::format!("generated parser did not emit rule {}", rule_index),
+                    ));
+                } else {
+                    self.parse_interpreted_rule_precedence(rule_index, precedence)?
+                };
+                if allow_generated_fallback {
+                    self.$base.report_generated_parser_diagnostics();
+                    // A sticky abort (depth-cap violation, listener abort) is not a
+                    // syntax error: rule-level recovery may have produced a tree
+                    // and semantic miss anyway, but the abort is the root cause. Drain
+                    // both sticky conditions before returning so parser reuse is clean.
+                    if let ::core::option::Option::Some(error) = self.$base.take_parse_abort() {
+                        let _ = self.$base.take_unknown_semantic_error();
+                        return ::core::result::Result::Err(error);
+                    }
+                    // Surface unknown predicate/action coordinates recorded under the
+                    // Error policy only after parser aborts have been ruled out.
+                    if let ::core::option::Option::Some(error) =
+                        self.$base.take_unknown_semantic_error()
+                    {
+                        return ::core::result::Result::Err(error);
+                    }
+                }
+                ::core::result::Result::Ok(__tree)
+            }
+
+            #[allow(dead_code)]
+            fn parse_interpreted_rule(
+                &mut self,
+                rule_index: usize,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                self.parse_interpreted_rule_precedence(rule_index, 0)
+            }
+
+            #[allow(dead_code)]
+            fn parse_interpreted_rule_precedence(
+                &mut self,
+                rule_index: usize,
+                precedence: i32,
+            ) -> ::core::result::Result<$crate::tree::ParseTree, $crate::errors::AntlrError> {
+                if precedence == 0
+                    && $adaptive_direct
+                    && ::std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some()
+                {
+                    let simulator = self.$simulator.get_or_insert_with(|| {
+                        $crate::atn::parser::ParserAtnSimulator::new_shared($atn())
+                    });
+                    self.$base
+                        .parse_atn_rule_adaptive_or_fallback($atn(), simulator, rule_index)
+                } else {
+                    let (__tree, __actions) = {
+                        let $this = &mut *self;
+                        let $rule_index = rule_index;
+                        let $precedence = precedence;
+                        $fallback
+                    }?;
+                    // Uniform dispatch: grammars without action states define an
+                    // empty `run_action` and collect no deferred actions, so this
+                    // loop is a no-op for them.
+                    for __action in __actions {
+                        self.run_action(__action, __tree);
+                    }
+                    ::core::result::Result::Ok(__tree)
+                }
+            }
+        }
+    };
+}
+
+/// Defines the grammar-independent parse entry points for one generated
+/// parser module: the `<Grammar>ParserParseOutput` alias of
+/// [`GeneratedParseOutput`], the validation bridge behind
+/// [`GeneratedParseOutput::validate`], and the `parse*` / `parse_stream*`
+/// convenience functions.
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __antlr4_rust_parser_entry_points {
+    (
+        parser: $parser:ident,
+        output: $output:ident,
+        validated_tree: $validated:ident,
+        validation_error: $validation_error:ident,
+        validate_tree: $validate_tree:path
+        $(,)?
+    ) => {
+        #[doc = ::core::concat!(
+                    "Result from [`parse_with_parser`] or [`parse_stream_with_parser`].\n\n",
+                    "Keeps the generated parser available after the entry rule runs so callers\n",
+                    "can inspect diagnostics or recover the parser-owned token stream. Alias of\n",
+                    "the runtime's `GeneratedParseOutput` with [`",
+                    ::core::stringify!($parser),
+                    "`] substituted for its parser type parameter.",
+                )]
+        pub type $output<R, L> = $crate::generated::GeneratedParseOutput<R, $parser<L>>;
+
+        impl<L, H> $crate::generated::__GeneratedParserValidate for $parser<L, H>
+        where
+            L: $crate::token::TokenSource,
+            H: $crate::parser::SemanticHooks,
+        {
+            type Validated = $validated;
+
+            fn __validate(
+                self,
+                root: $crate::tree::NodeId,
+            ) -> ::core::result::Result<$validated, $crate::validated::ValidationError> {
+                let lexer = self.token_stream().number_of_source_errors();
+                let parser = $crate::parser::Parser::number_of_syntax_errors(&self);
+                if lexer != 0 || parser != 0 {
+                    return ::core::result::Result::Err($validation_error::SyntaxErrors {
+                        lexer,
+                        parser,
+                    });
+                }
+                let parsed = self.into_parsed_file(root);
+                $validate_tree(&parsed)?;
+                ::core::result::Result::Ok(<$validated>::__new(parsed))
+            }
+        }
+
+        /// Parses UTF-8 text by constructing the lexer, token stream, parser, and
+        /// caller-selected entry rule in one call.
+        ///
+        #[doc = ::core::concat!(
+                    "Pass the generated lexer constructor and a parser entry rule, for example\n",
+                    "`parse(src, MyGrammarLexer::new, ",
+                    ::core::stringify!($parser),
+                    "::file)`.",
+                )]
+        ///
+        /// The returned [`antlr4_runtime::ParsedFile`] owns the canonical token store,
+        /// flat CST storage, and entry-rule root.
+        /// Use [`parse_with_parser`] instead when the caller also needs parser
+        /// diagnostics after the entry rule runs.
+        pub fn parse<L: $crate::token::TokenSource>(
+            input: impl ::core::convert::AsRef<str>,
+            lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            ) -> ::core::result::Result<
+                $crate::tree::NodeId,
+                $crate::errors::AntlrError,
+            >,
+        ) -> ::core::result::Result<$crate::tree::ParsedFile, $crate::errors::AntlrError> {
+            parse_stream(
+                $crate::char_stream::InputStream::new(input.as_ref()),
+                lexer,
+                entry,
+            )
+        }
+
+        /// Parses UTF-8 text and returns a typed tree whose required generated child
+        /// accessors are infallible.
+        pub fn parse_validated<L: $crate::token::TokenSource>(
+            input: impl ::core::convert::AsRef<str>,
+            lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            ) -> ::core::result::Result<
+                $crate::tree::NodeId,
+                $crate::errors::AntlrError,
+            >,
+        ) -> ::core::result::Result<$validated, $validation_error> {
+            parse_stream_validated(
+                $crate::char_stream::InputStream::new(input.as_ref()),
+                lexer,
+                entry,
+            )
+        }
+
+        /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
+        /// rule has run.
+        ///
+        #[doc = ::core::concat!(
+                    "This keeps the compact generated setup path available for callers that also\n",
+                    "need `Parser::number_of_syntax_errors()` or `",
+                    ::core::stringify!($parser),
+                    "::into_token_stream()`.",
+                )]
+        pub fn parse_with_parser<L: $crate::token::TokenSource, R>(
+            input: impl ::core::convert::AsRef<str>,
+            lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            )
+                -> ::core::result::Result<R, $crate::errors::AntlrError>,
+        ) -> ::core::result::Result<$output<R, L>, $crate::errors::AntlrError> {
+            parse_stream_with_parser(
+                $crate::char_stream::InputStream::new(input.as_ref()),
+                lexer,
+                entry,
+            )
+        }
+
+        /// Parses a caller-provided character stream by constructing the lexer, token
+        /// stream, parser, and caller-selected entry rule in one call.
+        ///
+        /// Unlike [`parse`], this accepts any [`antlr4_runtime::CharStream`], including
+        /// a named [`antlr4_runtime::InputStream`] or a byte-oriented
+        /// [`antlr4_runtime::ByteStream`].
+        pub fn parse_stream<I: $crate::char_stream::CharStream, L: $crate::token::TokenSource>(
+            input: I,
+            lexer: impl ::core::ops::FnOnce(I) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            ) -> ::core::result::Result<
+                $crate::tree::NodeId,
+                $crate::errors::AntlrError,
+            >,
+        ) -> ::core::result::Result<$crate::tree::ParsedFile, $crate::errors::AntlrError> {
+            let $crate::generated::GeneratedParseOutput { result, parser } =
+                parse_stream_with_parser(input, lexer, entry)?;
+            ::core::result::Result::Ok(parser.into_parsed_file(result))
+        }
+
+        /// Parses a caller-provided character stream and validates the completed tree.
+        pub fn parse_stream_validated<
+            I: $crate::char_stream::CharStream,
+            L: $crate::token::TokenSource,
+        >(
+            input: I,
+            lexer: impl ::core::ops::FnOnce(I) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            ) -> ::core::result::Result<
+                $crate::tree::NodeId,
+                $crate::errors::AntlrError,
+            >,
+        ) -> ::core::result::Result<$validated, $validation_error> {
+            let output = parse_stream_with_parser(input, lexer, entry)
+                .map_err($validation_error::Recognition)?;
+            output.validate()
+        }
+
+        /// Parses a caller-provided character stream like [`parse_stream`] while
+        /// returning the parser after the entry rule has run.
+        pub fn parse_stream_with_parser<
+            I: $crate::char_stream::CharStream,
+            L: $crate::token::TokenSource,
+            R,
+        >(
+            input: I,
+            lexer: impl ::core::ops::FnOnce(I) -> L,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L>,
+            )
+                -> ::core::result::Result<R, $crate::errors::AntlrError>,
+        ) -> ::core::result::Result<$output<R, L>, $crate::errors::AntlrError> {
+            let lexer = lexer(input);
+            let tokens = $crate::token_stream::CommonTokenStream::new(lexer);
+            let mut parser = $parser::new(tokens);
+            let result = entry(&mut parser)?;
+            ::core::result::Result::Ok($crate::generated::GeneratedParseOutput { result, parser })
+        }
+    };
+}
+
 #[derive(Debug)]
 pub struct GrammarMetadata {
     grammar_file_name: &'static str,
@@ -1336,6 +1724,193 @@ pub trait GeneratedParser {
 
     /// Borrows the validated packed ATN embedded by the matching generator.
     fn parser_atn() -> &'static ParserAtn;
+}
+
+// ---------------------------------------------------------------------------
+// Parse-driver and entry-point support shared by every generated parser and
+// lexer module. The `__antlr4_rust_parser_driver!` and
+// `__antlr4_rust_parser_entry_points!` expansions, and the generated
+// `lex`/`lex_stream` re-exports, resolve against these items.
+// ---------------------------------------------------------------------------
+
+/// Error routing for generated rule bodies.
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API. Generated dispatch code distinguishes fatal
+/// unwinds (which report recovery diagnostics) from errors that request the
+/// interpreted fallback, plus the internal adaptive-ATN retry signal.
+#[doc(hidden)]
+#[derive(Debug)]
+pub enum GeneratedRuleError {
+    /// Unrecoverable failure of the generated engine for this entry.
+    Fatal(AntlrError),
+    /// Failure that requests the interpreted fallback for this entry.
+    Interpreted(AntlrError),
+    /// Internal adaptive-ATN retry unwind; never escapes the routing boundary.
+    AdaptiveRetry,
+}
+
+impl GeneratedRuleError {
+    /// Unwraps the underlying recognition error.
+    #[must_use]
+    pub fn into_error(self) -> AntlrError {
+        match self {
+            Self::Fatal(error) | Self::Interpreted(error) => error,
+            Self::AdaptiveRetry => AntlrError::Unsupported(
+                "internal adaptive ATN retry escaped its routing boundary".to_owned(),
+            ),
+        }
+    }
+}
+
+/// Adaptive-ATN preference state for the generated rules a grammar routes
+/// through warmed-retry dispatch.
+///
+/// `RULES` is the number of adaptive-ATN-preferred rules the generator
+/// assigned retry slots to; grammars without residual adaptive routing
+/// instantiate `AdaptiveAtnRetryState<0>`, whose [`Self::retry_pending`]
+/// check constant-folds to `false`.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct AdaptiveAtnRetryState<const RULES: usize> {
+    /// Rules whose warmed adaptive-prediction work marked them expensive.
+    pub preferred_rules: [bool; RULES],
+    /// Per-slot recursion depth of in-flight adaptive dispatches.
+    pub preference_depths: [usize; RULES],
+    /// Adaptive-prediction work counters captured at outermost entry.
+    pub preference_starts: [(usize, usize); RULES],
+    /// Syntax-error counts captured at outermost entry.
+    pub syntax_error_starts: [usize; RULES],
+    /// Slot currently unwinding through an adaptive retry, if any.
+    pub retry_slot: Option<usize>,
+}
+
+impl<const RULES: usize> AdaptiveAtnRetryState<RULES> {
+    /// Creates cleared preference state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            preferred_rules: [false; RULES],
+            preference_depths: [0; RULES],
+            preference_starts: [(0, 0); RULES],
+            syntax_error_starts: [0; RULES],
+            retry_slot: None,
+        }
+    }
+
+    /// Clears every learned preference and any in-flight retry.
+    pub const fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    /// Reports whether an adaptive retry is currently unwinding.
+    ///
+    /// Constant-folds to `false` when the grammar has no retry slots, so the
+    /// uniform generated retry clause costs nothing for such grammars.
+    #[must_use]
+    pub const fn retry_pending(&self) -> bool {
+        RULES > 0 && self.retry_slot.is_some()
+    }
+}
+
+impl<const RULES: usize> Default for AdaptiveAtnRetryState<RULES> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Result from a generated `parse_with_parser` or `parse_stream_with_parser`
+/// call.
+///
+/// Keeps the generated parser available after the entry rule runs so callers
+/// can inspect diagnostics or recover the parser-owned token stream. Generated
+/// modules alias this type as `<Grammar>ParserParseOutput<R, L>` with their
+/// parser type substituted for `P`; [`Self::validate`] is available for those
+/// generated parser types, which wire in their module's validated surface.
+#[derive(Debug)]
+pub struct GeneratedParseOutput<R, P> {
+    /// Value returned by the caller-selected entry rule.
+    pub result: R,
+    /// The generated parser after the entry rule has run.
+    pub parser: P,
+}
+
+/// Grammar-specific validation step behind [`GeneratedParseOutput::validate`].
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API: each generated module implements it for its parser
+/// type via `__antlr4_rust_parser_entry_points!`.
+#[doc(hidden)]
+pub trait __GeneratedParserValidate: Sized {
+    /// The module-branded validated-tree type.
+    type Validated;
+
+    /// Validates a completed parse rooted at `root`.
+    fn __validate(self, root: NodeId) -> Result<Self::Validated, ValidationError>;
+}
+
+impl<P: __GeneratedParserValidate> GeneratedParseOutput<NodeId, P> {
+    /// Validates a completed parse and changes its generated context surface.
+    ///
+    /// Validation rejects lexer diagnostics, parser recovery, recovered error
+    /// nodes, and missing generated required children before constructing the
+    /// validated-tree type boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] when the parse recorded lexer or parser
+    /// syntax errors or the completed tree fails structural validation.
+    pub fn validate(self) -> Result<P::Validated, ValidationError> {
+        self.parser.__validate(self.result)
+    }
+}
+
+/// Lexes UTF-8 text into an eagerly filled token stream without constructing
+/// a parser.
+///
+/// Pass the generated lexer constructor, for example
+/// `lex(src, MyGrammarLexer::new)`.
+///
+/// The stream retains every emitted token, including EOF and tokens on hidden
+/// or custom channels. Lexer rules using `skip` do not emit tokens.
+///
+/// With `use antlr4_runtime::Token as _;` and the generated module's
+/// `metadata()`, print each token's vocabulary name, numeric channel, and
+/// text:
+/// `let vocabulary = metadata().vocabulary(); for token in lex(src, MyGrammarLexer::new).tokens() { println!("type={} channel={} text={:?}", vocabulary.display_name(token.token_type()), token.channel(), token.text()); }`
+///
+/// `number_of_source_errors()` reports buffered lexer diagnostics. After
+/// iterating `tokens()`, `drain_source_errors()` retrieves those diagnostics.
+///
+/// # Panics
+///
+/// Panics if buffering returns an [`crate::TokenStoreError`]. Construct the
+/// lexer and call [`CommonTokenStream::try_new`] to handle that error instead.
+pub fn lex<L: TokenSource>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(InputStream) -> L,
+) -> CommonTokenStream<L> {
+    lex_stream(InputStream::new(input.as_ref()), lexer)
+}
+
+/// Lexes a caller-provided character stream without constructing a parser.
+///
+/// Unlike [`lex`], this accepts any [`CharStream`], including a named
+/// [`InputStream`] or a byte-oriented [`crate::ByteStream`].
+///
+/// `number_of_source_errors()` reports buffered lexer diagnostics. After
+/// iterating `tokens()`, `drain_source_errors()` retrieves those diagnostics.
+///
+/// # Panics
+///
+/// Panics if buffering returns an [`crate::TokenStoreError`]. Call
+/// [`CommonTokenStream::try_new`] with the constructed lexer to handle that
+/// error instead.
+pub fn lex_stream<I: CharStream, L: TokenSource>(
+    input: I,
+    lexer: impl FnOnce(I) -> L,
+) -> CommonTokenStream<L> {
+    CommonTokenStream::new(lexer(input))
 }
 
 // ---------------------------------------------------------------------------
@@ -1776,5 +2351,140 @@ mod tests {
 
         assert!(std::ptr::eq(first.rule_names(), second.rule_names()));
         assert!(std::ptr::eq(first.vocabulary(), second.vocabulary()));
+    }
+}
+
+#[cfg(test)]
+mod parser_driver_tests {
+    // Anchors into the `__antlr4_rust_parser_driver!` macro body. Each search
+    // string is declared once so a rename inside the macro is a one-line
+    // update here, and the assertions below stay readable.
+    const DRIVER_MACRO: &str = "macro_rules! __antlr4_rust_parser_driver";
+    const ENTRY_POINTS_MACRO: &str = "macro_rules! __antlr4_rust_parser_entry_points";
+    /// Unique to the top-level surfacing check: the Err-arm check binds
+    /// `semantic_error` and the sticky-abort drains bind `_`, so anchoring on
+    /// the `Some(error)` binder cannot accidentally match a drain.
+    const TOP_LEVEL_SEMANTIC_SURFACE: &str =
+        "Some(error) = self.$base.take_unknown_semantic_error()";
+    const ERR_ARM_SEMANTIC_SURFACE: &str =
+        "Some(semantic_error) = self.$base.take_unknown_semantic_error()";
+    const ERR_ARM_START: &str = "::core::result::Result::Err(error) => {";
+    const ERR_CONVERSION: &str = "let error = error.into_error();";
+    const ERR_RETURN: &str = "return ::core::result::Result::Err(error);";
+    const DIAGNOSTICS_DISPATCH: &str = "self.$base.report_generated_parser_diagnostics();";
+    const ABORT_DRAIN: &str = "Some(abort) = self.$base.take_parse_abort()";
+    const UNRECOVERED_REPORT: &str = "self.$base.report_unrecovered_parser_error(&error);";
+    const OK_TREE: &str = "::core::result::Result::Ok(__tree)";
+    const INTERPRETED_FALLBACK: &str =
+        "self.parse_interpreted_rule_precedence(rule_index, precedence)?";
+    const ACTION_DISPATCH: &str = "self.run_action(__action, __tree);";
+
+    /// The driver macro body with all whitespace collapsed, so anchors that
+    /// rustfmt wraps across lines (`if let ::core::option::Option::Some(error)
+    /// = self.$base...`) match as single strings.
+    fn driver_macro_body() -> String {
+        let source = include_str!("generated.rs");
+        let driver_at = source
+            .find(DRIVER_MACRO)
+            .expect("driver macro is defined in this module");
+        let entry_points_at = source
+            .find(ENTRY_POINTS_MACRO)
+            .expect("entry-points macro is defined in this module");
+        source[driver_at..entry_points_at]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Pins ordering invariants of the `__antlr4_rust_parser_driver!` entry
+    /// body that generated-parser behavior depends on. These checks lived in
+    /// the generator's per-grammar rendered-text tests while the driver was
+    /// emitted per module; the macro is the single copy now, so the source
+    /// text is asserted here once. The runtime behavior itself is covered by
+    /// `public_entry_surfaces_recorded_semantic_miss_after_clean_parse` in
+    /// the generator's CLI suite, which parses through a generated entry and
+    /// asserts the fail-loud error is returned.
+    #[test]
+    fn parser_driver_entry_ordering_invariants() {
+        let driver = driver_macro_body();
+
+        // The fail-loud surfacing check runs before the entry can return Ok,
+        // or a parse that consulted an unimplemented hook would return a
+        // recovered Ok tree instead of AntlrError::Unsupported. The binder
+        // anchor is unique, so this cannot be satisfied by one of the
+        // `let _ =` drains.
+        assert_eq!(
+            driver.matches(TOP_LEVEL_SEMANTIC_SURFACE).count(),
+            1,
+            "exactly one top-level surfacing check binds `error`"
+        );
+        let surface_at = driver
+            .find(TOP_LEVEL_SEMANTIC_SURFACE)
+            .expect("entry surfaces recorded unknown-semantic coordinates");
+        let ok_at = driver[surface_at..]
+            .find(OK_TREE)
+            .map(|offset| surface_at + offset)
+            .expect("entry returns the tree after semantic checks");
+        assert!(surface_at < ok_at);
+
+        // Inside the generated-rule Err arm, retained diagnostics dispatch
+        // first, then parser aborts, then recorded semantic misses; otherwise
+        // the documented fail-loud error would be shadowed or diagnostics
+        // would leak into the next entry on a reused parser.
+        let arm_start = driver
+            .find(ERR_ARM_START)
+            .expect("the generated-rule match has an Err arm");
+        let conversion_at = driver[arm_start..]
+            .find(ERR_CONVERSION)
+            .map(|offset| arm_start + offset)
+            .expect("Err arm converts the generic rule error");
+        let arm = &driver[arm_start..conversion_at];
+        let diagnostics_at = arm
+            .find(DIAGNOSTICS_DISPATCH)
+            .expect("the fatal Err arm drains retained diagnostics");
+        let abort_at = arm
+            .find(ABORT_DRAIN)
+            .expect("the Err arm drains a recorded parser abort");
+        let semantic_at = arm
+            .find(ERR_ARM_SEMANTIC_SURFACE)
+            .expect("the Err arm drains a recorded semantic error");
+        assert!(
+            diagnostics_at < abort_at && abort_at < semantic_at,
+            "retained diagnostics dispatch first, then parser aborts precede semantic misses"
+        );
+
+        // A fatal unwind reports the converted error through the listener
+        // boundary before returning it.
+        let err_return_at = driver[conversion_at..]
+            .find(ERR_RETURN)
+            .map(|offset| conversion_at + offset)
+            .expect("the Err arm returns the converted error");
+        assert!(
+            driver[conversion_at..err_return_at].contains(UNRECOVERED_REPORT),
+            "the Err arm reports the unrecovered error before returning it"
+        );
+
+        // The interpreted fallback runs the uniform action-dispatch loop
+        // (every generated parser defines `run_action`; grammars without
+        // action states get the empty stub); the top-level boundary then
+        // dispatches recovery diagnostics and never returns Ok between the
+        // fallback and the surfacing check, so an action-hook miss recorded
+        // by the fallback's immediate `run_action` loop cannot escape as Ok.
+        let fallback_at = driver
+            .find(INTERPRETED_FALLBACK)
+            .expect("entry runs the interpreted fallback when a rule is not generated");
+        assert!(
+            fallback_at < surface_at,
+            "the surfacing check follows the interpreted fallback"
+        );
+        assert!(
+            driver[fallback_at..surface_at].contains(DIAGNOSTICS_DISPATCH),
+            "the entry dispatches boundary diagnostics between the fallback and the surfacing check"
+        );
+        assert!(
+            !driver[fallback_at..surface_at].contains(OK_TREE),
+            "the entry must not return Ok between the interpreted fallback and the surfacing check"
+        );
+        assert!(driver.contains(ACTION_DISPATCH));
     }
 }
