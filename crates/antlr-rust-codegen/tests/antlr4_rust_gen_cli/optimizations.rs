@@ -483,7 +483,7 @@ fn public_entry_surfaces_recorded_semantic_miss_after_clean_parse() {
     let out = temp.path().join("generated");
     fs::write(
         &grammar,
-        "grammar SemanticMiss;\nitem: A {recordSideEffect();} B;\nclean: A B;\nA: 'a';\nB: 'b';\n",
+        "grammar SemanticMiss;\nitem: A {recordSideEffect();} B;\nclean: EOF;\nA: 'a';\nB: 'b';\n",
     )
     .expect("grammar should be writable");
 
@@ -532,10 +532,10 @@ mod semantic_miss_tests {
             "the parse is structurally clean; only the recorded miss fails the entry"
         );
 
-        // The failed entry drains its sticky state, so a reused parser stays clean.
-        parser.set_token_stream(CommonTokenStream::new(SemanticMissLexer::new(
-            InputStream::new("ab"),
-        )));
+        // The failed entry drains its sticky state: the next entry on the
+        // same parser (no token-stream replacement, which would reset
+        // parser-owned state anyway) must not observe the taken miss. After
+        // `item()` consumed `ab`, the cursor sits at EOF for `clean`.
         parser
             .clean()
             .expect("the clean entry succeeds after the failed entry");
