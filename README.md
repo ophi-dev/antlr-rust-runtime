@@ -181,7 +181,7 @@ and the `<Grammar>ParserParseOutput` alias of the runtime's
 `AdaptiveRetry` variant always exists), the adaptive-ATN retry state is the
 runtime's `AdaptiveAtnRetryState<N>` sized by a const knob (0 for grammars
 without residual adaptive routing), and the lexer `lex` / `lex_stream`
-functions are re-exports of runtime generics. Revision 10 stops re-declaring
+functions are re-exports of runtime generics. Revision 10 stopped re-declaring
 the validated-parse surface in every generated parser: `<Grammar>ValidatedTree`
 is a type alias of the runtime's `ValidatedTree` branded with the module-local
 `ValidatedTreeContext` marker (likewise the module's `ValidatedRuleNode`

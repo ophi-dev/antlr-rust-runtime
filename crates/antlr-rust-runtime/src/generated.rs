@@ -1825,7 +1825,8 @@ impl<const RULES: usize> Default for AdaptiveAtnRetryState<RULES> {
 /// Keeps the generated parser available after the entry rule runs so callers
 /// can inspect diagnostics or recover the parser-owned token stream. Generated
 /// modules alias this type as `<Grammar>ParserParseOutput<R, L>` with their
-/// parser type substituted for `P`.
+/// parser type substituted for `P`; [`Self::validate`] is available for those
+/// generated parser types, which wire in their module's validated surface.
 #[derive(Debug)]
 pub struct GeneratedParseOutput<R, P> {
     /// Value returned by the caller-selected entry rule.
@@ -1873,8 +1874,9 @@ impl<P: __GeneratedParserValidate> GeneratedParseOutput<NodeId, P> {
 /// The stream retains every emitted token, including EOF and tokens on hidden
 /// or custom channels. Lexer rules using `skip` do not emit tokens.
 ///
-/// With `use antlr4_runtime::Token as _;`, print each token's vocabulary name,
-/// numeric channel, and text:
+/// With `use antlr4_runtime::Token as _;` and the generated module's
+/// `metadata()`, print each token's vocabulary name, numeric channel, and
+/// text:
 /// `let vocabulary = metadata().vocabulary(); for token in lex(src, MyGrammarLexer::new).tokens() { println!("type={} channel={} text={:?}", vocabulary.display_name(token.token_type()), token.channel(), token.text()); }`
 ///
 /// `number_of_source_errors()` reports buffered lexer diagnostics. After
@@ -2354,33 +2356,73 @@ mod tests {
 
 #[cfg(test)]
 mod parser_driver_tests {
+    // Anchors into the `__antlr4_rust_parser_driver!` macro body. Each search
+    // string is declared once so a rename inside the macro is a one-line
+    // update here, and the assertions below stay readable.
+    const DRIVER_MACRO: &str = "macro_rules! __antlr4_rust_parser_driver";
+    const ENTRY_POINTS_MACRO: &str = "macro_rules! __antlr4_rust_parser_entry_points";
+    /// Unique to the top-level surfacing check: the Err-arm check binds
+    /// `semantic_error` and the sticky-abort drains bind `_`, so anchoring on
+    /// the `Some(error)` binder cannot accidentally match a drain.
+    const TOP_LEVEL_SEMANTIC_SURFACE: &str =
+        "Some(error) = self.$base.take_unknown_semantic_error()";
+    const ERR_ARM_SEMANTIC_SURFACE: &str =
+        "Some(semantic_error) = self.$base.take_unknown_semantic_error()";
+    const ERR_ARM_START: &str = "::core::result::Result::Err(error) => {";
+    const ERR_CONVERSION: &str = "let error = error.into_error();";
+    const ERR_RETURN: &str = "return ::core::result::Result::Err(error);";
+    const DIAGNOSTICS_DISPATCH: &str = "self.$base.report_generated_parser_diagnostics();";
+    const ABORT_DRAIN: &str = "Some(abort) = self.$base.take_parse_abort()";
+    const UNRECOVERED_REPORT: &str = "self.$base.report_unrecovered_parser_error(&error);";
+    const OK_TREE: &str = "::core::result::Result::Ok(__tree)";
+    const INTERPRETED_FALLBACK: &str =
+        "self.parse_interpreted_rule_precedence(rule_index, precedence)?";
+    const ACTION_DISPATCH: &str = "self.run_action(__action, __tree);";
+
+    /// The driver macro body with all whitespace collapsed, so anchors that
+    /// rustfmt wraps across lines (`if let ::core::option::Option::Some(error)
+    /// = self.$base...`) match as single strings.
+    fn driver_macro_body() -> String {
+        let source = include_str!("generated.rs");
+        let driver_at = source
+            .find(DRIVER_MACRO)
+            .expect("driver macro is defined in this module");
+        let entry_points_at = source
+            .find(ENTRY_POINTS_MACRO)
+            .expect("entry-points macro is defined in this module");
+        source[driver_at..entry_points_at]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     /// Pins ordering invariants of the `__antlr4_rust_parser_driver!` entry
     /// body that generated-parser behavior depends on. These checks lived in
     /// the generator's per-grammar rendered-text tests while the driver was
     /// emitted per module; the macro is the single copy now, so the source
-    /// text is asserted here once.
+    /// text is asserted here once. The runtime behavior itself is covered by
+    /// `public_entry_surfaces_recorded_semantic_miss_after_clean_parse` in
+    /// the generator's CLI suite, which parses through a generated entry and
+    /// asserts the fail-loud error is returned.
     #[test]
     fn parser_driver_entry_ordering_invariants() {
-        let source = include_str!("generated.rs");
-        let driver_at = source
-            .find("macro_rules! __antlr4_rust_parser_driver")
-            .expect("driver macro is defined in this module");
-        let entry_points_at = source
-            .find("macro_rules! __antlr4_rust_parser_entry_points")
-            .expect("entry-points macro is defined in this module");
-        let driver = &source[driver_at..entry_points_at];
+        let driver = driver_macro_body();
 
         // The fail-loud surfacing check runs before the entry can return Ok,
         // or a parse that consulted an unimplemented hook would return a
-        // recovered Ok tree instead of AntlrError::Unsupported. Both the
-        // interpreted-fallback branch and the surfacing check share the
-        // `allow_generated_fallback` gate, so an action-hook miss recorded by
-        // the fallback's immediate `run_action` loop cannot escape as Ok.
+        // recovered Ok tree instead of AntlrError::Unsupported. The binder
+        // anchor is unique, so this cannot be satisfied by one of the
+        // `let _ =` drains.
+        assert_eq!(
+            driver.matches(TOP_LEVEL_SEMANTIC_SURFACE).count(),
+            1,
+            "exactly one top-level surfacing check binds `error`"
+        );
         let surface_at = driver
-            .find("self.$base.take_unknown_semantic_error()")
+            .find(TOP_LEVEL_SEMANTIC_SURFACE)
             .expect("entry surfaces recorded unknown-semantic coordinates");
         let ok_at = driver[surface_at..]
-            .find("::core::result::Result::Ok(__tree)")
+            .find(OK_TREE)
             .map(|offset| surface_at + offset)
             .expect("entry returns the tree after semantic checks");
         assert!(surface_at < ok_at);
@@ -2389,43 +2431,60 @@ mod parser_driver_tests {
         // first, then parser aborts, then recorded semantic misses; otherwise
         // the documented fail-loud error would be shadowed or diagnostics
         // would leak into the next entry on a reused parser.
-        let error_conversion_at = driver
-            .find("let error = error.into_error();")
+        let arm_start = driver
+            .find(ERR_ARM_START)
+            .expect("the generated-rule match has an Err arm");
+        let conversion_at = driver[arm_start..]
+            .find(ERR_CONVERSION)
+            .map(|offset| arm_start + offset)
             .expect("Err arm converts the generic rule error");
-        let arm_start = driver[..error_conversion_at]
-            .rfind("::core::result::Result::Err(error) => {")
-            .expect("generic conversion lives in the Err arm");
-        let arm = &driver[arm_start..error_conversion_at];
+        let arm = &driver[arm_start..conversion_at];
         let diagnostics_at = arm
-            .find("self.$base.report_generated_parser_diagnostics();")
+            .find(DIAGNOSTICS_DISPATCH)
             .expect("the fatal Err arm drains retained diagnostics");
         let abort_at = arm
-            .find("self.$base.take_parse_abort()")
+            .find(ABORT_DRAIN)
             .expect("the Err arm drains a recorded parser abort");
         let semantic_at = arm
-            .find("self.$base.take_unknown_semantic_error()")
+            .find(ERR_ARM_SEMANTIC_SURFACE)
             .expect("the Err arm drains a recorded semantic error");
         assert!(
             diagnostics_at < abort_at && abort_at < semantic_at,
             "retained diagnostics dispatch first, then parser aborts precede semantic misses"
         );
 
+        // A fatal unwind reports the converted error through the listener
+        // boundary before returning it.
+        let err_return_at = driver[conversion_at..]
+            .find(ERR_RETURN)
+            .map(|offset| conversion_at + offset)
+            .expect("the Err arm returns the converted error");
+        assert!(
+            driver[conversion_at..err_return_at].contains(UNRECOVERED_REPORT),
+            "the Err arm reports the unrecovered error before returning it"
+        );
+
         // The interpreted fallback runs the uniform action-dispatch loop
         // (every generated parser defines `run_action`; grammars without
-        // action states get the empty stub), and the driver never returns Ok
-        // between the fallback and the top-level surfacing check.
+        // action states get the empty stub); the top-level boundary then
+        // dispatches recovery diagnostics and never returns Ok between the
+        // fallback and the surfacing check, so an action-hook miss recorded
+        // by the fallback's immediate `run_action` loop cannot escape as Ok.
         let fallback_at = driver
-            .find("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
+            .find(INTERPRETED_FALLBACK)
             .expect("entry runs the interpreted fallback when a rule is not generated");
-        let post_fallback_surface_at = driver[fallback_at..]
-            .find("self.$base.take_unknown_semantic_error()")
-            .map(|offset| fallback_at + offset)
-            .expect("the entry drains recorded semantic misses after the fallback");
         assert!(
-            !driver[fallback_at..post_fallback_surface_at]
-                .contains("::core::result::Result::Ok(__tree)"),
+            fallback_at < surface_at,
+            "the surfacing check follows the interpreted fallback"
+        );
+        assert!(
+            driver[fallback_at..surface_at].contains(DIAGNOSTICS_DISPATCH),
+            "the entry dispatches boundary diagnostics between the fallback and the surfacing check"
+        );
+        assert!(
+            !driver[fallback_at..surface_at].contains(OK_TREE),
             "the entry must not return Ok between the interpreted fallback and the surfacing check"
         );
-        assert!(driver.contains("self.run_action(__action, __tree);"));
+        assert!(driver.contains(ACTION_DISPATCH));
     }
 }

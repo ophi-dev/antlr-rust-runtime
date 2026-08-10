@@ -467,3 +467,85 @@ mod fatal_error_listener_tests {
         semantic_override
     );
 }
+
+#[test]
+fn public_entry_surfaces_recorded_semantic_miss_after_clean_parse() {
+    // The driver's post-tree surfacing check is the only drain for a
+    // fail-loud coordinate recorded during a structurally clean parse: the
+    // Err-arm overrides never run (there is no parse error), so deleting the
+    // top-level `take_unknown_semantic_error` block from
+    // `__antlr4_rust_parser_driver!` would let the miss escape as a
+    // recovered Ok tree. This pins that behavior end to end where the
+    // source-text ordering test (`parser_driver_entry_ordering_invariants`
+    // in the runtime) can only pin the macro text.
+    let temp = temporary_directory("semantic-miss-surfacing");
+    let grammar = temp.path().join("SemanticMiss.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "grammar SemanticMiss;\nitem: A {recordSideEffect();} B;\nclean: A B;\nA: 'a';\nB: 'b';\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("templates"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("hook"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+
+    let test_source = r#"
+#[cfg(test)]
+mod semantic_miss_tests {
+    use super::semantic_miss_lexer::SemanticMissLexer;
+    use super::semantic_miss_parser::SemanticMissParser;
+    use antlr4_runtime::{AntlrError, CommonTokenStream, InputStream, Parser as _};
+
+    fn parser(input: &str) -> SemanticMissParser<SemanticMissLexer<InputStream>> {
+        let lexer = SemanticMissLexer::new(InputStream::new(input));
+        SemanticMissParser::new(CommonTokenStream::new(lexer))
+    }
+
+    #[test]
+    fn public_entry_surfaces_recorded_semantic_miss_after_clean_parse() {
+        let mut parser = parser("ab");
+
+        let error = parser
+            .item()
+            .expect_err("a recorded action miss must not escape as a recovered Ok tree");
+        assert!(
+            matches!(&error, AntlrError::Unsupported(message) if message.contains("unhandled semantic action")),
+            "expected the fail-loud semantic miss, got {error:?}"
+        );
+        assert_eq!(
+            parser.number_of_syntax_errors(),
+            0,
+            "the parse is structurally clean; only the recorded miss fails the entry"
+        );
+
+        // The failed entry drains its sticky state, so a reused parser stays clean.
+        parser.set_token_stream(CommonTokenStream::new(SemanticMissLexer::new(
+            InputStream::new("ab"),
+        )));
+        parser
+            .clean()
+            .expect("the clean entry succeeds after the failed entry");
+    }
+}
+"#;
+
+    assert_generated_project(
+        temp.path(),
+        &["semantic_miss_lexer.rs", "semantic_miss_parser.rs"],
+        test_source,
+    );
+}

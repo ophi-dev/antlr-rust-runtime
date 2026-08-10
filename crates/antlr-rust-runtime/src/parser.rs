@@ -307,6 +307,11 @@ macro_rules! __antlr4_rust_generated_rule {
         marker $marker:ident;
         abort $abort:ident;
     ) => {
+        // Back-compat only: generated-code API revisions <= 10 spell the
+        // adaptive retry unwind as an explicit condition/error pair. The
+        // bundled generator emits `retry [adaptive]` since revision 11; keep
+        // this arm while those revisions remain accepted by
+        // `__antlr4_rust_require_codegen_api!`.
         if $condition {
             $parser.base.$abort();
             $parser.base.restore_generated_diagnostics($marker);

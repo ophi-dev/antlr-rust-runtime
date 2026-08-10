@@ -260,7 +260,9 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
             .map(|name| format!("fn {name}")),
         );
     }
-    if source.contains("antlr4_runtime::__antlr4_rust_parser_entry_points!") {
+    if let Some((_, invocation)) =
+        source.split_once("antlr4_runtime::__antlr4_rust_parser_entry_points! {")
+    {
         // The parse entry points and validation bridge expand from the
         // runtime macro; surface them like the facade methods above.
         api.extend(
@@ -275,7 +277,12 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
             ]
             .map(|name| format!("fn {name}")),
         );
-        if let Some(output) = source.lines().find_map(|line| {
+        // Read the alias name from the invocation block only, so an
+        // `output: ` line elsewhere in the module cannot add a bogus entry.
+        let invocation = invocation
+            .split_once("\n}")
+            .map_or(invocation, |(block, _)| block);
+        if let Some(output) = invocation.lines().find_map(|line| {
             line.trim()
                 .strip_prefix("output: ")
                 .map(|rest| rest.trim_end_matches(','))
