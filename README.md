@@ -170,11 +170,14 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 9, which imports the
-grammar-independent generated support surface (the typed terminal/error-node
-wrappers, context child-iteration helpers, and embedded-action input facade)
-from the runtime's `generated` module instead of re-declaring it in every
-generated parser. The runtime also accepts revisions 1 through 8 because
+The bundled generator currently emits revision 10, which aliases the
+generated validated-parse surface (`<Grammar>ValidatedTree`,
+`<Grammar>ValidationError`, `ValidatedRuleNode`, `FromValidatedRuleNode`) to
+grammar-agnostic types owned by the runtime instead of re-declaring them in
+every generated parser. Revision 9 similarly imports the grammar-independent
+generated support surface (the typed terminal/error-node wrappers, context
+child-iteration helpers, and embedded-action input facade) from the runtime's
+`generated` module. The runtime also accepts revisions 1 through 9 because
 their older generated recognizers use API surfaces that remain available.
 
 Generated modules created before this check was introduced cannot be detected

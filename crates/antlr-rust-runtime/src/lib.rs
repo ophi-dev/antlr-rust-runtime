@@ -4,7 +4,7 @@ extern crate self as antlr4_runtime;
 
 /// Current generated-source/runtime contract revision emitted by the bundled generator.
 #[doc(hidden)]
-pub const __ANTLR4_RUST_CODEGEN_API: u32 = 9;
+pub const __ANTLR4_RUST_CODEGEN_API: u32 = 10;
 
 /// Verifies that generated source is compatible with the selected runtime.
 #[doc(hidden)]
@@ -19,6 +19,7 @@ macro_rules! __antlr4_rust_require_codegen_api {
     (7, $generator_version:literal) => {};
     (8, $generator_version:literal) => {};
     (9, $generator_version:literal) => {};
+    (10, $generator_version:literal) => {};
     ($requested:literal, $generator_version:literal) => {
         compile_error!(concat!(
             "antlr4-rust generated-code API mismatch: antlr4-rust-gen v",
@@ -26,8 +27,8 @@ macro_rules! __antlr4_rust_require_codegen_api {
             " emitted generated-code API revision ",
             stringify!($requested),
             ", but the selected antlr-rust-runtime supports revisions 1, 2, 3, 4, 5, 6, 7, 8, \
-             and 9; regenerate this recognizer with a compatible antlr4-rust-gen or select a \
-             compatible antlr-rust-runtime dependency"
+             9, and 10; regenerate this recognizer with a compatible antlr4-rust-gen or select \
+             a compatible antlr-rust-runtime dependency"
         ));
     };
 }
@@ -50,6 +51,7 @@ pub mod token;
 pub mod token_stream;
 pub mod tree;
 pub mod tree_pattern;
+pub mod validated;
 pub mod vocabulary;
 pub mod xpath;
 
@@ -90,6 +92,9 @@ pub use tree::{
 pub use tree_pattern::{
     ParseTreeMatch, ParseTreePattern, ParseTreePatternError, ParseTreePatternMatcher, PatternLexer,
     lex_pattern_chunk,
+};
+pub use validated::{
+    FromValidatedRuleNode, ValidatedRuleNode, ValidatedTree, ValidationError, require_min_count,
 };
 pub use vocabulary::Vocabulary;
 pub use xpath::{XPath, XPathError};

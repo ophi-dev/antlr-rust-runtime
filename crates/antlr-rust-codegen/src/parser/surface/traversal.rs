@@ -16,150 +16,16 @@ pub struct ValidatedTreeContext {{
 
 /// A completed, syntax-clean parse tree whose generated child cardinalities
 /// have been structurally validated.
-#[derive(Debug)]
-pub struct {validated_tree} {{
-    parsed: antlr4_runtime::ParsedFile,
-}}
-
-impl {validated_tree} {{
-    fn __new(parsed: antlr4_runtime::ParsedFile) -> Self {{
-        Self {{ parsed }}
-    }}
-
-    /// Returns the validated entry-rule root.
-    pub fn tree(&self) -> ValidatedRuleNode<'_> {{
-        let Some(rule) = self.parsed.tree().as_rule() else {{
-            unreachable!("validated parse root was checked as a rule node")
-        }};
-        ValidatedRuleNode {{ __node: rule }}
-    }}
-
-    /// Borrows the underlying recovery-oriented parsed file.
-    pub const fn parsed_file(&self) -> &antlr4_runtime::ParsedFile {{
-        &self.parsed
-    }}
-
-    /// Drops the validation type boundary and returns the underlying parsed file.
-    pub fn into_parsed_file(self) -> antlr4_runtime::ParsedFile {{
-        self.parsed
-    }}
-}}
-
-/// A rule node borrowed from a [`{validated_tree}`].
-#[derive(Clone, Copy, Debug)]
-pub struct ValidatedRuleNode<'a> {{
-    __node: RuleNodeView<'a>,
-}}
-
-impl<'a> ValidatedRuleNode<'a> {{
-    pub const fn rule_node(self) -> RuleNodeView<'a> {{
-        self.__node
-    }}
-
-    pub const fn node(self) -> antlr4_runtime::Node<'a> {{
-        self.__node.node()
-    }}
-
-    pub fn rule_index(self) -> usize {{
-        self.__node.rule_index()
-    }}
-
-    pub fn text(self) -> String {{
-        self.__node.text()
-    }}
-
-    pub fn downcast_ref<T: FromValidatedRuleNode<'a>>(self) -> Option<T> {{
-        T::from_validated_rule_node(self)
-    }}
-}}
-
-/// Constructs a generated validated context from a validated rule node.
-pub trait FromValidatedRuleNode<'a>: Sized {{
-    fn from_validated_rule_node(node: ValidatedRuleNode<'a>) -> Option<Self>;
-}}
+///
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidatedTree`; the
+/// validated-parse types of every generated parser are interchangeable.
+pub type {validated_tree} = antlr4_runtime::ValidatedTree;
 
 /// Failure to recognize or validate a strict generated parse.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum {validation_error} {{
-    Recognition(antlr4_runtime::AntlrError),
-    SyntaxErrors {{
-        lexer: usize,
-        parser: usize,
-    }},
-    MissingChild(MissingChildError),
-    InvalidChildCount {{
-        context: &'static str,
-        child: &'static str,
-        minimum: usize,
-        actual: usize,
-    }},
-    RecoveredErrorNode {{
-        line: usize,
-        column: usize,
-        text: String,
-    }},
-    InvalidRoot,
-    UnknownRule {{
-        rule_index: usize,
-    }},
-}}
-
-impl std::fmt::Display for {validation_error} {{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{
-        match self {{
-            Self::Recognition(error) => write!(f, "parse failed: {{error}}"),
-            Self::SyntaxErrors {{ lexer, parser }} => write!(
-                f,
-                "parse produced {{lexer}} lexer and {{parser}} parser syntax errors"
-            ),
-            Self::MissingChild(error) => error.fmt(f),
-            Self::InvalidChildCount {{
-                context,
-                child,
-                minimum,
-                actual,
-            }} => write!(
-                f,
-                "required child {{child}} occurs {{actual}} times in {{context}}; expected at least {{minimum}}"
-            ),
-            Self::RecoveredErrorNode {{
-                line,
-                column,
-                text,
-            }} => write!(
-                f,
-                "recovered error node at {{line}}:{{column}}: {{text}}"
-            ),
-            Self::InvalidRoot => f.write_str("validated parse root is not a rule node"),
-            Self::UnknownRule {{ rule_index }} => write!(
-                f,
-                "parse tree contains unknown rule index {{rule_index}}"
-            ),
-        }}
-    }}
-}}
-
-impl std::error::Error for {validation_error} {{
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {{
-        match self {{
-            Self::Recognition(error) => Some(error),
-            Self::MissingChild(error) => Some(error),
-            _ => None,
-        }}
-    }}
-}}
-
-impl From<antlr4_runtime::AntlrError> for {validation_error} {{
-    fn from(error: antlr4_runtime::AntlrError) -> Self {{
-        Self::Recognition(error)
-    }}
-}}
-
-impl From<MissingChildError> for {validation_error} {{
-    fn from(error: MissingChildError) -> Self {{
-        Self::MissingChild(error)
-    }}
-}}
+///
+/// Alias of the grammar-agnostic `antlr4_runtime::ValidationError`; the
+/// validated-parse types of every generated parser are interchangeable.
+pub type {validation_error} = antlr4_runtime::ValidationError;
 
 "#
     )
@@ -349,7 +215,7 @@ impl {validated_tree_walker} {{
                         if let Some(states) = &mut invocation_states {{
                             states.insert(0, context.invoking_state());
                         }}
-                        listener.enter_every_rule(ValidatedRuleNode {{ __node: context }})?;
+                        listener.enter_every_rule(ValidatedRuleNode::__new(context))?;
                         match __context_kind(context) {{
 {validated_enter_arms}                            _ => {{}}
                         }}
@@ -369,7 +235,7 @@ impl {validated_tree_walker} {{
                     match __context_kind(context) {{
 {validated_exit_arms}                        _ => {{}}
                     }}
-                    listener.exit_every_rule(ValidatedRuleNode {{ __node: context }})?;
+                    listener.exit_every_rule(ValidatedRuleNode::__new(context))?;
                     if let Some(states) = &mut invocation_states {{
                         states.remove(0);
                     }}
@@ -606,7 +472,7 @@ impl<T: {validated_visitor_trait}> antlr4_runtime::ParseTreeVisitor
     ) -> bool {{
         {validated_visitor_trait}::should_visit_next_child(
             self.0,
-            ValidatedRuleNode {{ __node: context }},
+            ValidatedRuleNode::__new(context),
             current_result,
         )
     }}

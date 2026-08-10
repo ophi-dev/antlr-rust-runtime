@@ -3088,8 +3088,8 @@ fn renders_parse_convenience_without_replacing_manual_constructor() {
 fn validated_parse_names_match_lowercase_grammar_surface() {
     let rendered = render_parser("u", &minimal_parser_data()).expect("parser should render");
 
-    assert!(rendered.contains("pub struct uValidatedTree"));
-    assert!(rendered.contains("pub enum uValidationError"));
+    assert!(rendered.contains("pub type uValidatedTree = antlr4_runtime::ValidatedTree;"));
+    assert!(rendered.contains("pub type uValidationError = antlr4_runtime::ValidationError;"));
     assert!(rendered.contains("pub fn validate(self) -> Result<uValidatedTree, uValidationError>"));
     assert!(!rendered.contains("UValidatedTree"));
     assert!(!rendered.contains("UValidationError"));

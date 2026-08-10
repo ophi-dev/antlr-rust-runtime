@@ -552,8 +552,8 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
     );
     let parser = fs::read_to_string(out.join("t_parser.rs")).expect("parser should be emitted");
     for expected in [
-        "pub struct TValidatedTree",
-        "pub enum TValidationError",
+        "pub type TValidatedTree = antlr4_runtime::ValidatedTree;",
+        "pub type TValidationError = antlr4_runtime::ValidationError;",
         "pub fn parse_validated<L: TokenSource>",
         "pub fn parse_stream_validated<I: antlr4_runtime::CharStream, L: TokenSource>",
         "pub fn validate(self) -> Result<TValidatedTree, TValidationError>",
@@ -566,7 +566,7 @@ fn validated_tree_makes_required_children_infallible_after_full_validation() {
         "rule atom_children: many(AtomContext[",
         "label_token tails: many(skip(0), [",
         "let _ = context.required_rule().map_err(TValidationError::MissingChild)?;",
-        "TValidationError::InvalidChildCount",
+        "antlr4_runtime::require_min_count(context.atom_children().count(), 1, \"StartContext\", \"atom\")?;",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }

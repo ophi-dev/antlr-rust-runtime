@@ -357,8 +357,11 @@ macro_rules! __antlr4_rust_context {
 /// support items (`__rule_children`, `__token_children`,
 /// `__labeled_token_children`, `__labeled_token_children_matching`,
 /// `TerminalNode`, `__RecoveryContextState`) are runtime-owned
-/// [`crate::generated`] items the generated module imports by name;
-/// `ValidatedTreeContext` plus the
+/// [`crate::generated`] items the generated module imports by name, and
+/// `ValidatedRuleNode`/`FromValidatedRuleNode` resolve in the generated
+/// module's scope (module-local definitions through generated-code API
+/// revision 9, re-exports of the runtime's [`crate::validated`] types from
+/// revision 10); `ValidatedTreeContext` plus the
 /// `__from_child_node`/`__from_validated_child_node` constructors and the
 /// `__node`/`__invocation_states` context fields stay emitted per generated
 /// module (the validated marker must remain crate-local for the two impl

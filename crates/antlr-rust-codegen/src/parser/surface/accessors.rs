@@ -661,14 +661,13 @@ fn render_repeated_accessor_validation(
     view_name: &str,
     child_name: &str,
     minimum: usize,
-    validation_error_name: &str,
 ) {
     if minimum == 0 {
         return;
     }
     let _ = writeln!(
         out,
-        "        {{\n            let actual = context.{method}().count();\n            if actual < {minimum} {{\n                return Err({validation_error_name}::InvalidChildCount {{\n                    context: \"{view_name}\",\n                    child: \"{child_name}\",\n                    minimum: {minimum},\n                    actual,\n                }});\n            }}\n        }}"
+        "        antlr4_runtime::require_min_count(context.{method}().count(), {minimum}, \"{view_name}\", \"{child_name}\")?;"
     );
 }
 
@@ -913,7 +912,6 @@ fn render_rule_label_accessor(
             view_name,
             &label.source_name,
             label.cardinality.min,
-            validation_error_name,
         );
         return;
     }
@@ -965,7 +963,6 @@ fn render_token_label_accessor(
             view_name,
             &label.source_name,
             label.cardinality.min,
-            validation_error_name,
         );
         return;
     }
@@ -1056,7 +1053,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
                 view_name,
                 &child.name,
                 cardinality.min,
-                validation_error_name,
             );
             if antlr4rust_compat {
                 render_antlr4rust_indexed_rule_accessor(
@@ -1134,7 +1130,6 @@ fn render_context_child_accessors(context: ContextAccessorsRender<'_>) -> Render
                 view_name,
                 token_name,
                 cardinality.min,
-                validation_error_name,
             );
             if antlr4rust_compat {
                 render_antlr4rust_indexed_token_accessor(

@@ -7,13 +7,25 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 9: the grammar-independent support
-preamble every generated parser used to re-declare (the typed
-`TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
-the embedded-action `__GeneratedInput` facade) is now owned by the runtime's
-`generated` module and imported by generated modules, so it exists once in
-source and once in a linked binary. This runtime continues to accept
-revisions 1 through 8 because their required APIs remain supported.
+The current generator emits revision 10: the validated-parse surface every
+generated parser used to re-declare (the validated-tree and validated-rule-node
+types, the `FromValidatedRuleNode` trait, and the validation-error enum with
+its `Display`/`Error`/`From` machinery) is now owned by the runtime as the
+grammar-agnostic `ValidatedTree`, `ValidatedRuleNode`, `FromValidatedRuleNode`,
+and `ValidationError` types. Generated modules keep their public names as
+plain type aliases (`pub type TomlValidatedTree = antlr4_runtime::ValidatedTree;`),
+so `<Grammar>ValidatedTree` and `<Grammar>ValidationError` of different
+grammars are deliberately interchangeable types: a binary linking several
+generated parsers compiles one copy of the machinery and can handle all their
+validation errors uniformly. Grammar-specific detail (context and child names)
+stays in generated code as error-variant data, and generated
+`validate_tree_structure` implementations delegate repeated-child minimums to
+the runtime's `require_min_count` helper. Revision 9 moved the
+grammar-independent support preamble (the typed `TerminalNode`/`ErrorNode`
+wrappers, the context child-iteration helpers, and the embedded-action
+`__GeneratedInput` facade) into the runtime's `generated` module the same way.
+This runtime continues to accept revisions 1 through 9 because their required
+APIs remain supported.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when
