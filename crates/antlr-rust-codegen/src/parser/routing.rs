@@ -106,11 +106,53 @@ pub(crate) fn render_routing_plan(
     let adaptive_atn_probe_rule_slots = &plan.adaptive_atn_probe_rule_slots;
     writeln!(
         out,
-        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
+        "    const __GENERATED_RULE_BODIES: [Option<antlr4_runtime::generated::GeneratedRuleBody<Self>>; {}] = [",
+        rules.len()
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
-    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
+    for rule in rules {
+        match rule {
+            Some(rule) if rule.left_recursive => writeln!(
+                out,
+                "        Some(Self::parse_generated_rule_{}_precedence),",
+                rule.rule_index
+            ),
+            Some(rule) => writeln!(
+                out,
+                "        Some(Self::parse_generated_rule_{}),",
+                rule.rule_index
+            ),
+            None => writeln!(out, "        None,"),
+        }
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "    ];").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    #[inline(always)]\n    fn dispatch_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let body = Self::__GENERATED_RULE_BODIES.get(rule_index).copied().flatten().expect(\"generated rule dispatch target\");"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        antlr4_runtime::generated::dispatch_generated_rule(self, rule_index, precedence, allow_fallback, body)"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let _body = Self::__GENERATED_RULE_BODIES.get(rule_index).copied().flatten()?;"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
     for rule in rules.iter().flatten() {
         let index = rule.rule_index;
@@ -125,9 +167,10 @@ pub(crate) fn render_routing_plan(
             // coverage beat the long-call-chain optimization.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.dispatch_generated_rule({index}, precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
+            writeln!(out, "            {index} => None,").expect("writing to a string cannot fail");
         } else if let Some(slot) = adaptive_atn_preferred_rule_slots
             .get(index)
             .copied()
@@ -140,7 +183,7 @@ pub(crate) fn render_routing_plan(
             // parsing, still override the adaptive ATN preference.
             writeln!(
                 out,
-                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+                "            {index} if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.dispatch_generated_rule({index}, precedence, allow_fallback)),"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -148,15 +191,14 @@ pub(crate) fn render_routing_plan(
                 "            {index} if !self.adaptive_atn.preferred_rules[{slot}] => Some(self.parse_generated_rule_{index}_adaptive_dispatch(precedence, allow_fallback, None)),"
             )
             .expect("writing to a string cannot fail");
-        } else {
-            writeln!(
-                out,
-                "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
-            )
-            .expect("writing to a string cannot fail");
+            writeln!(out, "            {index} => None,").expect("writing to a string cannot fail");
         }
     }
-    writeln!(out, "            _ => None,").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "            _ => Some(self.dispatch_generated_rule(rule_index, precedence, allow_fallback)),"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     let step_render_context = GeneratedStepRenderContext {
@@ -185,7 +227,7 @@ pub(crate) fn render_routing_plan(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        let __result = self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);"
+                "        let __result = self.dispatch_generated_rule({index}, precedence, allow_fallback);"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -229,7 +271,7 @@ pub(crate) fn render_routing_plan(
             writeln!(
                 out,
                 "        if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() {{\n            \
-                 return self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
+                 return self.dispatch_generated_rule({index}, precedence, allow_fallback);\n        \
                  }}\n        \
                  let __adaptive_outermost = self.adaptive_atn.preference_depths[{slot}] == 0;\n        \
                  let __adaptive_rule_start = antlr4_runtime::IntStream::index(self.base.input());\n        \
@@ -247,7 +289,7 @@ pub(crate) fn render_routing_plan(
                  self.adaptive_atn.syntax_error_starts[{slot}] = self.base.number_of_syntax_errors();\n        \
                  }}\n        \
                  self.adaptive_atn.preference_depths[{slot}] += 1;\n        \
-                 let mut __result = self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback);\n        \
+                 let mut __result = self.dispatch_generated_rule({index}, precedence, allow_fallback);\n        \
                  self.adaptive_atn.preference_depths[{slot}] -= 1;"
             )
             .expect("writing to a string cannot fail");
@@ -286,23 +328,6 @@ pub(crate) fn render_routing_plan(
             writeln!(out, "        __result").expect("writing to a string cannot fail");
             writeln!(out, "    }}").expect("writing to a string cannot fail");
         }
-        writeln!(
-            out,
-            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
-        )
-        .expect("writing to a string cannot fail");
-        let target_call = if rule.left_recursive {
-            format!("self.parse_generated_rule_{index}_precedence(precedence, allow_fallback)")
-        } else {
-            writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
-            format!("self.parse_generated_rule_{index}(precedence, allow_fallback)")
-        };
-        writeln!(
-            out,
-            "        antlr4_runtime::__antlr4_rust_generated_rule! {{ dispatch self, {index}, GeneratedRuleError::Fatal; {target_call} }}"
-        )
-        .expect("writing to a string cannot fail");
-        writeln!(out, "    }}").expect("writing to a string cannot fail");
         render_generated_rule_method(
             &mut out,
             rule,

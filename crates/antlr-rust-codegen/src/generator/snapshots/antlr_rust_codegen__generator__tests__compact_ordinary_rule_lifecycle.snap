@@ -2,10 +2,23 @@
 source: crates/antlr-rust-codegen/src/generator/tests.rs
 expression: rendered_generated_rule_methods(&rendered)
 ---
+    const __GENERATED_RULE_BODIES: [Option<antlr4_runtime::generated::GeneratedRuleBody<Self>>; 1] = [
+        Some(Self::parse_generated_rule_0),
+    ];
+
     #[allow(dead_code)]
-    fn parse_generated_rule_0_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
-        let _ = precedence;
-        antlr4_runtime::__antlr4_rust_generated_rule! { dispatch self, 0, GeneratedRuleError::Fatal; self.parse_generated_rule_0(precedence, allow_fallback) }
+    #[inline(always)]
+    fn dispatch_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {
+        let body = Self::__GENERATED_RULE_BODIES.get(rule_index).copied().flatten().expect("generated rule dispatch target");
+        antlr4_runtime::generated::dispatch_generated_rule(self, rule_index, precedence, allow_fallback, body)
+    }
+
+    #[allow(dead_code)]
+    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {
+        let _body = Self::__GENERATED_RULE_BODIES.get(rule_index).copied().flatten()?;
+        match rule_index {
+            _ => Some(self.dispatch_generated_rule(rule_index, precedence, allow_fallback)),
+        }
     }
 
     #[allow(dead_code)]

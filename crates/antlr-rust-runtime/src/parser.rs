@@ -111,10 +111,9 @@ const FAST_RECOGNIZE_STACK_CHECK_INTERVAL: usize = 8;
 const FAST_RECOGNIZE_RED_ZONE: usize = 1024 * 1024;
 const FAST_RECOGNIZE_STACK_SIZE: usize = 4 * 1024 * 1024;
 /// Generated recursive-descent rule methods map grammar-rule nesting onto
-/// native call depth. Their `_dispatch` boundary samples remaining stack
-/// capacity once per this many rule-context frames, so between two samples at
-/// most this many rule bodies of native growth can occur — far below the
-/// red zone.
+/// native call depth. Their dispatch boundary samples remaining stack capacity
+/// once per this many rule-context frames, so between two samples at most this
+/// many rule bodies of native growth can occur — far below the red zone.
 const GENERATED_RULE_STACK_CHECK_INTERVAL: usize = 8;
 /// Whole-rule direct adaptive execution is allowed to give up and fall back to
 /// the existing recognizer. Keep the guard at the same order of magnitude as
@@ -124,7 +123,7 @@ const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
 /// Runs a generated rule body after ensuring native stack capacity, growing
 /// onto a segmented stack when remaining capacity enters the red zone.
 ///
-/// Generated `parse_generated_rule_*_dispatch` methods call this when
+/// Generated rule dispatch calls this when
 /// [`BaseParser::generated_rule_stack_check_due`] fires so deeply nested input
 /// parses (or reports a syntax error) instead of aborting the process.
 pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
@@ -135,29 +134,11 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 ///
 /// This is an implementation detail of `antlr4-rust-gen`, not a stable
 /// hand-written parser API. The binders supplied by generated code keep
-/// grammar-specific locals and steps inline while this macro owns the fixed
-/// dispatch, entry, recovery, and exit state machine.
+/// grammar-specific locals and steps inline while this macro owns the entry,
+/// recovery, and exit state machine.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_generated_rule {
-    (
-        dispatch $parser:ident, $rule:expr, $fatal:path;
-        $body:expr
-    ) => {{
-        if let Some(error) = $parser.base.rule_depth_cap_violation() {
-            return Err($fatal(error));
-        }
-        if let Some(error) = $parser.base.parse_listener_enter_rule($rule) {
-            return Err($fatal(error));
-        }
-        let __listener_result = if $parser.base.generated_rule_stack_check_due() {
-            $crate::grow_generated_rule_stack(|| $body)
-        } else {
-            $body
-        };
-        $parser.base.parse_listener_exit_rule($rule);
-        __listener_result
-    }};
     (
         ordinary $parser:ident, $state:expr, $rule:expr, $allow_fallback:expr,
         $atn:expr, $fatal:path;
@@ -298,24 +279,6 @@ macro_rules! __antlr4_rust_generated_rule {
             $parser.base.$abort();
             $parser.base.restore_generated_diagnostics($marker);
             return Err($crate::generated::GeneratedRuleError::AdaptiveRetry);
-        }
-    };
-    (
-        @retry
-        [$condition:expr => $retry_error:expr]
-        parser $parser:ident;
-        marker $marker:ident;
-        abort $abort:ident;
-    ) => {
-        // Back-compat only: generated-code API revisions <= 10 spell the
-        // adaptive retry unwind as an explicit condition/error pair. The
-        // bundled generator emits `retry [adaptive]` since revision 11; keep
-        // this arm while those revisions remain accepted by
-        // `__antlr4_rust_require_codegen_api!`.
-        if $condition {
-            $parser.base.$abort();
-            $parser.base.restore_generated_diagnostics($marker);
-            return Err($retry_error);
         }
     };
 }

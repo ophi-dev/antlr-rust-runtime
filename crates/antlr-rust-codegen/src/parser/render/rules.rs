@@ -307,14 +307,15 @@ pub(crate) fn render_generated_step(
                     .flatten();
                 probes_enclosing_candidate =
                     caller_candidate_slot.is_some_and(|slot| probe_slots.contains(&slot));
-                let dispatch = if probes_enclosing_candidate {
-                    "adaptive_probe_dispatch"
+                if probes_enclosing_candidate {
+                    format!(
+                        "self.parse_generated_rule_{rule_index}_adaptive_probe_dispatch({precedence}, false).map_err(GeneratedRuleError::into_error)"
+                    )
                 } else {
-                    "dispatch"
-                };
-                format!(
-                    "self.parse_generated_rule_{rule_index}_{dispatch}({precedence}, false).map_err(GeneratedRuleError::into_error)"
-                )
+                    format!(
+                        "self.dispatch_generated_rule({rule_index}, {precedence}, false).map_err(GeneratedRuleError::into_error)"
+                    )
+                }
             } else {
                 from_generated_call.clone()
             };

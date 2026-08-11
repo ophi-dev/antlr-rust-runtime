@@ -7,6 +7,7 @@ use crate::atn::serialized::SerializedAtn;
 use crate::char_stream::{CharStream, InputStream};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
+use crate::parser::{BaseParser, SemanticHooks, grow_generated_rule_stack};
 use crate::recognizer::{RecognizerData, RecognizerMetadata};
 use crate::token::{Token as _, TokenSource, TokenStore, TokenView};
 use crate::token_stream::CommonTokenStream;
@@ -1155,6 +1156,21 @@ macro_rules! __antlr4_rust_parser_facade {
             }
         }
 
+        impl<$source, $hooks> $crate::generated::GeneratedRuleParser for $parser<$source, $hooks>
+        where
+            $source: $crate::token::TokenSource,
+            $hooks: $crate::parser::SemanticHooks,
+        {
+            type Source = $source;
+            type Hooks = $hooks;
+
+            fn generated_rule_base(
+                &mut self,
+            ) -> &mut $crate::parser::BaseParser<Self::Source, Self::Hooks> {
+                &mut self.$base
+            }
+        }
+
         impl<$source, $hooks> $crate::recognizer::Recognizer for $parser<$source, $hooks>
         where
             $source: $crate::token::TokenSource,
@@ -1726,6 +1742,18 @@ pub trait GeneratedParser {
     fn parser_atn() -> &'static ParserAtn;
 }
 
+/// Exposes the parser base needed by the generated-rule dispatch lifecycle.
+///
+/// This is implemented by [`crate::__antlr4_rust_parser_facade`] for generated
+/// parsers so [`dispatch_generated_rule`] can remain grammar-agnostic.
+#[doc(hidden)]
+pub trait GeneratedRuleParser {
+    type Source: TokenSource;
+    type Hooks: SemanticHooks;
+
+    fn generated_rule_base(&mut self) -> &mut BaseParser<Self::Source, Self::Hooks>;
+}
+
 // ---------------------------------------------------------------------------
 // Parse-driver and entry-point support shared by every generated parser and
 // lexer module. The `__antlr4_rust_parser_driver!` and
@@ -1761,6 +1789,50 @@ impl GeneratedRuleError {
             ),
         }
     }
+}
+
+/// Uniform function-pointer shape for one generated parser rule body.
+#[doc(hidden)]
+pub type GeneratedRuleBody<P> =
+    fn(&mut P, i32, bool) -> Result<crate::tree::ParseTree, GeneratedRuleError>;
+
+/// Applies the grammar-independent generated-rule guard around one table-selected body.
+///
+/// The function stays out of line so every generated parser monomorphization
+/// carries one lifecycle shell instead of repeating it for every rule.
+#[doc(hidden)]
+#[inline(never)]
+pub fn dispatch_generated_rule<P>(
+    parser: &mut P,
+    rule_index: usize,
+    precedence: i32,
+    allow_fallback: bool,
+    body: GeneratedRuleBody<P>,
+) -> Result<crate::tree::ParseTree, GeneratedRuleError>
+where
+    P: GeneratedRuleParser,
+{
+    if let Some(error) = parser.generated_rule_base().rule_depth_cap_violation() {
+        return Err(GeneratedRuleError::Fatal(error));
+    }
+    if let Some(error) = parser
+        .generated_rule_base()
+        .parse_listener_enter_rule(rule_index)
+    {
+        return Err(GeneratedRuleError::Fatal(error));
+    }
+    let result = if parser
+        .generated_rule_base()
+        .generated_rule_stack_check_due()
+    {
+        grow_generated_rule_stack(|| body(parser, precedence, allow_fallback))
+    } else {
+        body(parser, precedence, allow_fallback)
+    };
+    parser
+        .generated_rule_base()
+        .parse_listener_exit_rule(rule_index);
+    result
 }
 
 /// Adaptive-ATN preference state for the generated rules a grammar routes

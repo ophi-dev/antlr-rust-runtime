@@ -4,31 +4,21 @@ extern crate self as antlr4_runtime;
 
 /// Current generated-source/runtime contract revision emitted by the bundled generator.
 #[doc(hidden)]
-pub const __ANTLR4_RUST_CODEGEN_API: u32 = 11;
+pub const __ANTLR4_RUST_CODEGEN_API: u32 = 12;
 
 /// Verifies that generated source is compatible with the selected runtime.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_require_codegen_api {
-    (1, $generator_version:literal) => {};
-    (2, $generator_version:literal) => {};
-    (3, $generator_version:literal) => {};
-    (4, $generator_version:literal) => {};
-    (5, $generator_version:literal) => {};
-    (6, $generator_version:literal) => {};
-    (7, $generator_version:literal) => {};
-    (8, $generator_version:literal) => {};
-    (9, $generator_version:literal) => {};
-    (10, $generator_version:literal) => {};
-    (11, $generator_version:literal) => {};
+    (12, $generator_version:literal) => {};
     ($requested:literal, $generator_version:literal) => {
         compile_error!(concat!(
             "antlr4-rust generated-code API mismatch: antlr4-rust-gen v",
             $generator_version,
             " emitted generated-code API revision ",
             stringify!($requested),
-            ", but the selected antlr-rust-runtime supports revisions 1, 2, 3, 4, 5, 6, 7, 8, \
-             9, 10, and 11; regenerate this recognizer with a compatible antlr4-rust-gen or \
+            ", but the selected antlr-rust-runtime supports revision 12; regenerate this \
+             recognizer with a compatible antlr4-rust-gen or \
              select a compatible antlr-rust-runtime dependency"
         ));
     };
