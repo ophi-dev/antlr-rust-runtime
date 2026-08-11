@@ -175,7 +175,8 @@ per-rule `parse_generated_rule_N_dispatch` wrapper and the ordinary
 rule-routing match arms with one generated function-pointer table. The
 runtime-owned `generated::dispatch_generated_rule` function applies the
 depth-cap, parse-listener, stack-growth, and balanced-exit guard around the
-selected body; generated code retains only exceptional ATN-preference routing.
+selected body; generated code retains explicit ATN-preference and
+adaptive-routing exceptions.
 Revision 11 stopped re-declaring the parse-driver core and entry-point
 scaffolding in every generated parser:
 the driver methods (`parse_rule*`, `parse_interpreted_rule*`) expand from the

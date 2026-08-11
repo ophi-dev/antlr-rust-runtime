@@ -162,7 +162,19 @@ fn deeply_nested_input_parses_without_native_stack_overflow() {
         parser.contains("antlr4_runtime::generated::dispatch_generated_rule("),
         "generated rules must use the runtime lifecycle dispatcher\n{parser}"
     );
-    assert!(!parser.contains("parse_generated_rule_0_dispatch"));
+    let legacy_dispatch = parser.lines().find(|line| {
+        let Some(suffix) = line.trim_start().strip_prefix("fn parse_generated_rule_") else {
+            return false;
+        };
+        let Some((rule_index, suffix)) = suffix.split_once('_') else {
+            return false;
+        };
+        rule_index.bytes().all(|byte| byte.is_ascii_digit()) && suffix.starts_with("dispatch(")
+    });
+    assert!(
+        legacy_dispatch.is_none(),
+        "generated parser retained a per-rule dispatch wrapper: {legacy_dispatch:?}"
+    );
 
     assert_generated_project(
         temp.path(),
