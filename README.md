@@ -170,8 +170,15 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 11, which stops re-declaring
-the parse-driver core and entry-point scaffolding in every generated parser:
+The bundled generator currently emits revision 12, which replaces every
+per-rule `parse_generated_rule_N_dispatch` wrapper and the ordinary
+rule-routing match arms with one generated function-pointer table. The
+runtime-owned `generated::dispatch_generated_rule` function applies the
+depth-cap, parse-listener, stack-growth, and balanced-exit guard around the
+selected body; generated code retains explicit ATN-preference and
+adaptive-routing exceptions.
+Revision 11 stopped re-declaring the parse-driver core and entry-point
+scaffolding in every generated parser:
 the driver methods (`parse_rule*`, `parse_interpreted_rule*`) expand from the
 runtime's `__antlr4_rust_parser_driver!` macro with the module's interpreted
 fallback supplied as a binder block, the `parse*` / `parse_stream*` functions
@@ -192,9 +199,9 @@ types while all grammars share one error type (per-grammar trait impls on the
 error name must collapse into one; see `docs/migration.md`). Revision 9
 similarly imports the grammar-independent generated support surface (the typed
 terminal/error-node wrappers, context child-iteration helpers, and
-embedded-action input facade) from the runtime's `generated` module. The
-runtime also accepts revisions 1 through 10 because their older generated
-recognizers use API surfaces that remain available.
+embedded-action input facade) from the runtime's `generated` module. Revision
+12 is the only accepted generated-code contract; older generated recognizers
+must be regenerated when upgrading to this release.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

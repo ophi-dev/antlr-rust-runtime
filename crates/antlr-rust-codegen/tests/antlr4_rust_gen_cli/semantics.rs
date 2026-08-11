@@ -686,7 +686,7 @@ fn imported_rule_arguments_and_locals_use_structural_call_owners() {
         "{parser}"
     );
     assert!(
-        parser.contains("parse_generated_rule_2_dispatch(1, false)"),
+        parser.contains("dispatch_generated_rule(2, 1, false)"),
         "{parser}"
     );
 }

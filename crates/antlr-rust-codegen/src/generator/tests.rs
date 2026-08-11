@@ -39,10 +39,10 @@ fn rendered_facade_declaration<'a>(rendered: &'a str, macro_name: &str) -> &'a s
 }
 
 fn rendered_generated_rule_methods(rendered: &str) -> &str {
-    let marker = "    #[allow(dead_code)]\n    fn parse_generated_rule_0_dispatch";
+    let marker = "    const __GENERATED_RULE_BODIES:";
     let start = rendered
         .find(marker)
-        .unwrap_or_else(|| panic!("generated rule dispatch method"));
+        .unwrap_or_else(|| panic!("generated rule body table"));
     rendered[start..].trim_end()
 }
 
@@ -729,7 +729,7 @@ fn compiles_left_recursive_parser_rule() {
     insta::assert_debug_snapshot!("compiles_left_recursive_parser_rule", body.steps);
 
     let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
-    assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
+    assert!(rendered.contains("Some(Self::parse_generated_rule_0_precedence),"));
     assert!(rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)"));
     assert!(rendered.contains("parse_rule_precedence_from_generated(0, 3)"));
     assert!(rendered.contains("precpred(_ctx, 2)"));
@@ -794,13 +794,10 @@ fn generated_parent_keeps_interpreted_child_call() {
 
     let rendered = render_generated_rule_dispatch(&rules, &[true, false], &BTreeMap::new(), false);
 
-    assert!(
-        rendered.contains(
-            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
-        )
-    );
+    assert!(rendered.contains("Some(Self::parse_generated_rule_0),"));
+    assert!(rendered.contains("None,"));
     assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
-    assert!(!rendered.contains("parse_generated_rule_1_dispatch"));
+    assert!(!rendered.contains("parse_generated_rule_1("));
 }
 
 #[test]
@@ -1104,13 +1101,9 @@ fn renders_atn_preferred_dispatch_only_for_generated_only_mode() {
     // A configured depth cap overrides the ATN preference: only generated
     // bodies enforce the bound, so the guard admits either trigger.
     assert!(rendered.contains(
-            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() => Some(self.dispatch_generated_rule(0, precedence, allow_fallback))"
         ));
-    assert!(
-        !rendered.contains(
-            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
-        )
-    );
+    assert!(rendered.contains("0 => None,"));
     // The ATN-preferred child call routes through the buffering wrapper.
     assert!(rendered.contains("self.parse_rule_precedence_from_generated(2, 0)"));
     assert!(!rendered.contains("self.parse_interpreted_rule_precedence(2, 0)"));
@@ -1135,7 +1128,7 @@ fn renders_adaptive_atn_preference_after_prediction_becomes_expensive() {
         render_generated_rule_dispatch(&rules, &vec![true; rules.len()], &BTreeMap::new(), false);
 
     assert!(rendered.contains(
-            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+            "0 if self.generated_only() || self.base.has_rule_depth_cap() || self.base.has_parse_listeners() || self.base.observes_parser_decisions() => Some(self.dispatch_generated_rule(0, precedence, allow_fallback))"
         ));
     assert!(rendered.contains(
             "0 if !self.adaptive_atn.preferred_rules[0] => Some(self.parse_generated_rule_0_adaptive_dispatch(precedence, allow_fallback, None))"
@@ -1249,12 +1242,11 @@ fn embedded_rules_never_use_atn_preferred_fallback() {
     );
 
     assert!(!rendered.contains("if self.generated_only()"));
-    assert!(
-        rendered.contains(
-            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
-        )
-    );
-    assert!(rendered.contains("self.parse_generated_rule_1_dispatch(0, false)"));
+    assert!(rendered.contains("Some(Self::parse_generated_rule_0),"));
+    assert!(rendered.contains(
+        "_ => Some(self.dispatch_generated_rule(rule_index, precedence, allow_fallback))"
+    ));
+    assert!(rendered.contains("self.dispatch_generated_rule(1, 0, false)"));
     assert!(!rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
 }
 
@@ -2896,7 +2888,7 @@ fn non_embedded_parser_action_runs_at_generated_position() {
     let rendered = render_parser("TParser", &action_parser_data()).expect("parser should render");
 
     assert!(
-        rendered.contains("parse_generated_rule_0_dispatch"),
+        rendered.contains("Some(Self::parse_generated_rule_0),"),
         "a hook-routed parser action must remain on the generated path"
     );
     assert!(rendered.contains("parser_action_at_current_indexed"));
@@ -2925,7 +2917,7 @@ fn untranslated_parser_predicate_keeps_generated_rule() {
     let rendered =
         render_parser("SParser", &predicate_parser_data()).expect("parser should render");
     assert!(
-        rendered.contains("parse_generated_rule_0_dispatch"),
+        rendered.contains("Some(Self::parse_generated_rule_0),"),
         "an untranslated predicate must not disable the generated rule"
     );
     // The coordinate reaches SemIR as a hook node, so an attached
@@ -3160,7 +3152,7 @@ fn call_rule_step_skips_child_action_scaffolding_without_parser_actions() {
 
     assert!(rendered.contains("antlr4_runtime::__antlr4_rust_invoke_subrule!(self, "));
     assert!(rendered.contains(
-        "self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error)"
+        "self.dispatch_generated_rule(1, 0, false).map_err(GeneratedRuleError::into_error)"
     ));
     assert!(!rendered.contains("__child_action_marker"));
     assert!(!rendered.contains("__child_member_checkpoint"));

@@ -7,9 +7,16 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 11: the parse-driver core and entry-point
-scaffolding every generated parser used to re-declare is now owned by the
-runtime. The driver methods (`parse_rule`, `parse_rule_precedence`,
+The current generator emits revision 12: generated parsers now store their
+uniform rule-body function pointers in one table and call the runtime-owned
+`generated::dispatch_generated_rule` lifecycle guard. The per-rule
+`parse_generated_rule_N_dispatch` wrappers are gone, ordinary routing is one
+table lookup, and the exceptional ATN-preference/adaptive routes preserve their
+existing conditions.
+
+Revision 11 moved the parse-driver core and entry-point scaffolding every
+generated parser used to re-declare into the runtime. The driver methods
+(`parse_rule`, `parse_rule_precedence`,
 `parse_rule_precedence_from_generated`, `parse_rule_precedence_inner`,
 `parse_interpreted_rule`, `parse_interpreted_rule_precedence`) expand from the
 runtime's `__antlr4_rust_parser_driver!` macro; the generated module supplies
@@ -70,9 +77,8 @@ infallible validated accessors panic.
 Revision 9 moved the grammar-independent support preamble (the typed
 `TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
 the embedded-action `__GeneratedInput` facade) into the runtime's `generated`
-module the same way. This runtime continues to accept revisions 1 through 10
-because their required APIs remain supported; a checked-in frozen revision-9
-module is compiled against the runtime in CI to enforce that claim.
+module the same way. Revision 12 is the only accepted generated-code contract;
+regenerate older lexer and parser modules when upgrading to this release.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when
