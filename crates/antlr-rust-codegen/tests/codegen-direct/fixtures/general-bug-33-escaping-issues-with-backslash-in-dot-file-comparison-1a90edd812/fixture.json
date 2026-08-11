@@ -66,7 +66,6 @@
     },
     "exit_status": 0
   },
-  "regeneration_command": "node tools/grammar-frontend/generate-general-bug-fixtures.mjs --update --antlr-ng-root target/antlr-cleanroom/antlr-ng-1f68422 --java-root target/antlr-cleanroom/antlr4-4.13.2-tool --antlr-jar target/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar target/antlr-cleanroom/tools/icu4j-78.1.jar",
   "files": {
     "abbLexer.g4": "d68b644ea95a62264050b9e2770d9047ae0e87b4831b52c1687f87f2dba47411",
     "abbLexer.interp": "543f4fe2e4b71def8c25c2b3cd536f5bc2c56ed3a9eaec3e5ec55446ec88eb57",

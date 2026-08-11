@@ -41,7 +41,7 @@
     "source_sha256": "4faeffad53d8e8f63f6514f218445c65b379a9d06b14b95641f54b6d5805bfac"
   },
   "expected": "success",
-  "phase_c_runtime_oracle": {
+  "runtime_oracle": {
     "kind": "parser-start-without-eof",
     "compatibility_verdict": "Java ANTLR 4.13.2",
     "source_adaptation": null

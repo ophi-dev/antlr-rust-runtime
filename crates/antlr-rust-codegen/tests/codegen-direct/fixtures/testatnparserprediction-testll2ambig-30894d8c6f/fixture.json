@@ -42,7 +42,7 @@
     "source_sha256": "030dfaa8b5745f753ac535b595bc8648e1e60e1438c67807b961b14024190ce1"
   },
   "expected": "success",
-  "phase_c_runtime_oracle": {
+  "runtime_oracle": {
     "kind": "prediction",
     "compatibility_verdict": "Java ANTLR 4.13.2",
     "source_adaptation": "added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge"

@@ -22,11 +22,11 @@ const antlrNg = resolve(
 );
 const corpusPath = resolve(
     repo,
-    options.corpus ?? "crates/antlr-rust-codegen/tests/codegen-direct/frontend-corpus.json",
+    options.corpus ?? "crates/antlr-rust-g4-parser/tests/frontend/frontend-corpus.json",
 );
 const outputPath = resolve(
     repo,
-    options.output ?? "crates/antlr-rust-codegen/tests/codegen-direct/frontend-snapshots.tsv",
+    options.output ?? "crates/antlr-rust-g4-parser/tests/frontend/frontend-snapshots.tsv",
 );
 
 const corpus = JSON.parse(await readFile(corpusPath, "utf8"));

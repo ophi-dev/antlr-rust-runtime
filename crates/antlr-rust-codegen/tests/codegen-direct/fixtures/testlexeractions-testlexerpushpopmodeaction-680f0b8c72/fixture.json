@@ -41,7 +41,7 @@
     "source_sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
   },
   "expected": "success",
-  "phase_c_runtime_oracle": {
+  "runtime_oracle": {
     "kind": "lexer-actions",
     "compatibility_verdict": "Java ANTLR 4.13.2",
     "source_adaptation": null

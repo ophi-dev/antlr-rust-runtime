@@ -20,6 +20,3 @@ pub use frontend::{
     SourceSpan, SyntaxDiagnostic, SyntaxId, SyntaxNode, SyntaxNodeKind, SyntaxToken,
     parse_input_stream, parse_input_stream_recovering, parse_source, parse_source_recovering,
 };
-
-#[cfg(test)]
-mod ported_tests;

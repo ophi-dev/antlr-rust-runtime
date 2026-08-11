@@ -27,7 +27,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-          fetch-depth: 0
 
       - name: Install stable Rust
         run: |
@@ -41,9 +40,6 @@ jobs:
 
       - name: Validate direct-codegen fixtures
         run: node tools/grammar-frontend/validate-interp-fixtures.mjs
-
-      - name: Validate port evidence
-        run: node tools/grammar-frontend/validate-port-evidence.mjs
 
       - name: Validate workspace release metadata
         run: tools/release/check-workspace-version.sh

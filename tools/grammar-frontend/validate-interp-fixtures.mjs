@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { digest } from "./evidence-common.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
@@ -107,7 +106,9 @@ async function validateHash(path, expectedHash, label) {
         return;
     }
     try {
-        const actualHash = digest(await readFile(path));
+        const actualHash = createHash("sha256")
+            .update(await readFile(path))
+            .digest("hex");
         artifactCount += 1;
         expect(actualHash === expectedHash, `${label}: SHA-256 differs`);
     } catch (error) {
