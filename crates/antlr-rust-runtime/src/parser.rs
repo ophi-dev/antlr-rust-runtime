@@ -18448,6 +18448,40 @@ mod tests {
     }
 
     #[test]
+    fn full_context_exact_conflict_reports_attempt_and_ambiguity() {
+        let atn = two_alt_decision_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::new(2).with_text("y"),
+            TestToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 1,
+                    conflicting_alts: vec![1, 2],
+                    exact: true,
+                }),
+            },
+        );
+
+        insta::assert_debug_snapshot!(
+            "full_context_exact_conflict_reports_attempt_and_ambiguity",
+            parser.generated_parser_diagnostics
+        );
+    }
+
+    #[test]
     fn generated_match_not_set_recovers_empty_complement_at_eof() {
         let atn = complement_set_atn();
         let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
