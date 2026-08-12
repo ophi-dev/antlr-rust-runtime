@@ -12,6 +12,8 @@ const NO_PREDICTION: u32 = u32::MAX;
 const ACCEPT_STATE: u8 = 1 << 0;
 const REQUIRES_FULL_CONTEXT: u8 = 1 << 1;
 const HAS_SEMANTIC_CONTEXT: u8 = 1 << 2;
+const EXACT_CONFLICT: u8 = 1 << 3;
+const CONTEXT_CONTAINMENT_CONFLICT: u8 = 1 << 4;
 
 // Across the protected Kotlin, C#, Java, and Trino fixtures, rows with fewer
 // than eight edges were overwhelmingly sparse. Above that point, dense rows
@@ -316,15 +318,26 @@ impl ParserDfa {
             mut configs,
             prediction,
             requires_full_context,
+            exact_conflict,
+            context_containment_conflict,
             conflicting_alts,
             has_semantic_context_for_alt,
         } = state;
         configs.set_readonly(true);
-        self.hot.push_state(
-            prediction,
-            requires_full_context,
-            has_semantic_context_for_alt,
-        );
+        let mut flags = 0;
+        if requires_full_context {
+            flags |= REQUIRES_FULL_CONTEXT;
+        }
+        if exact_conflict {
+            flags |= EXACT_CONFLICT;
+        }
+        if context_containment_conflict {
+            flags |= CONTEXT_CONTAINMENT_CONFLICT;
+        }
+        if has_semantic_context_for_alt {
+            flags |= HAS_SEMANTIC_CONTEXT;
+        }
+        self.hot.push_state(prediction, flags);
         self.cold.push(configs, conflicting_alts);
         self.interner.insert(fingerprint, id);
         self.learning.states_created = self.learning.states_created.saturating_add(1);
@@ -391,6 +404,8 @@ impl ParserDfa {
             configs: self.cold.configs[index].clone(),
             prediction: self.hot.prediction(state),
             requires_full_context: self.hot.has_flag(state, REQUIRES_FULL_CONTEXT),
+            exact_conflict: self.hot.has_flag(state, EXACT_CONFLICT),
+            context_containment_conflict: self.hot.has_flag(state, CONTEXT_CONTAINMENT_CONFLICT),
             conflicting_alts: self.cold.extras[index].conflicting_alts.clone(),
             has_semantic_context_for_alt: self.hot.has_flag(state, HAS_SEMANTIC_CONTEXT),
         }
@@ -452,6 +467,15 @@ impl<'a> ParserDfaStateView<'a> {
         self.dfa.hot.has_flag(self.id, REQUIRES_FULL_CONTEXT)
     }
 
+    /// Whether this accept state was proven to contain an exact SLL conflict.
+    pub fn is_exact_conflict(self) -> bool {
+        self.dfa.hot.has_flag(self.id, EXACT_CONFLICT)
+    }
+
+    pub(crate) fn is_context_containment_conflict(self) -> bool {
+        self.dfa.hot.has_flag(self.id, CONTEXT_CONTAINMENT_CONFLICT)
+    }
+
     pub fn has_semantic_context(self) -> bool {
         self.dfa.hot.has_flag(self.id, HAS_SEMANTIC_CONTEXT)
     }
@@ -478,6 +502,8 @@ pub(crate) struct DfaStateBuilder {
     pub(crate) configs: AtnConfigSet,
     prediction: Option<usize>,
     requires_full_context: bool,
+    exact_conflict: bool,
+    context_containment_conflict: bool,
     conflicting_alts: Vec<usize>,
     has_semantic_context_for_alt: bool,
 }
@@ -488,6 +514,8 @@ impl DfaStateBuilder {
             configs,
             prediction: None,
             requires_full_context: false,
+            exact_conflict: false,
+            context_containment_conflict: false,
             conflicting_alts: Vec::new(),
             has_semantic_context_for_alt: false,
         }
@@ -499,6 +527,14 @@ impl DfaStateBuilder {
 
     pub(crate) const fn set_requires_full_context(&mut self, required: bool) {
         self.requires_full_context = required;
+    }
+
+    pub(crate) const fn set_exact_conflict(&mut self, exact: bool) {
+        self.exact_conflict = exact;
+    }
+
+    pub(crate) const fn set_context_containment_conflict(&mut self, containment: bool) {
+        self.context_containment_conflict = containment;
     }
 
     pub(crate) fn set_conflicting_alts(&mut self, conflicting_alts: Vec<usize>) {
@@ -526,26 +562,14 @@ impl DfaHotTables {
         }
     }
 
-    fn push_state(
-        &mut self,
-        prediction: Option<usize>,
-        requires_full_context: bool,
-        has_semantic_context: bool,
-    ) {
+    fn push_state(&mut self, prediction: Option<usize>, mut flags: u8) {
         self.edges.push_row();
         let prediction = prediction.map_or(NO_PREDICTION, |prediction| {
             compact_index(prediction, "DFA prediction must fit below the u32 sentinel")
         });
         self.accept_predictions.push(prediction);
-        let mut flags = 0;
         if prediction != NO_PREDICTION {
             flags |= ACCEPT_STATE;
-        }
-        if requires_full_context {
-            flags |= REQUIRES_FULL_CONTEXT;
-        }
-        if has_semantic_context {
-            flags |= HAS_SEMANTIC_CONTEXT;
         }
         self.flags.push(flags);
         debug_assert_eq!(self.edges.len(), self.accept_predictions.len());

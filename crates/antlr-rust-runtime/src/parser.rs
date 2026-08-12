@@ -17429,6 +17429,110 @@ mod tests {
         finish_atn(atn)
     }
 
+    /// The outer decision sees helper-rule contexts `{common, extra}` and
+    /// `{common}` after token 1. The nested decision is overridden in the
+    /// recovery test so committed parsing can exercise token deletion after
+    /// the outer SLL containment conflict selects alternative 1.
+    fn context_containment_recovery_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(5);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::BlockStart, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::Basic, 0),
+            (4, AtnStateKind::Basic, 0),
+            (5, AtnStateKind::Basic, 0),
+            (6, AtnStateKind::BlockEnd, 0),
+            (7, AtnStateKind::RuleStop, 0),
+            (8, AtnStateKind::RuleStart, 1),
+            (9, AtnStateKind::Basic, 1),
+            (10, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 8])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![7, 10])
+            .expect("rule stop states");
+        atn.set_end_state(1, 6).expect("block end state");
+        atn.add_decision_state(1).expect("outer decision");
+        atn.add_decision_state(2).expect("inner decision");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        for follow_state in [4, 5] {
+            atn.add_transition(
+                2,
+                ParserTransitionSpec::Rule {
+                    target: 8,
+                    rule_index: 1,
+                    follow_state,
+                    precedence: 0,
+                },
+            )
+            .expect("transition");
+        }
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Rule {
+                target: 8,
+                rule_index: 1,
+                follow_state: 4,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: 3,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: 4,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            6,
+            ParserTransitionSpec::Atom {
+                target: 7,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            8,
+            ParserTransitionSpec::Atom {
+                target: 9,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            9,
+            ParserTransitionSpec::Atom {
+                target: 10,
+                label: 2,
+            },
+        )
+        .expect("transition");
+        finish_atn(atn)
+    }
+
     /// ATN for `s : A B | {false}? A C | {true}? A C;`.
     fn semantic_fallback_viability_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(3);
@@ -19882,6 +19986,28 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct ContainmentRecoveryHooks {
+        decisions: Vec<(usize, usize, usize)>,
+    }
+
+    impl SemanticHooks for ContainmentRecoveryHooks {
+        fn observes_parser_decisions(&self) -> bool {
+            true
+        }
+
+        fn parser_decision_override(
+            &mut self,
+            decision: usize,
+            input_index: usize,
+            alternative_count: usize,
+        ) -> Option<usize> {
+            self.decisions
+                .push((decision, input_index, alternative_count));
+            (decision == 1).then_some(1)
+        }
+    }
+
     struct RecordingParseListener {
         events: Arc<Mutex<Vec<String>>>,
     }
@@ -20202,6 +20328,50 @@ mod tests {
                 .expect("recorded diagnostics lock")
                 .is_empty(),
             "SLL mode must not retry with full context or report LL diagnostics"
+        );
+    }
+
+    #[test]
+    fn committed_sll_containment_conflict_preserves_token_deletion_recovery() {
+        let atn = context_containment_recovery_atn();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("a"),
+                TestToken::new(2).with_text("b"),
+                TestToken::new(5).with_text("x"),
+                TestToken::new(3).with_text("c"),
+                TestToken::eof("parser-test", 4, 1, 4),
+            ],
+            ContainmentRecoveryHooks::default(),
+        );
+        parser.set_prediction_mode(PredictionMode::Sll);
+        parser.remove_error_listeners();
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+
+        let (tree, deferred_actions) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the selected alternative should recover by deleting token x");
+
+        assert!(deferred_actions.is_empty());
+        assert_eq!(parser.node(tree).text(), "abxc<EOF>");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert_eq!(parser.semantic_hooks.decisions, [(0, 0, 2), (1, 0, 2)]);
+        insta::assert_debug_snapshot!(
+            "committed_sll_containment_conflict_preserves_token_deletion_recovery",
+            diagnostics
+                .lock()
+                .expect("recorded diagnostics lock")
+                .as_slice()
         );
     }
 
