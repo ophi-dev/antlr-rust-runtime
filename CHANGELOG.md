@@ -12,6 +12,16 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.33.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.32.0...v0.33.0) (2026-08-12)
+
+
+### Features
+
+* **codegen:** centralize parse-driver and entry-point scaffolding in the runtime ([#332](https://github.com/ophi-dev/antlr-rust-runtime/issues/332)) ([65cdc82](https://github.com/ophi-dev/antlr-rust-runtime/commit/65cdc825c4d1f375c2a828ddcbc7013335183265))
+* **codegen:** hoist the byte-identical generated support preamble into the runtime ([#329](https://github.com/ophi-dev/antlr-rust-runtime/issues/329)) ([d3b0af8](https://github.com/ophi-dev/antlr-rust-runtime/commit/d3b0af8d6512e371e81d9b0b9de1b972fb992eec)), closes [#318](https://github.com/ophi-dev/antlr-rust-runtime/issues/318)
+* **codegen:** share the validated-parse surface via runtime types ([#331](https://github.com/ophi-dev/antlr-rust-runtime/issues/331)) ([0d118b3](https://github.com/ophi-dev/antlr-rust-runtime/commit/0d118b355397529ed6e7e1e16c94bc1438183348))
+* **codegen:** table-drive generated rule dispatch ([#338](https://github.com/ophi-dev/antlr-rust-runtime/issues/338)) ([80cb700](https://github.com/ophi-dev/antlr-rust-runtime/commit/80cb700c95b22f73fbbf3efab9b752b4a70c47ef))
+
 ## [0.32.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.31.0...v0.32.0) (2026-08-08)
 
 
