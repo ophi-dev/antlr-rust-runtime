@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Mehen compares source metrics against the base revision.
           fetch-depth: 0
 
       - name: Install stable Rust
@@ -41,9 +42,6 @@ jobs:
 
       - name: Validate direct-codegen fixtures
         run: node tools/grammar-frontend/validate-interp-fixtures.mjs
-
-      - name: Validate port evidence
-        run: node tools/grammar-frontend/validate-port-evidence.mjs
 
       - name: Validate workspace release metadata
         run: tools/release/check-workspace-version.sh

@@ -1,5 +1,10 @@
 # Issue #141: direct `.g4` codegen implementation plan
 
+> Historical implementation plan. The direct `.g4` port is complete. Its
+> temporary case inventories, port-evidence ledgers, fixture generators, and
+> completeness validators have since been removed. The commands and paths below
+> describe the original migration and are not maintained.
+
 Status: revised for an intentionally breaking v0.14.x cutover
 Prepared: 2026-07-21
 Repository baseline: `7b27c7f59677664906e019ca66ae003cedebb904`

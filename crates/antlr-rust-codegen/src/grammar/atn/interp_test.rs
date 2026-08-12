@@ -1588,14 +1588,13 @@ mod tests {
         }
     }
 
-    // This module is byte-locked to the recorded Phase C test commit.
     #[allow(
         clippy::disallowed_methods,
         clippy::needless_pass_by_value,
         clippy::redundant_closure_for_method_calls,
         clippy::semicolon_if_nothing_returned
     )]
-    mod upstream_phase_c_runtime {
+    mod upstream_runtime_cases {
         use std::collections::BTreeSet;
 
         use antlr4_runtime::atn::parser::{ParserAtnSimulator, ParserAtnSimulatorError};
@@ -1966,7 +1965,7 @@ mod tests {
 
         include!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/codegen-direct/generated/phase-c-runtime-cases.inc.rs"
+            "/tests/codegen-direct/generated/runtime-cases.inc.rs"
         ));
 
         fn assert_tool_case(fixture_name: &str, roots: &[&str], case: ToolCase) {
@@ -2312,7 +2311,7 @@ mod tests {
             let recognizer = &compiled.semantic.recognizer;
             let source = ActionTokenSource {
                 base: BaseLexer::new(
-                    InputStream::with_source_name(input, "phase-c-lexer-actions"),
+                    InputStream::with_source_name(input, "runtime-lexer-actions"),
                     recognizer_data(recognizer),
                 ),
                 atn: &compiled.atn,
@@ -2670,7 +2669,7 @@ mod tests {
         ) -> CommonTokenStream<DirectTokenSource<'a>> {
             CommonTokenStream::try_new(DirectTokenSource {
                 base: BaseLexer::new(
-                    InputStream::with_source_name(input, "phase-c-runtime"),
+                    InputStream::with_source_name(input, "runtime-conformance"),
                     recognizer_data(&lexer.semantic.recognizer),
                 ),
                 atn: &lexer.atn,

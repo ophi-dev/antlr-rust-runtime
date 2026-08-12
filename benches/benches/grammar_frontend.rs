@@ -19,17 +19,17 @@ const LEXER_BASIC: &str = include_str!(
 
 /// The `ANTLRv4` lexer grammar (~8 KiB): modes, lexer commands, actions.
 const ANTLR_V4_LEXER: &str = include_str!(
-    "../../crates/antlr-rust-codegen/tests/codegen-direct/bootstrap/src/grammars/ANTLRv4Lexer.g4"
+    "../../crates/antlr-rust-g4-parser/tests/frontend/bootstrap/src/grammars/ANTLRv4Lexer.g4"
 );
 
 /// The `ANTLRv4` parser grammar (~8 KiB): labeled alternatives, EBNF blocks.
 const ANTLR_V4_PARSER: &str = include_str!(
-    "../../crates/antlr-rust-codegen/tests/codegen-direct/bootstrap/src/grammars/ANTLRv4Parser.g4"
+    "../../crates/antlr-rust-g4-parser/tests/frontend/bootstrap/src/grammars/ANTLRv4Parser.g4"
 );
 
 /// The Java grammar (~31 KiB): the largest checked-in combined grammar.
 const JAVA: &str = include_str!(
-    "../../crates/antlr-rust-codegen/tests/codegen-direct/bootstrap/tests/grammars/Java.g4"
+    "../../crates/antlr-rust-g4-parser/tests/frontend/bootstrap/tests/grammars/Java.g4"
 );
 
 /// Grammar with missing rule terminators, exercising parser error recovery.
