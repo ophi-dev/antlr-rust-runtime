@@ -1344,6 +1344,9 @@ impl<'a> ParserAtnSimulator<'a> {
             resolution,
             semantic_candidates,
         } = full_context;
+        // Containment ends the SLL walk before the shared suffix is consumed.
+        // Use the LL stop for both coordinates to retain the reference
+        // diagnostic window.
         let sll_stop_index = if context_containment_conflict {
             stop_index
         } else {
@@ -2393,6 +2396,107 @@ fn dfa_state_display(state: ParserDfaStateView<'_>, deferred: bool) -> String {
 }
 
 #[cfg(test)]
+pub(crate) fn context_containment_test_atn(
+    block_end_state: Option<usize>,
+    state_six_transition: ParserTransitionSpec,
+) -> Atn {
+    let mut atn = ParserAtnBuilder::new(5);
+    for (state_number, kind, rule_index) in [
+        (0, AtnStateKind::RuleStart, 0),
+        (1, AtnStateKind::BlockStart, 0),
+        (2, AtnStateKind::Basic, 0),
+        (3, AtnStateKind::Basic, 0),
+        (4, AtnStateKind::Basic, 0),
+        (5, AtnStateKind::Basic, 0),
+        (6, AtnStateKind::BlockEnd, 0),
+        (7, AtnStateKind::RuleStop, 0),
+        (8, AtnStateKind::RuleStart, 1),
+        (9, AtnStateKind::Basic, 1),
+        (10, AtnStateKind::RuleStop, 1),
+    ] {
+        assert_eq!(
+            atn.add_state(kind, Some(rule_index))
+                .expect("state")
+                .index(),
+            state_number
+        );
+    }
+    atn.set_rule_to_start_state(vec![0, 8])
+        .expect("rule start states");
+    atn.set_rule_to_stop_state(vec![7, 10])
+        .expect("rule stop states");
+    if let Some(block_end_state) = block_end_state {
+        atn.set_end_state(1, block_end_state)
+            .expect("block end state");
+    }
+    atn.add_decision_state(1).expect("outer decision");
+    atn.add_decision_state(2).expect("inner decision");
+    atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+        .expect("transition");
+    atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+        .expect("transition");
+    atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+        .expect("transition");
+    for follow_state in [4, 5] {
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Rule {
+                target: 8,
+                rule_index: 1,
+                follow_state,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+    }
+    atn.add_transition(
+        3,
+        ParserTransitionSpec::Rule {
+            target: 8,
+            rule_index: 1,
+            follow_state: 4,
+            precedence: 0,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        4,
+        ParserTransitionSpec::Atom {
+            target: 6,
+            label: 3,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        5,
+        ParserTransitionSpec::Atom {
+            target: 6,
+            label: 4,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(6, state_six_transition)
+        .expect("transition");
+    atn.add_transition(
+        8,
+        ParserTransitionSpec::Atom {
+            target: 9,
+            label: 1,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        9,
+        ParserTransitionSpec::Atom {
+            target: 10,
+            label: 2,
+        },
+    )
+    .expect("transition");
+    atn.finish().expect("valid packed parser ATN")
+}
+
+#[cfg(test)]
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
@@ -2812,7 +2916,7 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_predict_stops_at_an_exact_context_containment_conflict() {
+    fn adaptive_predict_stops_at_a_context_containment_conflict() {
         let atn = context_containment_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
         let mut input = VecIntStream::new(vec![1, 2, 5, TOKEN_EOF]);
@@ -2838,6 +2942,29 @@ mod tests {
             state.edge(2).is_none(),
             "the outer SLL decision must stop before the shared second token"
         );
+    }
+
+    #[test]
+    fn context_containment_full_context_memo_replays_diagnostic() {
+        let atn = context_containment_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, 2, 3, TOKEN_EOF]);
+
+        let fresh = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("fresh full-context retry");
+        assert_eq!(simulator.full_context_memo_len, 1);
+
+        let replayed = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("memoized full-context retry");
+
+        assert_eq!(replayed, fresh);
+        assert_eq!(simulator.full_context_memo_len, 1);
+        let diagnostic = replayed
+            .diagnostic
+            .expect("the common return path remains ambiguous");
+        assert_eq!(diagnostic.sll_stop_index, diagnostic.ll_stop_index);
     }
 
     #[test]
@@ -3759,96 +3886,7 @@ mod tests {
     /// `{common, extra}` and `{common}`. After token 1, the first context
     /// contains the second even though no `(state, context)` pair conflicts.
     fn context_containment_decision_atn() -> Atn {
-        let mut atn = ParserAtnBuilder::new(5);
-        for (state_number, kind, rule_index) in [
-            (0, AtnStateKind::RuleStart, 0),
-            (1, AtnStateKind::BlockStart, 0),
-            (2, AtnStateKind::Basic, 0),
-            (3, AtnStateKind::Basic, 0),
-            (4, AtnStateKind::Basic, 0),
-            (5, AtnStateKind::Basic, 0),
-            (6, AtnStateKind::BlockEnd, 0),
-            (7, AtnStateKind::RuleStop, 0),
-            (8, AtnStateKind::RuleStart, 1),
-            (9, AtnStateKind::Basic, 1),
-            (10, AtnStateKind::RuleStop, 1),
-        ] {
-            assert_eq!(
-                atn.add_state(kind, Some(rule_index))
-                    .expect("state")
-                    .index(),
-                state_number
-            );
-        }
-        atn.set_rule_to_start_state(vec![0, 8])
-            .expect("rule start states");
-        atn.set_rule_to_stop_state(vec![7, 10])
-            .expect("rule stop states");
-        atn.add_decision_state(1).expect("outer decision");
-        atn.add_decision_state(2).expect("inner decision");
-        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
-            .expect("transition");
-        for follow_state in [4, 5] {
-            atn.add_transition(
-                2,
-                ParserTransitionSpec::Rule {
-                    target: 8,
-                    rule_index: 1,
-                    follow_state,
-                    precedence: 0,
-                },
-            )
-            .expect("transition");
-        }
-        atn.add_transition(
-            3,
-            ParserTransitionSpec::Rule {
-                target: 8,
-                rule_index: 1,
-                follow_state: 4,
-                precedence: 0,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            4,
-            ParserTransitionSpec::Atom {
-                target: 6,
-                label: 3,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            5,
-            ParserTransitionSpec::Atom {
-                target: 6,
-                label: 4,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
-            .expect("transition");
-        atn.add_transition(
-            8,
-            ParserTransitionSpec::Atom {
-                target: 9,
-                label: 1,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            9,
-            ParserTransitionSpec::Atom {
-                target: 10,
-                label: 2,
-            },
-        )
-        .expect("transition");
-        finish_atn(atn)
+        context_containment_test_atn(None, ParserTransitionSpec::Epsilon { target: 7 })
     }
 
     fn prefix_alt_decision_atn() -> Atn {

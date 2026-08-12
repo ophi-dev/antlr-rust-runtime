@@ -14462,6 +14462,7 @@ mod tests {
     use super::*;
     use crate::atn::parser::{
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+        context_containment_test_atn,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
@@ -17434,103 +17435,13 @@ mod tests {
     /// recovery test so committed parsing can exercise token deletion after
     /// the outer SLL containment conflict selects alternative 1.
     fn context_containment_recovery_atn() -> Atn {
-        let mut atn = ParserAtnBuilder::new(5);
-        for (state_number, kind, rule_index) in [
-            (0, AtnStateKind::RuleStart, 0),
-            (1, AtnStateKind::BlockStart, 0),
-            (2, AtnStateKind::Basic, 0),
-            (3, AtnStateKind::Basic, 0),
-            (4, AtnStateKind::Basic, 0),
-            (5, AtnStateKind::Basic, 0),
-            (6, AtnStateKind::BlockEnd, 0),
-            (7, AtnStateKind::RuleStop, 0),
-            (8, AtnStateKind::RuleStart, 1),
-            (9, AtnStateKind::Basic, 1),
-            (10, AtnStateKind::RuleStop, 1),
-        ] {
-            assert_eq!(
-                atn.add_state(kind, Some(rule_index))
-                    .expect("state")
-                    .index(),
-                state_number
-            );
-        }
-        atn.set_rule_to_start_state(vec![0, 8])
-            .expect("rule start states");
-        atn.set_rule_to_stop_state(vec![7, 10])
-            .expect("rule stop states");
-        atn.set_end_state(1, 6).expect("block end state");
-        atn.add_decision_state(1).expect("outer decision");
-        atn.add_decision_state(2).expect("inner decision");
-        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
-            .expect("transition");
-        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
-            .expect("transition");
-        for follow_state in [4, 5] {
-            atn.add_transition(
-                2,
-                ParserTransitionSpec::Rule {
-                    target: 8,
-                    rule_index: 1,
-                    follow_state,
-                    precedence: 0,
-                },
-            )
-            .expect("transition");
-        }
-        atn.add_transition(
-            3,
-            ParserTransitionSpec::Rule {
-                target: 8,
-                rule_index: 1,
-                follow_state: 4,
-                precedence: 0,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            4,
-            ParserTransitionSpec::Atom {
-                target: 6,
-                label: 3,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            5,
-            ParserTransitionSpec::Atom {
-                target: 6,
-                label: 4,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            6,
+        context_containment_test_atn(
+            Some(6),
             ParserTransitionSpec::Atom {
                 target: 7,
                 label: TOKEN_EOF,
             },
         )
-        .expect("transition");
-        atn.add_transition(
-            8,
-            ParserTransitionSpec::Atom {
-                target: 9,
-                label: 1,
-            },
-        )
-        .expect("transition");
-        atn.add_transition(
-            9,
-            ParserTransitionSpec::Atom {
-                target: 10,
-                label: 2,
-            },
-        )
-        .expect("transition");
-        finish_atn(atn)
     }
 
     /// ATN for `s : A B | {false}? A C | {true}? A C;`.

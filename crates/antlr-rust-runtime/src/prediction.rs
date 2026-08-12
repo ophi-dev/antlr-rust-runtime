@@ -1715,6 +1715,75 @@ mod tests {
     }
 
     #[test]
+    fn exact_context_conflict_requires_the_minimum_alt_in_every_state() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        for (state, alt) in [(7, 1), (7, 2), (8, 2)] {
+            configs.add(
+                AtnConfig::new(state, alt, context, &arena),
+                &mut arena,
+                &mut workspace,
+            );
+        }
+
+        assert_eq!(
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
+            None
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_marks_different_state_alt_sets_inexact() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        for (state, alt) in [(7, 1), (7, 2), (8, 1), (8, 2), (8, 3)] {
+            configs.add(
+                AtnConfig::new(state, alt, context, &arena),
+                &mut arena,
+                &mut workspace,
+            );
+        }
+
+        assert_eq!(
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
+            Some(SllConflict {
+                alts: BTreeSet::from([1, 2, 3]),
+                exact: false,
+                from_context_containment: true,
+            })
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_marks_outer_context_reach_inexact() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        let mut outer = AtnConfig::new(7, 1, context, &arena);
+        outer.reaches_into_outer_context = 1;
+        configs.add(outer, &mut arena, &mut workspace);
+        configs.add(
+            AtnConfig::new(7, 2, context, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+
+        assert_eq!(
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
+            Some(SllConflict {
+                alts: BTreeSet::from([1, 2]),
+                exact: false,
+                from_context_containment: true,
+            })
+        );
+    }
+
+    #[test]
     fn predicate_provenance_is_idempotent_per_rule_path() {
         let arena = ContextArena::new();
         let mut provenance = PredictionSemanticProvenanceArena::default();
