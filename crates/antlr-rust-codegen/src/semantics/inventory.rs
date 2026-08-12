@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// One semantic predicate/action coordinate inventoried for the manifest.
 ///
 /// Optional fields reflect the coordinate kind or the absence of authored

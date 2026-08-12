@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Rule-bypass alternatives for parse-tree pattern matching.
 //!
 //! ANTLR's parse-tree pattern matcher needs to interpret a hybrid token stream

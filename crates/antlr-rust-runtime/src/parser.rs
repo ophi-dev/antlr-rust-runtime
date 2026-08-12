@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 // `HashMap`/`HashSet` here are used as parser-internal caches keyed on
 // stable ATN coordinates (state numbers, token indices). They're never
 // iterated externally, so the project's `disallowed_types` lint (which

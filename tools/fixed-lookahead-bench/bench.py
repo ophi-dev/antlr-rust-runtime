@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 """Same-machine interleaved A/B benchmark: baseline vs --fixed-lookahead.
 
 Driven by run.sh (env: GRAMMARS_DIR, DRIVER_BIN). For each corpus file the

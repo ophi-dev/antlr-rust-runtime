@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! `stack_member` lowering for the `--sem-patterns` DSL (issue #206).
 //!
 //! Several published grammars keep their lexer state inline in

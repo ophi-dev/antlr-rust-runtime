@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 pub const EOF: i32 = -1;
 pub const UNKNOWN_SOURCE_NAME: &str = "<unknown>";
 

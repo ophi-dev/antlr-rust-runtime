@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::{
     BTreeSet, Cow, FormatMacroCaptures, Range, RustDelimiterMap, RustLexeme, RustLexemeKind,
     RustReplacement, io, is_turbofish_open, is_unqualified_identifier, lex_rust_body, lexeme_text,

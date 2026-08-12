@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::Error;
 
 pub(crate) fn decode_basic(value: &str, multiline: bool) -> Result<String, Error> {

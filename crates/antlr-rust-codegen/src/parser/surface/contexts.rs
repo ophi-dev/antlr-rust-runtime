@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
 ///

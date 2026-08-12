@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Renders a Rust lexer module that delegates token recognition to the shared
 /// ATN interpreter.
 ///

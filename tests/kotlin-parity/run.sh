@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 # End-to-end Kotlin parse-tree parity smoke. Generates Python and Rust parsers
 # from the antlr/grammars-v4 Kotlin grammar, parses every snippet under
 # tests/kotlin-parity/snippets/*.kt and script-snippets/*.kts with both, and

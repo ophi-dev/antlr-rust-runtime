@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Shared validated-parse surface for generated recognizers.
 //!
 //! Every generated parser exposes a strict parsing mode that rejects syntax

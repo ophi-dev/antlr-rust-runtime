@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 fn structural_attr_decl(attribute: &AttributeSymbol) -> embedded::AttrDecl {
     embedded::AttrDecl {
         name: attribute.name.clone(),

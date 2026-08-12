@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 pub(crate) fn lexer_typed_hook_mappings(
     data: &RecognizerCodegenData<'_>,
     patterns: &SemPatternFile,

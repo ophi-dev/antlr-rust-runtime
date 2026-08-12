@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::{
     ANTLR4RUST_INPUT_FACADE, Antlr4RustSourceKind, BTreeSet, MemberField, MemberItem, MembersModel,
     Range, RustDelimiterMap, RustLexeme, RustLexemeKind, SourceId, io, lex_rust_body, lexeme_text,

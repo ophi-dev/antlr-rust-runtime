@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Lightweight counters for lexer and prediction performance investigations.
 
 #![allow(clippy::missing_const_for_thread_local)]

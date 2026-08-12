@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Renders a Rust parser module with one public method per grammar rule.
 ///
 /// Parser methods use generated recursive-descent bodies for the ATN subset

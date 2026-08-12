@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
 use std::time::Duration;

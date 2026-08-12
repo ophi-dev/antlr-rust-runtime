@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 """Pinned execution surface from grammars-v4 c/Rust/transformGrammar.py.
 
 Source commit: 42b1ea521705c126d84331186b221c9819db1058

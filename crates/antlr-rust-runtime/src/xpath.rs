@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! ANTLR parse-tree `XPath` queries.
 //!
 //! This is ANTLR's small tree-path dialect, not W3C `XPath`. It supports child

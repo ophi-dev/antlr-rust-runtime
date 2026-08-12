@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::char_support::get_char_value_from_grammar_char_literal;

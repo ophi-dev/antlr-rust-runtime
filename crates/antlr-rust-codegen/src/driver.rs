@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::config::CompilerConfig;
 use crate::generator::prelude::*;
 use crate::lexer::{LexerRenderModel, render_lexer_model};

@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 # Differential validation + A/B benchmark for `--fixed-lookahead` (issue #150).
 #
 # For each target grammar (Thrift, EDN, Rego from antlr/grammars-v4) this

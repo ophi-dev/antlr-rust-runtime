@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::prediction::{AtnConfigSet, ContextArena, ContextId, PredictionFxHasher};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;

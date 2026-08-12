@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use serde::Serialize;
 
 pub(crate) fn to_pretty_json<T: Serialize>(value: &T) -> String {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::collections::{BTreeMap, BTreeSet};
 
 use petgraph::algo::tarjan_scc;

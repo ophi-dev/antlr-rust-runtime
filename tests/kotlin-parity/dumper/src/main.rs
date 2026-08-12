@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Parses a Kotlin source file with the Rust runtime's generated parser and
 //! prints the parse tree in the same diff-friendly form as
 //! `tests/kotlin-parity/dump_python.py`. The smoke workflow compares the two

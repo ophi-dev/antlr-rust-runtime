@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::atn::AtnStateKind;
 use crate::atn::parser_atn::{
     ParserAtn as Atn, ParserAtnState as AtnState, ParserTransition, ParserTransitionKind,

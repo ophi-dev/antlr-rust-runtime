@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::grammar::model::{Block, ElementKind, GrammarUnit};
 
 /// Deterministic structural counts captured around an optimization pass.

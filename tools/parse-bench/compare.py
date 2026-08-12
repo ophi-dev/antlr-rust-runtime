@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 """Compare two parse-benchmark JSON reports and fail on Rust regressions."""
 
 from __future__ import annotations

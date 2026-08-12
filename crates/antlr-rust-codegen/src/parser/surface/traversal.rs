@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 fn render_validated_tree_support(surface_name: &str) -> String {
     let validated_tree = format!("{surface_name}ValidatedTree");
     let validation_error = format!("{surface_name}ValidationError");

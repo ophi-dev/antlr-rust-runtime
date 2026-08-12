@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 """Parse a source file with an antlr4-python3-runtime parser and dump the parse
 tree in a stable, diff-friendly form.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Mutual (indirect) left-recursion elimination — issue #151.
 //!
 //! ANTLR 4 rewrites *direct* left recursion (`e : e '+' e | INT`) into a

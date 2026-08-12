@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Packed, index-addressed parser ATN storage.
 //!
 //! Parser ATNs are immutable after generation/deserialization. Keeping their

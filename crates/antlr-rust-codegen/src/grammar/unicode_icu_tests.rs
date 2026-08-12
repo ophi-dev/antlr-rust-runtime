@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::{property_ranges, simple_lowercase, simple_uppercase};
 use std::collections::BTreeMap;
 use std::fmt::Write;

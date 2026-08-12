@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use antlr4_runtime::{CharStream, DEFAULT_CHANNEL, LexerSemCtx, Token, TokenView};
 
 use crate::generated::type_script_lexer::{

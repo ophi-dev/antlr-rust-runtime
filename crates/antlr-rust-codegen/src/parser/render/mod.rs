@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Test-facing wrapper over [`render_parser_with_decision_report`] for the
 /// many render assertions that never look at the manifest rows.
 #[cfg(test)]

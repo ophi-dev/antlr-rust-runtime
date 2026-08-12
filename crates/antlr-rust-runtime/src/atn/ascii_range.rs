@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Exact ASCII range descriptors and range-prefix scanners.
 
 const ASCII_SYMBOLS: usize = 128;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #![allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 
 use std::collections::BTreeMap;

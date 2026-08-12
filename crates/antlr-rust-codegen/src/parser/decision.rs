@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// LOOK(1) of one decision alternative, plus whether the walk crossed a
 /// predicate — Java nulls such alternatives, forcing the decision adaptive.
 #[derive(Debug, Default)]

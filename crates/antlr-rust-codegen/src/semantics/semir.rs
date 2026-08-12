@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Renders parser predicate metadata shared by generated predicate checks.
 #[allow(dead_code)]
 fn render_parser_predicate_constant(

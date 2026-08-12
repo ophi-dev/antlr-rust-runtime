@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Splits a body made only of adjacent target-template expressions.
 pub(crate) fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
     let mut templates = Vec::new();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum UnicodeEscapeStyle {
     Utf16CodeUnits,

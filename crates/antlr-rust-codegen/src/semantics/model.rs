@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Disposition policy for semantic predicate/action coordinates that the
 /// generator cannot translate into runtime metadata.
 ///

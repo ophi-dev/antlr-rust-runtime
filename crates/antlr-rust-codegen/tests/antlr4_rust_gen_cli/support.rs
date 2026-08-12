@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 pub(super) use std::collections::BTreeSet;
 pub(super) use std::ffi::OsStr;
 pub(super) use std::fs;

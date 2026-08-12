@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Grammar-specific parser API and embedded-body bindings.
 ///
 /// This model is built from structural grammar metadata only. Decision and IR
