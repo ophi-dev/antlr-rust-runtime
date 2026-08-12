@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Clean-room ANTLR v4 runtime foundation for Rust.
 
 extern crate self as antlr4_runtime;

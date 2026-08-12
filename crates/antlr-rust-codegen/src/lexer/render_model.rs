@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Complete, immutable input to lexer Rust emission.
 ///
 /// Constructing this value before calling the renderer keeps CLI/configuration

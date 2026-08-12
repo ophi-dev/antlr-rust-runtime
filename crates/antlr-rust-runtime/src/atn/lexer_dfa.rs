@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Ahead-of-time lexer DFA compilation.
 //!
 //! ANTLR runtimes normally discover the lexer DFA lazily: the ATN simulator

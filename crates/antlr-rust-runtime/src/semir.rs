@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Semantic IR for grammar-embedded predicates and actions.
 //!
 //! ANTLR grammars embed target-language semantic predicates and actions that

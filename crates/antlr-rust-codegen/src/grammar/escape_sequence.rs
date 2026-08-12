@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use antlr4_runtime::atn::IntervalSet;
 
 use super::unicode::property_ranges;

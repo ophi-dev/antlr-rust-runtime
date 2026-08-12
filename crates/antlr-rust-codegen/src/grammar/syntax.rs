@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::char_support::get_string_from_grammar_string_literal;
 use super::frontend::{Cst, SourceFile, SourceSpan, SyntaxId, SyntaxNodeKind, SyntaxToken};
 use super::generated::antlr_v4_parser as p;

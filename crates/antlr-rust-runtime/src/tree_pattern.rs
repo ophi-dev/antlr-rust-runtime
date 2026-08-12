@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! ANTLR parse-tree pattern matching.
 //!
 //! A *tree pattern* is a string of ordinary grammar input with embedded

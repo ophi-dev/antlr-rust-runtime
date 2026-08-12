@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::collections::BTreeSet;
 
 use antlr4_runtime::{CharStream, EOF, HIDDEN_CHANNEL, LexerLifecycleCtx, LexerSemCtx};

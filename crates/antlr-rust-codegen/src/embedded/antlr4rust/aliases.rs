@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::{Range, RustDelimiterMap, RustLexeme, RustLexemeKind, RustReplacement, io};
 
 pub(crate) fn recog_input_replacement(

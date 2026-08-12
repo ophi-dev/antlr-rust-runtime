@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Vocabulary {
     literal: Vec<Option<String>>,

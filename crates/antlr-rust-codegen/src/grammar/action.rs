@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ActionReference<'a> {
     pub(crate) kind: ActionReferenceKind<'a>,

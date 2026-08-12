@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Abstract Transition Network structures used by generated lexers and
 //! parsers.
 //!

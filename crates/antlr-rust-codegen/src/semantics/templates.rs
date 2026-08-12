@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Emits the generated lexer action dispatcher for structurally bound custom
 /// actions in the compiled lexer.
 pub(crate) fn render_lexer_action_method(

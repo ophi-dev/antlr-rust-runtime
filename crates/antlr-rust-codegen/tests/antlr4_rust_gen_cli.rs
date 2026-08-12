@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[path = "antlr4_rust_gen_cli/cli.rs"]
 mod cli;
 #[path = "antlr4_rust_gen_cli/compatibility.rs"]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::errors::AntlrError;
 use crate::recognizer::Recognizer;
 use crate::token::{Token, TokenId, TokenStore, TokenView};

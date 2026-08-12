@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Checked-in `ANTLRv4` recognizers and recovered source-syntax facade.
 //!
 //! This crate is a lockstep implementation dependency of

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 fn render_antlr4rust_input_facade(input_facade: &str, token_view: &str) -> String {
     let mut out = String::with_capacity(ANTLR4RUST_INPUT_FACADE_TEMPLATE.len());
     let mut rest = ANTLR4RUST_INPUT_FACADE_TEMPLATE;

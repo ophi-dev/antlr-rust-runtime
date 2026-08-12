@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Character-stream benchmarks.
 //!
 //! Every generated lexer walks an [`InputStream`] one code point at a time, so

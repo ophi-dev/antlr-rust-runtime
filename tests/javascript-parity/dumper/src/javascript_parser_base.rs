@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use antlr4_runtime::{HIDDEN_CHANNEL, ParserSemCtx, Token, TokenSource};
 
 use crate::generated::java_script_parser::{

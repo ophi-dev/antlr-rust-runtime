@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 use std::io;
 use std::rc::Rc;

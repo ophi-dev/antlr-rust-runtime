@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! A byte-oriented [`CharStream`] for parsing binary formats.
 //!
 //! ANTLR grammars normally consume Unicode text, but many real-world formats

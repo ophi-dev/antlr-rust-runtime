@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Checked-in TOML recognizers and a decoded syntax facade.
 //!
 //! This crate is a lockstep implementation dependency of

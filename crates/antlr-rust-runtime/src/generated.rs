@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, OnceLock};

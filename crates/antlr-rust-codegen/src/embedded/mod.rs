@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! Embedded-action grammar model and `$`-attribute translator.
 //!
 //! In embedded mode the generator receives a grammar whose actions and

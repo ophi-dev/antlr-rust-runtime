@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 //! End-to-end benchmarks for the `ANTLRv4` grammar frontend.
 //!
 //! Parsing a `.g4` source drives the whole runtime stack in one call: the

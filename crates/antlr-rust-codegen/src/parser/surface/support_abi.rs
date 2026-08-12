@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 /// Runtime support surface selected for the generated-source API revision.
 ///
 /// Keeping this selection in the parser surface layer makes a future ABI

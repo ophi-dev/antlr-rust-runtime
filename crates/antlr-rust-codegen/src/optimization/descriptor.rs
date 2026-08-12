@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use crate::grammar::transform::SafetyClass;
 use crate::grammar::transform::passes::precedence_ladder::CollapsePrecedenceLadders;
 use crate::grammar::transform::passes::prune_unreachable::PruneUnreachableRules;

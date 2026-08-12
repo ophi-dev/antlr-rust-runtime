@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Konstantin Vyatkin
 """Regenerate twinkle.mid, the byte fixture for the MIDI binary-parsing test.
 
 The bytes are committed so the test needs no toolchain, but this script keeps

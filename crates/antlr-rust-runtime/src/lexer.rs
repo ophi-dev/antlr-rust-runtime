@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;

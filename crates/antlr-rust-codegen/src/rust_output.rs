@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use icu_properties::{CodePointSetData, CodePointSetDataBorrowed, props};
 
 /// Returns the byte end of a Rust identifier beginning at `start`.

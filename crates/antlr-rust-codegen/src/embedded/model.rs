@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 use super::*;
 
 /// One `name: type` attribute declared in a rule's `[...]` args clause or

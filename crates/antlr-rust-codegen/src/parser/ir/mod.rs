@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GeneratedParserRule {
     pub(crate) rule_index: usize,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 pub(crate) fn render_generated_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,

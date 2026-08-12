@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 Konstantin Vyatkin
 #[derive(Clone, Copy)]
 pub(crate) struct ParserFallbackRender<'a> {
     pub(crate) track_alt_numbers: bool,
