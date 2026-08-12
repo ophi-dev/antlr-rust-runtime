@@ -71,11 +71,11 @@ fn render_context_listener_surface(
         );
         let _ = writeln!(
             enter_arms,
-            "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
+            "            {kind_id} => listener.enter_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states))?,"
         );
         let _ = writeln!(
             exit_arms,
-            "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
+            "            {kind_id} => listener.exit_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states))?,"
         );
         let _ = writeln!(
             validated_trait_methods,
@@ -83,11 +83,11 @@ fn render_context_listener_surface(
         );
         let _ = writeln!(
             validated_enter_arms,
-            "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,"
+            "            {kind_id} => listener.enter_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states))?,"
         );
         let _ = writeln!(
             validated_exit_arms,
-            "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states.as_deref()))?,"
+            "            {kind_id} => listener.exit_{listener_method}(&{context_type}::<ValidatedTreeContext>::__from_validated_listener_node(context, invocation_states))?,"
         );
     }
     let _ = writeln!(
@@ -97,7 +97,31 @@ fn render_context_listener_surface(
 
     let _ = writeln!(
         out,
-        r#"#[allow(dead_code)]
+        r#"antlr4_runtime::__antlr4_rust_generated_walk_callbacks! {{
+    callbacks: __{tree_walker}Callbacks,
+    listener: {listener_trait},
+    enter: |listener, context, invocation_states| {{
+        listener.enter_every_rule(context)?;
+        match __context_kind(context) {{
+{enter_arms}            _ => {{}}
+        }}
+        Ok(())
+    }},
+    exit: |listener, context, invocation_states| {{
+        match __context_kind(context) {{
+{exit_arms}            _ => {{}}
+        }}
+        listener.exit_every_rule(context)
+    }},
+    terminal: |listener, node| {{
+        listener.visit_terminal(&TerminalNode::new(node))
+    }},
+    error: |listener, node| {{
+        listener.visit_error_node(&ErrorNode::new(node))
+    }},
+}}
+
+#[allow(dead_code)]
 pub struct {tree_walker};
 
 #[allow(dead_code)]
@@ -120,52 +144,10 @@ impl {tree_walker} {{
     fn __walk<E, T: {listener_trait}<E>>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
-        mut invocation_states: Option<Vec<isize>>,
+        invocation_states: Option<Vec<isize>>,
     ) -> Result<(), E> {{
-        enum Event<'tree> {{
-            Enter(antlr4_runtime::Node<'tree>),
-            Exit(RuleNodeView<'tree>),
-        }}
-
-        let mut stack = vec![Event::Enter(tree)];
-        while let Some(event) = stack.pop() {{
-            match event {{
-                Event::Enter(node) => match node.kind() {{
-                    antlr4_runtime::NodeKind::Rule => {{
-                        let context = node.as_rule().expect("rule node kind checked");
-                        if let Some(states) = &mut invocation_states {{
-                            states.insert(0, context.invoking_state());
-                        }}
-                        listener.enter_every_rule(context)?;
-                        match __context_kind(context) {{
-{enter_arms}                            _ => {{}}
-                        }}
-                        stack.push(Event::Exit(context));
-                        stack.extend(context.children().rev().map(Event::Enter));
-                    }}
-                    antlr4_runtime::NodeKind::Terminal => {{
-                        listener.visit_terminal(&TerminalNode::new(
-                            node.as_terminal().expect("terminal node kind checked"),
-                        ))?;
-                    }}
-                    antlr4_runtime::NodeKind::Error => {{
-                        listener.visit_error_node(&ErrorNode::new(
-                            node.as_error().expect("error node kind checked"),
-                        ))?;
-                    }}
-                }},
-                Event::Exit(context) => {{
-                    match __context_kind(context) {{
-{exit_arms}                        _ => {{}}
-                    }}
-                    listener.exit_every_rule(context)?;
-                    if let Some(states) = &mut invocation_states {{
-                        states.remove(0);
-                    }}
-                }}
-            }}
-        }}
-        Ok(())
+        let mut callbacks = __{tree_walker}Callbacks(listener);
+        antlr4_runtime::generated::walk_generated(tree, invocation_states, &mut callbacks)
     }}
 }}
 
@@ -188,6 +170,30 @@ pub trait {validated_listener_trait}<E = std::convert::Infallible> {{
 
 {validated_trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) -> Result<(), E> {{ Ok(()) }}
     fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}
+}}
+
+antlr4_runtime::__antlr4_rust_generated_walk_callbacks! {{
+    callbacks: __{validated_tree_walker}Callbacks,
+    listener: {validated_listener_trait},
+    enter: |listener, context, invocation_states| {{
+        listener.enter_every_rule(ValidatedRuleNode::__new(context))?;
+        match __context_kind(context) {{
+{validated_enter_arms}            _ => {{}}
+        }}
+        Ok(())
+    }},
+    exit: |listener, context, invocation_states| {{
+        match __context_kind(context) {{
+{validated_exit_arms}            _ => {{}}
+        }}
+        listener.exit_every_rule(ValidatedRuleNode::__new(context))
+    }},
+    terminal: |listener, node| {{
+        listener.visit_terminal(&TerminalNode::new(node))
+    }},
+    error: |_listener, _node| {{
+        unreachable!("validated parse tree contains an error node")
+    }},
 }}
 
 #[allow(dead_code)]
@@ -213,50 +219,10 @@ impl {validated_tree_walker} {{
     fn __walk<E, T: {validated_listener_trait}<E>>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
-        mut invocation_states: Option<Vec<isize>>,
+        invocation_states: Option<Vec<isize>>,
     ) -> Result<(), E> {{
-        enum Event<'tree> {{
-            Enter(antlr4_runtime::Node<'tree>),
-            Exit(RuleNodeView<'tree>),
-        }}
-
-        let mut stack = vec![Event::Enter(tree)];
-        while let Some(event) = stack.pop() {{
-            match event {{
-                Event::Enter(node) => match node.kind() {{
-                    antlr4_runtime::NodeKind::Rule => {{
-                        let context = node.as_rule().expect("rule node kind checked");
-                        if let Some(states) = &mut invocation_states {{
-                            states.insert(0, context.invoking_state());
-                        }}
-                        listener.enter_every_rule(ValidatedRuleNode::__new(context))?;
-                        match __context_kind(context) {{
-{validated_enter_arms}                            _ => {{}}
-                        }}
-                        stack.push(Event::Exit(context));
-                        stack.extend(context.children().rev().map(Event::Enter));
-                    }}
-                    antlr4_runtime::NodeKind::Terminal => {{
-                        listener.visit_terminal(&TerminalNode::new(
-                            node.as_terminal().expect("terminal node kind checked"),
-                        ))?;
-                    }}
-                    antlr4_runtime::NodeKind::Error => {{
-                        unreachable!("validated parse tree contains an error node")
-                    }}
-                }},
-                Event::Exit(context) => {{
-                    match __context_kind(context) {{
-{validated_exit_arms}                        _ => {{}}
-                    }}
-                    listener.exit_every_rule(ValidatedRuleNode::__new(context))?;
-                    if let Some(states) = &mut invocation_states {{
-                        states.remove(0);
-                    }}
-                }}
-            }}
-        }}
-        Ok(())
+        let mut callbacks = __{validated_tree_walker}Callbacks(listener);
+        antlr4_runtime::generated::walk_generated(tree, invocation_states, &mut callbacks)
     }}
 }}
 

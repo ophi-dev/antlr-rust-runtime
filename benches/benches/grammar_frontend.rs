@@ -9,6 +9,11 @@
 //! network access.
 
 use antlr_rust_g4_parser::{SourceFile, SourceId, parse_source, parse_source_recovering};
+use antlr_rust_toml_parser::generated::toml_lexer::TomlLexer;
+use antlr_rust_toml_parser::generated::toml_parser::{
+    TomlListener, TomlParser, TomlTreeWalker, parse_with_parser,
+};
+use antlr4_runtime::ParsedFile;
 
 fn main() {
     divan::main();
@@ -59,8 +64,37 @@ G : 'g' ;
 H : 'h' ;
 ";
 
+const TOML: &str = r#"
+title = "Listener walk benchmark"
+enabled = true
+retries = 3
+owners = ["Ada", "Grace", "Linus"]
+metadata = { project = "antlr-rust-runtime", issue = 324 }
+
+[database]
+host = "localhost"
+ports = [8000, 8001, 8002]
+connection_max = 5000
+
+[[pipelines]]
+name = "unit"
+commands = ["cargo test", "cargo clippy"]
+
+[[pipelines]]
+name = "conformance"
+commands = ["runtime-testsuite", "parity"]
+"#;
+
 fn parse(source: &str) -> SourceFile {
     parse_source(SourceId::new(0), "bench.g4", source).expect("fixture grammar parses cleanly")
+}
+
+fn parse_toml_tree() -> ParsedFile {
+    let output = parse_with_parser(TOML, TomlLexer::new, |parser: &mut TomlParser<_>| {
+        parser.document()
+    })
+    .expect("fixture TOML parses cleanly");
+    output.parser.into_parsed_file(output.result)
 }
 
 /// Full lex + parse + parse-tree construction of a grammar file.
@@ -103,7 +137,21 @@ mod recover {
 
 /// Post-parse traversal of the concrete syntax tree and its token table.
 mod traverse {
-    use super::{JAVA, parse};
+    use super::{JAVA, TomlListener, TomlTreeWalker, parse, parse_toml_tree};
+
+    struct NoopTomlListener;
+
+    impl TomlListener for NoopTomlListener {}
+
+    #[divan::bench]
+    fn generated_listener_walk(bencher: divan::Bencher<'_, '_>) {
+        let parsed = parse_toml_tree();
+        bencher.bench_local(|| {
+            let tree = std::hint::black_box(parsed.tree());
+            let result = TomlTreeWalker::walk(&mut NoopTomlListener, tree);
+            std::hint::black_box(result).expect("infallible listener walk")
+        });
+    }
 
     #[divan::bench]
     fn cst_descendants(bencher: divan::Bencher<'_, '_>) {

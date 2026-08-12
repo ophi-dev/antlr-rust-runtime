@@ -2,5 +2,5 @@
 1286e542499e4480b3ab5ff60e4a4a7faf21134ca4c4f8f1f468f30095fa25cb  third_party/antlr-v4-grammar/ANTLRv4Parser.g4
 c7114545a75ab294215819962e92e570383dc830fd5768463dab04e6733bcb80  third_party/antlr-v4-grammar/predefined.tokens
 5803594bd2c8dd2d5180f1ca08fc70dfc80308479d18a7c4a1b743fa523b55ec  third_party/antlr-v4-grammar/antlr-v4.toml
-1cb4245e948c98f342a1ea208a1e2857dbd7d59aafe505d7c5f01b7166b56808  crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs
-454da6b8d9333942e7a4f49f5925586b566eabb15acbfd147e5edf90a8dc07c2  crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs
+93f2977d6ac2f5fc490b9308220ffa4e83769760a05d5cf7d6a740c8d7129a66  crates/antlr-rust-g4-parser/src/generated/antlr_v4_lexer.rs
+c460c7a97164aef71858ae817c9343c6714f4bff952e553bc175f140e1c761cd  crates/antlr-rust-g4-parser/src/generated/antlr_v4_parser.rs

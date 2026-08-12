@@ -23,23 +23,32 @@ version = "0.0.0"
 dependencies = [
  "antlr-rust-g4-parser",
  "antlr-rust-runtime",
+ "antlr-rust-toml-parser",
  "codspeed-divan-compat",
 ]
 
 [[package]]
 name = "antlr-rust-g4-parser"
-version = "0.30.0"
+version = "0.32.0"
 dependencies = [
  "antlr-rust-runtime",
 ]
 
 [[package]]
 name = "antlr-rust-runtime"
-version = "0.30.0"
+version = "0.32.0"
 dependencies = [
  "memchr",
  "stacker",
  "thiserror",
+]
+
+[[package]]
+name = "antlr-rust-toml-parser"
+version = "0.32.0"
+dependencies = [
+ "antlr-rust-runtime",
+ "toml_datetime",
 ]
 
 [[package]]

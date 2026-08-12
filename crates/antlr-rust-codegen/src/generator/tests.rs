@@ -1855,7 +1855,7 @@ fn embedded_listener_forwards_error_nodes() {
     assert!(
         rendered.contains("fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E>")
     );
-    assert!(rendered.contains("listener.visit_error_node(&ErrorNode::new("));
+    assert!(rendered.contains("listener.visit_error_node(&ErrorNode::new(node))"));
 }
 
 #[test]
@@ -1875,8 +1875,15 @@ fn embedded_contexts_delegate_stored_invocation_states_to_the_runtime_api() {
     assert!(!rendered.contains("__invocation_states: Option<Vec<isize>>"));
     assert!(!rendered.contains("Self::__from_node_with_invocation_states(node, None)"));
     assert!(rendered.contains("antlr4_runtime::__antlr4_rust_context_accessors!"));
-    assert!(rendered.contains("::__from_listener_node(context, invocation_states.as_deref())"));
+    assert!(rendered.contains("enter: |listener, context, invocation_states|"));
+    assert!(rendered.contains("exit: |listener, context, invocation_states|"));
+    assert!(rendered.contains("::__from_listener_node(context, invocation_states)"));
     assert!(rendered.contains("pub fn walk_with_invocation_states"));
+    assert!(rendered.contains("antlr4_runtime::__antlr4_rust_generated_walk_callbacks!"));
+    assert!(
+        !rendered.contains("enum Event<'tree>"),
+        "generated walkers must delegate the iterative engine to the runtime"
+    );
     assert!(
         !rendered.contains("node.invocation_states().collect"),
         "stored contexts must leave the derivable invocation-state chain lazy"
