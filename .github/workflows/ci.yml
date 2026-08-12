@@ -27,6 +27,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Mehen compares source metrics against the base revision.
+          fetch-depth: 0
 
       - name: Install stable Rust
         run: |
