@@ -10,9 +10,10 @@
 ///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
-/// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
-///   walker onto the typed listener callbacks, threading the invoking-state
-///   chain Java's `RuleContext.toString` renders (`[13 6]`).
+/// * a module-local `ParseTreeWalker` whose grammar-specific callback adapter
+///   dispatches the runtime-owned walking engine onto typed listener callbacks,
+///   threading the invoking-state chain Java's `RuleContext.toString` renders
+///   (`[13 6]`).
 pub(crate) fn parser_surface_name(grammar_name: &str) -> &str {
     grammar_name.strip_suffix("Parser").unwrap_or(grammar_name)
 }

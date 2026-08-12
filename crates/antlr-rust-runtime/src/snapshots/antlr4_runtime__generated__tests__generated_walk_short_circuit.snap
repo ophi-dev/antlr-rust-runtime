@@ -1,0 +1,10 @@
+---
+source: crates/antlr-rust-runtime/src/generated.rs
+expression: callbacks.events
+---
+[
+    "enter rule 0 None",
+    "terminal a",
+    "enter rule 1 None",
+    "terminal b",
+]

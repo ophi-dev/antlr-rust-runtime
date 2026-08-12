@@ -99,18 +99,27 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
+    let previous = "__antlr4_rust_require_codegen_api!(12,";
     let unsupported = "__antlr4_rust_require_codegen_api!(11,";
-    let mut incompatible_parser = parser;
-    let check_start = incompatible_parser
+    let mut previous_parser = parser;
+    let check_start = previous_parser
         .find(&current)
         .expect("parser check should contain the current API revision");
-    incompatible_parser.replace_range(check_start..check_start + current.len(), unsupported);
+    previous_parser.replace_range(check_start..check_start + current.len(), previous);
+    fs::write(&parser_path, &previous_parser).expect("parser should be writable");
+    assert_generated_modules_compile(temp.path(), &modules);
+
+    let mut incompatible_parser = previous_parser;
+    let check_start = incompatible_parser
+        .find(previous)
+        .expect("parser check should contain the previous API revision");
+    incompatible_parser.replace_range(check_start..check_start + previous.len(), unsupported);
     fs::write(parser_path, incompatible_parser).expect("parser should be writable");
 
     let output = run_generated_project(temp.path(), &modules, "");
     assert!(
         !output.status.success(),
-        "previous generated-code API unexpectedly compiled"
+        "unsupported generated-code API unexpectedly compiled"
     );
     assert_eq!(utf8(&output.stdout), "");
     let diagnostic = utf8(&output.stderr)
@@ -120,8 +129,8 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        diagnostic.contains("supports revision 12"),
-        "diagnostic should name the supported revision: {diagnostic}"
+        diagnostic.contains("supports revisions 12 and 13"),
+        "diagnostic should name the supported revisions: {diagnostic}"
     );
     insta::assert_snapshot!(
         "generated_codegen_api_mismatch_diagnostic",

@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-runtime/src/generated.rs
+expression: callbacks.events
+---
+[
+    "enter rule 0 Some([-1, 99])",
+    "terminal a",
+    "enter rule 1 Some([7, -1, 99])",
+    "terminal b",
+    "exit rule 1 Some([7, -1, 99])",
+    "error !",
+    "exit rule 0 Some([-1, 99])",
+]

@@ -2142,6 +2142,133 @@ impl fmt::Display for ErrorNode<'_> {
     }
 }
 
+/// Defines a grammar-specific callback adapter for [`walk_generated`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __antlr4_rust_generated_walk_callbacks {
+    (
+        callbacks: $callbacks:ident,
+        listener: $listener:ident,
+        enter: |$enter_listener:ident, $enter_context:ident, $enter_states:ident| $enter_body:block,
+        exit: |$exit_listener:ident, $exit_context:ident, $exit_states:ident| $exit_body:block,
+        terminal: |$terminal_listener:ident, $terminal_node:ident| $terminal_body:block,
+        error: |$error_listener:ident, $error_node:ident| $error_body:block $(,)?
+    ) => {
+        #[allow(dead_code)]
+        struct $callbacks<'listener, T>(&'listener mut T);
+
+        impl<E, T: $listener<E>> $crate::generated::GeneratedWalkCallbacks<E>
+            for $callbacks<'_, T>
+        {
+            #[inline(always)]
+            fn dispatch_enter_rule(
+                &mut self,
+                $enter_context: $crate::RuleNodeView<'_>,
+                $enter_states: ::core::option::Option<&[isize]>,
+            ) -> ::core::result::Result<(), E> {
+                let $enter_listener = &mut *self.0;
+                $enter_body
+            }
+
+            #[inline(always)]
+            fn dispatch_exit_rule(
+                &mut self,
+                $exit_context: $crate::RuleNodeView<'_>,
+                $exit_states: ::core::option::Option<&[isize]>,
+            ) -> ::core::result::Result<(), E> {
+                let $exit_listener = &mut *self.0;
+                $exit_body
+            }
+
+            #[inline(always)]
+            fn visit_terminal(
+                &mut self,
+                $terminal_node: $crate::TerminalNodeView<'_>,
+            ) -> ::core::result::Result<(), E> {
+                let $terminal_listener = &mut *self.0;
+                $terminal_body
+            }
+
+            #[inline(always)]
+            fn visit_error_node(
+                &mut self,
+                $error_node: $crate::ErrorNodeView<'_>,
+            ) -> ::core::result::Result<(), E> {
+                let $error_listener = &mut *self.0;
+                $error_body
+            }
+        }
+    };
+}
+
+/// Grammar-specific callbacks used by the runtime-owned generated tree walker.
+#[doc(hidden)]
+pub trait GeneratedWalkCallbacks<E> {
+    fn dispatch_enter_rule(
+        &mut self,
+        context: RuleNodeView<'_>,
+        invocation_states: Option<&[isize]>,
+    ) -> Result<(), E>;
+
+    fn dispatch_exit_rule(
+        &mut self,
+        context: RuleNodeView<'_>,
+        invocation_states: Option<&[isize]>,
+    ) -> Result<(), E>;
+
+    fn visit_terminal(&mut self, node: TerminalNodeView<'_>) -> Result<(), E>;
+
+    fn visit_error_node(&mut self, node: ErrorNodeView<'_>) -> Result<(), E>;
+}
+
+/// Walks a generated parse tree while generated callbacks perform typed
+/// context dispatch.
+#[doc(hidden)]
+#[inline(always)]
+pub fn walk_generated<E, C>(
+    tree: Node<'_>,
+    mut invocation_states: Option<Vec<isize>>,
+    callbacks: &mut C,
+) -> Result<(), E>
+where
+    C: GeneratedWalkCallbacks<E>,
+{
+    enum Event<'tree> {
+        Enter(Node<'tree>),
+        Exit(RuleNodeView<'tree>),
+    }
+
+    let mut stack = vec![Event::Enter(tree)];
+    while let Some(event) = stack.pop() {
+        match event {
+            Event::Enter(node) => match node.kind() {
+                NodeKind::Rule => {
+                    let context = node.as_rule().expect("rule node kind checked");
+                    if let Some(states) = &mut invocation_states {
+                        states.insert(0, context.invoking_state());
+                    }
+                    callbacks.dispatch_enter_rule(context, invocation_states.as_deref())?;
+                    stack.push(Event::Exit(context));
+                    stack.extend(context.children().rev().map(Event::Enter));
+                }
+                NodeKind::Terminal => callbacks
+                    .visit_terminal(node.as_terminal().expect("terminal node kind checked"))?,
+                NodeKind::Error => {
+                    callbacks
+                        .visit_error_node(node.as_error().expect("error node kind checked"))?;
+                }
+            },
+            Event::Exit(context) => {
+                callbacks.dispatch_exit_rule(context, invocation_states.as_deref())?;
+                if let Some(states) = &mut invocation_states {
+                    states.remove(0);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Child source of one generated context view: either a stored parse-tree
 /// node or the live parser context observed from an in-flight rule.
 #[doc(hidden)]
@@ -2328,8 +2455,11 @@ impl __RecoveryContextState for StoredTreeContext {}
 impl __RecoveryContextState for __ActiveParserContext {}
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
+    use crate::token::{TokenId, TokenSpec};
+    use crate::tree::ParsedFile;
 
     static META: GrammarMetadata = GrammarMetadata::new(
         "Mini.g4",
@@ -2341,6 +2471,107 @@ mod tests {
         &["DEFAULT_MODE"],
         &[4, 1, 1, 0, 0, 0],
     );
+
+    fn test_token(store: &mut TokenStore, token_type: i32, text: &str) -> TokenId {
+        store
+            .push(TokenSpec::explicit(token_type, text))
+            .expect("test token should fit")
+    }
+
+    fn generated_walk_test_tree() -> ParsedFile {
+        let mut tokens = TokenStore::new(None, "");
+        let a = test_token(&mut tokens, 1, "a");
+        let b = test_token(&mut tokens, 2, "b");
+        let error = test_token(&mut tokens, 3, "!");
+        let mut storage = ParseTreeStorage::new();
+        let a = storage.terminal(a);
+        let b = storage.terminal(b);
+        let error = storage.error(error);
+        let mut child = ParserRuleContext::new(1, 7);
+        storage.add_child(&mut child, b);
+        let child = storage.finish_rule(child);
+        let mut root = ParserRuleContext::new(0, -1);
+        storage.add_child(&mut root, a);
+        storage.add_child(&mut root, child);
+        storage.add_child(&mut root, error);
+        let root = storage.finish_rule(root);
+        ParsedFile::new(tokens, storage, root)
+    }
+
+    #[derive(Default)]
+    struct RecordingWalkCallbacks {
+        events: Vec<String>,
+        fail_on_terminal: Option<&'static str>,
+    }
+
+    impl GeneratedWalkCallbacks<&'static str> for RecordingWalkCallbacks {
+        fn dispatch_enter_rule(
+            &mut self,
+            context: RuleNodeView<'_>,
+            invocation_states: Option<&[isize]>,
+        ) -> Result<(), &'static str> {
+            self.events.push(format!(
+                "enter rule {} {invocation_states:?}",
+                context.rule_index()
+            ));
+            Ok(())
+        }
+
+        fn dispatch_exit_rule(
+            &mut self,
+            context: RuleNodeView<'_>,
+            invocation_states: Option<&[isize]>,
+        ) -> Result<(), &'static str> {
+            self.events.push(format!(
+                "exit rule {} {invocation_states:?}",
+                context.rule_index()
+            ));
+            Ok(())
+        }
+
+        fn visit_terminal(&mut self, node: TerminalNodeView<'_>) -> Result<(), &'static str> {
+            self.events.push(format!("terminal {}", node.text()));
+            if self.fail_on_terminal == Some(node.text()) {
+                Err("terminal callback failed")
+            } else {
+                Ok(())
+            }
+        }
+
+        fn visit_error_node(&mut self, node: ErrorNodeView<'_>) -> Result<(), &'static str> {
+            self.events.push(format!("error {}", node.text()));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn generated_walk_preserves_order_and_invocation_states() {
+        let parsed = generated_walk_test_tree();
+        let mut callbacks = RecordingWalkCallbacks::default();
+
+        walk_generated(parsed.tree(), Some(vec![99]), &mut callbacks)
+            .expect("recording callbacks should accept every event");
+
+        insta::assert_debug_snapshot!(
+            "generated_walk_order_and_invocation_states",
+            callbacks.events
+        );
+    }
+
+    #[test]
+    fn generated_walk_short_circuits_callback_errors() {
+        let parsed = generated_walk_test_tree();
+        let mut callbacks = RecordingWalkCallbacks {
+            fail_on_terminal: Some("b"),
+            ..RecordingWalkCallbacks::default()
+        };
+
+        assert_eq!(
+            walk_generated(parsed.tree(), None, &mut callbacks),
+            Err("terminal callback failed")
+        );
+        insta::assert_debug_snapshot!("generated_walk_short_circuit", callbacks.events);
+    }
 
     // Compile-only fixture: successful expansion of both facade macros with
     // invocation-site prelude names shadowed is the assertion.

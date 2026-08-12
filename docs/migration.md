@@ -7,7 +7,20 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 12: generated parsers now store their
+The current generator emits revision 13: the iterative listener tree-walk
+engine now lives in `antlr4_runtime::generated::walk_generated`. Generated
+parsers retain the same `<Grammar>TreeWalker`,
+`<Grammar>ValidatedTreeWalker`, `ParseTreeWalker`, and listener APIs, but emit
+only callback adapters for typed rule dispatch and terminal/error wrapping.
+Traversal order, invocation-state push/pop behavior, and callback error
+short-circuiting are unchanged.
+
+Revision 12 generated recognizers remain compatible with this runtime because
+their self-contained walkers use only runtime APIs that are still present.
+Regenerate them with revision 13 to adopt the shared walker engine and reduce
+generated source.
+
+Revision 12 made generated parsers store their
 uniform rule-body function pointers in one table and call the runtime-owned
 `generated::dispatch_generated_rule` lifecycle guard. The per-rule
 `parse_generated_rule_N_dispatch` wrappers are gone, ordinary routing is one
@@ -77,8 +90,9 @@ infallible validated accessors panic.
 Revision 9 moved the grammar-independent support preamble (the typed
 `TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
 the embedded-action `__GeneratedInput` facade) into the runtime's `generated`
-module the same way. Revision 12 is the only accepted generated-code contract;
-regenerate older lexer and parser modules when upgrading to this release.
+module the same way. Revisions 12 and 13 are accepted generated-code contracts;
+regenerate revision 11 and older lexer and parser modules when upgrading to
+this release.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when
