@@ -1010,6 +1010,43 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/frontend/frontend-snapshots.tsv"
     ));
+    const CORPUS: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/frontend/frontend-corpus.json"
+    ));
+
+    #[test]
+    fn frontend_corpus_paths_match_snapshot_paths() {
+        let corpus: serde_json::Value =
+            serde_json::from_str(CORPUS).expect("frontend corpus should be valid JSON");
+        let corpus_paths = corpus["cases"]
+            .as_array()
+            .expect("frontend corpus should contain cases")
+            .iter()
+            .map(|case| {
+                case["path"]
+                    .as_str()
+                    .expect("frontend corpus case should contain a path")
+            })
+            .collect::<Vec<_>>();
+        let snapshot_paths = SNAPSHOTS
+            .lines()
+            .skip(1)
+            .map(|row| {
+                row.split('\t')
+                    .nth(1)
+                    .expect("frontend snapshot row should contain a path")
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(corpus_paths, snapshot_paths);
+        for path in corpus_paths {
+            assert!(
+                workspace_root().join(path).is_file(),
+                "frontend corpus path does not exist: {path}"
+            );
+        }
+    }
 
     #[test]
     fn pinned_frontend_corpus_matches_token_and_tree_oracles() {

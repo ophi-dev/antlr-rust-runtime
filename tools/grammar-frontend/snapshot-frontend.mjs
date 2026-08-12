@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_ANTLR_NG =
@@ -33,6 +33,10 @@ const corpus = JSON.parse(await readFile(corpusPath, "utf8"));
 if (corpus.antlr_ng.commit !== EXPECTED_ANTLR_NG) {
     throw new Error(`unexpected corpus antlr-ng pin: ${corpus.antlr_ng.commit}`);
 }
+const sourceRoot = resolve(repo, corpus.source_root ?? ".");
+if (sourceRoot !== repo && !sourceRoot.startsWith(`${repo}${sep}`)) {
+    throw new Error(`corpus source root escapes repository: ${corpus.source_root}`);
+}
 verifyCheckout(antlrNg);
 
 const antlr = await import(
@@ -47,7 +51,14 @@ const { ANTLRv4Parser } = await import(
 
 const rows = [];
 for (const testCase of corpus.cases) {
-    const source = await readFile(resolve(repo, testCase.path), "utf8");
+    const sourcePath = resolve(sourceRoot, testCase.path);
+    if (
+        sourcePath !== sourceRoot
+        && !sourcePath.startsWith(`${sourceRoot}${sep}`)
+    ) {
+        throw new Error(`corpus path escapes source root: ${testCase.path}`);
+    }
+    const source = await readFile(sourcePath, "utf8");
     const snapshot = snapshotSource(source, antlr, ANTLRv4Lexer, ANTLRv4Parser);
     rows.push({
         id: testCase.id,
