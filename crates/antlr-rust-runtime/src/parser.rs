@@ -5651,6 +5651,9 @@ where
         state_number: usize,
         prediction: &ParserAtnPrediction,
     ) {
+        if self.prediction_mode == PredictionMode::Sll {
+            return;
+        }
         let Some(diagnostic) = &prediction.diagnostic else {
             return;
         };
@@ -5698,13 +5701,18 @@ where
         if !self.reported_prediction_diagnostics.insert(key) {
             return;
         }
-        let attempt_diagnostic = diagnostic_for_token(
-            self.token_at(diagnostic.sll_stop_index),
-            format!(
-                "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
-            ),
-        );
-        self.generated_parser_diagnostics.push(attempt_diagnostic);
+        let local_exact_ambiguity = !prediction.requires_full_context
+            && diagnostic.kind == ParserAtnPredictionDiagnosticKind::Ambiguity
+            && diagnostic.exact;
+        if !local_exact_ambiguity {
+            let attempt_diagnostic = diagnostic_for_token(
+                self.token_at(diagnostic.sll_stop_index),
+                format!(
+                    "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
+                ),
+            );
+            self.generated_parser_diagnostics.push(attempt_diagnostic);
+        }
         let message = match diagnostic.kind {
             ParserAtnPredictionDiagnosticKind::Ambiguity => {
                 // Java's DiagnosticErrorListener is exactOnly by default:
@@ -14462,6 +14470,7 @@ mod tests {
     use super::*;
     use crate::atn::parser::{
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+        context_containment_test_atn,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
@@ -17429,6 +17438,20 @@ mod tests {
         finish_atn(atn)
     }
 
+    /// The outer decision sees helper-rule contexts `{common, extra}` and
+    /// `{common}` after token 1. The nested decision is overridden in the
+    /// recovery test so committed parsing can exercise token deletion after
+    /// the outer SLL containment conflict selects alternative 1.
+    fn context_containment_recovery_atn() -> Atn {
+        context_containment_test_atn(
+            Some(6),
+            ParserTransitionSpec::Atom {
+                target: 7,
+                label: TOKEN_EOF,
+            },
+        )
+    }
+
     /// ATN for `s : A B | {false}? A C | {true}? A C;`.
     fn semantic_fallback_viability_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(3);
@@ -18356,6 +18379,104 @@ mod tests {
         // is one snapshot rather than three ParserDiagnostic literals.
         insta::assert_debug_snapshot!(
             "generated_prediction_diagnostics_use_adaptive_context",
+            parser.generated_parser_diagnostics
+        );
+    }
+
+    #[test]
+    fn sll_mode_suppresses_exact_conflict_diagnostics() {
+        let atn = two_alt_decision_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.set_prediction_mode(PredictionMode::Sll);
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: false,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                    exact: true,
+                }),
+            },
+        );
+
+        assert!(parser.generated_parser_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn local_exact_conflict_reports_ambiguity_without_full_context_attempt() {
+        let atn = two_alt_decision_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: false,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                    exact: true,
+                }),
+            },
+        );
+
+        insta::assert_debug_snapshot!(
+            "local_exact_conflict_reports_ambiguity_without_full_context_attempt",
+            parser.generated_parser_diagnostics
+        );
+    }
+
+    #[test]
+    fn full_context_exact_conflict_reports_attempt_and_ambiguity() {
+        let atn = two_alt_decision_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::new(2).with_text("y"),
+            TestToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 1,
+                    conflicting_alts: vec![1, 2],
+                    exact: true,
+                }),
+            },
+        );
+
+        insta::assert_debug_snapshot!(
+            "full_context_exact_conflict_reports_attempt_and_ambiguity",
             parser.generated_parser_diagnostics
         );
     }
@@ -19882,6 +20003,28 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct ContainmentRecoveryHooks {
+        decisions: Vec<(usize, usize, usize)>,
+    }
+
+    impl SemanticHooks for ContainmentRecoveryHooks {
+        fn observes_parser_decisions(&self) -> bool {
+            true
+        }
+
+        fn parser_decision_override(
+            &mut self,
+            decision: usize,
+            input_index: usize,
+            alternative_count: usize,
+        ) -> Option<usize> {
+            self.decisions
+                .push((decision, input_index, alternative_count));
+            (decision == 1).then_some(1)
+        }
+    }
+
     struct RecordingParseListener {
         events: Arc<Mutex<Vec<String>>>,
     }
@@ -20202,6 +20345,50 @@ mod tests {
                 .expect("recorded diagnostics lock")
                 .is_empty(),
             "SLL mode must not retry with full context or report LL diagnostics"
+        );
+    }
+
+    #[test]
+    fn committed_sll_containment_conflict_enables_token_deletion_recovery() {
+        let atn = context_containment_recovery_atn();
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("a"),
+                TestToken::new(2).with_text("b"),
+                TestToken::new(5).with_text("x"),
+                TestToken::new(3).with_text("c"),
+                TestToken::eof("parser-test", 4, 1, 4),
+            ],
+            ContainmentRecoveryHooks::default(),
+        );
+        parser.set_prediction_mode(PredictionMode::Sll);
+        parser.remove_error_listeners();
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Arc::clone(&diagnostics),
+        });
+
+        let (tree, deferred_actions) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    action_indices: &[(usize::MAX, 0)],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the selected alternative should recover by deleting token x");
+
+        assert!(deferred_actions.is_empty());
+        assert_eq!(parser.node(tree).text(), "abxc<EOF>");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert_eq!(parser.semantic_hooks.decisions, [(0, 0, 2), (1, 0, 2)]);
+        insta::assert_debug_snapshot!(
+            "committed_sll_containment_conflict_enables_token_deletion_recovery",
+            diagnostics
+                .lock()
+                .expect("recorded diagnostics lock")
+                .as_slice()
         );
     }
 

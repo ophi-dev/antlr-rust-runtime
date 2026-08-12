@@ -1,0 +1,16 @@
+---
+source: crates/antlr-rust-runtime/src/parser.rs
+expression: parser.generated_parser_diagnostics
+---
+[
+    ParserDiagnostic {
+        line: 1,
+        column: 0,
+        message: "reportAmbiguity d=0 (s): ambigAlts={1, 2}, input='x'",
+        offending: Some(
+            TokenId(
+                0,
+            ),
+        ),
+    },
+]

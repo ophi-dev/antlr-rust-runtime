@@ -14,8 +14,8 @@ use crate::prediction::{
     AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
     PredictionContextStats, PredictionFxHasher, PredictionPredicateCall,
     PredictionSemanticProvenanceArena, PredictionSemanticProvenanceId, PredictionWorkspace,
-    SemanticContext, all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
-    has_sll_conflict_terminating_prediction, single_viable_alt,
+    SemanticContext, SllConflict, all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
+    exact_context_sll_conflict, has_sll_conflict_terminating_prediction, single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
@@ -289,6 +289,8 @@ struct PreviousGoodAlt {
 struct DfaPredictionInfo {
     prediction: ParserAtnPrediction,
     conflicting_alts: Vec<usize>,
+    exact_conflict: bool,
+    context_containment_conflict: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1259,7 +1261,18 @@ impl<'a> ParserAtnSimulator<'a> {
         let Some(info) = self.dfa_prediction_info(decision, state_number) else {
             return Ok(None);
         };
-        let prediction = info.prediction;
+        let mut prediction = info.prediction;
+        if info.exact_conflict && info.conflicting_alts.len() > 1 {
+            let stop_index = input.index();
+            prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
+                kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                start_index,
+                sll_stop_index: stop_index,
+                ll_stop_index: stop_index,
+                conflicting_alts: info.conflicting_alts.clone(),
+                exact: true,
+            });
+        }
         let semantic_candidates = self
             .store
             .decision_to_dfa
@@ -1300,6 +1313,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(Some(self.full_context_retry_prediction(
                     full_context,
                     info.conflicting_alts,
+                    info.context_containment_conflict,
                     start_index,
                     sll_stop_index,
                 )));
@@ -1317,6 +1331,7 @@ impl<'a> ParserAtnSimulator<'a> {
             return Ok(Some(self.full_context_retry_prediction(
                 full_context,
                 info.conflicting_alts,
+                info.context_containment_conflict,
                 start_index,
                 sll_stop_index,
             )));
@@ -1331,6 +1346,7 @@ impl<'a> ParserAtnSimulator<'a> {
         &mut self,
         full_context: FullContextPrediction,
         sll_conflicting_alts: Vec<usize>,
+        context_containment_conflict: bool,
         start_index: usize,
         sll_stop_index: usize,
     ) -> ParserAtnPrediction {
@@ -1340,6 +1356,14 @@ impl<'a> ParserAtnSimulator<'a> {
             resolution,
             semantic_candidates,
         } = full_context;
+        // Containment ends the SLL walk before the shared suffix is consumed.
+        // Use the LL stop for both coordinates to retain the reference
+        // diagnostic window.
+        let sll_stop_index = if context_containment_conflict {
+            stop_index
+        } else {
+            sll_stop_index
+        };
         self.prediction_semantic_candidates = semantic_candidates;
         let (kind, exact, conflicting_alts) = match resolution {
             FullContextResolution::Ambiguous { exact, ref alts } => (
@@ -1753,35 +1777,54 @@ impl<'a> ParserAtnSimulator<'a> {
             return Err(ParserAtnSimulatorError::NoViableAlt { symbol, index: 0 });
         }
         let prediction = reach.unique_alt();
+        let conflict = if prediction.is_some() {
+            None
+        } else if has_sll_conflict_terminating_prediction(&reach, |state| {
+            self.atn.state(state).is_some_and(AtnState::is_rule_stop)
+        }) {
+            let alts = reach.conflicting_alts();
+            Some(SllConflict {
+                alts: if alts.is_empty() { reach.alts() } else { alts },
+                exact: false,
+                from_context_containment: false,
+            })
+        } else if reach.has_semantic_context() {
+            // Predicate and precedence results are evaluated outside the
+            // simulator; retain their established lookahead and retry path.
+            None
+        } else {
+            let atn = self.atn;
+            exact_context_sll_conflict(&reach, &mut self.store.contexts, merge_cache, |state| {
+                atn.state(state).is_some_and(AtnState::is_rule_stop)
+            })
+        };
         let conflict_prediction = prediction.or_else(|| {
-            if !has_sll_conflict_terminating_prediction(&reach, |state| {
-                self.atn.state(state).is_some_and(AtnState::is_rule_stop)
-            }) {
-                return None;
-            }
-            reach
-                .conflicting_alts()
-                .into_iter()
-                .next()
-                .or_else(|| reach.alts().into_iter().next())
+            conflict
+                .as_ref()
+                .and_then(|conflict| conflict.alts.iter().next().copied())
         });
         let requires_full_context = prediction.is_none() && conflict_prediction.is_some();
         #[cfg(feature = "perf-counters")]
         if requires_full_context {
             crate::perf::record_sll_conflict(edge.decision);
         }
-        let conflicting_alts = if requires_full_context {
-            let alts = reach.conflicting_alts();
-            if alts.is_empty() { reach.alts() } else { alts }
-                .into_iter()
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let conflicting_alts = conflict
+            .as_ref()
+            .map(|conflict| conflict.alts.iter().copied().collect())
+            .unwrap_or_default();
         let mut dfa_state = DfaStateBuilder::new(reach);
         if let Some(prediction) = conflict_prediction {
             dfa_state.mark_accept(prediction);
             dfa_state.set_requires_full_context(requires_full_context);
+            dfa_state.set_exact_conflict(
+                requires_full_context && conflict.as_ref().is_some_and(|conflict| conflict.exact),
+            );
+            dfa_state.set_context_containment_conflict(
+                requires_full_context
+                    && conflict
+                        .as_ref()
+                        .is_some_and(|conflict| conflict.from_context_containment),
+            );
             dfa_state.set_conflicting_alts(conflicting_alts);
             // The set-wide flag gates the per-alt scan: if no config in the set
             // carries a semantic context, no alt can either.
@@ -2211,8 +2254,9 @@ impl<'a> ParserAtnSimulator<'a> {
         let dfa = self.store.decision_to_dfa.get(decision)?;
         let state = dfa.state(state_number)?;
         let alt = state.prediction()?;
-        let requires_full_context = state.requires_full_context();
-        let conflicting_alts = if requires_full_context {
+        let conflict = state.requires_full_context();
+        let exact_conflict = conflict && state.is_exact_conflict();
+        let conflicting_alts = if conflict {
             let stored = dfa.conflicting_alts(state_number);
             if stored.is_empty() {
                 dfa.configs(state_number).alts().into_iter().collect()
@@ -2225,13 +2269,15 @@ impl<'a> ParserAtnSimulator<'a> {
         Some(DfaPredictionInfo {
             prediction: ParserAtnPrediction {
                 alt,
-                requires_full_context,
+                requires_full_context: conflict && !exact_conflict,
                 // Precomputed at accept time (see compute_target_state) so
                 // warm accept lookup does not rescan the cold config set.
                 has_semantic_context: state.has_semantic_context(),
                 diagnostic: None,
             },
             conflicting_alts,
+            exact_conflict,
+            context_containment_conflict: state.is_context_containment_conflict(),
         })
     }
 }
@@ -2361,6 +2407,107 @@ fn dfa_state_display(state: ParserDfaStateView<'_>, deferred: bool) -> String {
         );
     }
     out
+}
+
+#[cfg(test)]
+pub(crate) fn context_containment_test_atn(
+    block_end_state: Option<usize>,
+    state_six_transition: ParserTransitionSpec,
+) -> Atn {
+    let mut atn = ParserAtnBuilder::new(5);
+    for (state_number, kind, rule_index) in [
+        (0, AtnStateKind::RuleStart, 0),
+        (1, AtnStateKind::BlockStart, 0),
+        (2, AtnStateKind::Basic, 0),
+        (3, AtnStateKind::Basic, 0),
+        (4, AtnStateKind::Basic, 0),
+        (5, AtnStateKind::Basic, 0),
+        (6, AtnStateKind::BlockEnd, 0),
+        (7, AtnStateKind::RuleStop, 0),
+        (8, AtnStateKind::RuleStart, 1),
+        (9, AtnStateKind::Basic, 1),
+        (10, AtnStateKind::RuleStop, 1),
+    ] {
+        assert_eq!(
+            atn.add_state(kind, Some(rule_index))
+                .expect("state")
+                .index(),
+            state_number
+        );
+    }
+    atn.set_rule_to_start_state(vec![0, 8])
+        .expect("rule start states");
+    atn.set_rule_to_stop_state(vec![7, 10])
+        .expect("rule stop states");
+    if let Some(block_end_state) = block_end_state {
+        atn.set_end_state(1, block_end_state)
+            .expect("block end state");
+    }
+    atn.add_decision_state(1).expect("outer decision");
+    atn.add_decision_state(2).expect("inner decision");
+    atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+        .expect("transition");
+    atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+        .expect("transition");
+    atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+        .expect("transition");
+    for follow_state in [4, 5] {
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Rule {
+                target: 8,
+                rule_index: 1,
+                follow_state,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+    }
+    atn.add_transition(
+        3,
+        ParserTransitionSpec::Rule {
+            target: 8,
+            rule_index: 1,
+            follow_state: 4,
+            precedence: 0,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        4,
+        ParserTransitionSpec::Atom {
+            target: 6,
+            label: 3,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        5,
+        ParserTransitionSpec::Atom {
+            target: 6,
+            label: 4,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(6, state_six_transition)
+        .expect("transition");
+    atn.add_transition(
+        8,
+        ParserTransitionSpec::Atom {
+            target: 9,
+            label: 1,
+        },
+    )
+    .expect("transition");
+    atn.add_transition(
+        9,
+        ParserTransitionSpec::Atom {
+            target: 10,
+            label: 2,
+        },
+    )
+    .expect("transition");
+    atn.finish().expect("valid packed parser ATN")
 }
 
 #[cfg(test)]
@@ -2783,6 +2930,78 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_predict_stops_at_a_context_containment_conflict() {
+        let atn = context_containment_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, 2, 5, TOKEN_EOF]);
+
+        let prediction = simulator
+            .adaptive_predict_stream_info_sll_probe(0, 0, &mut input)
+            .expect("containment proves an SLL conflict before the invalid suffix");
+
+        assert_eq!(prediction.alt, 1);
+        assert!(prediction.requires_full_context);
+        let dfa = &simulator.decision_dfas()[0];
+        let start = dfa.start_state().expect("start state");
+        let target = dfa
+            .state(start)
+            .and_then(|state| state.edge(1))
+            .expect("edge for the shared first token");
+        let state = dfa.state(target).expect("containment conflict state");
+        assert!(state.is_accept_state());
+        assert!(state.requires_full_context());
+        assert!(!state.is_exact_conflict());
+        assert_eq!(state.prediction(), Some(1));
+        assert!(
+            state.edge(2).is_none(),
+            "the outer SLL decision must stop before the shared second token"
+        );
+    }
+
+    #[test]
+    fn context_containment_full_context_memo_replays_diagnostic() {
+        let atn = context_containment_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, 2, 3, TOKEN_EOF]);
+
+        let fresh = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("fresh full-context retry");
+        assert_eq!(simulator.full_context_memo_len, 1);
+
+        let replayed = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("memoized full-context retry");
+
+        assert_eq!(replayed, fresh);
+        assert_eq!(simulator.full_context_memo_len, 1);
+        let diagnostic = replayed
+            .diagnostic
+            .expect("the common return path remains ambiguous");
+        assert_eq!(diagnostic.sll_stop_index, diagnostic.ll_stop_index);
+    }
+
+    #[test]
+    fn context_containment_ll_retry_preserves_reference_diagnostic_stop() {
+        let atn = context_containment_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        simulator.set_exact_ambig_detection(true);
+        let mut input = VecIntStream::new(vec![1, 2, 3, TOKEN_EOF]);
+
+        let prediction = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("full-context retry should resolve the containment conflict");
+        let diagnostic = prediction
+            .diagnostic
+            .expect("the common return path remains ambiguous");
+
+        assert_eq!(
+            diagnostic.sll_stop_index, diagnostic.ll_stop_index,
+            "LL diagnostics retain the reference stop even though SLL accepted earlier"
+        );
+    }
+
+    #[test]
     fn adaptive_predict_keeps_rule_stop_configs_at_eof() {
         let atn = optional_token_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
@@ -3091,6 +3310,48 @@ mod tests {
             "context_prediction_reports_context_sensitivity_for_dfa_conflict",
             prediction
         );
+        assert_eq!(input.index(), 0);
+    }
+
+    #[test]
+    fn exact_sll_conflict_skips_full_context_retry() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut workspace = PredictionWorkspace::default();
+        let mut start_configs = AtnConfigSet::new();
+        start_configs.add(
+            AtnConfig::new(2, 1, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut workspace,
+        );
+        let start =
+            simulator.store.decision_to_dfa[0].add_state(DfaStateBuilder::new(start_configs));
+        simulator.store.decision_to_dfa[0].set_start_state(start);
+
+        let mut accept_configs = AtnConfigSet::new();
+        for alt in [1, 2] {
+            accept_configs.add(
+                AtnConfig::new(3, alt, EMPTY_CONTEXT, &simulator.store.contexts),
+                &mut simulator.store.contexts,
+                &mut workspace,
+            );
+        }
+        let mut accept_state = DfaStateBuilder::new(accept_configs);
+        accept_state.mark_accept(1);
+        accept_state.set_requires_full_context(true);
+        accept_state.set_exact_conflict(true);
+        accept_state.set_context_containment_conflict(true);
+        accept_state.set_conflicting_alts(vec![1, 2]);
+        let accept = simulator.store.decision_to_dfa[0].add_state(accept_state);
+        simulator.store.decision_to_dfa[0].add_edge(start, 1, accept);
+
+        let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
+        let prediction = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("exact SLL conflict");
+
+        insta::assert_debug_snapshot!("exact_sll_conflict_skips_full_context_retry", prediction);
+        assert_eq!(simulator.full_context_memo_len, 0);
         assert_eq!(input.index(), 0);
     }
 
@@ -3675,6 +3936,13 @@ mod tests {
         atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
             .expect("transition");
         finish_atn(atn)
+    }
+
+    /// Outer alternatives call the same rule with prediction contexts
+    /// `{common, extra}` and `{common}`. After token 1, the first context
+    /// contains the second even though no `(state, context)` pair conflicts.
+    fn context_containment_decision_atn() -> Atn {
+        context_containment_test_atn(None, ParserTransitionSpec::Epsilon { target: 7 })
     }
 
     fn prefix_alt_decision_atn() -> Atn {

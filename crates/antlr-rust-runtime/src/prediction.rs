@@ -1373,6 +1373,13 @@ pub(crate) fn single_viable_alt(alt_subsets: &[BTreeSet<usize>]) -> Option<usize
     result
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SllConflict {
+    pub(crate) alts: BTreeSet<usize>,
+    pub(crate) exact: bool,
+    pub(crate) from_context_containment: bool,
+}
+
 pub(crate) fn has_sll_conflict_terminating_prediction(
     configs: &AtnConfigSet,
     is_rule_stop_state: impl Fn(usize) -> bool,
@@ -1389,6 +1396,88 @@ pub(crate) fn has_sll_conflict_terminating_prediction(
         && !has_state_associated_with_one_alt(configs.configs())
 }
 
+pub(crate) fn exact_context_sll_conflict(
+    configs: &AtnConfigSet,
+    arena: &mut ContextArena,
+    workspace: &mut PredictionWorkspace,
+    is_rule_stop_state: impl Fn(usize) -> bool,
+) -> Option<SllConflict> {
+    debug_assert!(!configs.full_context());
+    if configs.len() <= 1 || unique_alt(configs.configs()).is_some() {
+        return None;
+    }
+
+    let state_key = |config: &AtnConfig| {
+        if is_rule_stop_state(config.state) {
+            None
+        } else {
+            Some(config.state)
+        }
+    };
+    let mut sorted = configs.configs().iter().collect::<Vec<_>>();
+    sorted.sort_unstable_by_key(|config| (state_key(config), config.alt));
+
+    let min_alt = sorted.first()?.alt;
+    let mut state_start = 0;
+    let mut represented_alts = Vec::new();
+    let mut exact = !configs.dips_into_outer_context;
+    let mut alts = BTreeSet::from([min_alt]);
+
+    while state_start < sorted.len() {
+        let current_state = state_key(sorted[state_start]);
+        let mut state_end = state_start + 1;
+        while state_end < sorted.len() && state_key(sorted[state_end]) == current_state {
+            state_end += 1;
+        }
+        if sorted[state_start].alt != min_alt {
+            return None;
+        }
+
+        let mut current_alts = Vec::new();
+        let mut alt_start = state_start;
+        let mut joined_min_context = None;
+        while alt_start < state_end {
+            let current_alt = sorted[alt_start].alt;
+            current_alts.push(current_alt);
+            alts.insert(current_alt);
+
+            let mut alt_end = alt_start + 1;
+            while alt_end < state_end && sorted[alt_end].alt == current_alt {
+                alt_end += 1;
+            }
+            let joined_context = sorted[alt_start + 1..alt_end]
+                .iter()
+                .fold(sorted[alt_start].context, |joined, config| {
+                    arena.merge(joined, config.context, true, workspace)
+                });
+            if current_alt == min_alt {
+                joined_min_context = Some(joined_context);
+            } else {
+                let min_context =
+                    joined_min_context.expect("minimum alternative starts every state group");
+                if arena.merge(min_context, joined_context, true, workspace) != min_context {
+                    return None;
+                }
+                exact &= min_context == joined_context;
+            }
+            alt_start = alt_end;
+        }
+
+        if represented_alts.is_empty() {
+            represented_alts = current_alts;
+        } else {
+            exact &= represented_alts == current_alts;
+        }
+        state_start = state_end;
+    }
+
+    Some(SllConflict {
+        alts,
+        exact,
+        from_context_containment: true,
+    })
+}
+
 fn has_state_associated_with_one_alt(configs: &[AtnConfig]) -> bool {
     let mut by_state = BTreeMap::<usize, BTreeSet<usize>>::new();
     for config in configs {
@@ -1398,6 +1487,7 @@ fn has_state_associated_with_one_alt(configs: &[AtnConfig]) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -1525,6 +1615,157 @@ mod tests {
         ));
         assert_eq!(set.len(), 1);
         assert_eq!(arena.len(set.configs()[0].context), 2);
+    }
+
+    #[test]
+    fn exact_context_conflict_proves_containment_without_shared_context_ids() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let first = arena.singleton(EMPTY_CONTEXT, 10);
+        let second = arena.singleton(EMPTY_CONTEXT, 20);
+        let containing = arena.merge(first, second, true, &mut workspace);
+        let mut configs = AtnConfigSet::new();
+        configs.add(
+            AtnConfig::new(7, 1, containing, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+        configs.add(
+            AtnConfig::new(7, 2, first, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+
+        assert!(!has_sll_conflict_terminating_prediction(&configs, |_| {
+            false
+        }));
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_proves_containment_without_shared_context_ids",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_joins_semantically_distinct_configs() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let first = arena.singleton(EMPTY_CONTEXT, 10);
+        let second = arena.singleton(EMPTY_CONTEXT, 20);
+        let joined = arena.merge(first, second, true, &mut workspace);
+        let predicate = |pred_index| SemanticContext::Predicate {
+            rule_index: 0,
+            pred_index,
+            context_dependent: false,
+        };
+        let mut configs = AtnConfigSet::new();
+        configs.add(
+            AtnConfig::new(7, 1, first, &arena).with_semantic_context(predicate(0)),
+            &mut arena,
+            &mut workspace,
+        );
+        configs.add(
+            AtnConfig::new(7, 1, second, &arena).with_semantic_context(predicate(1)),
+            &mut arena,
+            &mut workspace,
+        );
+        configs.add(
+            AtnConfig::new(7, 2, joined, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+
+        assert!(!has_sll_conflict_terminating_prediction(&configs, |_| {
+            false
+        }));
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_joins_semantically_distinct_configs",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_declines_a_non_contained_context() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let first = arena.singleton(EMPTY_CONTEXT, 10);
+        let second = arena.singleton(EMPTY_CONTEXT, 20);
+        let mut configs = AtnConfigSet::new();
+        configs.add(
+            AtnConfig::new(7, 1, first, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+        configs.add(
+            AtnConfig::new(7, 2, second, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+
+        assert_eq!(
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
+            None
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_requires_the_minimum_alt_in_every_state() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        for (state, alt) in [(7, 1), (7, 2), (8, 2)] {
+            configs.add(
+                AtnConfig::new(state, alt, context, &arena),
+                &mut arena,
+                &mut workspace,
+            );
+        }
+
+        assert_eq!(
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
+            None
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_marks_different_state_alt_sets_inexact() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        for (state, alt) in [(7, 1), (7, 2), (8, 1), (8, 2), (8, 3)] {
+            configs.add(
+                AtnConfig::new(state, alt, context, &arena),
+                &mut arena,
+                &mut workspace,
+            );
+        }
+
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_marks_different_state_alt_sets_inexact",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
+        );
+    }
+
+    #[test]
+    fn exact_context_conflict_marks_outer_context_reach_inexact() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let context = arena.singleton(EMPTY_CONTEXT, 10);
+        let mut configs = AtnConfigSet::new();
+        let mut outer = AtnConfig::new(7, 1, context, &arena);
+        outer.reaches_into_outer_context = 1;
+        configs.add(outer, &mut arena, &mut workspace);
+        configs.add(
+            AtnConfig::new(7, 2, context, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_marks_outer_context_reach_inexact",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
+        );
     }
 
     #[test]
