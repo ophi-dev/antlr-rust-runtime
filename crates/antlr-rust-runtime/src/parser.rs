@@ -20243,7 +20243,7 @@ mod tests {
     }
 
     #[test]
-    fn committed_sll_containment_conflict_preserves_token_deletion_recovery() {
+    fn committed_sll_containment_conflict_enables_token_deletion_recovery() {
         let atn = context_containment_recovery_atn();
         let diagnostics = Arc::new(Mutex::new(Vec::new()));
         let mut parser = mini_parser_with_hooks(
@@ -20278,7 +20278,7 @@ mod tests {
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.semantic_hooks.decisions, [(0, 0, 2), (1, 0, 2)]);
         insta::assert_debug_snapshot!(
-            "committed_sll_containment_conflict_preserves_token_deletion_recovery",
+            "committed_sll_containment_conflict_enables_token_deletion_recovery",
             diagnostics
                 .lock()
                 .expect("recorded diagnostics lock")

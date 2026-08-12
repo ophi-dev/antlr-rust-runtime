@@ -289,6 +289,7 @@ struct PreviousGoodAlt {
 struct DfaPredictionInfo {
     prediction: ParserAtnPrediction,
     conflicting_alts: Vec<usize>,
+    exact_conflict: bool,
     context_containment_conflict: bool,
 }
 
@@ -1260,7 +1261,18 @@ impl<'a> ParserAtnSimulator<'a> {
         let Some(info) = self.dfa_prediction_info(decision, state_number) else {
             return Ok(None);
         };
-        let prediction = info.prediction;
+        let mut prediction = info.prediction;
+        if info.exact_conflict && info.conflicting_alts.len() > 1 {
+            let stop_index = input.index();
+            prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
+                kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                start_index,
+                sll_stop_index: stop_index,
+                ll_stop_index: stop_index,
+                conflicting_alts: info.conflicting_alts.clone(),
+                exact: true,
+            });
+        }
         let semantic_candidates = self
             .store
             .decision_to_dfa
@@ -2242,8 +2254,9 @@ impl<'a> ParserAtnSimulator<'a> {
         let dfa = self.store.decision_to_dfa.get(decision)?;
         let state = dfa.state(state_number)?;
         let alt = state.prediction()?;
-        let requires_full_context = state.requires_full_context();
-        let conflicting_alts = if requires_full_context {
+        let conflict = state.requires_full_context();
+        let exact_conflict = conflict && state.is_exact_conflict();
+        let conflicting_alts = if conflict {
             let stored = dfa.conflicting_alts(state_number);
             if stored.is_empty() {
                 dfa.configs(state_number).alts().into_iter().collect()
@@ -2256,13 +2269,14 @@ impl<'a> ParserAtnSimulator<'a> {
         Some(DfaPredictionInfo {
             prediction: ParserAtnPrediction {
                 alt,
-                requires_full_context,
+                requires_full_context: conflict && !exact_conflict,
                 // Precomputed at accept time (see compute_target_state) so
                 // warm accept lookup does not rescan the cold config set.
                 has_semantic_context: state.has_semantic_context(),
                 diagnostic: None,
             },
             conflicting_alts,
+            exact_conflict,
             context_containment_conflict: state.is_context_containment_conflict(),
         })
     }
@@ -3296,6 +3310,48 @@ mod tests {
             "context_prediction_reports_context_sensitivity_for_dfa_conflict",
             prediction
         );
+        assert_eq!(input.index(), 0);
+    }
+
+    #[test]
+    fn exact_sll_conflict_skips_full_context_retry() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut workspace = PredictionWorkspace::default();
+        let mut start_configs = AtnConfigSet::new();
+        start_configs.add(
+            AtnConfig::new(2, 1, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut workspace,
+        );
+        let start =
+            simulator.store.decision_to_dfa[0].add_state(DfaStateBuilder::new(start_configs));
+        simulator.store.decision_to_dfa[0].set_start_state(start);
+
+        let mut accept_configs = AtnConfigSet::new();
+        for alt in [1, 2] {
+            accept_configs.add(
+                AtnConfig::new(3, alt, EMPTY_CONTEXT, &simulator.store.contexts),
+                &mut simulator.store.contexts,
+                &mut workspace,
+            );
+        }
+        let mut accept_state = DfaStateBuilder::new(accept_configs);
+        accept_state.mark_accept(1);
+        accept_state.set_requires_full_context(true);
+        accept_state.set_exact_conflict(true);
+        accept_state.set_context_containment_conflict(true);
+        accept_state.set_conflicting_alts(vec![1, 2]);
+        let accept = simulator.store.decision_to_dfa[0].add_state(accept_state);
+        simulator.store.decision_to_dfa[0].add_edge(start, 1, accept);
+
+        let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
+        let prediction = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
+            .expect("exact SLL conflict");
+
+        insta::assert_debug_snapshot!("exact_sll_conflict_skips_full_context_retry", prediction);
+        assert_eq!(simulator.full_context_memo_len, 0);
         assert_eq!(input.index(), 0);
     }
 

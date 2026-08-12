@@ -1,0 +1,15 @@
+---
+source: crates/antlr-rust-runtime/src/prediction.rs
+expression: "exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)"
+---
+Some(
+    SllConflict {
+        alts: {
+            1,
+            2,
+            3,
+        },
+        exact: false,
+        from_context_containment: true,
+    },
+)

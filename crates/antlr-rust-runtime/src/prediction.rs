@@ -1487,6 +1487,7 @@ fn has_state_associated_with_one_alt(configs: &[AtnConfig]) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
 
@@ -1638,13 +1639,9 @@ mod tests {
         assert!(!has_sll_conflict_terminating_prediction(&configs, |_| {
             false
         }));
-        assert_eq!(
-            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
-            Some(SllConflict {
-                alts: BTreeSet::from([1, 2]),
-                exact: false,
-                from_context_containment: true,
-            })
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_proves_containment_without_shared_context_ids",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
         );
     }
 
@@ -1680,13 +1677,9 @@ mod tests {
         assert!(!has_sll_conflict_terminating_prediction(&configs, |_| {
             false
         }));
-        assert_eq!(
-            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
-            Some(SllConflict {
-                alts: BTreeSet::from([1, 2]),
-                exact: true,
-                from_context_containment: true,
-            })
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_joins_semantically_distinct_configs",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
         );
     }
 
@@ -1748,13 +1741,9 @@ mod tests {
             );
         }
 
-        assert_eq!(
-            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
-            Some(SllConflict {
-                alts: BTreeSet::from([1, 2, 3]),
-                exact: false,
-                from_context_containment: true,
-            })
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_marks_different_state_alt_sets_inexact",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
         );
     }
 
@@ -1773,13 +1762,9 @@ mod tests {
             &mut workspace,
         );
 
-        assert_eq!(
-            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false),
-            Some(SllConflict {
-                alts: BTreeSet::from([1, 2]),
-                exact: false,
-                from_context_containment: true,
-            })
+        insta::assert_debug_snapshot!(
+            "exact_context_conflict_marks_outer_context_reach_inexact",
+            exact_context_sll_conflict(&configs, &mut arena, &mut workspace, |_| false)
         );
     }
 
