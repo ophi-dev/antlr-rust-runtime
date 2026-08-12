@@ -5701,13 +5701,18 @@ where
         if !self.reported_prediction_diagnostics.insert(key) {
             return;
         }
-        let attempt_diagnostic = diagnostic_for_token(
-            self.token_at(diagnostic.sll_stop_index),
-            format!(
-                "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
-            ),
-        );
-        self.generated_parser_diagnostics.push(attempt_diagnostic);
+        let local_exact_ambiguity = !prediction.requires_full_context
+            && diagnostic.kind == ParserAtnPredictionDiagnosticKind::Ambiguity
+            && diagnostic.exact;
+        if !local_exact_ambiguity {
+            let attempt_diagnostic = diagnostic_for_token(
+                self.token_at(diagnostic.sll_stop_index),
+                format!(
+                    "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
+                ),
+            );
+            self.generated_parser_diagnostics.push(attempt_diagnostic);
+        }
         let message = match diagnostic.kind {
             ParserAtnPredictionDiagnosticKind::Ambiguity => {
                 // Java's DiagnosticErrorListener is exactOnly by default:
@@ -18407,6 +18412,39 @@ mod tests {
         );
 
         assert!(parser.generated_parser_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn local_exact_conflict_reports_ambiguity_without_full_context_attempt() {
+        let atn = two_alt_decision_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: false,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                    exact: true,
+                }),
+            },
+        );
+
+        insta::assert_debug_snapshot!(
+            "local_exact_conflict_reports_ambiguity_without_full_context_attempt",
+            parser.generated_parser_diagnostics
+        );
     }
 
     #[test]
