@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Konstantin Vyatkin
 use super::Error;
 
