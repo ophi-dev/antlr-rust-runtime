@@ -2252,6 +2252,10 @@ impl<'a> ParserAtnSimulator<'a> {
         let empty_local_context = self.store.contexts.is_empty(config.context);
         let elide_tail_call = transition_kind == ParserTransitionKind::Rule
             && transition.is_tail_call()
+            // Rule-call provenance is popped alongside return contexts. Keep
+            // those structures one-to-one when parameterized predicates need
+            // the exact active call path.
+            && !self.track_prediction_rule_calls
             && (!self.tail_call_preserves_sll || !empty_local_context);
         let context = if transition_kind == ParserTransitionKind::Rule && !elide_tail_call {
             self.store
@@ -2600,6 +2604,59 @@ mod tests {
         finish_atn(atn)
     }
 
+    fn tracked_tail_call_prediction_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (kind, rule_index) in [
+            (AtnStateKind::RuleStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::RuleStop, 1),
+            (AtnStateKind::RuleStart, 2),
+            (AtnStateKind::Basic, 2),
+            (AtnStateKind::RuleStop, 2),
+        ] {
+            atn.add_state(kind, Some(rule_index)).expect("state");
+        }
+        atn.set_rule_to_start_state(vec![0, 3, 5])
+            .expect("rule starts");
+        atn.set_rule_to_stop_state(vec![2, 4, 7])
+            .expect("rule stops");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("caller entry");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("tail call");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("callee body");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Predicate {
+                target: 6,
+                rule_index: 2,
+                pred_index: 0,
+                context_dependent: false,
+            },
+        )
+        .expect("caller predicate");
+        atn.add_transition(
+            6,
+            ParserTransitionSpec::Atom {
+                target: 7,
+                label: 1,
+            },
+        )
+        .expect("caller token");
+        finish_atn(atn)
+    }
+
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn parser_prediction_hot_path_layouts_stay_compact() {
@@ -2773,6 +2830,65 @@ mod tests {
         assert_eq!(target.context, EMPTY_CONTEXT);
         assert_eq!(target.reaches_into_outer_context, 1);
         assert_eq!(compact.prediction_context_stats().contexts_created, before);
+    }
+
+    #[test]
+    fn tracked_tail_call_preserves_balanced_rule_provenance() {
+        let atn = tracked_tail_call_prediction_atn();
+        let transition = atn
+            .state(1)
+            .expect("tail call source")
+            .transitions()
+            .first()
+            .expect("tail call");
+        assert!(transition.is_tail_call());
+
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        simulator.set_track_prediction_rule_calls(true);
+        let outer_context = simulator.store.contexts.singleton(EMPTY_CONTEXT, 5);
+        let mut config = AtnConfig::new(1, 1, outer_context, &simulator.store.contexts);
+        config.enter_prediction_rule(
+            simulator
+                .semantic_provenance
+                .as_deref_mut()
+                .expect("tracked simulator"),
+            99,
+            0,
+        );
+        let target = simulator
+            .epsilon_target_config(&config, transition, transition.kind(), 0, true, true)
+            .expect("tail-call target");
+
+        let mut configs = AtnConfigSet::new_full_context(true);
+        let mut workspace = PredictionWorkspace::default();
+        let mut scratch = ClosureScratch::default();
+        simulator.closure(
+            target,
+            &mut configs,
+            &mut workspace,
+            &mut scratch,
+            ClosureParams {
+                precedence: 0,
+                collect_predicates: true,
+                treat_eof_as_epsilon: false,
+            },
+        );
+
+        let predicate_config = configs
+            .configs()
+            .iter()
+            .find(|config| config.state == 6)
+            .expect("caller predicate reached");
+        let predicate_calls = simulator
+            .semantic_provenance
+            .as_deref()
+            .expect("tracked simulator")
+            .predicate_calls(predicate_config.semantic_provenance_id());
+        assert_eq!(predicate_calls.len(), 1);
+        assert!(
+            predicate_calls[0].rule_calls.is_empty(),
+            "caller predicate must not inherit a tail-called rule after both returns"
+        );
     }
 
     #[test]
