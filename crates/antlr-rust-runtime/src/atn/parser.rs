@@ -2249,14 +2249,16 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             _ => config.semantic_context.clone(),
         };
-        let empty_local_context = self.store.contexts.is_empty(config.context);
+        let context_has_empty_path = self.store.contexts.has_empty_path(config.context);
         let elide_tail_call = transition_kind == ParserTransitionKind::Rule
             && transition.is_tail_call()
             // Rule-call provenance is popped alongside return contexts. Keep
             // those structures one-to-one when parameterized predicates need
             // the exact active call path.
             && !self.track_prediction_rule_calls
-            && (!self.tail_call_preserves_sll || !empty_local_context);
+            // Full-context prediction always preserves empty paths. Only the
+            // explicit reduced-accuracy SLL policy may elide them.
+            && (!context_has_empty_path || (!full_context && !self.tail_call_preserves_sll));
         let context = if transition_kind == ParserTransitionKind::Rule && !elide_tail_call {
             self.store
                 .contexts
@@ -2265,12 +2267,6 @@ impl<'a> ParserAtnSimulator<'a> {
             config.context
         };
         let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
-        if elide_tail_call && !self.tail_call_preserves_sll && empty_local_context {
-            // The reduced-accuracy mode must still force SLL conflicts to retry
-            // with full context instead of treating the elided local frame as
-            // proof that prediction never reached outside its entry context.
-            target.reaches_into_outer_context = target.reaches_into_outer_context.saturating_add(1);
-        }
         target.semantic_context = semantic_context;
         if self.track_prediction_rule_calls {
             match transition_kind {
@@ -2601,6 +2597,49 @@ mod tests {
         .expect("tail call");
         atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
             .expect("callee body");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("derived rule return");
+        finish_atn(atn)
+    }
+
+    fn tail_call_mismatch_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (kind, rule_index) in [
+            (AtnStateKind::BlockStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::Basic, 1),
+            (AtnStateKind::RuleStop, 1),
+        ] {
+            atn.add_state(kind, Some(rule_index)).expect("state");
+        }
+        atn.set_rule_to_start_state(vec![0, 3])
+            .expect("rule starts");
+        atn.set_rule_to_stop_state(vec![2, 5]).expect("rule stops");
+        atn.add_decision_state(0).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("decision alternative");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("tail call");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: 1,
+            },
+        )
+        .expect("callee token");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("derived rule return");
         finish_atn(atn)
     }
 
@@ -2823,9 +2862,13 @@ mod tests {
         let target = conservative
             .epsilon_target_config(&config, transition, transition.kind(), 0, true, true)
             .expect("full-context tail-call target");
-        assert_eq!(
+        assert_ne!(
             target.context, full_with_empty,
-            "a full-context array with an empty path is not the local empty context"
+            "full-context empty paths must retain the return frame"
+        );
+        assert_eq!(
+            conservative.store.contexts.return_state(target.context, 0),
+            Some(2)
         );
 
         let local_with_empty =
@@ -2855,8 +2898,46 @@ mod tests {
             .epsilon_target_config(&local, transition, transition.kind(), 0, true, false)
             .expect("reduced-accuracy local target");
         assert_eq!(target.context, EMPTY_CONTEXT);
-        assert_eq!(target.reaches_into_outer_context, 1);
+        assert_eq!(target.reaches_into_outer_context, 0);
         assert_eq!(compact.prediction_context_stats().contexts_created, before);
+
+        let mut configs = AtnConfigSet::new();
+        let mut workspace = PredictionWorkspace::default();
+        let mut scratch = ClosureScratch::default();
+        compact.closure(
+            target,
+            &mut configs,
+            &mut workspace,
+            &mut scratch,
+            ClosureParams {
+                precedence: 0,
+                collect_predicates: true,
+                treat_eof_as_epsilon: false,
+            },
+        );
+        let returned = configs
+            .configs()
+            .iter()
+            .find(|config| config.state == 2)
+            .expect("tail call returns through the caller stop");
+        assert_eq!(
+            returned.reaches_into_outer_context, 1,
+            "outer-context reach is recorded only after the callee returns"
+        );
+    }
+
+    #[test]
+    fn reduced_sll_tail_call_does_not_accept_a_mismatching_callee() {
+        let atn = tail_call_mismatch_atn();
+        let mut simulator = ParserAtnSimulator::new_with_tail_call_preserves_sll(&atn, false);
+
+        assert_eq!(
+            simulator.adaptive_predict(0, [2]),
+            Err(ParserAtnSimulatorError::NoViableAlt {
+                symbol: 2,
+                index: 0,
+            })
+        );
     }
 
     #[test]
