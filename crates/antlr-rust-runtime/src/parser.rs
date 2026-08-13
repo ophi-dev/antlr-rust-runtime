@@ -6521,7 +6521,9 @@ where
     }
 
     /// Returns caller follow states for interning in a parser ATN simulator's
-    /// prediction store. States are yielded outermost to innermost.
+    /// prediction store. States are yielded outermost to innermost, with
+    /// provable tail-call frames omitted because they would be popped before
+    /// prediction can observe them.
     pub fn prediction_context_return_states<'a>(
         &'a self,
         atn: &'a Atn,
@@ -6530,11 +6532,13 @@ where
             let Ok(state_number) = usize::try_from(frame.invoking_state) else {
                 return None;
             };
-            let Some(Transition::Rule { follow_state, .. }) = atn
+            let transition = atn
                 .state(state_number)
-                .and_then(|state| state.transitions().first())
-                .map(ParserTransition::data)
-            else {
+                .and_then(|state| state.transitions().first())?;
+            if transition.is_tail_call() {
+                return None;
+            }
+            let Transition::Rule { follow_state, .. } = transition.data() else {
                 return None;
             };
             Some(follow_state)
@@ -17727,6 +17731,62 @@ mod tests {
         finish_atn(atn)
     }
 
+    fn tail_call_context_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (kind, rule_index) in [
+            (AtnStateKind::RuleStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::Basic, 1),
+            (AtnStateKind::RuleStop, 1),
+            (AtnStateKind::RuleStart, 2),
+            (AtnStateKind::RuleStop, 2),
+        ] {
+            atn.add_state(kind, Some(rule_index)).expect("state");
+        }
+        atn.set_rule_to_start_state(vec![0, 4, 7])
+            .expect("rule starts");
+        atn.set_rule_to_stop_state(vec![3, 6, 8])
+            .expect("rule stops");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("outer entry");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("non-tail outer call");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 3,
+                label: 1,
+            },
+        )
+        .expect("observable outer continuation");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("middle entry");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Rule {
+                target: 7,
+                rule_index: 2,
+                follow_state: 6,
+                precedence: 0,
+            },
+        )
+        .expect("tail middle call");
+        atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 8 })
+            .expect("inner body");
+        finish_atn(atn)
+    }
+
     fn generated_match_recovery_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         assert_eq!(
@@ -18128,6 +18188,41 @@ mod tests {
         let after_pop: Vec<_> = parser.prediction_context_return_states(&atn).collect();
         assert_ne!(first, after_pop);
         assert_ne!(parser.rule_context_version(), initial_version);
+    }
+
+    #[test]
+    fn prediction_context_return_states_skip_tail_call_frames() {
+        let atn = tail_call_context_atn();
+        assert!(
+            atn.state(5)
+                .expect("tail call source")
+                .transitions()
+                .first()
+                .expect("tail call")
+                .is_tail_call()
+        );
+        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 5,
+            },
+        ];
+
+        assert_eq!(
+            parser
+                .prediction_context_return_states(&atn)
+                .collect::<Vec<_>>(),
+            [2]
+        );
     }
 
     #[test]

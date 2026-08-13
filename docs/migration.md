@@ -7,8 +7,19 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 13: the iterative listener tree-walk
-engine now lives in `antlr4_runtime::generated::walk_generated`. Generated
+The current generator emits revision 14. Generated parsers embed packed parser
+ATN format 3 with validated tail-call markers on rule transitions. Prediction
+elides a marked return frame only when doing so preserves the configured SLL
+accuracy policy, and committed full-context construction omits equivalent
+caller frames before interning them. The default remains conservative; the
+reduced-accuracy SLL policy requires an explicit simulator constructor.
+
+Revision 12 and 13 generated recognizers remain compatible because the runtime
+still implements their source APIs and reads packed parser ATN formats 1 and 2.
+Regenerate them with revision 14 to emit the new metadata.
+
+Revision 13 moved the iterative listener tree-walk engine into
+`antlr4_runtime::generated::walk_generated`. Generated
 parsers retain the same `<Grammar>TreeWalker`,
 `<Grammar>ValidatedTreeWalker`, `ParseTreeWalker`, and listener APIs, but emit
 only callback adapters for typed rule dispatch and terminal/error wrapping.
@@ -90,9 +101,9 @@ infallible validated accessors panic.
 Revision 9 moved the grammar-independent support preamble (the typed
 `TerminalNode`/`ErrorNode` wrappers, the context child-iteration helpers, and
 the embedded-action `__GeneratedInput` facade) into the runtime's `generated`
-module the same way. Revisions 12 and 13 are accepted generated-code contracts;
-regenerate revision 11 and older lexer and parser modules when upgrading to
-this release.
+module the same way. Revisions 12, 13, and 14 are accepted generated-code
+contracts; regenerate revision 11 and older lexer and parser modules when
+upgrading to this release.
 
 Generated modules created before the compatibility check was introduced carry
 no enforceable revision. Regenerate every committed lexer and parser once when

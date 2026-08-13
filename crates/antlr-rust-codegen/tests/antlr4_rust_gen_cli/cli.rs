@@ -99,7 +99,8 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
-    let previous = "__antlr4_rust_require_codegen_api!(12,";
+    let previous = "__antlr4_rust_require_codegen_api!(13,";
+    let oldest_supported = "__antlr4_rust_require_codegen_api!(12,";
     let unsupported = "__antlr4_rust_require_codegen_api!(11,";
     let mut previous_parser = parser;
     let check_start = previous_parser
@@ -109,11 +110,22 @@ fn generated_modules_enforce_codegen_api_compatibility() {
     fs::write(&parser_path, &previous_parser).expect("parser should be writable");
     assert_generated_modules_compile(temp.path(), &modules);
 
-    let mut incompatible_parser = previous_parser;
-    let check_start = incompatible_parser
+    let mut oldest_parser = previous_parser;
+    let check_start = oldest_parser
         .find(previous)
         .expect("parser check should contain the previous API revision");
-    incompatible_parser.replace_range(check_start..check_start + previous.len(), unsupported);
+    oldest_parser.replace_range(check_start..check_start + previous.len(), oldest_supported);
+    fs::write(&parser_path, &oldest_parser).expect("parser should be writable");
+    assert_generated_modules_compile(temp.path(), &modules);
+
+    let mut incompatible_parser = oldest_parser;
+    let check_start = incompatible_parser
+        .find(oldest_supported)
+        .expect("parser check should contain the oldest supported API revision");
+    incompatible_parser.replace_range(
+        check_start..check_start + oldest_supported.len(),
+        unsupported,
+    );
     fs::write(parser_path, incompatible_parser).expect("parser should be writable");
 
     let output = run_generated_project(temp.path(), &modules, "");
@@ -129,7 +141,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        diagnostic.contains("supports revisions 12 and 13"),
+        diagnostic.contains("supports revisions 12, 13, and 14"),
         "diagnostic should name the supported revisions: {diagnostic}"
     );
     insta::assert_snapshot!(

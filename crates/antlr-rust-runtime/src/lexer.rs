@@ -1002,6 +1002,10 @@ impl LexerContextArena {
         self.record(context).node
     }
 
+    pub(crate) fn has_empty_path(&self, context: LexerContextId) -> bool {
+        self.path_sets.has_empty_path(self.record(context).path_set)
+    }
+
     #[cfg(test)]
     pub(crate) const fn len(&self) -> usize {
         self.records.len()

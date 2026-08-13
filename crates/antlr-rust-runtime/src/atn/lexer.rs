@@ -68,6 +68,7 @@ trait LexerContextOps {
     fn singleton(&mut self, parent: LexerContextId, return_state: usize) -> LexerContextId;
     fn merge(&mut self, left: LexerContextId, right: LexerContextId) -> LexerContextId;
     fn node(&self, context: LexerContextId) -> LexerContextNode;
+    fn has_empty_path(&self, context: LexerContextId) -> bool;
 }
 
 struct BorrowedLexerContexts<'a> {
@@ -86,6 +87,10 @@ impl LexerContextOps for BorrowedLexerContexts<'_> {
 
     fn node(&self, context: LexerContextId) -> LexerContextNode {
         self.contexts.node(context)
+    }
+
+    fn has_empty_path(&self, context: LexerContextId) -> bool {
+        self.contexts.has_empty_path(context)
     }
 }
 
@@ -114,6 +119,13 @@ where
 
     fn node(&self, context: LexerContextId) -> LexerContextNode {
         self.lexer.lexer_prediction_store().contexts.node(context)
+    }
+
+    fn has_empty_path(&self, context: LexerContextId) -> bool {
+        self.lexer
+            .lexer_prediction_store()
+            .contexts
+            .has_empty_path(context)
     }
 }
 
@@ -1948,12 +1960,17 @@ fn close_config<C, P>(
             LexerTransition::Rule {
                 target,
                 follow_state,
+                tail_call,
                 ..
             } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                next.context = contexts.singleton(config.context, *follow_state);
+                next.context = if *tail_call && !contexts.has_empty_path(config.context) {
+                    config.context
+                } else {
+                    contexts.singleton(config.context, *follow_state)
+                };
                 close_config(atn, next, contexts, closure, semantic_predicate);
             }
             LexerTransition::Predicate {
@@ -2344,6 +2361,7 @@ mod tests {
             rule_index: 1,
             follow_state: 3,
             precedence: 0,
+            tail_call: false,
         });
         atn.add_state(call_fragment);
         atn.add_state(LexerAtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
@@ -2363,6 +2381,76 @@ mod tests {
         atn.set_rule_to_token_type(vec![1, INVALID_TOKEN_TYPE]);
         atn.add_mode_start_state(0);
         atn
+    }
+
+    fn tail_call_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(1);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::RuleStop, 0),
+            (2, AtnStateKind::RuleStart, 1),
+            (3, AtnStateKind::RuleStop, 1),
+        ] {
+            atn.add_state(LexerAtnState::new(state_number, kind).with_rule_index(rule_index));
+        }
+        atn.state_mut(0)
+            .expect("caller start")
+            .add_transition(LexerTransition::Rule {
+                target: 2,
+                rule_index: 1,
+                follow_state: 1,
+                precedence: 0,
+                tail_call: false,
+            });
+        atn.state_mut(2)
+            .expect("callee start")
+            .add_transition(LexerTransition::Epsilon { target: 3 });
+        atn.set_rule_to_start_state(vec![0, 2]);
+        atn.set_rule_to_stop_state(vec![1, 3]);
+        atn.set_rule_to_token_type(vec![1, INVALID_TOKEN_TYPE]);
+        atn.identify_tail_calls();
+        atn
+    }
+
+    #[test]
+    fn marked_lexer_tail_call_does_not_allocate_a_redundant_context() {
+        let atn = tail_call_atn();
+        assert!(atn.state(0).expect("caller start").transitions[0].is_tail_call());
+        let mut contexts = LexerContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let parent = contexts.singleton(EMPTY_LEXER_CONTEXT, 99);
+        let before = contexts.len();
+
+        let config = LexerConfig {
+            state: 0,
+            position: 0,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            context: parent,
+            actions: Vec::new(),
+        };
+        let _ = epsilon_closure(&atn, [config], &mut contexts, &mut workspace, &mut |_| true);
+        assert_eq!(
+            contexts.len(),
+            before,
+            "tail call with no empty lexer path must reuse its caller context"
+        );
+
+        let local = LexerConfig {
+            state: 0,
+            position: 0,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            context: EMPTY_LEXER_CONTEXT,
+            actions: Vec::new(),
+        };
+        let _ = epsilon_closure(&atn, [local], &mut contexts, &mut workspace, &mut |_| true);
+        assert!(
+            contexts.len() > before,
+            "an empty lexer path must retain the conservative return frame"
+        );
     }
 
     // `BLOCK_COMMENT: ('/**/' | '/*' ~[!] .*? '*/'); OTHER: .;`

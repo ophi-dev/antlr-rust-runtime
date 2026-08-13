@@ -18,12 +18,12 @@ use std::iter::FusedIterator;
 
 use crate::token::TOKEN_EOF;
 
-use super::AtnStateKind;
+use super::{AtnStateKind, TailCallSite, plain_epsilon_tail_call};
 
 const PARSER_ATN_MAGIC: u32 = 0x5041_544e;
-const PARSER_ATN_FORMAT_VERSION: u32 = 2;
+const PARSER_ATN_FORMAT_VERSION: u32 = 3;
 const PARSER_ATN_MIN_FORMAT_VERSION: u32 = 1;
-const PARSER_ATN_MAX_FORMAT_VERSION: u32 = 2;
+const PARSER_ATN_MAX_FORMAT_VERSION: u32 = 3;
 const PARSER_ATN_BYTE_ORDER: u32 = 0x0102_0304;
 
 const LEGACY_HEADER_WORDS: usize = 26;
@@ -42,6 +42,10 @@ const DENSE_TOKEN_SET_COST_MULTIPLIER: usize = 2;
 const DENSE_TOKEN_SET_MIN_DENSITY_DENOMINATOR: u64 = 8;
 
 const NO_INDEX: u32 = u32::MAX;
+
+const TRANSITION_KIND_MASK: u32 = 0xff;
+const TRANSITION_FLAG_TAIL_CALL: u32 = 1 << 8;
+const TRANSITION_FLAGS: u32 = TRANSITION_FLAG_TAIL_CALL;
 
 const FLAG_NON_GREEDY: u32 = 1 << 0;
 const FLAG_PRECEDENCE_DECISION: u32 = 1 << 1;
@@ -701,8 +705,15 @@ impl<'a> ParserTransition<'a> {
 
     #[inline(always)]
     pub fn kind(self) -> ParserTransitionKind {
-        decode_transition_kind(self.word(0))
+        decode_transition_kind(self.word(0) & TRANSITION_KIND_MASK)
             .expect("packed parser ATN transition kind was validated")
+    }
+
+    /// Returns whether this rule call's follow state is a provably redundant
+    /// prediction-context frame.
+    #[inline(always)]
+    pub fn is_tail_call(self) -> bool {
+        self.word(0) & TRANSITION_FLAG_TAIL_CALL != 0
     }
 
     #[inline(always)]
@@ -777,7 +788,7 @@ impl<'a> ParserTransition<'a> {
 
     #[inline(always)]
     pub fn data(self) -> ParserTransitionData<'a> {
-        match decode_transition_kind(self.word(0))
+        match decode_transition_kind(self.word(0) & TRANSITION_KIND_MASK)
             .expect("packed parser ATN transition kind was validated")
         {
             ParserTransitionKind::Epsilon => ParserTransitionData::Epsilon {
@@ -1363,6 +1374,7 @@ impl ParserAtnBuilder {
         self.mark_precedence_decisions();
         self.transitions.sort_by_key(|transition| transition.source);
         let transition_ranges = self.transition_ranges()?;
+        self.mark_tail_calls(&transition_ranges);
         self.precompute_state_flags(&transition_ranges);
         let words = self.encode(&transition_ranges)?;
         ParserAtn::from_owned(words)
@@ -1465,6 +1477,7 @@ impl ParserAtnBuilder {
             arg0,
             arg1,
             arg2,
+            tail_call: false,
         })
     }
 
@@ -1518,6 +1531,54 @@ impl ParserAtnBuilder {
             {
                 state.flags |= FLAG_HAS_SEMANTIC;
             }
+        }
+    }
+
+    fn mark_tail_calls(&mut self, ranges: &[(u32, u32)]) {
+        let tail_calls = self
+            .transitions
+            .iter()
+            .map(|transition| {
+                if transition.kind != ParserTransitionKind::Rule {
+                    return false;
+                }
+                let source = transition.source.index();
+                let Some(rule_index) = self
+                    .states
+                    .get(source)
+                    .and_then(|state| unpack_index(state.rule_index))
+                else {
+                    return false;
+                };
+                let Some(stop) = self.rule_stops.get(rule_index).copied() else {
+                    return false;
+                };
+                plain_epsilon_tail_call(
+                    TailCallSite {
+                        start: transition.arg1 as usize,
+                        stop: stop.index(),
+                        rule_index,
+                        state_count: self.states.len(),
+                    },
+                    |state| self.states[state].kind,
+                    |state| unpack_index(self.states[state].rule_index),
+                    |state, successors| {
+                        let (start, len) = ranges[state];
+                        for transition in
+                            &self.transitions[start as usize..start as usize + len as usize]
+                        {
+                            if transition.kind != ParserTransitionKind::Epsilon {
+                                return false;
+                            }
+                            successors.push(transition.target.index());
+                        }
+                        true
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        for (transition, tail_call) in self.transitions.iter_mut().zip(tail_calls) {
+            transition.tail_call = tail_call;
         }
     }
 
@@ -1625,7 +1686,8 @@ impl ParserAtnBuilder {
     fn encode_transitions(&self, words: &mut [u32], section: Section) {
         for (index, transition) in self.transitions.iter().enumerate() {
             let base = section.offset + index * TRANSITION_WORDS;
-            words[base] = transition.kind as u32;
+            words[base] = transition.kind as u32
+                | (u32::from(transition.tail_call) * TRANSITION_FLAG_TAIL_CALL);
             words[base + 1] = transition.target.raw();
             words[base + 2] = transition.arg0;
             words[base + 3] = transition.arg1;
@@ -1894,6 +1956,7 @@ struct TransitionBuild {
     arg0: u32,
     arg1: u32,
     arg2: u32,
+    tail_call: bool,
 }
 
 impl TransitionBuild {
@@ -1974,6 +2037,7 @@ fn validate_packed(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
     validate_state_flags(words, layout)?;
     validate_sets(words, layout)?;
     validate_side_tables(words, layout)?;
+    validate_tail_call_flags(words, layout)?;
     Ok(layout)
 }
 
@@ -2192,7 +2256,25 @@ fn validate_states(words: &[u32], layout: ParserAtnLayout) -> Result<(), ParserA
 fn validate_transitions(words: &[u32], layout: ParserAtnLayout) -> Result<(), ParserAtnError> {
     for transition in 0..layout.transition_count {
         let base = layout.transitions.offset + transition * TRANSITION_WORDS;
-        let kind = decode_transition_kind(words[base])?;
+        let raw_kind = words[base];
+        let flags = raw_kind & !TRANSITION_KIND_MASK;
+        let allowed_flags = if layout.format_version >= 3 {
+            TRANSITION_FLAGS
+        } else {
+            0
+        };
+        if flags & !allowed_flags != 0 {
+            return Err(ParserAtnError::InvalidData(format!(
+                "transition {transition} has unknown flags 0x{:x}",
+                flags & !allowed_flags
+            )));
+        }
+        let kind = decode_transition_kind(raw_kind & TRANSITION_KIND_MASK)?;
+        if flags != 0 && kind != ParserTransitionKind::Rule {
+            return Err(ParserAtnError::InvalidData(format!(
+                "transition {transition} has rule-only flags 0x{flags:x} on {kind:?}"
+            )));
+        }
         validate_index(words[base + 1], layout.state_count, "transition target")?;
         match kind {
             ParserTransitionKind::Range => {
@@ -2243,7 +2325,7 @@ fn validate_state_flags(words: &[u32], layout: ParserAtnLayout) -> Result<(), Pa
         let mut has_semantic = false;
         for transition in start..start + len {
             let base = layout.transitions.offset + transition * TRANSITION_WORDS;
-            let kind = decode_transition_kind(words[base])
+            let kind = decode_transition_kind(words[base] & TRANSITION_KIND_MASK)
                 .expect("packed parser transition kind was already validated");
             all_epsilon &= kind.is_epsilon();
             has_consuming |= kind.is_consuming();
@@ -2259,6 +2341,68 @@ fn validate_state_flags(words: &[u32], layout: ParserAtnLayout) -> Result<(), Pa
             return Err(ParserAtnError::InvalidData(format!(
                 "state {state} has inconsistent precomputed flags 0x{derived:x}; expected 0x{expected:x}"
             )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_tail_call_flags(words: &[u32], layout: ParserAtnLayout) -> Result<(), ParserAtnError> {
+    if layout.format_version < 3 {
+        return Ok(());
+    }
+    for source in 0..layout.state_count {
+        let state_base = layout.states.offset + source * STATE_WORDS;
+        let rule_index = unpack_index(words[state_base + 1]);
+        let start = words[state_base + 3] as usize;
+        let len = words[state_base + 4] as usize;
+        for transition_index in start..start + len {
+            let base = layout.transitions.offset + transition_index * TRANSITION_WORDS;
+            let kind = decode_transition_kind(words[base] & TRANSITION_KIND_MASK)
+                .expect("packed parser transition kind was already validated");
+            if kind != ParserTransitionKind::Rule {
+                continue;
+            }
+            let expected = rule_index.is_some_and(|rule_index| {
+                let stop = words[layout.rule_stops.offset + rule_index] as usize;
+                plain_epsilon_tail_call(
+                    TailCallSite {
+                        start: words[base + 3] as usize,
+                        stop,
+                        rule_index,
+                        state_count: layout.state_count,
+                    },
+                    |state| {
+                        let base = layout.states.offset + state * STATE_WORDS;
+                        decode_state_kind(words[base])
+                            .expect("packed parser state kind was already validated")
+                    },
+                    |state| {
+                        let base = layout.states.offset + state * STATE_WORDS;
+                        unpack_index(words[base + 1])
+                    },
+                    |state, successors| {
+                        let state_base = layout.states.offset + state * STATE_WORDS;
+                        let start = words[state_base + 3] as usize;
+                        let len = words[state_base + 4] as usize;
+                        for index in start..start + len {
+                            let base = layout.transitions.offset + index * TRANSITION_WORDS;
+                            let kind = decode_transition_kind(words[base] & TRANSITION_KIND_MASK)
+                                .expect("packed parser transition kind was already validated");
+                            if kind != ParserTransitionKind::Epsilon {
+                                return false;
+                            }
+                            successors.push(words[base + 1] as usize);
+                        }
+                        true
+                    },
+                )
+            });
+            let actual = words[base] & TRANSITION_FLAG_TAIL_CALL != 0;
+            if actual != expected {
+                return Err(ParserAtnError::InvalidData(format!(
+                    "rule transition {transition_index} has tail-call flag {actual}; expected {expected}"
+                )));
+            }
         }
     }
     Ok(())
@@ -2780,6 +2924,191 @@ mod tests {
         builder.finish().expect("packed parser ATN")
     }
 
+    fn classified_rule_transition(
+        continuations: impl IntoIterator<Item = (usize, ParserTransitionSpec)>,
+    ) -> ParserAtn {
+        let mut builder = ParserAtnBuilder::new(4);
+        for (kind, rule_index) in [
+            (AtnStateKind::RuleStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::RuleStop, 1),
+            (AtnStateKind::RuleStart, 2),
+            (AtnStateKind::RuleStop, 2),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::Basic, 0),
+        ] {
+            builder
+                .add_state(kind, Some(rule_index))
+                .expect("classifier state");
+        }
+        builder
+            .set_rule_to_start_state(vec![0, 4, 6])
+            .expect("rule starts");
+        builder
+            .set_rule_to_stop_state(vec![3, 5, 7])
+            .expect("rule stops");
+        builder
+            .add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("caller entry");
+        builder
+            .add_transition(
+                1,
+                ParserTransitionSpec::Rule {
+                    target: 4,
+                    rule_index: 1,
+                    follow_state: 2,
+                    precedence: 0,
+                },
+            )
+            .expect("classified rule call");
+        builder
+            .add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("callee body");
+        builder
+            .add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
+            .expect("other rule body");
+        for (source, transition) in continuations {
+            builder
+                .add_transition(source, transition)
+                .expect("caller continuation");
+        }
+        builder.finish().expect("classified parser ATN")
+    }
+
+    fn classified_call(atn: &ParserAtn) -> ParserTransition<'_> {
+        atn.state(1)
+            .expect("call source")
+            .transitions()
+            .first()
+            .expect("rule call")
+    }
+
+    #[test]
+    fn tail_call_classifier_accepts_only_total_plain_epsilon_continuations() {
+        let linear = classified_rule_transition([
+            (2, ParserTransitionSpec::Epsilon { target: 8 }),
+            (8, ParserTransitionSpec::Epsilon { target: 3 }),
+        ]);
+        assert!(classified_call(&linear).is_tail_call());
+
+        let branching = classified_rule_transition([
+            (2, ParserTransitionSpec::Epsilon { target: 8 }),
+            (2, ParserTransitionSpec::Epsilon { target: 9 }),
+            (8, ParserTransitionSpec::Epsilon { target: 3 }),
+            (9, ParserTransitionSpec::Epsilon { target: 3 }),
+        ]);
+        assert!(classified_call(&branching).is_tail_call());
+
+        let rejected = [
+            ("dead end", Vec::new()),
+            (
+                "consuming edge",
+                vec![(
+                    2,
+                    ParserTransitionSpec::Atom {
+                        target: 3,
+                        label: 1,
+                    },
+                )],
+            ),
+            (
+                "predicate",
+                vec![(
+                    2,
+                    ParserTransitionSpec::Predicate {
+                        target: 3,
+                        rule_index: 0,
+                        pred_index: 0,
+                        context_dependent: false,
+                    },
+                )],
+            ),
+            (
+                "action",
+                vec![(
+                    2,
+                    ParserTransitionSpec::Action {
+                        target: 3,
+                        rule_index: 0,
+                        action_index: Some(0),
+                        context_dependent: false,
+                    },
+                )],
+            ),
+            (
+                "precedence",
+                vec![(
+                    2,
+                    ParserTransitionSpec::Precedence {
+                        target: 3,
+                        precedence: 1,
+                    },
+                )],
+            ),
+            (
+                "nested rule",
+                vec![(
+                    2,
+                    ParserTransitionSpec::Rule {
+                        target: 4,
+                        rule_index: 1,
+                        follow_state: 3,
+                        precedence: 0,
+                    },
+                )],
+            ),
+            (
+                "epsilon cycle",
+                vec![(2, ParserTransitionSpec::Epsilon { target: 2 })],
+            ),
+            (
+                "other rule stop",
+                vec![(2, ParserTransitionSpec::Epsilon { target: 7 })],
+            ),
+        ];
+        for (label, continuations) in rejected {
+            let atn = classified_rule_transition(continuations);
+            assert!(
+                !classified_call(&atn).is_tail_call(),
+                "{label} must not be classified as a tail call"
+            );
+        }
+    }
+
+    #[test]
+    fn format_three_validates_tail_call_flags_and_format_two_remains_readable() {
+        let atn = classified_rule_transition([(2, ParserTransitionSpec::Epsilon { target: 3 })]);
+        let call = classified_call(&atn);
+        assert!(call.is_tail_call());
+        let call_base = atn.layout.transitions.offset + call.id().index() * TRANSITION_WORDS;
+
+        let mut missing_marker = atn.packed_words().to_vec();
+        missing_marker[call_base] &= !TRANSITION_FLAG_TAIL_CALL;
+        let error =
+            ParserAtn::from_owned(missing_marker).expect_err("missing derived marker must fail");
+        assert!(error.to_string().contains("tail-call flag false"));
+
+        let mut non_rule_marker = sample_atn().packed_words().to_vec();
+        let transition_base = sample_atn().layout.transitions.offset;
+        non_rule_marker[transition_base] |= TRANSITION_FLAG_TAIL_CALL;
+        let error = ParserAtn::from_owned(non_rule_marker)
+            .expect_err("tail-call marker on an atom must fail");
+        assert!(error.to_string().contains("rule-only flags"));
+
+        let mut format_two = atn.packed_words().to_vec();
+        format_two[HEADER_VERSION] = 2;
+        for transition in 0..atn.transition_count() {
+            let base = atn.layout.transitions.offset + transition * TRANSITION_WORDS;
+            format_two[base] &= !TRANSITION_FLAGS;
+        }
+        let legacy = ParserAtn::from_owned(format_two).expect("format 2 remains supported");
+        assert_eq!(legacy.format_version(), 2);
+        assert!(!classified_call(&legacy).is_tail_call());
+    }
+
     #[test]
     fn duplicate_transitions_reuse_the_existing_edge() {
         let mut builder = ParserAtnBuilder::new(1);
@@ -2899,9 +3228,9 @@ mod tests {
         assert_eq!(
             ParserAtn::from_owned(wrong_version),
             Err(ParserAtnError::UnsupportedVersion {
-                found: 3,
+                found: 4,
                 minimum: 1,
-                maximum: 2,
+                maximum: 3,
             })
         );
     }

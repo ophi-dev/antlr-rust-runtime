@@ -35,12 +35,15 @@ pub struct ParserAtnSimulator<'a> {
     /// Accept states treated as provisional by the latest direct prediction.
     /// Generated SLL still uses their stored accept metadata.
     deferred_accept_states: FxHashSet<(usize, DfaStateId)>,
-    shared_cache_key: Option<usize>,
+    shared_cache_key: Option<SharedPredictionKey>,
     shared_cache_generation: u64,
     has_trained_decision: bool,
     measure_adaptive_work: bool,
     adaptive_calls: usize,
     adaptive_closure_work: usize,
+    /// Keeps local-context SLL prediction exact by retaining a tail-call frame
+    /// when the current prediction context is empty.
+    tail_call_preserves_sll: bool,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
@@ -176,12 +179,18 @@ struct SharedPredictionStore {
     store: Option<PredictionStore>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct SharedPredictionKey {
+    atn: usize,
+    tail_call_preserves_sll: bool,
+}
+
 thread_local! {
-    static SHARED_PREDICTION_STORES: RefCell<HashMap<usize, SharedPredictionStore>> =
+    static SHARED_PREDICTION_STORES: RefCell<HashMap<SharedPredictionKey, SharedPredictionStore>> =
         RefCell::new(HashMap::new());
 }
 
-fn clear_shared_prediction_store(key: usize) -> u64 {
+fn clear_shared_prediction_store(key: SharedPredictionKey) -> u64 {
     SHARED_PREDICTION_STORES.with(|cache| {
         let mut cache = cache.borrow_mut();
         let shared = cache.entry(key).or_default();
@@ -588,6 +597,15 @@ impl Drop for ParserAtnSimulator<'_> {
 
 impl<'a> ParserAtnSimulator<'a> {
     pub fn new(atn: &'a Atn) -> Self {
+        Self::new_with_tail_call_preserves_sll(atn, true)
+    }
+
+    /// Creates a simulator with an explicit tail-call/SLL accuracy policy.
+    ///
+    /// `true` is the conservative default. Passing `false` can reduce prediction
+    /// context and DFA size, but may make SLL report an error for input that a
+    /// subsequent full-context LL prediction accepts.
+    pub fn new_with_tail_call_preserves_sll(atn: &'a Atn, tail_call_preserves_sll: bool) -> Self {
         Self {
             atn,
             store: PredictionStore::new(atn),
@@ -602,6 +620,7 @@ impl<'a> ParserAtnSimulator<'a> {
             measure_adaptive_work: false,
             adaptive_calls: 0,
             adaptive_closure_work: 0,
+            tail_call_preserves_sll,
             exact_ambig_detection: false,
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
@@ -646,7 +665,12 @@ impl<'a> ParserAtnSimulator<'a> {
     /// Clears the thread-local learned DFA store for a generated parser ATN.
     pub fn clear_shared_dfa(atn: &'static Atn) {
         let ptr: *const Atn = atn;
-        clear_shared_prediction_store(ptr as usize);
+        for tail_call_preserves_sll in [true, false] {
+            clear_shared_prediction_store(SharedPredictionKey {
+                atn: ptr as usize,
+                tail_call_preserves_sll,
+            });
+        }
     }
 
     /// Switches the full-context resolution strategy (Java's
@@ -709,8 +733,21 @@ impl<'a> ParserAtnSimulator<'a> {
     }
 
     pub fn new_shared(atn: &'static Atn) -> Self {
+        Self::new_shared_with_tail_call_preserves_sll(atn, true)
+    }
+
+    /// Creates a shared-cache simulator with an explicit tail-call/SLL policy.
+    ///
+    /// Conservative and reduced-accuracy modes use separate shared DFA stores.
+    pub fn new_shared_with_tail_call_preserves_sll(
+        atn: &'static Atn,
+        tail_call_preserves_sll: bool,
+    ) -> Self {
         let ptr: *const Atn = atn;
-        let key = ptr as usize;
+        let key = SharedPredictionKey {
+            atn: ptr as usize,
+            tail_call_preserves_sll,
+        };
         #[cfg(feature = "perf-counters")]
         let import_started = std::time::Instant::now();
         let (store, generation) = SHARED_PREDICTION_STORES.with(|cache| {
@@ -748,6 +785,7 @@ impl<'a> ParserAtnSimulator<'a> {
             measure_adaptive_work: false,
             adaptive_calls: 0,
             adaptive_closure_work: 0,
+            tail_call_preserves_sll,
             exact_ambig_detection: false,
             full_context_memo: HashMap::default(),
             full_context_memo_len: 0,
@@ -2211,7 +2249,11 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             _ => config.semantic_context.clone(),
         };
-        let context = if transition_kind == ParserTransitionKind::Rule {
+        let empty_local_context = self.store.contexts.is_empty(config.context);
+        let elide_tail_call = transition_kind == ParserTransitionKind::Rule
+            && transition.is_tail_call()
+            && (!self.tail_call_preserves_sll || !empty_local_context);
+        let context = if transition_kind == ParserTransitionKind::Rule && !elide_tail_call {
             self.store
                 .contexts
                 .singleton(config.context, transition.arg1() as usize)
@@ -2219,6 +2261,12 @@ impl<'a> ParserAtnSimulator<'a> {
             config.context
         };
         let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
+        if elide_tail_call && !self.tail_call_preserves_sll && empty_local_context {
+            // The reduced-accuracy mode must still force SLL conflicts to retry
+            // with full context instead of treating the elided local frame as
+            // proof that prediction never reached outside its entry context.
+            target.reaches_into_outer_context = target.reaches_into_outer_context.saturating_add(1);
+        }
         target.semantic_context = semantic_context;
         if self.track_prediction_rule_calls {
             match transition_kind {
@@ -2521,6 +2569,37 @@ mod tests {
         builder.finish().expect("valid packed parser ATN")
     }
 
+    fn tail_call_prediction_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (kind, rule_index) in [
+            (AtnStateKind::RuleStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::RuleStop, 1),
+        ] {
+            atn.add_state(kind, Some(rule_index)).expect("state");
+        }
+        atn.set_rule_to_start_state(vec![0, 3])
+            .expect("rule starts");
+        atn.set_rule_to_stop_state(vec![2, 4]).expect("rule stops");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("caller entry");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("tail call");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("callee body");
+        finish_atn(atn)
+    }
+
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn parser_prediction_hot_path_layouts_stay_compact() {
@@ -2648,6 +2727,52 @@ mod tests {
             second.store.contexts.return_state(second_context, 0),
             Some(99)
         );
+    }
+
+    #[test]
+    fn marked_tail_calls_reuse_contexts_under_the_selected_sll_policy() {
+        let atn = tail_call_prediction_atn();
+        let transition = atn
+            .state(1)
+            .expect("call source")
+            .transitions()
+            .first()
+            .expect("rule transition");
+        assert!(transition.is_tail_call());
+
+        let mut conservative = ParserAtnSimulator::new(&atn);
+        let parent = conservative.store.contexts.singleton(EMPTY_CONTEXT, 99);
+        let before = conservative.prediction_context_stats().contexts_created;
+        let config = AtnConfig::new(1, 1, parent, &conservative.store.contexts);
+        let target = conservative
+            .epsilon_target_config(&config, transition, transition.kind(), 0, true, true)
+            .expect("tail-call target");
+        assert_eq!(target.context, parent);
+        assert_eq!(
+            conservative.prediction_context_stats().contexts_created,
+            before,
+            "a marked tail call with a caller context must not allocate a return node"
+        );
+
+        let local = AtnConfig::new(1, 1, EMPTY_CONTEXT, &conservative.store.contexts);
+        let target = conservative
+            .epsilon_target_config(&local, transition, transition.kind(), 0, true, false)
+            .expect("conservative local target");
+        assert_ne!(target.context, EMPTY_CONTEXT);
+        assert_eq!(
+            conservative.store.contexts.return_state(target.context, 0),
+            Some(2)
+        );
+
+        let mut compact = ParserAtnSimulator::new_with_tail_call_preserves_sll(&atn, false);
+        let before = compact.prediction_context_stats().contexts_created;
+        let local = AtnConfig::new(1, 1, EMPTY_CONTEXT, &compact.store.contexts);
+        let target = compact
+            .epsilon_target_config(&local, transition, transition.kind(), 0, true, false)
+            .expect("reduced-accuracy local target");
+        assert_eq!(target.context, EMPTY_CONTEXT);
+        assert_eq!(target.reaches_into_outer_context, 1);
+        assert_eq!(compact.prediction_context_stats().contexts_created, before);
     }
 
     #[test]
@@ -2803,6 +2928,29 @@ mod tests {
 
         let simulator = ParserAtnSimulator::new_shared(atn);
         assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
+    }
+
+    #[test]
+    fn shared_simulator_separates_tail_call_sll_policies() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        ParserAtnSimulator::clear_shared_dfa(atn);
+
+        {
+            let mut conservative = ParserAtnSimulator::new_shared(atn);
+            assert_eq!(conservative.adaptive_predict(0, [1, 2]), Ok(1));
+        }
+        {
+            let mut compact =
+                ParserAtnSimulator::new_shared_with_tail_call_preserves_sll(atn, false);
+            assert_eq!(compact.adaptive_prediction_work(), None);
+            assert_eq!(compact.adaptive_predict(0, [1, 3]), Ok(2));
+        }
+
+        let conservative = ParserAtnSimulator::new_shared(atn);
+        assert_eq!(conservative.adaptive_prediction_work(), Some((0, 0)));
+        drop(conservative);
+        let compact = ParserAtnSimulator::new_shared_with_tail_call_preserves_sll(atn, false);
+        assert_eq!(compact.adaptive_prediction_work(), Some((0, 0)));
     }
 
     #[test]

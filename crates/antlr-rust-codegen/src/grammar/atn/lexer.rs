@@ -1180,6 +1180,7 @@ fn lower(
         }
     }
     add_rule_return_edges(&mut atn);
+    atn.identify_tail_calls();
     atn
 }
 
@@ -1218,6 +1219,7 @@ fn lower_transition(transition: &FinalizedTransition) -> LexerTransition {
             rule_index: *rule_index,
             follow_state: *follow,
             precedence: *precedence,
+            tail_call: false,
         },
         FinalizedTransitionKind::Predicate {
             rule_index,
@@ -1814,6 +1816,7 @@ fn runtime_edge(
             rule_index,
             follow_state,
             precedence,
+            ..
         } => (
             *follow_state,
             3,
