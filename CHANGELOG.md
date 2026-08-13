@@ -12,6 +12,15 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.33.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.33.0...v0.33.1) (2026-08-13)
+
+
+### Performance Improvements
+
+* **prediction:** eliminate provable tail-call contexts ([#345](https://github.com/ophi-dev/antlr-rust-runtime/issues/345)) ([33493d1](https://github.com/ophi-dev/antlr-rust-runtime/commit/33493d18c88e4738c4f4e27d08306a5c80d830c0))
+* **prediction:** specialize default ATN configs ([#346](https://github.com/ophi-dev/antlr-rust-runtime/issues/346)) ([cc9e966](https://github.com/ophi-dev/antlr-rust-runtime/commit/cc9e966b0d4c60420e758fe0d9e522ecf8d04bae))
+* **prediction:** terminate SLL conflicts by context containment ([#343](https://github.com/ophi-dev/antlr-rust-runtime/issues/343)) ([020758b](https://github.com/ophi-dev/antlr-rust-runtime/commit/020758b5f0448d01eebf9c52103ef4f63142098a))
+
 ## [0.33.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.32.0...v0.33.0) (2026-08-12)
 
 
