@@ -849,6 +849,12 @@ macro_rules! __antlr4_rust_lexer_facade {
             pub fn clear_dfa(&self) {
                 self.$base.clear_dfa();
             }
+
+            /// Returns learned lexer-DFA shape and optional action-payload storage.
+            #[must_use]
+            pub fn lexer_dfa_stats(&self) -> $crate::lexer::LexerDfaStats {
+                self.$base.lexer_dfa_stats()
+            }
         }
 
         impl<$input, $hooks> $crate::generated::GeneratedLexer for $lexer<$input, $hooks>

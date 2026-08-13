@@ -14,8 +14,9 @@ use crate::prediction::{
     AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
     PredictionContextStats, PredictionFxHasher, PredictionPredicateCall,
     PredictionSemanticProvenanceArena, PredictionSemanticProvenanceId, PredictionWorkspace,
-    SemanticContext, SllConflict, all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
-    exact_context_sll_conflict, has_sll_conflict_terminating_prediction, single_viable_alt,
+    SemanticContext, SemanticContextArena, SemanticContextId, SllConflict, all_subsets_conflict,
+    all_subsets_equal, conflicting_alt_subsets, exact_context_sll_conflict,
+    has_sll_conflict_terminating_prediction, single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
@@ -161,6 +162,7 @@ fn atn_has_predicate_transition(atn: &Atn) -> bool {
 #[derive(Debug, Default)]
 struct PredictionStore {
     contexts: ContextArena,
+    semantic_contexts: SemanticContextArena,
     decision_to_dfa: Vec<ParserDfa>,
 }
 
@@ -168,6 +170,7 @@ impl PredictionStore {
     fn new(atn: &Atn) -> Self {
         Self {
             contexts: ContextArena::new(),
+            semantic_contexts: SemanticContextArena::new(),
             decision_to_dfa: initial_decision_dfas(atn),
         }
     }
@@ -323,6 +326,7 @@ enum FullContextResolution {
 fn full_context_prediction(
     alt: usize,
     configs: &AtnConfigSet,
+    semantic_contexts: &SemanticContextArena,
     stop_index: usize,
     resolution: FullContextResolution,
 ) -> FullContextPrediction {
@@ -335,11 +339,14 @@ fn full_context_prediction(
         },
         stop_index,
         resolution,
-        semantic_candidates: semantic_prediction_candidates(configs),
+        semantic_candidates: semantic_prediction_candidates(configs, semantic_contexts),
     }
 }
 
-fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<CompactParserSemanticCandidate> {
+fn semantic_prediction_candidates(
+    configs: &AtnConfigSet,
+    semantic_contexts: &SemanticContextArena,
+) -> Vec<CompactParserSemanticCandidate> {
     if !configs.has_semantic_context() {
         return Vec::new();
     }
@@ -348,7 +355,7 @@ fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<CompactParserSe
         .iter()
         .map(|config| CompactParserSemanticCandidate {
             alt: config.alt,
-            context: config.semantic_context.clone(),
+            context: config.semantic_context(semantic_contexts).clone(),
             semantic_provenance: config.semantic_provenance_id(),
         })
         .collect::<Vec<_>>();
@@ -361,7 +368,7 @@ fn semantic_prediction_candidates(configs: &AtnConfigSet) -> Vec<CompactParserSe
 struct ClosureConfigKey {
     state: usize,
     alt: usize,
-    semantic_context: SemanticContext,
+    semantic_context: SemanticContextId,
     context_and_provenance: u64,
 }
 
@@ -370,7 +377,7 @@ impl From<&AtnConfig> for ClosureConfigKey {
         Self {
             state: config.state,
             alt: config.alt,
-            semantic_context: config.semantic_context.clone(),
+            semantic_context: config.semantic_context_id(),
             context_and_provenance: u64::from(config.context.compact())
                 | (u64::from(config.semantic_provenance_and_flags()) << 32),
         }
@@ -488,9 +495,17 @@ fn union_prediction_stores(
     mut local: PredictionStore,
     workspace: &mut PredictionWorkspace,
 ) {
-    let remap = shared.contexts.import_all(&local.contexts, workspace);
+    let context_remap = shared.contexts.import_all(&local.contexts, workspace);
+    let semantic_context_remap = shared
+        .semantic_contexts
+        .import_all(&local.semantic_contexts);
     for dfa in &mut local.decision_to_dfa {
-        dfa.remap_contexts(&remap, &shared.contexts);
+        dfa.remap_store_ids(
+            &context_remap,
+            &semantic_context_remap,
+            &shared.contexts,
+            &shared.semantic_contexts,
+        );
     }
     union_decision_dfas(&mut shared.decision_to_dfa, local.decision_to_dfa);
 }
@@ -887,6 +902,16 @@ impl<'a> ParserAtnSimulator<'a> {
         for dfa in &self.store.decision_to_dfa {
             stats.add_assign(dfa.stats());
         }
+        stats.semantic_contexts = self.store.semantic_contexts.len();
+        stats.semantic_context_bytes = self.store.semantic_contexts.retained_bytes();
+        if let Some(provenance) = self.semantic_provenance.as_deref() {
+            stats.semantic_provenance_records = provenance.len();
+            stats.semantic_provenance_bytes = provenance.retained_bytes();
+        }
+        stats.cold_bytes = stats
+            .cold_bytes
+            .saturating_add(stats.semantic_context_bytes)
+            .saturating_add(stats.semantic_provenance_bytes);
         stats
     }
 
@@ -1259,7 +1284,8 @@ impl<'a> ParserAtnSimulator<'a> {
                     .map(|dfa| dfa.configs(state_number).clone())
                     && let Some(alt) = self.alt_that_finished_decision_entry_rule(&configs)
                 {
-                    self.prediction_semantic_candidates = semantic_prediction_candidates(&configs);
+                    self.prediction_semantic_candidates =
+                        semantic_prediction_candidates(&configs, &self.store.semantic_contexts);
                     return Ok(ParserAtnPrediction {
                         alt,
                         requires_full_context: false,
@@ -1315,7 +1341,12 @@ impl<'a> ParserAtnSimulator<'a> {
             .store
             .decision_to_dfa
             .get(decision)
-            .map(|dfa| semantic_prediction_candidates(dfa.configs(state_number)))
+            .map(|dfa| {
+                semantic_prediction_candidates(
+                    dfa.configs(state_number),
+                    &self.store.semantic_contexts,
+                )
+            })
             .unwrap_or_default();
         self.prediction_semantic_candidates = semantic_candidates;
         // SLL-probe stage: the caller only needs to know that this conflict
@@ -1440,7 +1471,12 @@ impl<'a> ParserAtnSimulator<'a> {
             .store
             .decision_to_dfa
             .get(decision)
-            .map(|dfa| semantic_prediction_candidates(dfa.configs(state_number)))
+            .map(|dfa| {
+                semantic_prediction_candidates(
+                    dfa.configs(state_number),
+                    &self.store.semantic_contexts,
+                )
+            })
             .unwrap_or_default();
     }
 
@@ -1708,6 +1744,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(full_context_prediction(
                     alt,
                     &configs,
+                    &self.store.semantic_contexts,
                     input.index(),
                     FullContextResolution::Unique,
                 ));
@@ -1725,6 +1762,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(full_context_prediction(
                     alt,
                     &configs,
+                    &self.store.semantic_contexts,
                     input.index(),
                     FullContextResolution::Unique,
                 ));
@@ -1743,6 +1781,7 @@ impl<'a> ParserAtnSimulator<'a> {
                         return Ok(full_context_prediction(
                             alt,
                             &configs,
+                            &self.store.semantic_contexts,
                             input.index(),
                             FullContextResolution::Ambiguous { exact: true, alts },
                         ));
@@ -1752,6 +1791,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     return Ok(full_context_prediction(
                         alt,
                         &configs,
+                        &self.store.semantic_contexts,
                         input.index(),
                         FullContextResolution::Ambiguous { exact: false, alts },
                     ));
@@ -1777,6 +1817,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(full_context_prediction(
                     alt,
                     &configs,
+                    &self.store.semantic_contexts,
                     input.index(),
                     resolution,
                 ));
@@ -2225,14 +2266,16 @@ impl<'a> ParserAtnSimulator<'a> {
         full_context: bool,
     ) -> Option<AtnConfig> {
         let semantic_context = match transition_kind {
-            ParserTransitionKind::Predicate if collect_predicates => SemanticContext::and(
-                config.semantic_context.clone(),
-                SemanticContext::Predicate {
-                    rule_index: transition.arg0() as usize,
-                    pred_index: transition.arg1() as usize,
-                    context_dependent: transition.arg2() != 0,
-                },
-            ),
+            ParserTransitionKind::Predicate if collect_predicates => {
+                self.store.semantic_contexts.and(
+                    config.semantic_context_id(),
+                    SemanticContext::Predicate {
+                        rule_index: transition.arg0() as usize,
+                        pred_index: transition.arg1() as usize,
+                        context_dependent: transition.arg2() != 0,
+                    },
+                )
+            }
             ParserTransitionKind::Precedence
                 if collect_predicates
                     && i32::from_le_bytes(transition.arg0().to_le_bytes()) < precedence =>
@@ -2240,14 +2283,14 @@ impl<'a> ParserAtnSimulator<'a> {
                 return None;
             }
             ParserTransitionKind::Precedence if collect_predicates && !full_context => {
-                SemanticContext::and(
-                    config.semantic_context.clone(),
+                self.store.semantic_contexts.and(
+                    config.semantic_context_id(),
                     SemanticContext::Precedence {
                         precedence: i32::from_le_bytes(transition.arg0().to_le_bytes()),
                     },
                 )
             }
-            _ => config.semantic_context.clone(),
+            _ => config.semantic_context_id(),
         };
         let context_has_empty_path = self.store.contexts.has_empty_path(config.context);
         let elide_tail_call = transition_kind == ParserTransitionKind::Rule
@@ -2267,7 +2310,7 @@ impl<'a> ParserAtnSimulator<'a> {
             config.context
         };
         let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
-        target.semantic_context = semantic_context;
+        target.set_semantic_context(semantic_context, &self.store.semantic_contexts);
         if self.track_prediction_rule_calls {
             match transition_kind {
                 ParserTransitionKind::Rule => {
@@ -2421,7 +2464,7 @@ fn configs_have_semantic_context_for_alt(configs: &AtnConfigSet, alt: usize) -> 
     configs
         .configs()
         .iter()
-        .any(|config| config.alt == alt && !config.semantic_context.is_none())
+        .any(|config| config.alt == alt && config.has_semantic_context())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2704,6 +2747,35 @@ mod tests {
     }
 
     #[test]
+    fn parser_dfa_stats_account_for_optional_config_payload_arenas() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        simulator
+            .store
+            .semantic_contexts
+            .intern(SemanticContext::Predicate {
+                rule_index: 1,
+                pred_index: 2,
+                context_dependent: false,
+            });
+        let mut provenance = PredictionSemanticProvenanceArena::default();
+        provenance.enter_rule(PredictionSemanticProvenanceId::default(), 3, 4);
+        simulator.semantic_provenance = Some(Box::new(provenance));
+
+        let stats = simulator.parser_dfa_stats();
+        assert_eq!(stats.semantic_contexts, 2);
+        assert_eq!(stats.semantic_provenance_records, 1);
+        assert!(stats.semantic_context_bytes > 0);
+        assert!(stats.semantic_provenance_bytes > 0);
+        assert!(
+            stats.cold_bytes
+                >= stats
+                    .semantic_context_bytes
+                    .saturating_add(stats.semantic_provenance_bytes)
+        );
+    }
+
+    #[test]
     fn union_decision_dfa_preserves_disjoint_coverage() {
         fn configs(
             atn_state: usize,
@@ -2759,7 +2831,7 @@ mod tests {
     }
 
     #[test]
-    fn union_prediction_stores_remaps_context_ids_before_dfa_union() {
+    fn union_prediction_stores_remaps_config_store_ids_before_dfa_union() {
         let atn = two_token_decision_atn();
         let mut shared = PredictionStore::new(&atn);
         let mut local = PredictionStore::new(&atn);
@@ -2768,13 +2840,23 @@ mod tests {
         let distracting = shared.contexts.singleton(EMPTY_CONTEXT, 99);
         let local_context = local.contexts.singleton(EMPTY_CONTEXT, 7);
         assert_eq!(distracting, local_context, "both stores allocate ID 1");
+        let distracting_semantic = shared
+            .semantic_contexts
+            .intern(SemanticContext::Precedence { precedence: 99 });
+        let local_semantic = local.semantic_contexts.intern(SemanticContext::Predicate {
+            rule_index: 2,
+            pred_index: 3,
+            context_dependent: true,
+        });
+        assert_eq!(
+            distracting_semantic, local_semantic,
+            "both semantic stores allocate ID 1"
+        );
 
         let mut configs = AtnConfigSet::new();
-        configs.add(
-            AtnConfig::new(42, 1, local_context, &local.contexts),
-            &mut local.contexts,
-            &mut workspace,
-        );
+        let mut config = AtnConfig::new(42, 1, local_context, &local.contexts);
+        config.set_semantic_context(local_semantic, &local.semantic_contexts);
+        configs.add(config, &mut local.contexts, &mut workspace);
         local.decision_to_dfa[0].add_state(DfaStateBuilder::new(configs));
 
         union_prediction_stores(&mut shared, local, &mut workspace);
@@ -2786,6 +2868,14 @@ mod tests {
             .expect("local DFA config imported");
         assert_ne!(imported.context, local_context);
         assert_eq!(shared.contexts.return_state(imported.context, 0), Some(7));
+        assert_eq!(
+            imported.semantic_context(&shared.semantic_contexts),
+            &SemanticContext::Predicate {
+                rule_index: 2,
+                pred_index: 3,
+                context_dependent: true,
+            }
+        );
         imported.assert_store(&shared.contexts);
     }
 
@@ -3662,6 +3752,7 @@ mod tests {
                     pred_index: 0,
                     context_dependent: false,
                 },
+                &mut simulator.store.semantic_contexts,
             ),
             &mut simulator.store.contexts,
             &mut workspace,
@@ -3827,19 +3918,27 @@ mod tests {
             .epsilon_target_config(&config, transition, transition.kind(), 1, true, false)
             .expect("sll start transition");
         assert!(matches!(
-            sll_start.semantic_context,
+            sll_start.semantic_context(&simulator.store.semantic_contexts),
             SemanticContext::Precedence { precedence: 2 }
         ));
 
         let full_context_start = simulator
             .epsilon_target_config(&config, transition, transition.kind(), 1, true, true)
             .expect("full-context start transition");
-        assert!(full_context_start.semantic_context.is_none());
+        assert!(
+            full_context_start
+                .semantic_context(&simulator.store.semantic_contexts)
+                .is_none()
+        );
 
         let reach = simulator
             .epsilon_target_config(&config, transition, transition.kind(), 3, false, false)
             .expect("reach transition");
-        assert!(reach.semantic_context.is_none());
+        assert!(
+            reach
+                .semantic_context(&simulator.store.semantic_contexts)
+                .is_none()
+        );
 
         assert!(
             simulator
@@ -3920,7 +4019,9 @@ mod tests {
             .find(|config| config.state == 2)
             .expect("config at state 2");
         assert!(
-            at_two.semantic_context.is_none(),
+            at_two
+                .semantic_context(&simulator.store.semantic_contexts)
+                .is_none(),
             "predicate after an action edge must not be collected during prediction"
         );
 
@@ -3945,7 +4046,7 @@ mod tests {
             )
             .expect("predicate transition");
         assert!(matches!(
-            direct.semantic_context,
+            direct.semantic_context(&simulator.store.semantic_contexts),
             SemanticContext::Predicate { pred_index: 0, .. }
         ));
     }
@@ -3990,6 +4091,7 @@ mod tests {
     #[test]
     fn semantic_context_flag_is_scoped_to_predicted_alt() {
         let mut arena = ContextArena::new();
+        let mut semantic_contexts = SemanticContextArena::new();
         let mut workspace = PredictionWorkspace::default();
         let mut configs = AtnConfigSet::new();
         configs.add(
@@ -4004,6 +4106,7 @@ mod tests {
                     pred_index: 0,
                     context_dependent: false,
                 },
+                &mut semantic_contexts,
             ),
             &mut arena,
             &mut workspace,

@@ -824,6 +824,136 @@ impl SemanticContext {
     }
 }
 
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct SemanticContextId(u32);
+
+#[derive(Debug)]
+pub(crate) struct SemanticContextArena {
+    records: Vec<SemanticContext>,
+    interner_heads: FxHashMap<u64, SemanticContextId>,
+    interner_next: Vec<Option<SemanticContextId>>,
+}
+
+impl SemanticContextArena {
+    pub(crate) fn new() -> Self {
+        let semantic_context = SemanticContext::None;
+        let cached_hash = semantic_context_hash(&semantic_context);
+        let mut interner_heads = FxHashMap::default();
+        interner_heads.insert(cached_hash, SemanticContextId::default());
+        Self {
+            records: vec![semantic_context],
+            interner_heads,
+            interner_next: vec![None],
+        }
+    }
+
+    pub(crate) fn intern(&mut self, semantic_context: SemanticContext) -> SemanticContextId {
+        if semantic_context.is_none() {
+            return SemanticContextId::default();
+        }
+        let cached_hash = semantic_context_hash(&semantic_context);
+        if let Some(id) = self.find_interned(cached_hash, &semantic_context) {
+            return id;
+        }
+        let id = SemanticContextId(
+            u32::try_from(self.records.len()).expect("semantic-context arena exhausted"),
+        );
+        let previous = self.interner_heads.insert(cached_hash, id);
+        self.records.push(semantic_context);
+        self.interner_next.push(previous);
+        id
+    }
+
+    pub(crate) fn and(
+        &mut self,
+        left: SemanticContextId,
+        right: SemanticContext,
+    ) -> SemanticContextId {
+        let combined = SemanticContext::and(self.get(left).clone(), right);
+        self.intern(combined)
+    }
+
+    pub(crate) fn get(&self, id: SemanticContextId) -> &SemanticContext {
+        self.assert_valid(id);
+        &self.records[usize::try_from(id.0).expect("u32 semantic-context ID fits usize")]
+    }
+
+    pub(crate) fn import_all(&mut self, source: &Self) -> Vec<SemanticContextId> {
+        source
+            .records
+            .iter()
+            .cloned()
+            .map(|semantic_context| self.intern(semantic_context))
+            .collect()
+    }
+
+    pub(crate) const fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.records.capacity() * size_of::<SemanticContext>()
+            + self
+                .records
+                .iter()
+                .map(semantic_context_heap_retained_bytes)
+                .sum::<usize>()
+            + self.interner_heads.capacity() * size_of::<(u64, SemanticContextId)>()
+            + self.interner_next.capacity() * size_of::<Option<SemanticContextId>>()
+    }
+
+    fn find_interned(
+        &self,
+        cached_hash: u64,
+        semantic_context: &SemanticContext,
+    ) -> Option<SemanticContextId> {
+        let mut candidate = self.interner_heads.get(&cached_hash).copied();
+        while let Some(id) = candidate {
+            let index = usize::try_from(id.0).ok()?;
+            if self.records.get(index) == Some(semantic_context) {
+                return Some(id);
+            }
+            candidate = self.interner_next.get(index).copied().flatten();
+        }
+        None
+    }
+
+    fn assert_valid(&self, id: SemanticContextId) {
+        assert!(
+            usize::try_from(id.0).is_ok_and(|index| index < self.records.len()),
+            "semantic-context ID does not belong to this store"
+        );
+    }
+}
+
+impl Default for SemanticContextArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn semantic_context_hash(semantic_context: &SemanticContext) -> u64 {
+    let mut hasher = PredictionFxHasher::default();
+    semantic_context.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn semantic_context_heap_retained_bytes(semantic_context: &SemanticContext) -> usize {
+    match semantic_context {
+        SemanticContext::And(children) | SemanticContext::Or(children) => {
+            children.capacity() * size_of::<SemanticContext>()
+                + children
+                    .iter()
+                    .map(semantic_context_heap_retained_bytes)
+                    .sum::<usize>()
+        }
+        SemanticContext::None
+        | SemanticContext::Predicate { .. }
+        | SemanticContext::Precedence { .. } => 0,
+    }
+}
+
 fn combine_semantic_context(
     left: SemanticContext,
     right: SemanticContext,
@@ -938,6 +1068,32 @@ impl PredictionSemanticProvenanceArena {
             .map_or(&[], |provenance| provenance.predicate_calls.as_slice())
     }
 
+    pub(crate) const fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.records.capacity() * size_of::<PredictionSemanticProvenance>()
+            + self
+                .records
+                .iter()
+                .map(|provenance| {
+                    provenance.active_rule_calls.capacity() * size_of::<PredictionRuleCall>()
+                        + provenance.predicate_calls.capacity()
+                            * size_of::<PredictionPredicateCall>()
+                        + provenance
+                            .predicate_calls
+                            .iter()
+                            .map(|call| {
+                                call.rule_calls.capacity() * size_of::<PredictionRuleCall>()
+                            })
+                            .sum::<usize>()
+                })
+                .sum::<usize>()
+            + self.interner_heads.capacity() * size_of::<(u64, PredictionSemanticProvenanceId)>()
+            + self.interner_next.capacity() * size_of::<Option<PredictionSemanticProvenanceId>>()
+    }
+
     fn get(&self, id: PredictionSemanticProvenanceId) -> Option<&PredictionSemanticProvenance> {
         let index = id.0.checked_sub(1)?;
         self.records.get(usize::try_from(index).ok()?)
@@ -995,7 +1151,7 @@ pub(crate) struct AtnConfig {
     pub(crate) state: usize,
     pub(crate) alt: usize,
     pub(crate) context: ContextId,
-    pub(crate) semantic_context: SemanticContext,
+    semantic_context: SemanticContextId,
     pub(crate) reaches_into_outer_context: usize,
     semantic_provenance_and_flags: u32,
     #[cfg(debug_assertions)]
@@ -1009,7 +1165,7 @@ impl AtnConfig {
             state,
             alt,
             context,
-            semantic_context: SemanticContext::None,
+            semantic_context: SemanticContextId::default(),
             reaches_into_outer_context: 0,
             semantic_provenance_and_flags: 0,
             #[cfg(debug_assertions)]
@@ -1019,9 +1175,37 @@ impl AtnConfig {
 
     #[must_use]
     #[cfg(test)]
-    pub(crate) fn with_semantic_context(mut self, semantic_context: SemanticContext) -> Self {
-        self.semantic_context = semantic_context;
+    pub(crate) fn with_semantic_context(
+        mut self,
+        semantic_context: SemanticContext,
+        arena: &mut SemanticContextArena,
+    ) -> Self {
+        self.semantic_context = arena.intern(semantic_context);
         self
+    }
+
+    pub(crate) const fn semantic_context_id(&self) -> SemanticContextId {
+        self.semantic_context
+    }
+
+    pub(crate) fn semantic_context<'a>(
+        &self,
+        arena: &'a SemanticContextArena,
+    ) -> &'a SemanticContext {
+        arena.get(self.semantic_context)
+    }
+
+    pub(crate) const fn has_semantic_context(&self) -> bool {
+        self.semantic_context.0 != 0
+    }
+
+    pub(crate) fn set_semantic_context(
+        &mut self,
+        semantic_context: SemanticContextId,
+        arena: &SemanticContextArena,
+    ) {
+        arena.assert_valid(semantic_context);
+        self.semantic_context = semantic_context;
     }
 
     pub(crate) fn set_context(&mut self, context: ContextId, arena: &ContextArena) {
@@ -1035,7 +1219,7 @@ impl AtnConfig {
 
     pub(crate) fn moved_to(&self, state: usize, context: ContextId, arena: &ContextArena) -> Self {
         let mut moved = Self::new(state, self.alt, context, arena);
-        moved.semantic_context = self.semantic_context.clone();
+        moved.semantic_context = self.semantic_context;
         moved.reaches_into_outer_context = self.reaches_into_outer_context;
         moved.semantic_provenance_and_flags = self.semantic_provenance_and_flags;
         moved
@@ -1148,7 +1332,7 @@ impl AtnConfigSet {
         config.assert_store(arena);
         #[cfg(feature = "perf-counters")]
         crate::perf::record_config_add_call();
-        if !config.semantic_context.is_none() {
+        if config.has_semantic_context() {
             self.has_semantic_context = true;
         }
         if config.reaches_into_outer_context > 0 {
@@ -1243,14 +1427,28 @@ impl AtnConfigSet {
         self.conflicting_alts.clone()
     }
 
-    pub(crate) fn remap_contexts(&mut self, remap: &[ContextId], arena: &ContextArena) {
+    pub(crate) fn remap_store_ids(
+        &mut self,
+        context_remap: &[ContextId],
+        semantic_context_remap: &[SemanticContextId],
+        contexts: &ContextArena,
+        semantic_contexts: &SemanticContextArena,
+    ) {
         for config in &mut self.configs {
             let index = usize::try_from(config.context.0).expect("u32 context ID fits usize");
             config.set_context(
-                *remap
+                *context_remap
                     .get(index)
                     .expect("every imported context ID has a remap"),
-                arena,
+                contexts,
+            );
+            let semantic_index = usize::try_from(config.semantic_context_id().0)
+                .expect("u32 semantic-context ID fits usize");
+            config.set_semantic_context(
+                *semantic_context_remap
+                    .get(semantic_index)
+                    .expect("every imported semantic-context ID has a remap"),
+                semantic_contexts,
             );
         }
         self.config_index.clear();
@@ -1310,7 +1508,7 @@ impl PartialOrd for AtnConfigSet {
 struct AtnConfigKey {
     state: usize,
     alt: usize,
-    semantic_context: SemanticContext,
+    semantic_context: SemanticContextId,
     semantic_provenance: PredictionSemanticProvenanceId,
 }
 
@@ -1319,7 +1517,7 @@ impl From<&AtnConfig> for AtnConfigKey {
         Self {
             state: config.state,
             alt: config.alt,
-            semantic_context: config.semantic_context.clone(),
+            semantic_context: config.semantic_context_id(),
             semantic_provenance: config.semantic_provenance_id(),
         }
     }
@@ -1596,6 +1794,46 @@ mod tests {
     }
 
     #[test]
+    fn semantic_context_arena_interns_imports_and_accounts_for_payloads() {
+        let predicate = SemanticContext::Predicate {
+            rule_index: 2,
+            pred_index: 3,
+            context_dependent: true,
+        };
+        let mut source = SemanticContextArena::new();
+        let predicate_id = source.intern(predicate.clone());
+        assert_eq!(source.intern(predicate), predicate_id);
+
+        let combined_id = source.and(predicate_id, SemanticContext::Precedence { precedence: 4 });
+        assert_ne!(combined_id, predicate_id);
+        assert_eq!(source.len(), 3);
+        assert!(source.retained_bytes() >= source.len() * size_of::<SemanticContext>());
+
+        let mut destination = SemanticContextArena::new();
+        let distracting_id = destination.intern(SemanticContext::Precedence { precedence: 99 });
+        assert_eq!(distracting_id, predicate_id, "both arenas allocate ID 1");
+        let remap = destination.import_all(&source);
+        let imported = remap[usize::try_from(combined_id.0).expect("semantic ID fits usize")];
+        assert_eq!(destination.get(imported), source.get(combined_id));
+        assert_ne!(imported, combined_id);
+    }
+
+    #[test]
+    fn semantic_context_arena_verifies_hash_collisions() {
+        let mut arena = SemanticContextArena::new();
+        let first = SemanticContext::Precedence { precedence: 1 };
+        let first_id = arena.intern(first);
+        let second = SemanticContext::Precedence { precedence: 2 };
+        arena
+            .interner_heads
+            .insert(semantic_context_hash(&second), first_id);
+
+        let second_id = arena.intern(second.clone());
+        assert_ne!(second_id, first_id);
+        assert_eq!(arena.intern(second), second_id);
+    }
+
+    #[test]
     fn config_set_merges_context_ids() {
         let mut arena = ContextArena::new();
         let mut workspace = PredictionWorkspace::default();
@@ -1648,6 +1886,7 @@ mod tests {
     #[test]
     fn exact_context_conflict_joins_semantically_distinct_configs() {
         let mut arena = ContextArena::new();
+        let mut semantic_contexts = SemanticContextArena::new();
         let mut workspace = PredictionWorkspace::default();
         let first = arena.singleton(EMPTY_CONTEXT, 10);
         let second = arena.singleton(EMPTY_CONTEXT, 20);
@@ -1659,12 +1898,14 @@ mod tests {
         };
         let mut configs = AtnConfigSet::new();
         configs.add(
-            AtnConfig::new(7, 1, first, &arena).with_semantic_context(predicate(0)),
+            AtnConfig::new(7, 1, first, &arena)
+                .with_semantic_context(predicate(0), &mut semantic_contexts),
             &mut arena,
             &mut workspace,
         );
         configs.add(
-            AtnConfig::new(7, 1, second, &arena).with_semantic_context(predicate(1)),
+            AtnConfig::new(7, 1, second, &arena)
+                .with_semantic_context(predicate(1), &mut semantic_contexts),
             &mut arena,
             &mut workspace,
         );
@@ -1825,6 +2066,7 @@ mod tests {
     #[test]
     fn config_set_keeps_distinct_prediction_provenance() {
         let mut arena = ContextArena::new();
+        let semantic_contexts = SemanticContextArena::new();
         let mut provenance = PredictionSemanticProvenanceArena::default();
         let mut workspace = PredictionWorkspace::default();
         let mut first = AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena);
@@ -1839,20 +2081,27 @@ mod tests {
         assert_eq!(set.len(), 2);
         assert_eq!(set.config_index.len(), set.len());
 
-        set.remap_contexts(&[EMPTY_CONTEXT], &arena);
+        set.remap_store_ids(
+            &[EMPTY_CONTEXT],
+            &[SemanticContextId::default()],
+            &arena,
+            &semantic_contexts,
+        );
         assert_eq!(set.config_index.len(), set.len());
     }
 
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn parser_config_hot_path_layout_stays_compact() {
+        // Inline SemanticContext storage was 64 bytes in release / 72 in debug;
+        // cloning it into AtnConfigKey made each key 56 bytes.
         let debug_generation = if cfg!(debug_assertions) {
             size_of::<u64>()
         } else {
             0
         };
-        assert!(size_of::<AtnConfig>() <= 64 + debug_generation);
-        assert!(size_of::<AtnConfigKey>() <= 56);
+        assert_eq!(size_of::<AtnConfig>(), 40 + debug_generation);
+        assert_eq!(size_of::<AtnConfigKey>(), 24);
     }
 
     #[test]

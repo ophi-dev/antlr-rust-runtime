@@ -1047,7 +1047,7 @@ impl ModeBuild {
             .map(|config| CompiledLexerConfig {
                 state: config.state,
                 consumed_eof: config.consumed_eof,
-                alt_rule_index: config.alt_rule_index,
+                alt_rule_index: config.alt_rule_index(),
                 passed_non_greedy: config.passed_non_greedy,
                 context: compile_context(
                     &self.contexts,
@@ -1057,6 +1057,7 @@ impl ModeBuild {
                 ),
                 actions: config
                     .actions
+                    .as_slice()
                     .iter()
                     .map(|action| CompiledLexerActionTrace {
                         action_index: action.action_index,
@@ -1084,12 +1085,13 @@ impl ModeBuild {
 fn relative_config_key(config: &LexerConfig, step: usize) -> LexerDfaConfigKey {
     LexerDfaConfigKey::new(
         config.state,
-        config.alt_rule_index,
+        config.alt_rule_index(),
         config.consumed_eof,
         config.passed_non_greedy,
         config.context,
         config
             .actions
+            .as_slice()
             .iter()
             .map(|action| LexerDfaActionKey {
                 action_index: action.action_index,
@@ -1140,15 +1142,7 @@ fn build_mode(
     let start_configs = closed_configs(
         atn,
         &mut build,
-        vec![LexerConfig {
-            state: start_state,
-            position: 0,
-            consumed_eof: false,
-            alt_rule_index: None,
-            passed_non_greedy: false,
-            context: EMPTY_LEXER_CONTEXT,
-            actions: Vec::new(),
-        }],
+        vec![LexerConfig::new(start_state, 0, EMPTY_LEXER_CONTEXT)],
     )?;
     let start_id = build.intern(atn, start_configs, 0);
     if start_id == ESCAPE_STATE {
@@ -1211,7 +1205,7 @@ fn closed_configs(
 /// DFA-state identity would mint a fresh state per input offset — rules that
 /// loop over comment/whitespace references would never determinize.
 fn prune_dead_action_traces(atn: &LexerAtn, config: &mut LexerConfig) {
-    let Some(accept_rule) = config.alt_rule_index else {
+    let Some(accept_rule) = config.alt_rule_index() else {
         return;
     };
     config
@@ -1986,15 +1980,7 @@ mod tests {
         for return_state in 0..MAX_CONTEXT_DEPTH {
             bounded = contexts.singleton(bounded, return_state);
         }
-        let config = |context| LexerConfig {
-            state: 0,
-            position: 0,
-            consumed_eof: false,
-            alt_rule_index: Some(0),
-            passed_non_greedy: false,
-            context,
-            actions: Vec::new(),
-        };
+        let config = |context| LexerConfig::new(0, 0, context).with_alt_rule_index(0);
 
         assert!(!has_recursive_context(&config(bounded), &contexts));
 
@@ -2016,15 +2002,7 @@ mod tests {
             context = contexts.merge(context, branch, &mut workspace);
         }
         let expected_contexts = contexts.len() - 1;
-        let config = LexerConfig {
-            state: 0,
-            position: 0,
-            consumed_eof: false,
-            alt_rule_index: Some(0),
-            passed_non_greedy: false,
-            context,
-            actions: Vec::new(),
-        };
+        let config = LexerConfig::new(0, 0, context).with_alt_rule_index(0);
 
         std::thread::Builder::new()
             .stack_size(64 * 1024)

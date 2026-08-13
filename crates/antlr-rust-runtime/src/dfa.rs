@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Konstantin Vyatkin
-use crate::prediction::{AtnConfigSet, ContextArena, ContextId, PredictionFxHasher};
+use crate::prediction::{
+    AtnConfigSet, ContextArena, ContextId, PredictionFxHasher, SemanticContextArena,
+    SemanticContextId,
+};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::mem::size_of;
@@ -77,6 +80,15 @@ pub struct ParserDfaStats {
     pub edge_density_histogram: [usize; 6],
     pub hot_bytes: usize,
     pub cold_bytes: usize,
+    /// Store-wide semantic-context records. Populated by
+    /// `ParserAtnSimulator::parser_dfa_stats`; zero for one standalone DFA.
+    pub semantic_contexts: usize,
+    /// Retained element storage for the store-wide semantic-context arena.
+    pub semantic_context_bytes: usize,
+    /// Store-wide semantic-provenance records used by parameterized predicates.
+    pub semantic_provenance_records: usize,
+    /// Retained element storage for the optional semantic-provenance arena.
+    pub semantic_provenance_bytes: usize,
     pub states_created: usize,
     pub states_deduplicated: usize,
     pub fingerprint_candidates: usize,
@@ -116,6 +128,18 @@ impl ParserDfaStats {
         }
         self.hot_bytes = self.hot_bytes.saturating_add(other.hot_bytes);
         self.cold_bytes = self.cold_bytes.saturating_add(other.cold_bytes);
+        self.semantic_contexts = self
+            .semantic_contexts
+            .saturating_add(other.semantic_contexts);
+        self.semantic_context_bytes = self
+            .semantic_context_bytes
+            .saturating_add(other.semantic_context_bytes);
+        self.semantic_provenance_records = self
+            .semantic_provenance_records
+            .saturating_add(other.semantic_provenance_records);
+        self.semantic_provenance_bytes = self
+            .semantic_provenance_bytes
+            .saturating_add(other.semantic_provenance_bytes);
         self.states_created = self.states_created.saturating_add(other.states_created);
         self.states_deduplicated = self
             .states_deduplicated
@@ -285,6 +309,10 @@ impl ParserDfa {
                 + self.interner.retained_bytes()
                 + self.precedence_start_states.capacity() * size_of::<DfaStateId>(),
             cold_bytes: self.cold.retained_bytes(),
+            semantic_contexts: 0,
+            semantic_context_bytes: 0,
+            semantic_provenance_records: 0,
+            semantic_provenance_bytes: 0,
             states_created: self.learning.states_created,
             states_deduplicated: self.learning.states_deduplicated,
             fingerprint_candidates: self.learning.fingerprint_candidates,
@@ -411,9 +439,20 @@ impl ParserDfa {
         }
     }
 
-    pub(crate) fn remap_contexts(&mut self, remap: &[ContextId], arena: &ContextArena) {
+    pub(crate) fn remap_store_ids(
+        &mut self,
+        context_remap: &[ContextId],
+        semantic_context_remap: &[SemanticContextId],
+        contexts: &ContextArena,
+        semantic_contexts: &SemanticContextArena,
+    ) {
         for configs in &mut self.cold.configs {
-            configs.remap_contexts(remap, arena);
+            configs.remap_store_ids(
+                context_remap,
+                semantic_context_remap,
+                contexts,
+                semantic_contexts,
+            );
         }
         self.interner.rebuild(&self.cold.configs);
     }
