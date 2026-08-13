@@ -2811,6 +2811,33 @@ mod tests {
             "a marked tail call with a caller context must not allocate a return node"
         );
 
+        let mut workspace = PredictionWorkspace::default();
+        let full_with_empty =
+            conservative
+                .store
+                .contexts
+                .merge(parent, EMPTY_CONTEXT, false, &mut workspace);
+        assert!(conservative.store.contexts.has_empty_path(full_with_empty));
+        assert!(!conservative.store.contexts.is_empty(full_with_empty));
+        let config = AtnConfig::new(1, 1, full_with_empty, &conservative.store.contexts);
+        let target = conservative
+            .epsilon_target_config(&config, transition, transition.kind(), 0, true, true)
+            .expect("full-context tail-call target");
+        assert_eq!(
+            target.context, full_with_empty,
+            "a full-context array with an empty path is not the local empty context"
+        );
+
+        let local_with_empty =
+            conservative
+                .store
+                .contexts
+                .merge(parent, EMPTY_CONTEXT, true, &mut workspace);
+        assert!(
+            conservative.store.contexts.is_empty(local_with_empty),
+            "an SLL wildcard merge must collapse an empty path to the local empty context"
+        );
+
         let local = AtnConfig::new(1, 1, EMPTY_CONTEXT, &conservative.store.contexts);
         let target = conservative
             .epsilon_target_config(&local, transition, transition.kind(), 0, true, false)

@@ -23,8 +23,16 @@ struct TailCallSite {
     state_count: usize,
 }
 
+#[derive(Default)]
+struct TailCallScratch {
+    marks: Vec<u8>,
+    work: Vec<(usize, bool)>,
+    successors: Vec<usize>,
+}
+
 fn plain_epsilon_tail_call<StateKind, StateRule, PushSuccessors>(
     site: TailCallSite,
+    scratch: &mut TailCallScratch,
     state_kind: StateKind,
     state_rule_index: StateRule,
     push_successors: PushSuccessors,
@@ -51,9 +59,16 @@ where
     // Reject cycles as well as semantic, consuming, nested-rule, and dead-end
     // paths. Every continuation must finish the enclosing rule without
     // observable work.
-    let mut marks = vec![0_u8; state_count];
-    let mut work = vec![(start, false)];
-    let mut successors = Vec::new();
+    let TailCallScratch {
+        marks,
+        work,
+        successors,
+    } = scratch;
+    marks.clear();
+    marks.resize(state_count, 0);
+    work.clear();
+    work.push((start, false));
+    successors.clear();
     while let Some((state, exiting)) = work.pop() {
         if state == stop {
             continue;
@@ -76,7 +91,7 @@ where
             return false;
         }
         successors.clear();
-        if !push_successors(state, &mut successors) || successors.is_empty() {
+        if !push_successors(state, successors) || successors.is_empty() {
             return false;
         }
         marks[state] = 1;
@@ -192,9 +207,15 @@ impl LexerAtn {
     }
 
     /// Recomputes conservative tail-call markers after the graph is complete.
+    ///
+    /// Call this after every transition and derived rule-return edge has been
+    /// added. Any later mutation through [`Self::add_state`],
+    /// [`Self::state_mut`], or [`LexerAtnState::add_transition`] invalidates the
+    /// stored markers, so callers must run this analysis again before prediction.
     #[doc(hidden)]
     pub fn identify_tail_calls(&mut self) {
         let mut tail_calls = Vec::new();
+        let mut scratch = TailCallScratch::default();
         for source in 0..self.states.len() {
             for index in 0..self.states[source].transitions.len() {
                 let follow_state = match &self.states[source].transitions[index] {
@@ -204,7 +225,7 @@ impl LexerAtn {
                 tail_calls.push((
                     source,
                     index,
-                    self.tail_call_follow_is_safe(source, follow_state),
+                    self.tail_call_follow_is_safe(source, follow_state, &mut scratch),
                 ));
             }
         }
@@ -221,7 +242,12 @@ impl LexerAtn {
         }
     }
 
-    fn tail_call_follow_is_safe(&self, source: usize, start: usize) -> bool {
+    fn tail_call_follow_is_safe(
+        &self,
+        source: usize,
+        start: usize,
+        scratch: &mut TailCallScratch,
+    ) -> bool {
         let Some(rule_index) = self.states.get(source).and_then(|state| state.rule_index) else {
             return false;
         };
@@ -235,6 +261,7 @@ impl LexerAtn {
                 rule_index,
                 state_count: self.states.len(),
             },
+            scratch,
             |state| self.states[state].kind,
             |state| self.states[state].rule_index,
             |state, successors| {

@@ -18,7 +18,7 @@ use std::iter::FusedIterator;
 
 use crate::token::TOKEN_EOF;
 
-use super::{AtnStateKind, TailCallSite, plain_epsilon_tail_call};
+use super::{AtnStateKind, TailCallScratch, TailCallSite, plain_epsilon_tail_call};
 
 const PARSER_ATN_MAGIC: u32 = 0x5041_544e;
 const PARSER_ATN_FORMAT_VERSION: u32 = 3;
@@ -1535,6 +1535,7 @@ impl ParserAtnBuilder {
     }
 
     fn mark_tail_calls(&mut self, ranges: &[(u32, u32)]) {
+        let mut scratch = TailCallScratch::default();
         let tail_calls = self
             .transitions
             .iter()
@@ -1560,6 +1561,7 @@ impl ParserAtnBuilder {
                         rule_index,
                         state_count: self.states.len(),
                     },
+                    &mut scratch,
                     |state| self.states[state].kind,
                     |state| unpack_index(self.states[state].rule_index),
                     |state, successors| {
@@ -2350,6 +2352,7 @@ fn validate_tail_call_flags(words: &[u32], layout: ParserAtnLayout) -> Result<()
     if layout.format_version < 3 {
         return Ok(());
     }
+    let mut scratch = TailCallScratch::default();
     for source in 0..layout.state_count {
         let state_base = layout.states.offset + source * STATE_WORDS;
         let rule_index = unpack_index(words[state_base + 1]);
@@ -2371,6 +2374,7 @@ fn validate_tail_call_flags(words: &[u32], layout: ParserAtnLayout) -> Result<()
                         rule_index,
                         state_count: layout.state_count,
                     },
+                    &mut scratch,
                     |state| {
                         let base = layout.states.offset + state * STATE_WORDS;
                         decode_state_kind(words[base])
