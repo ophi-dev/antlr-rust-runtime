@@ -58,8 +58,9 @@ pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener, SyntaxErrorEve
 pub use generated::{GeneratedLexer, GeneratedParseOutput, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 pub use lexer::{
-    BaseLexer, Lexer, LexerCustomAction, LexerLifecycleCtx, LexerMode, LexerPredicate, LexerSemCtx,
-    LexerSemIrCtx, LexerSemanticAction, LexerSemanticPredicate, LexerSemantics,
+    BaseLexer, Lexer, LexerCustomAction, LexerDfaStats, LexerLifecycleCtx, LexerMode,
+    LexerPredicate, LexerSemCtx, LexerSemIrCtx, LexerSemanticAction, LexerSemanticPredicate,
+    LexerSemantics,
 };
 pub use parser::{
     BailErrorStrategy, BaseParser, EnterRuleEvent, ExpectedTokenSet, NoSemanticHooks,

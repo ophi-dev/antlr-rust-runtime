@@ -3,8 +3,10 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
+use std::mem::size_of;
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::atn::LexerAtn;
 use crate::char_stream::{CharStream, TextInterval};
@@ -894,12 +896,77 @@ struct LexerDfaCache {
     mode_starts: FxHashMap<i32, usize>,
 }
 
+/// Storage measurements for one learned lexer DFA cache.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LexerDfaStats {
+    pub states: usize,
+    pub cached_states: usize,
+    pub transitions: usize,
+    pub max_configs_per_state: usize,
+    pub contexts: usize,
+    pub action_trace_sequences: usize,
+    pub action_traces: usize,
+    /// Retained element storage for action payloads in learned cache entries.
+    pub action_trace_bytes: usize,
+}
+
 /// Canonical caller contexts paired with the learned lexer DFA that stores
 /// their IDs.
 #[derive(Debug, Default)]
 pub(crate) struct LexerPredictionStore {
     pub(crate) contexts: LexerContextArena,
     pub(crate) workspace: PredictionWorkspace,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerActionTrace {
+    pub(crate) action_index: usize,
+    pub(crate) position: usize,
+    /// Owning lexer rule, used to suppress actions from nested token-rule calls.
+    pub(crate) rule_index: usize,
+}
+
+/// Thin clone-on-write handle; `Arc<[T]>` would widen every action-free config
+/// and cannot append in place when the payload is uniquely owned.
+#[allow(clippy::rc_buffer)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerActionTraceList(Option<Arc<Vec<LexerActionTrace>>>);
+
+impl LexerActionTraceList {
+    pub(crate) fn from_vec(traces: Vec<LexerActionTrace>) -> Self {
+        if traces.is_empty() {
+            Self::default()
+        } else {
+            Self(Some(Arc::new(traces)))
+        }
+    }
+
+    pub(crate) fn as_slice(&self) -> &[LexerActionTrace] {
+        self.0.as_deref().map_or(&[], Vec::as_slice)
+    }
+
+    pub(crate) fn to_vec(&self) -> Vec<LexerActionTrace> {
+        self.as_slice().to_vec()
+    }
+
+    pub(crate) fn make_mut(&mut self) -> &mut Vec<LexerActionTrace> {
+        Arc::make_mut(self.0.get_or_insert_with(|| Arc::new(Vec::new())))
+    }
+
+    pub(crate) fn retain(&mut self, mut keep: impl FnMut(&LexerActionTrace) -> bool) {
+        let Some(traces) = self.0.as_mut() else {
+            return;
+        };
+        Arc::make_mut(traces).retain(|trace| keep(trace));
+        if traces.is_empty() {
+            self.0 = None;
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.as_slice().len()
+    }
 }
 
 /// Store-local identity for one ordered lexer caller-context node.
@@ -1006,7 +1073,6 @@ impl LexerContextArena {
         self.path_sets.has_empty_path(self.record(context).path_set)
     }
 
-    #[cfg(test)]
     pub(crate) const fn len(&self) -> usize {
         self.records.len()
     }
@@ -1827,11 +1893,11 @@ where
         self.dfa_cache.borrow_mut().prediction.workspace.reset();
     }
 
-    #[cfg(test)]
-    pub(crate) fn lexer_dfa_cache_shape(&self) -> (usize, usize, usize, usize) {
+    /// Returns learned lexer-DFA shape and optional action-payload storage.
+    pub fn lexer_dfa_stats(&self) -> LexerDfaStats {
         let cache = self.dfa_cache.borrow();
         let cached_states = cache.cached_states.iter().flatten().count();
-        let cached_transitions = cache
+        let transitions = cache
             .dense_edges
             .iter()
             .flatten()
@@ -1842,15 +1908,58 @@ where
             })
             .sum::<usize>()
             + cache.sparse_edges.len();
-        let max_configs = cache
+        let max_configs_per_state = cache
             .cached_states
             .iter()
             .flatten()
             .map(|state| state.configs.len())
             .max()
             .unwrap_or(0);
-        let contexts = cache.prediction.contexts.len();
-        (cached_states, cached_transitions, max_configs, contexts)
+        let mut action_trace_sequences = 0;
+        let mut action_traces = 0;
+        let mut action_trace_bytes = 0;
+        let mut account_actions = |actions: &Vec<LexerDfaActionKey>| {
+            if actions.is_empty() {
+                return;
+            }
+            action_trace_sequences += 1;
+            action_traces += actions.len();
+            action_trace_bytes += actions.capacity() * size_of::<LexerDfaActionKey>();
+        };
+        for key in cache.state_numbers.keys() {
+            for config in &key.configs {
+                account_actions(&config.actions);
+            }
+        }
+        for state in cache.cached_states.iter().flatten() {
+            for config in &state.configs {
+                account_actions(&config.actions);
+            }
+            if let Some(accept) = state.accept.as_ref() {
+                account_actions(&accept.actions);
+            }
+        }
+        LexerDfaStats {
+            states: cache.state_numbers.len(),
+            cached_states,
+            transitions,
+            max_configs_per_state,
+            contexts: cache.prediction.contexts.len(),
+            action_trace_sequences,
+            action_traces,
+            action_trace_bytes,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn lexer_dfa_cache_shape(&self) -> (usize, usize, usize, usize) {
+        let stats = self.lexer_dfa_stats();
+        (
+            stats.cached_states,
+            stats.transitions,
+            stats.max_configs_per_state,
+            stats.contexts,
+        )
     }
 
     /// Returns the stable state number for a normalized lexer DFA config set,
@@ -1991,6 +2100,51 @@ mod tests {
     use crate::recognizer::RecognizerData;
     use crate::token::{DEFAULT_CHANNEL, Token, TokenStore};
     use crate::vocabulary::Vocabulary;
+
+    #[test]
+    fn action_trace_lists_clone_on_write_without_aliasing() {
+        let first = LexerActionTrace {
+            action_index: 1,
+            position: 2,
+            rule_index: 3,
+        };
+        let second = LexerActionTrace {
+            action_index: 4,
+            position: 5,
+            rule_index: 6,
+        };
+        let mut original = LexerActionTraceList::default();
+        original.make_mut().push(first);
+        let mut fork = original.clone();
+        fork.make_mut().push(second);
+
+        assert_eq!(original.as_slice(), [first]);
+        assert_eq!(fork.as_slice(), [first, second]);
+        fork.retain(|_| false);
+        assert!(fork.as_slice().is_empty());
+
+        fn assert_send<T: Send>() {}
+        assert_send::<LexerActionTraceList>();
+    }
+
+    #[test]
+    fn action_trace_lists_do_not_retain_growing_prefixes() {
+        let mut actions = LexerActionTraceList::default();
+        for position in 0..1024 {
+            let source = actions.clone();
+            actions.make_mut().push(LexerActionTrace {
+                action_index: 0,
+                position,
+                rule_index: 0,
+            });
+            drop(source);
+            assert_eq!(
+                Arc::strong_count(actions.0.as_ref().expect("non-empty action list")),
+                1
+            );
+        }
+        assert_eq!(actions.len(), 1024);
+    }
 
     #[derive(Clone, Debug)]
     struct UnsharedInput {
