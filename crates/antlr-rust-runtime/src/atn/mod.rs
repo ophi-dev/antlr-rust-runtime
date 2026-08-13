@@ -15,6 +15,92 @@ pub mod parser;
 pub mod parser_atn;
 pub mod serialized;
 
+#[derive(Clone, Copy)]
+struct TailCallSite {
+    start: usize,
+    stop: usize,
+    rule_index: usize,
+    state_count: usize,
+}
+
+#[derive(Default)]
+struct TailCallScratch {
+    marks: Vec<u8>,
+    work: Vec<(usize, bool)>,
+    successors: Vec<usize>,
+}
+
+fn plain_epsilon_tail_call<StateKind, StateRule, PushSuccessors>(
+    site: TailCallSite,
+    scratch: &mut TailCallScratch,
+    state_kind: StateKind,
+    state_rule_index: StateRule,
+    push_successors: PushSuccessors,
+) -> bool
+where
+    StateKind: Fn(usize) -> AtnStateKind,
+    StateRule: Fn(usize) -> Option<usize>,
+    PushSuccessors: Fn(usize, &mut Vec<usize>) -> bool,
+{
+    let TailCallSite {
+        start,
+        stop,
+        rule_index,
+        state_count,
+    } = site;
+    if start >= state_count
+        || stop >= state_count
+        || state_kind(stop) != AtnStateKind::RuleStop
+        || state_rule_index(stop) != Some(rule_index)
+    {
+        return false;
+    }
+
+    // Reject cycles as well as semantic, consuming, nested-rule, and dead-end
+    // paths. Every continuation must finish the enclosing rule without
+    // observable work.
+    let TailCallScratch {
+        marks,
+        work,
+        successors,
+    } = scratch;
+    marks.clear();
+    marks.resize(state_count, 0);
+    work.clear();
+    work.push((start, false));
+    successors.clear();
+    while let Some((state, exiting)) = work.pop() {
+        if state == stop {
+            continue;
+        }
+        if state >= state_count {
+            return false;
+        }
+        if exiting {
+            marks[state] = 2;
+            continue;
+        }
+        match marks[state] {
+            1 => return false,
+            2 => continue,
+            _ => {}
+        }
+        if state_kind(state) == AtnStateKind::RuleStop
+            || state_rule_index(state) != Some(rule_index)
+        {
+            return false;
+        }
+        successors.clear();
+        if !push_successors(state, successors) || successors.is_empty() {
+            return false;
+        }
+        marks[state] = 1;
+        work.push((state, true));
+        work.extend(successors.iter().copied().map(|target| (target, false)));
+    }
+    true
+}
+
 /// Deserialized lexer Abstract Transition Network.
 ///
 /// The structure keeps the state graph plus ANTLR side tables such as
@@ -118,6 +204,76 @@ impl LexerAtn {
 
     pub fn set_lexer_actions(&mut self, lexer_actions: Vec<LexerAction>) {
         self.lexer_actions = lexer_actions;
+    }
+
+    /// Recomputes conservative tail-call markers after the graph is complete.
+    ///
+    /// Call this after every transition and derived rule-return edge has been
+    /// added. Any later mutation through [`Self::add_state`],
+    /// [`Self::state_mut`], or [`LexerAtnState::add_transition`] invalidates the
+    /// stored markers, so callers must run this analysis again before prediction.
+    #[doc(hidden)]
+    pub fn identify_tail_calls(&mut self) {
+        let mut tail_calls = Vec::new();
+        let mut scratch = TailCallScratch::default();
+        for source in 0..self.states.len() {
+            for index in 0..self.states[source].transitions.len() {
+                let follow_state = match &self.states[source].transitions[index] {
+                    LexerTransition::Rule { follow_state, .. } => *follow_state,
+                    _ => continue,
+                };
+                tail_calls.push((
+                    source,
+                    index,
+                    self.tail_call_follow_is_safe(source, follow_state, &mut scratch),
+                ));
+            }
+        }
+        for (source, index, tail_call) in tail_calls {
+            if let Some(LexerTransition::Rule {
+                tail_call: marker, ..
+            }) = self
+                .states
+                .get_mut(source)
+                .and_then(|state| state.transitions.get_mut(index))
+            {
+                *marker = tail_call;
+            }
+        }
+    }
+
+    fn tail_call_follow_is_safe(
+        &self,
+        source: usize,
+        start: usize,
+        scratch: &mut TailCallScratch,
+    ) -> bool {
+        let Some(rule_index) = self.states.get(source).and_then(|state| state.rule_index) else {
+            return false;
+        };
+        let Some(&stop) = self.rule_to_stop_state.get(rule_index) else {
+            return false;
+        };
+        plain_epsilon_tail_call(
+            TailCallSite {
+                start,
+                stop,
+                rule_index,
+                state_count: self.states.len(),
+            },
+            scratch,
+            |state| self.states[state].kind,
+            |state| self.states[state].rule_index,
+            |state, successors| {
+                for transition in &self.states[state].transitions {
+                    let LexerTransition::Epsilon { target } = transition else {
+                        return false;
+                    };
+                    successors.push(*target);
+                }
+                true
+            },
+        )
     }
 }
 
@@ -228,6 +384,7 @@ pub enum LexerTransition {
         rule_index: usize,
         follow_state: usize,
         precedence: i32,
+        tail_call: bool,
     },
     Predicate {
         target: usize,
@@ -273,6 +430,18 @@ impl LexerTransition {
                 | Self::Predicate { .. }
                 | Self::Action { .. }
                 | Self::Precedence { .. }
+        )
+    }
+
+    /// Returns whether this rule call's follow state is a provably redundant
+    /// prediction-context frame.
+    pub const fn is_tail_call(&self) -> bool {
+        matches!(
+            self,
+            Self::Rule {
+                tail_call: true,
+                ..
+            }
         )
     }
 
@@ -394,6 +563,131 @@ pub enum LexerAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn classified_lexer_rule(continuations: Vec<(usize, LexerTransition)>) -> LexerAtn {
+        let mut atn = LexerAtn::new(4);
+        for (kind, rule_index) in [
+            (AtnStateKind::RuleStart, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::RuleStop, 0),
+            (AtnStateKind::RuleStart, 1),
+            (AtnStateKind::RuleStop, 1),
+            (AtnStateKind::RuleStart, 2),
+            (AtnStateKind::RuleStop, 2),
+            (AtnStateKind::Basic, 0),
+            (AtnStateKind::Basic, 0),
+        ] {
+            let state_number = atn.states.len();
+            atn.add_state(LexerAtnState::new(state_number, kind).with_rule_index(rule_index));
+        }
+        atn.set_rule_to_start_state(vec![0, 4, 6]);
+        atn.set_rule_to_stop_state(vec![3, 5, 7]);
+        atn.state_mut(0)
+            .expect("caller start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("call source")
+            .add_transition(LexerTransition::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+                tail_call: false,
+            });
+        atn.state_mut(4)
+            .expect("callee start")
+            .add_transition(LexerTransition::Epsilon { target: 5 });
+        atn.state_mut(6)
+            .expect("other rule start")
+            .add_transition(LexerTransition::Epsilon { target: 7 });
+        for (source, transition) in continuations {
+            atn.state_mut(source)
+                .expect("continuation source")
+                .add_transition(transition);
+        }
+        atn.identify_tail_calls();
+        atn
+    }
+
+    fn classified_lexer_call(atn: &LexerAtn) -> &LexerTransition {
+        &atn.state(1).expect("call source").transitions[0]
+    }
+
+    #[test]
+    fn lexer_tail_call_classifier_is_conservative() {
+        let positive = classified_lexer_rule(vec![
+            (2, LexerTransition::Epsilon { target: 8 }),
+            (8, LexerTransition::Epsilon { target: 3 }),
+        ]);
+        assert!(classified_lexer_call(&positive).is_tail_call());
+
+        let rejected = [
+            ("dead end", Vec::new()),
+            (
+                "consuming edge",
+                vec![(
+                    2,
+                    LexerTransition::Atom {
+                        target: 3,
+                        label: 1,
+                    },
+                )],
+            ),
+            (
+                "predicate",
+                vec![(
+                    2,
+                    LexerTransition::Predicate {
+                        target: 3,
+                        rule_index: 0,
+                        pred_index: 0,
+                        context_dependent: false,
+                    },
+                )],
+            ),
+            (
+                "action",
+                vec![(
+                    2,
+                    LexerTransition::Action {
+                        target: 3,
+                        rule_index: 0,
+                        action_index: Some(0),
+                        context_dependent: false,
+                    },
+                )],
+            ),
+            (
+                "nested rule",
+                vec![(
+                    2,
+                    LexerTransition::Rule {
+                        target: 4,
+                        rule_index: 1,
+                        follow_state: 3,
+                        precedence: 0,
+                        tail_call: false,
+                    },
+                )],
+            ),
+            (
+                "epsilon cycle",
+                vec![(2, LexerTransition::Epsilon { target: 2 })],
+            ),
+            (
+                "other rule stop",
+                vec![(2, LexerTransition::Epsilon { target: 7 })],
+            ),
+        ];
+        for (label, continuations) in rejected {
+            let atn = classified_lexer_rule(continuations);
+            assert!(
+                !classified_lexer_call(&atn).is_tail_call(),
+                "{label} must not be classified as a lexer tail call"
+            );
+        }
+    }
 
     #[test]
     fn interval_set_handles_ranges() {

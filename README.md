@@ -170,8 +170,20 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 13, which moves the iterative
-generated listener tree-walk engine into
+The bundled generator currently emits revision 14. Generated parsers now embed
+packed parser ATN format 3, whose rule-transition tags carry validated
+grammar-agnostic tail-call markers. Parser and lexer prediction reuse the
+existing caller context when every continuation from a rule call's follow state
+is a plain epsilon path to the enclosing rule stop; full-context construction
+also omits the same redundant frames. SLL accuracy is preserved by default, and
+the reduced-accuracy parser mode is available only through an explicit
+simulator constructor.
+
+Revision 12 and 13 generated recognizers remain accepted because the runtime
+still provides their source API and reads packed parser ATN formats 1 and 2.
+Regenerate them with revision 14 to emit tail-call metadata.
+
+Revision 13 moved the iterative generated listener tree-walk engine into
 `antlr4_runtime::generated::walk_generated`. Generated parsers retain their
 public plain and validated walker surfaces and emit only grammar-specific
 listener callback adapters; traversal order, invocation-state threading, and
@@ -209,8 +221,8 @@ error name must collapse into one; see `docs/migration.md`). Revision 9
 similarly imports the grammar-independent generated support surface (the typed
 terminal/error-node wrappers, context child-iteration helpers, and
 embedded-action input facade) from the runtime's `generated` module. Revisions
-12 and 13 are accepted generated-code contracts; recognizers from revision 11
-or earlier must be regenerated when upgrading to this release.
+12, 13, and 14 are accepted generated-code contracts; recognizers from revision
+11 or earlier must be regenerated when upgrading to this release.
 
 Generated modules created before this check was introduced cannot be detected
 retroactively. When first upgrading to a release that includes the check,

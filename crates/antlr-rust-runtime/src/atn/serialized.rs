@@ -106,6 +106,7 @@ impl<'a> AtnDeserializer<'a> {
         self.deserialize_decisions(&mut atn)?;
         self.deserialize_lexer_actions(&mut atn)?;
         mark_precedence_decisions(&mut atn);
+        atn.identify_tail_calls();
 
         Ok(atn)
     }
@@ -609,6 +610,7 @@ fn decode_transition(
             rule_index: read_index(b, "rule transition rule index")?,
             follow_state: target,
             precedence: c,
+            tail_call: false,
         },
         4 => LexerTransition::Predicate {
             target,
