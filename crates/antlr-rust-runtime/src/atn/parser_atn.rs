@@ -239,7 +239,7 @@ impl fmt::Debug for ParserAtn {
 impl ParserAtn {
     /// Validates and borrows generator-emitted packed data without allocating.
     pub fn from_static(words: &'static [u32]) -> Result<Self, ParserAtnError> {
-        let layout = validate_packed(words)?;
+        let layout = validate_packed(words, TailCallValidation::Structural)?;
         let atn = Self {
             words: Cow::Borrowed(words),
             words_address: words.as_ptr() as usize,
@@ -252,7 +252,7 @@ impl ParserAtn {
 
     /// Validates one owned packed stream.
     pub fn from_owned(words: Vec<u32>) -> Result<Self, ParserAtnError> {
-        let layout = validate_packed(&words)?;
+        let layout = validate_packed(&words, TailCallValidation::Recompute)?;
         let words: Cow<'static, [u32]> = Cow::Owned(words);
         let words_address = words.as_ptr() as usize;
         let atn = Self {
@@ -2030,7 +2030,19 @@ impl ParserTransitionKind {
     }
 }
 
-fn validate_packed(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
+#[derive(Clone, Copy)]
+enum TailCallValidation {
+    /// Validate the encoded flag namespace without allocating. Generated static
+    /// tables already passed full recomputation before they were rendered.
+    Structural,
+    /// Recompute every derived marker for owned/deserialized input.
+    Recompute,
+}
+
+fn validate_packed(
+    words: &[u32],
+    tail_calls: TailCallValidation,
+) -> Result<ParserAtnLayout, ParserAtnError> {
     validate_header(words)?;
     let layout = read_layout(words)?;
     validate_sections(words, layout)?;
@@ -2039,7 +2051,9 @@ fn validate_packed(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
     validate_state_flags(words, layout)?;
     validate_sets(words, layout)?;
     validate_side_tables(words, layout)?;
-    validate_tail_call_flags(words, layout)?;
+    if matches!(tail_calls, TailCallValidation::Recompute) {
+        validate_tail_call_flags(words, layout)?;
+    }
     Ok(layout)
 }
 
@@ -3222,10 +3236,11 @@ mod tests {
 
     #[test]
     fn static_format_is_allocation_free_and_version_checked() {
-        let atn = sample_atn();
+        let atn = classified_rule_transition([(2, ParserTransitionSpec::Epsilon { target: 3 })]);
         let words = Box::leak(atn.packed_words().to_vec().into_boxed_slice());
         let borrowed = ParserAtn::from_static(words).expect("static packed ATN");
         assert!(matches!(borrowed.words, Cow::Borrowed(_)));
+        assert!(classified_call(&borrowed).is_tail_call());
 
         let mut wrong_version = words.to_vec();
         wrong_version[HEADER_VERSION] = PARSER_ATN_FORMAT_VERSION + 1;
