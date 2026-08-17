@@ -407,6 +407,9 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
+See the [JavaScript build guide](docs/javascript-build.md) for a complete
+typed-lexer and typed-parser base setup.
+
 Call `.validate()` instead of `.into_parsed_file()` when the application wants
 the generated validated-tree boundary. The lexer constructor can likewise be a
 closure that calls `Lexer::with_typed_hooks`. Use

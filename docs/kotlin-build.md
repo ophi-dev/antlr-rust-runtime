@@ -66,9 +66,9 @@ Then include the generated modules and parse a Kotlin sample:
 use generated::kotlin_lexer::KotlinLexer;
 use generated::kotlin_parser::{self, KotlinParser};
 
-let tree = kotlin_parser::parse("fun main() {}", KotlinLexer::new, KotlinParser::kotlin_file)
+let parsed = kotlin_parser::parse("fun main() {}", KotlinLexer::new, KotlinParser::kotlin_file)
     .expect("entry rule parses");
-assert!(tree.text().contains("fun"));
+assert!(parsed.tree().text().contains("fun"));
 ```
 
 Use `parse_with_parser` when a caller also needs parser state after the entry
@@ -83,11 +83,11 @@ let output =
     kotlin_parser::parse_with_parser("fun main() {}", KotlinLexer::new, KotlinParser::kotlin_file)
         .expect("entry rule parses");
 let syntax_errors = output.parser.number_of_syntax_errors();
-let tree = output.result;
+let tree_text = output.parser.node(output.result).text();
 let tokens = output.parser.into_token_stream();
 
 assert_eq!(syntax_errors, 0);
-assert!(tree.text().contains("fun"));
+assert!(tree_text.contains("fun"));
 assert!(!tokens.tokens().is_empty());
 ```
 
@@ -127,7 +127,7 @@ let lexer = KotlinLexer::new(InputStream::new("fun main() {}"));
 let tokens = CommonTokenStream::new(lexer);
 let mut parser = KotlinParser::new(tokens);
 let tree = parser.kotlin_file().expect("entry rule parses");
-assert!(tree.text().contains("fun"));
+assert!(parser.node(tree).text().contains("fun"));
 ```
 
 Validated locally: the generated Kotlin lexer emits real tokens and the generated parser recognizes the `parser.kotlin_file()` entry rule for
