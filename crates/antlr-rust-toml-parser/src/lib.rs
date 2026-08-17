@@ -23,7 +23,41 @@ pub use decode::{Error, parse};
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)] // insta assertion macros unwrap internal I/O.
 mod tests {
-    use super::parse;
+    use super::{
+        generated::{
+            toml_lexer::TomlLexer,
+            toml_parser::{self, TomlParser},
+        },
+        parse,
+    };
+    use antlr4_runtime::{InputStream, Parser as _};
+
+    #[test]
+    fn constructor_entry_points_cover_the_checked_in_parser() {
+        const SOURCE: &str = "version = 1\n";
+
+        let output = toml_parser::parse_with_parser_constructor(
+            SOURCE,
+            TomlLexer::new,
+            TomlParser::new,
+            TomlParser::document,
+        )
+        .expect("constructor-aware text entry should parse");
+        assert_eq!(output.parser.number_of_syntax_errors(), 0);
+        let parsed = output.into_parsed_file();
+        assert!(!parsed.tokens().is_empty());
+
+        let validated = toml_parser::parse_stream_with_parser_constructor(
+            InputStream::new(SOURCE),
+            TomlLexer::new,
+            TomlParser::new,
+            TomlParser::document,
+        )
+        .expect("constructor-aware stream entry should parse")
+        .validate()
+        .expect("clean constructor-aware parse should validate");
+        assert!(!validated.tree().text().is_empty());
+    }
 
     #[test]
     fn typed_walker_decodes_toml_document_in_source_order() {

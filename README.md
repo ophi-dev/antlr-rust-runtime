@@ -381,6 +381,46 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
+When the parser needs typed semantic hooks, use
+`parse_with_parser_constructor`. The parser constructor receives the buffered
+`CommonTokenStream`, so superclass-style hooks and any other constructor-time
+configuration stay inside the same generated driver:
+
+```rust
+use antlr4_runtime::Parser;
+use generated::java_script_lexer::JavaScriptLexer;
+use generated::java_script_parser::{self, JavaScriptParser};
+use javascript_lexer_base::JavaScriptLexerBase;
+use javascript_parser_base::JavaScriptParserBase;
+
+fn main() -> Result<(), antlr4_runtime::AntlrError> {
+    let output = java_script_parser::parse_with_parser_constructor(
+        "class Example { static value = /x+/; }",
+        |input| {
+            JavaScriptLexer::with_typed_hooks(
+                input,
+                JavaScriptLexerBase::with_strict_default(false),
+            )
+        },
+        |tokens| JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase),
+        JavaScriptParser::program,
+    )?;
+    assert_eq!(output.parser.number_of_syntax_errors(), 0);
+    let parsed = output.into_parsed_file();
+
+    println!("{}", parsed.tree().text());
+    Ok(())
+}
+```
+
+See the [JavaScript build guide](docs/javascript-build.md) for a complete
+typed-lexer and typed-parser base setup.
+
+Call `.validate()` instead of `.into_parsed_file()` when the application wants
+the generated validated-tree boundary. The lexer constructor can likewise be a
+closure that calls `Lexer::with_typed_hooks`. Use
+`parse_stream_with_parser_constructor` for a caller-provided `CharStream`.
+
 Use `parse_stream` with a preconstructed `CharStream` when parsing a file,
 preserving its source name, or supplying a custom stream implementation:
 

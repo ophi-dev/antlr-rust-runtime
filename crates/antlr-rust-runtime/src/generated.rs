@@ -1464,14 +1464,30 @@ macro_rules! __antlr4_rust_parser_entry_points {
         $(,)?
     ) => {
         #[doc = ::core::concat!(
-                    "Result from [`parse_with_parser`] or [`parse_stream_with_parser`].\n\n",
+                    "Result from [`parse_with_parser`], [`parse_with_parser_constructor`],\n",
+                    "[`parse_stream_with_parser`], or [`parse_stream_with_parser_constructor`].\n\n",
                     "Keeps the generated parser available after the entry rule runs so callers\n",
                     "can inspect diagnostics or recover the parser-owned token stream. Alias of\n",
                     "the runtime's `GeneratedParseOutput` with [`",
                     ::core::stringify!($parser),
-                    "`] substituted for its parser type parameter.",
+                    "`] substituted for its parser type parameter. The semantic-hooks type\n",
+                    "defaults to `NoSemanticHooks` for the original entry points.",
                 )]
-        pub type $output<R, L> = $crate::generated::GeneratedParseOutput<R, $parser<L>>;
+        pub type $output<R, L, H = $crate::parser::NoSemanticHooks> =
+            $crate::generated::GeneratedParseOutput<R, $parser<L, H>>;
+
+        impl<L, H> $crate::generated::__GeneratedParserIntoParsedFile for $parser<L, H>
+        where
+            L: $crate::token::TokenSource,
+            H: $crate::parser::SemanticHooks,
+        {
+            fn __into_parsed_file(
+                self,
+                root: $crate::tree::NodeId,
+            ) -> $crate::tree::ParsedFile {
+                self.into_parsed_file(root)
+            }
+        }
 
         impl<L, H> $crate::generated::__GeneratedParserValidate for $parser<L, H>
         where
@@ -1511,7 +1527,10 @@ macro_rules! __antlr4_rust_parser_entry_points {
         /// The returned [`antlr4_runtime::ParsedFile`] owns the canonical token store,
         /// flat CST storage, and entry-rule root.
         /// Use [`parse_with_parser`] instead when the caller also needs parser
-        /// diagnostics after the entry rule runs.
+        /// diagnostics after the entry rule runs. Parsers that need semantic hooks
+        /// or other constructor-time customization can use
+        /// [`parse_with_parser_constructor`] and call
+        /// [`antlr4_runtime::GeneratedParseOutput::into_parsed_file`] on its result.
         pub fn parse<L: $crate::token::TokenSource>(
             input: impl ::core::convert::AsRef<str>,
             lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
@@ -1531,6 +1550,10 @@ macro_rules! __antlr4_rust_parser_entry_points {
 
         /// Parses UTF-8 text and returns a typed tree whose required generated child
         /// accessors are infallible.
+        ///
+        /// Parsers that need semantic hooks or other constructor-time customization
+        /// can call [`parse_with_parser_constructor`] followed by
+        /// [`antlr4_runtime::GeneratedParseOutput::validate`].
         pub fn parse_validated<L: $crate::token::TokenSource>(
             input: impl ::core::convert::AsRef<str>,
             lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
@@ -1557,6 +1580,9 @@ macro_rules! __antlr4_rust_parser_entry_points {
                     ::core::stringify!($parser),
                     "::into_token_stream()`.",
                 )]
+        ///
+        /// Use [`parse_with_parser_constructor`] when the parser needs semantic hooks
+        /// or other constructor-time customization.
         pub fn parse_with_parser<L: $crate::token::TokenSource, R>(
             input: impl ::core::convert::AsRef<str>,
             lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
@@ -1572,12 +1598,60 @@ macro_rules! __antlr4_rust_parser_entry_points {
             )
         }
 
+        /// Parses UTF-8 text using caller-provided lexer and parser constructors.
+        ///
+        /// This is the constructor-aware counterpart of [`parse_with_parser`].
+        /// It keeps the concrete parser type, including its semantic hooks, in the
+        /// returned [`antlr4_runtime::GeneratedParseOutput`]. Call
+        /// [`antlr4_runtime::GeneratedParseOutput::into_parsed_file`] for the
+        /// [`antlr4_runtime::ParsedFile`] result shape of [`parse`], or
+        /// [`antlr4_runtime::GeneratedParseOutput::validate`] for the typed validated
+        /// result shape of [`parse_validated`].
+        ///
+        /// A generated typed-hook parser can be installed without hand-writing the
+        /// lexer-to-token-stream driver:
+        ///
+        /// ```ignore
+        /// parse_with_parser_constructor(
+        ///     source,
+        ///     MyGrammarLexer::new,
+        ///     |tokens| MyGrammarParser::with_typed_hooks(tokens, MyHooks::default()),
+        ///     MyGrammarParser::file,
+        /// )
+        /// ```
+        pub fn parse_with_parser_constructor<
+            L: $crate::token::TokenSource,
+            H: $crate::parser::SemanticHooks,
+            R,
+        >(
+            input: impl ::core::convert::AsRef<str>,
+            lexer: impl ::core::ops::FnOnce($crate::char_stream::InputStream) -> L,
+            parser_constructor: impl ::core::ops::FnOnce(
+                $crate::token_stream::CommonTokenStream<L>,
+            ) -> $parser<L, H>,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L, H>,
+            )
+                -> ::core::result::Result<R, $crate::errors::AntlrError>,
+        ) -> ::core::result::Result<$output<R, L, H>, $crate::errors::AntlrError> {
+            parse_stream_with_parser_constructor(
+                $crate::char_stream::InputStream::new(input.as_ref()),
+                lexer,
+                parser_constructor,
+                entry,
+            )
+        }
+
         /// Parses a caller-provided character stream by constructing the lexer, token
         /// stream, parser, and caller-selected entry rule in one call.
         ///
         /// Unlike [`parse`], this accepts any [`antlr4_runtime::CharStream`], including
         /// a named [`antlr4_runtime::InputStream`] or a byte-oriented
         /// [`antlr4_runtime::ByteStream`].
+        ///
+        /// Parsers that need semantic hooks or other constructor-time customization
+        /// can use [`parse_stream_with_parser_constructor`] and call
+        /// [`antlr4_runtime::GeneratedParseOutput::into_parsed_file`] on its result.
         pub fn parse_stream<I: $crate::char_stream::CharStream, L: $crate::token::TokenSource>(
             input: I,
             lexer: impl ::core::ops::FnOnce(I) -> L,
@@ -1588,12 +1662,15 @@ macro_rules! __antlr4_rust_parser_entry_points {
                 $crate::errors::AntlrError,
             >,
         ) -> ::core::result::Result<$crate::tree::ParsedFile, $crate::errors::AntlrError> {
-            let $crate::generated::GeneratedParseOutput { result, parser } =
-                parse_stream_with_parser(input, lexer, entry)?;
-            ::core::result::Result::Ok(parser.into_parsed_file(result))
+            let output = parse_stream_with_parser(input, lexer, entry)?;
+            ::core::result::Result::Ok(output.into_parsed_file())
         }
 
         /// Parses a caller-provided character stream and validates the completed tree.
+        ///
+        /// Parsers that need semantic hooks or other constructor-time customization
+        /// can call [`parse_stream_with_parser_constructor`] followed by
+        /// [`antlr4_runtime::GeneratedParseOutput::validate`].
         pub fn parse_stream_validated<
             I: $crate::char_stream::CharStream,
             L: $crate::token::TokenSource,
@@ -1614,6 +1691,9 @@ macro_rules! __antlr4_rust_parser_entry_points {
 
         /// Parses a caller-provided character stream like [`parse_stream`] while
         /// returning the parser after the entry rule has run.
+        ///
+        /// Use [`parse_stream_with_parser_constructor`] when the parser needs semantic
+        /// hooks or other constructor-time customization.
         pub fn parse_stream_with_parser<
             I: $crate::char_stream::CharStream,
             L: $crate::token::TokenSource,
@@ -1626,9 +1706,34 @@ macro_rules! __antlr4_rust_parser_entry_points {
             )
                 -> ::core::result::Result<R, $crate::errors::AntlrError>,
         ) -> ::core::result::Result<$output<R, L>, $crate::errors::AntlrError> {
+            parse_stream_with_parser_constructor(input, lexer, $parser::new, entry)
+        }
+
+        /// Parses a caller-provided character stream using caller-provided lexer and
+        /// parser constructors while returning the concrete parser after the entry
+        /// rule has run.
+        ///
+        /// This is the stream-based counterpart of
+        /// [`parse_with_parser_constructor`].
+        pub fn parse_stream_with_parser_constructor<
+            I: $crate::char_stream::CharStream,
+            L: $crate::token::TokenSource,
+            H: $crate::parser::SemanticHooks,
+            R,
+        >(
+            input: I,
+            lexer: impl ::core::ops::FnOnce(I) -> L,
+            parser_constructor: impl ::core::ops::FnOnce(
+                $crate::token_stream::CommonTokenStream<L>,
+            ) -> $parser<L, H>,
+            entry: impl ::core::ops::FnOnce(
+                &mut $parser<L, H>,
+            )
+                -> ::core::result::Result<R, $crate::errors::AntlrError>,
+        ) -> ::core::result::Result<$output<R, L, H>, $crate::errors::AntlrError> {
             let lexer = lexer(input);
             let tokens = $crate::token_stream::CommonTokenStream::new(lexer);
-            let mut parser = $parser::new(tokens);
+            let mut parser = parser_constructor(tokens);
             let result = entry(&mut parser)?;
             ::core::result::Result::Ok($crate::generated::GeneratedParseOutput { result, parser })
         }
@@ -1899,20 +2004,33 @@ impl<const RULES: usize> Default for AdaptiveAtnRetryState<RULES> {
     }
 }
 
-/// Result from a generated `parse_with_parser` or `parse_stream_with_parser`
-/// call.
+/// Result from a generated parser entry point that retains the parser.
 ///
 /// Keeps the generated parser available after the entry rule runs so callers
 /// can inspect diagnostics or recover the parser-owned token stream. Generated
-/// modules alias this type as `<Grammar>ParserParseOutput<R, L>` with their
-/// parser type substituted for `P`; [`Self::validate`] is available for those
-/// generated parser types, which wire in their module's validated surface.
+/// modules alias this type as `<Grammar>ParserParseOutput<R, L, H>` with their
+/// parser type substituted for `P` and `H` defaulting to
+/// [`crate::NoSemanticHooks`]. [`Self::into_parsed_file`] and
+/// [`Self::validate`] are available for those generated parser types, which
+/// wire in their module's parsed and validated surfaces.
 #[derive(Debug)]
 pub struct GeneratedParseOutput<R, P> {
     /// Value returned by the caller-selected entry rule.
     pub result: R,
     /// The generated parser after the entry rule has run.
     pub parser: P,
+}
+
+/// Grammar-specific parsed-file conversion behind
+/// [`GeneratedParseOutput::into_parsed_file`].
+///
+/// This is an implementation detail of `antlr4-rust-gen`, not a stable
+/// hand-written parser API: each generated module implements it for its parser
+/// type via `__antlr4_rust_parser_entry_points!`.
+#[doc(hidden)]
+pub trait __GeneratedParserIntoParsedFile: Sized {
+    /// Converts a completed parse into the parser's owned parsed-file surface.
+    fn __into_parsed_file(self, root: NodeId) -> crate::tree::ParsedFile;
 }
 
 /// Grammar-specific validation step behind [`GeneratedParseOutput::validate`].
@@ -1927,6 +2045,18 @@ pub trait __GeneratedParserValidate: Sized {
 
     /// Validates a completed parse rooted at `root`.
     fn __validate(self, root: NodeId) -> Result<Self::Validated, ValidationError>;
+}
+
+impl<P: __GeneratedParserIntoParsedFile> GeneratedParseOutput<NodeId, P> {
+    /// Converts the completed parse into its owned [`crate::ParsedFile`].
+    ///
+    /// This consumes the retained parser, so inspect diagnostics such as
+    /// `Parser::number_of_syntax_errors()` first. Unlike `validate()`, this
+    /// preserves recovered parses, matching the generated `parse` entry point.
+    #[must_use]
+    pub fn into_parsed_file(self) -> crate::tree::ParsedFile {
+        self.parser.__into_parsed_file(self.result)
+    }
 }
 
 impl<P: __GeneratedParserValidate> GeneratedParseOutput<NodeId, P> {

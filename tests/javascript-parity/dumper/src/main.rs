@@ -114,19 +114,25 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let lexer = JavaScriptLexer::with_typed_hooks(
-        InputStream::new(&source),
-        JavaScriptLexerBase::with_strict_default(false),
-    );
-    let tokens = CommonTokenStream::new(lexer);
-    let mut parser = JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase);
-    let tree = match parser.program() {
-        Ok(tree) => tree,
+    let output = match java_script_parser::parse_with_parser_constructor(
+        &source,
+        |input| {
+            JavaScriptLexer::with_typed_hooks(
+                input,
+                JavaScriptLexerBase::with_strict_default(false),
+            )
+        },
+        |tokens| JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase),
+        JavaScriptParser::program,
+    ) {
+        Ok(output) => output,
         Err(error) => {
             eprintln!("parse failed: {error}");
             return ExitCode::FAILURE;
         }
     };
+    let tree = output.result;
+    let parser = output.parser;
     if parser.number_of_syntax_errors() != 0 {
         eprintln!(
             "parse produced {} syntax error(s)",

@@ -18,6 +18,20 @@ Revision 12 and 13 generated recognizers remain compatible because the runtime
 still implements their source APIs and reads packed parser ATN formats 1 and 2.
 Regenerate them with revision 14 to emit the new metadata.
 
+The current runtime also extends the revision-11
+`__antlr4_rust_parser_entry_points!` expansion with
+`parse_with_parser_constructor` and
+`parse_stream_with_parser_constructor`. These accept a caller-provided parser
+constructor after token buffering, so generated typed semantic hooks can use the
+shared parse driver. Their `GeneratedParseOutput` can be retained, converted
+with `.into_parsed_file()`, or validated with `.validate()`. This is an additive
+runtime-macro extension: generated source and the macro invocation are
+unchanged, so the generated-code API remains revision 14 and existing revision
+12-14 recognizers gain the helpers when linked against the updated runtime.
+The generated alias widens compatibly to
+`pub type TomlParserParseOutput<R, L, H = antlr4_runtime::NoSemanticHooks> =
+antlr4_runtime::GeneratedParseOutput<R, TomlParser<L, H>>;`.
+
 Revision 13 moved the iterative listener tree-walk engine into
 `antlr4_runtime::generated::walk_generated`. Generated
 parsers retain the same `<Grammar>TreeWalker`,
@@ -54,7 +68,8 @@ validation bridge expand from `__antlr4_rust_parser_entry_points!`, and
 `GeneratedParseOutput<R, P>` (`pub type TomlParserParseOutput<R, L> =
 antlr4_runtime::GeneratedParseOutput<R, TomlParser<L>>;`) whose `validate()`
 dispatches through the doc-hidden `__GeneratedParserValidate` trait the module
-implements for its parser. `GeneratedRuleError` moved to the runtime as a
+implements for its parser.
+`GeneratedRuleError` moved to the runtime as a
 grammar-agnostic type whose `AdaptiveRetry` variant always exists, the
 adaptive-ATN retry state bundle became the runtime's
 `AdaptiveAtnRetryState<const RULES: usize>` enabled by a const knob
