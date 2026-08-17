@@ -8,10 +8,10 @@ Use it from a build script:
 ```toml
 # x-release-please-start-version
 [dependencies]
-antlr-rust-runtime = "0.33.1"
+antlr-rust-runtime = "0.34.0"
 
 [build-dependencies]
-antlr-rust-codegen = "0.33.1"
+antlr-rust-codegen = "0.34.0"
 # x-release-please-end
 ```
 
