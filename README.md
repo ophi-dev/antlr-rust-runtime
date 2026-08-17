@@ -388,16 +388,22 @@ configuration stay inside the same generated driver:
 
 ```rust
 use antlr4_runtime::Parser;
-use generated::java_lexer::JavaLexer;
-use generated::java_parser::{self, JavaParser};
-use java_parser_base::JavaParserBase;
+use generated::java_script_lexer::JavaScriptLexer;
+use generated::java_script_parser::{self, JavaScriptParser};
+use javascript_lexer_base::JavaScriptLexerBase;
+use javascript_parser_base::JavaScriptParserBase;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let output = java_parser::parse_with_parser_constructor(
-        "class Example {}",
-        JavaLexer::new,
-        |tokens| JavaParser::with_typed_hooks(tokens, JavaParserBase),
-        JavaParser::compilation_unit,
+    let output = java_script_parser::parse_with_parser_constructor(
+        "class Example { static value = /x+/; }",
+        |input| {
+            JavaScriptLexer::with_typed_hooks(
+                input,
+                JavaScriptLexerBase::with_strict_default(false),
+            )
+        },
+        |tokens| JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase),
+        JavaScriptParser::program,
     )?;
     assert_eq!(output.parser.number_of_syntax_errors(), 0);
     let parsed = output.into_parsed_file();

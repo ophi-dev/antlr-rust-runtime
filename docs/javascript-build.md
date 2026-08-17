@@ -103,8 +103,10 @@ default-channel token, strict scopes, brace depth, and template depth. The
 parser base supplies automatic-semicolon-insertion and contextual lookahead
 helpers.
 
-For lower-level diagnostics, fill a `CommonTokenStream` and call
-`drain_source_errors()` before parsing, or inspect
+For lower-level lexer diagnostics, the parser-constructor closure receives the
+`CommonTokenStream` by value, so it can fill and drain source errors before
+constructing the parser. Use explicit layer construction when those diagnostics
+must change control flow before a parser exists. Inspect
 `Parser::number_of_syntax_errors()` after the entry rule.
 
 ## Run the repository proof

@@ -28,6 +28,9 @@ with `.into_parsed_file()`, or validated with `.validate()`. This is an additive
 runtime-macro extension: generated source and the macro invocation are
 unchanged, so the generated-code API remains revision 14 and existing revision
 12-14 recognizers gain the helpers when linked against the updated runtime.
+The generated alias widens compatibly to
+`pub type TomlParserParseOutput<R, L, H = antlr4_runtime::NoSemanticHooks> =
+antlr4_runtime::GeneratedParseOutput<R, TomlParser<L, H>>;`.
 
 Revision 13 moved the iterative listener tree-walk engine into
 `antlr4_runtime::generated::walk_generated`. Generated
@@ -62,10 +65,10 @@ The `parse` / `parse_validated` / `parse_with_parser` / `parse_stream` /
 `parse_stream_validated` / `parse_stream_with_parser` functions and the
 validation bridge expand from `__antlr4_rust_parser_entry_points!`, and
 `<Grammar>ParserParseOutput` is now a type alias of the runtime's
-`GeneratedParseOutput<R, P>` (`pub type TomlParserParseOutput<R, L, H =
-antlr4_runtime::NoSemanticHooks> = antlr4_runtime::GeneratedParseOutput<R,
-TomlParser<L, H>>;`) whose `validate()` dispatches through the doc-hidden
-`__GeneratedParserValidate` trait the module implements for its parser.
+`GeneratedParseOutput<R, P>` (`pub type TomlParserParseOutput<R, L> =
+antlr4_runtime::GeneratedParseOutput<R, TomlParser<L>>;`) whose `validate()`
+dispatches through the doc-hidden `__GeneratedParserValidate` trait the module
+implements for its parser.
 `GeneratedRuleError` moved to the runtime as a
 grammar-agnostic type whose `AdaptiveRetry` variant always exists, the
 adaptive-ATN retry state bundle became the runtime's

@@ -103,8 +103,10 @@ The parser base implements visible lookahead/lookbehind for `n(...)` and
 `p(...)`, automatic-semicolon-insertion checks, and the TypeScript
 open-brace/function/interface guard.
 
-For lower-level diagnostics, fill a `CommonTokenStream` and call
-`drain_source_errors()` before parsing, or inspect
+For lower-level lexer diagnostics, the parser-constructor closure receives the
+`CommonTokenStream` by value, so it can fill and drain source errors before
+constructing the parser. Use explicit layer construction when those diagnostics
+must change control flow before a parser exists. Inspect
 `Parser::number_of_syntax_errors()` after the entry rule.
 
 The generator intentionally omits `--require-generated-parser`. Rules outside

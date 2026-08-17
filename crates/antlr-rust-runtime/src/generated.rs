@@ -2049,6 +2049,10 @@ pub trait __GeneratedParserValidate: Sized {
 
 impl<P: __GeneratedParserIntoParsedFile> GeneratedParseOutput<NodeId, P> {
     /// Converts the completed parse into its owned [`crate::ParsedFile`].
+    ///
+    /// This consumes the retained parser, so inspect diagnostics such as
+    /// `Parser::number_of_syntax_errors()` first. Unlike `validate()`, this
+    /// preserves recovered parses, matching the generated `parse` entry point.
     #[must_use]
     pub fn into_parsed_file(self) -> crate::tree::ParsedFile {
         self.parser.__into_parsed_file(self.result)
