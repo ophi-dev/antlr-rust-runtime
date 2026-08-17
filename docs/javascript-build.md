@@ -72,25 +72,30 @@ Copy these files into an application crate:
 The base files are examples rather than runtime modules. Adjust their module
 paths if the generated files do not live under `generated` in the application.
 
-## Construct the typed lexer and parser
+## Parse with typed lexer and parser hooks
 
 ```rust
-use antlr4_runtime::{CommonTokenStream, InputStream, Parser};
+use antlr4_runtime::Parser;
 use generated::java_script_lexer::JavaScriptLexer;
-use generated::java_script_parser::JavaScriptParser;
+use generated::java_script_parser::{self, JavaScriptParser};
 use javascript_lexer_base::JavaScriptLexerBase;
 use javascript_parser_base::JavaScriptParserBase;
 
 let source = "class Example { static value = /x+/; }";
-let lexer = JavaScriptLexer::with_typed_hooks(
-    InputStream::new(source),
-    JavaScriptLexerBase::with_strict_default(false),
-);
-let tokens = CommonTokenStream::new(lexer);
-let mut parser = JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase);
-let tree = parser.program().expect("JavaScript parses");
-assert_eq!(parser.number_of_syntax_errors(), 0);
-assert!(!tree.text().is_empty());
+let output = java_script_parser::parse_with_parser_constructor(
+    source,
+    |input| {
+        JavaScriptLexer::with_typed_hooks(
+            input,
+            JavaScriptLexerBase::with_strict_default(false),
+        )
+    },
+    |tokens| JavaScriptParser::with_typed_hooks(tokens, JavaScriptParserBase),
+    JavaScriptParser::program,
+)
+.expect("JavaScript parses");
+assert_eq!(output.parser.number_of_syntax_errors(), 0);
+assert!(!output.parser.node(output.result).text().is_empty());
 ```
 
 `program()` is the compilation-unit entry rule. The lexer base tracks the last

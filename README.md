@@ -381,6 +381,37 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
+When the parser needs typed semantic hooks, use
+`parse_with_parser_constructor`. The parser constructor receives the buffered
+`CommonTokenStream`, so superclass-style hooks and any other constructor-time
+configuration stay inside the same generated driver:
+
+```rust
+use antlr4_runtime::Parser;
+use generated::java_lexer::JavaLexer;
+use generated::java_parser::{self, JavaParser};
+use java_parser_base::JavaParserBase;
+
+fn main() -> Result<(), antlr4_runtime::AntlrError> {
+    let output = java_parser::parse_with_parser_constructor(
+        "class Example {}",
+        JavaLexer::new,
+        |tokens| JavaParser::with_typed_hooks(tokens, JavaParserBase),
+        JavaParser::compilation_unit,
+    )?;
+    assert_eq!(output.parser.number_of_syntax_errors(), 0);
+    let parsed = output.into_parsed_file();
+
+    println!("{}", parsed.tree().text());
+    Ok(())
+}
+```
+
+Call `.validate()` instead of `.into_parsed_file()` when the application wants
+the generated validated-tree boundary. The lexer constructor can likewise be a
+closure that calls `Lexer::with_typed_hooks`. Use
+`parse_stream_with_parser_constructor` for a caller-provided `CharStream`.
+
 Use `parse_stream` with a preconstructed `CharStream` when parsing a file,
 preserving its source name, or supplying a custom stream implementation:
 

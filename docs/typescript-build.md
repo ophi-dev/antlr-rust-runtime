@@ -71,25 +71,30 @@ Copy these files into an application crate:
 The base files are examples rather than runtime modules. Adjust their module
 paths if the generated files do not live under `generated` in the application.
 
-## Construct the typed lexer and parser
+## Parse with typed lexer and parser hooks
 
 ```rust
-use antlr4_runtime::{CommonTokenStream, InputStream, Parser};
+use antlr4_runtime::Parser;
 use generated::type_script_lexer::TypeScriptLexer;
-use generated::type_script_parser::TypeScriptParser;
+use generated::type_script_parser::{self, TypeScriptParser};
 use typescript_lexer_base::TypeScriptLexerBase;
 use typescript_parser_base::TypeScriptParserBase;
 
 let source = "interface Box<T> { value: T }";
-let lexer = TypeScriptLexer::with_typed_hooks(
-    InputStream::new(source),
-    TypeScriptLexerBase::with_strict_default(false),
-);
-let tokens = CommonTokenStream::new(lexer);
-let mut parser = TypeScriptParser::with_typed_hooks(tokens, TypeScriptParserBase);
-let tree = parser.program().expect("TypeScript parses");
-assert_eq!(parser.number_of_syntax_errors(), 0);
-assert!(!tree.text().is_empty());
+let output = type_script_parser::parse_with_parser_constructor(
+    source,
+    |input| {
+        TypeScriptLexer::with_typed_hooks(
+            input,
+            TypeScriptLexerBase::with_strict_default(false),
+        )
+    },
+    |tokens| TypeScriptParser::with_typed_hooks(tokens, TypeScriptParserBase),
+    TypeScriptParser::program,
+)
+.expect("TypeScript parses");
+assert_eq!(output.parser.number_of_syntax_errors(), 0);
+assert!(!output.parser.node(output.result).text().is_empty());
 ```
 
 `program()` is the compilation-unit entry rule. The lexer base tracks the last

@@ -138,10 +138,11 @@ lower = "hook"
 mod recog_receiver_tests {
     use super::recog_predicate_lexer::RecogPredicateLexer;
     use super::recog_predicate_parser::{
-        RecogPredicateParser, RecogPredicateParserHooks,
+        self, RecogPredicateParser, RecogPredicateParserHooks,
+        RecogPredicateParserTypedHooks,
     };
     use antlr4_runtime::{
-        CommonTokenStream, InputStream, Parser as _, ParserSemCtx, TokenSource,
+        InputStream, Parser as _, ParserSemCtx, TokenSource,
     };
     use std::cell::Cell;
     use std::rc::Rc;
@@ -160,19 +161,100 @@ mod recog_receiver_tests {
         }
     }
 
-    #[test]
-    fn typed_hook_accepts_the_predicated_alternative() {
-        let calls = Rc::new(Cell::new(0));
-        let lexer = RecogPredicateLexer::new(InputStream::new("<<"));
-        let mut parser = RecogPredicateParser::with_typed_hooks(
-            CommonTokenStream::new(lexer),
-            Hooks {
-                calls: Rc::clone(&calls),
-            },
+    fn parser_constructor(
+        calls: &Rc<Cell<usize>>,
+    ) -> impl FnOnce(
+        antlr4_runtime::CommonTokenStream<RecogPredicateLexer<InputStream>>,
+    ) -> RecogPredicateParser<
+        RecogPredicateLexer<InputStream>,
+        RecogPredicateParserTypedHooks<Hooks>,
+    > {
+        let calls = Rc::clone(calls);
+        |tokens| RecogPredicateParser::with_typed_hooks(tokens, Hooks { calls })
+    }
+
+    fn assert_hook_ran(calls: &Cell<usize>, before: usize) {
+        assert!(
+            calls.get() > before,
+            "typed predicate hook was not invoked"
         );
-        let _ = parser.shl().expect("predicated rule should parse");
-        assert_eq!(parser.number_of_syntax_errors(), 0);
-        assert!(calls.get() > 0, "typed predicate hook was not invoked");
+    }
+
+    #[test]
+    fn generated_entry_points_accept_a_typed_parser_constructor() {
+        let calls = Rc::new(Cell::new(0));
+
+        let before = calls.get();
+        let parsed = recog_predicate_parser::parse_with_parser_constructor(
+            "<<",
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated rule should parse")
+        .into_parsed_file();
+        assert!(!parsed.tokens().is_empty());
+        assert_hook_ran(&calls, before);
+
+        let before = calls.get();
+        let validated = recog_predicate_parser::parse_with_parser_constructor(
+            "<<",
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated rule should parse")
+        .validate()
+        .expect("clean predicated parse should validate");
+        assert!(!validated.tree().text().is_empty());
+        assert_hook_ran(&calls, before);
+
+        let before = calls.get();
+        let output = recog_predicate_parser::parse_with_parser_constructor(
+            "<<",
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated rule should parse");
+        assert_eq!(output.parser.number_of_syntax_errors(), 0);
+        assert_hook_ran(&calls, before);
+
+        let before = calls.get();
+        let parsed = recog_predicate_parser::parse_stream_with_parser_constructor(
+            InputStream::new("<<"),
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated stream should parse")
+        .into_parsed_file();
+        assert!(!parsed.tokens().is_empty());
+        assert_hook_ran(&calls, before);
+
+        let before = calls.get();
+        let validated = recog_predicate_parser::parse_stream_with_parser_constructor(
+            InputStream::new("<<"),
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated stream should parse")
+        .validate()
+        .expect("clean predicated stream should validate");
+        assert!(!validated.tree().text().is_empty());
+        assert_hook_ran(&calls, before);
+
+        let before = calls.get();
+        let output = recog_predicate_parser::parse_stream_with_parser_constructor(
+            InputStream::new("<<"),
+            RecogPredicateLexer::new,
+            parser_constructor(&calls),
+            RecogPredicateParser::shl,
+        )
+        .expect("predicated stream should parse");
+        assert_eq!(output.parser.number_of_syntax_errors(), 0);
+        assert_hook_ran(&calls, before);
     }
 }
 "####;

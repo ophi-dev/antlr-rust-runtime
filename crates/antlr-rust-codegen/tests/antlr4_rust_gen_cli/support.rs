@@ -273,8 +273,10 @@ pub(super) fn generated_parser_api(source: &str) -> Vec<String> {
                 "parse_stream",
                 "parse_stream_validated",
                 "parse_stream_with_parser",
+                "parse_stream_with_parser_constructor",
                 "parse_validated",
                 "parse_with_parser",
+                "parse_with_parser_constructor",
                 "validate",
             ]
             .map(|name| format!("fn {name}")),
