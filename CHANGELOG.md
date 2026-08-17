@@ -12,6 +12,13 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.34.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.33.1...v0.34.0) (2026-08-17)
+
+
+### Features
+
+* **runtime:** support custom parser construction in parse drivers ([#350](https://github.com/ophi-dev/antlr-rust-runtime/issues/350)) ([b371dcd](https://github.com/ophi-dev/antlr-rust-runtime/commit/b371dcd21cd45f039ab5ddd89a66e96f3e67e595))
+
 ## [0.33.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.33.0...v0.33.1) (2026-08-13)
 
 
