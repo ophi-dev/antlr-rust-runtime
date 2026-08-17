@@ -264,10 +264,6 @@ fn binary_property_ranges(name: &str) -> Option<Vec<i32>> {
         props::Math,
         props::ModifierCombiningMark,
         props::NoncharacterCodePoint,
-        props::NfcInert,
-        props::NfdInert,
-        props::NfkcInert,
-        props::NfkdInert,
         props::PatternSyntax,
         props::PatternWhiteSpace,
         props::PrependedConcatenationMark,
@@ -276,8 +272,6 @@ fn binary_property_ranges(name: &str) -> Option<Vec<i32>> {
         props::Radical,
         props::RegionalIndicator,
         props::SoftDotted,
-        props::SegmentStarter,
-        props::CaseSensitive,
         props::SentenceTerminal,
         props::TerminalPunctuation,
         props::UnifiedIdeograph,
@@ -287,6 +281,20 @@ fn binary_property_ranges(name: &str) -> Option<Vec<i32>> {
         props::Xdigit,
         props::XidContinue,
         props::XidStart,
+    );
+    icu_binary_property_ranges(name)
+}
+
+#[allow(deprecated)] // ANTLR exposes these ICU-only properties alongside UCD properties.
+fn icu_binary_property_ranges(name: &str) -> Option<Vec<i32>> {
+    try_binary_properties!(
+        name,
+        props::NfcInert,
+        props::NfdInert,
+        props::NfkcInert,
+        props::NfkdInert,
+        props::SegmentStarter,
+        props::CaseSensitive,
     );
     None
 }
@@ -727,9 +735,7 @@ fn decomposition_ccc_ranges(value: &str, lead: bool) -> Option<Vec<i32>> {
     if value == "null" {
         return Some(Vec::new());
     }
-    let combining_class = PropertyParser::<props::CanonicalCombiningClass>::new()
-        .get_loose(value)?
-        .to_icu4c_value();
+    let combining_class = canonical_combining_class_value(value)?;
     let (lead_ranges, trail_ranges) = DECOMPOSITION_CCC_RANGES.get_or_init(|| {
         let mut lead = ValueRangeBuilder::default();
         let mut trail = ValueRangeBuilder::default();
@@ -756,6 +762,15 @@ fn decomposition_ccc_ranges(value: &str, lead: bool) -> Option<Vec<i32>> {
             .get(&combining_class)
             .cloned()
             .unwrap_or_default(),
+    )
+}
+
+#[allow(deprecated)] // ICU4X 2.2 does not expose CanonicalCombiningClass's numeric field.
+fn canonical_combining_class_value(value: &str) -> Option<u8> {
+    Some(
+        PropertyParser::<props::CanonicalCombiningClass>::new()
+            .get_loose(value)?
+            .to_icu4c_value(),
     )
 }
 
