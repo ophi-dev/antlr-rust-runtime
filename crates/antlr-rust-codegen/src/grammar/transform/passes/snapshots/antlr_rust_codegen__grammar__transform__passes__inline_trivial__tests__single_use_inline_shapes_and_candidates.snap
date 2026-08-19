@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/transform/passes/inline_trivial.rs
+expression: "(shape(&grammar.units[0]), candidate_lines(&report))"
+---
+(
+    [
+        "start : item (COMMA item)* EOF",
+        "item : (AT AT?) ID",
+    ],
+    [
+        "Applied prefix [item#1]: inlined single-use rule prefix into its call site in item",
+    ],
+)

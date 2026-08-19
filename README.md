@@ -1015,6 +1015,55 @@ rules. It removes generated rule methods, context types, and listener/visitor
 callbacks, so consumers that invoke other rules directly must declare them with
 `--entry-rule` or leave pruning disabled.
 
+### Trivial-rule inlining
+
+`--inline-trivial-rules` is an explicit, off-by-default optimization that
+inlines two classes of pure parser rules into their call sites before ATN
+construction, so the caller's decision sees the actual tokens instead of a
+rule transition:
+
+- **token-set rules** — a rule whose body is nothing but an alternation of
+  single terminals (keyword lists, operator names). Every reference is
+  replaced by the flattened token set, however many call sites exist;
+  expansion is bounded by construction at one element per site.
+- **single-use pure sequences** — a single-alternative rule referenced
+  exactly once whose body carries no observable surface. Its body moves into
+  the call site as a parenthesized block.
+
+Inlined rules are removed, so this pass is **recognition preserving**, not
+tree/API preserving: the callee's rule method, context type, and
+listener/visitor callbacks disappear, its parse-tree level vanishes, and its
+recovery boundary moves to the caller. The accepted language and consumed
+input for valid text are unchanged.
+
+Candidates are inlined all-or-nothing and fail closed. A candidate is
+declined — with a reason recorded in the manifest — when it is a configured or
+inferred entry rule, recursive, nullable, referenced by grammar target code,
+carries labels, attributes, actions, predicates, options, or exception
+clauses, or when any call site binds a label, passes arguments, or pins
+precedence. Discovery re-runs after every accepted rewrite, so alias chains
+(`a : b ; b : X | Y ;`) collapse in one invocation while every application
+removes exactly one rule.
+
+Every applied run writes `optimizations.json` recording each candidate's
+status, reason, removed rule, and rewritten call sites with original source
+spans. Inspect the same deterministic report without generating or changing a
+parser with:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --report-trivial-rules \
+  --out-dir target/grammar-report
+```
+
+Report mode writes only `optimizations.json`. Apply reviewed candidates with:
+
+```bash
+antlr4-rust-gen Grammar.g4 \
+  --inline-trivial-rules \
+  --out-dir src/generated
+```
+
 ### Precedence-ladder optimization
 
 `--optimize-precedence-ladders` is an explicit, off-by-default source

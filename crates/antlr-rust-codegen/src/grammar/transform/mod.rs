@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Konstantin Vyatkin
 pub(crate) mod analysis;
 pub(crate) mod artifact;
+pub(crate) mod clone;
 mod registry;
 
 pub(crate) mod passes {
+    pub(crate) mod inline_trivial;
     pub(crate) mod precedence_ladder;
     pub(crate) mod prune_unreachable;
 }
@@ -70,6 +72,15 @@ pub(crate) struct TransformLabelMapping {
     pub(crate) target_label: String,
 }
 
+/// One rewritten (or would-be rewritten) reference to an inlined rule.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformCallSite {
+    pub(crate) caller: String,
+    /// One-based top-level alternative ordinal within the caller.
+    pub(crate) alternative: usize,
+    pub(crate) source_span: SourceSpan,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TransformCandidateReport {
     pub(crate) pass: TransformId,
@@ -85,6 +96,7 @@ pub(crate) struct TransformCandidateReport {
     pub(crate) alternatives: Vec<TransformAlternativeMapping>,
     pub(crate) labels: Vec<TransformLabelMapping>,
     pub(crate) grouping_changes: Vec<String>,
+    pub(crate) call_sites: Vec<TransformCallSite>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

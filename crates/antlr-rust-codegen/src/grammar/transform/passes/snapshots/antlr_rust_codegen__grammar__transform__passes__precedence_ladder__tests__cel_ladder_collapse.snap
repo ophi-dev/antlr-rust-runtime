@@ -1,6 +1,5 @@
 ---
 source: crates/antlr-rust-codegen/src/grammar/transform/passes/precedence_ladder.rs
-assertion_line: 1671
 expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,)"
 ---
 (
@@ -306,6 +305,7 @@ expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,
                 "conditionalOr",
                 "conditionalAnd",
             ],
+            call_sites: [],
         },
     ],
 )

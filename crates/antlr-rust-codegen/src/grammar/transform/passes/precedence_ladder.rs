@@ -2,17 +2,20 @@
 // Copyright (c) 2026 Konstantin Vyatkin
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::grammar::action::ActionReferenceParser;
 #[cfg(test)]
 use crate::grammar::action::action_references;
-use crate::grammar::action::{ActionReferenceKind, ActionReferenceParser};
 use crate::grammar::char_support::get_string_from_grammar_string_literal;
 use crate::grammar::diagnostic::Diagnostic;
 use crate::grammar::model::{
-    Alternative, Authored, Block, Element, ElementKind, GrammarUnit, Label, ModelIdAllocator,
-    ModelNodeId, OptionDecl, Quantifier, Rule, RuleCall, RuleId, RuleKind, SetElement, Terminal,
+    Alternative, Authored, Block, Element, ElementKind, GrammarUnit, ModelIdAllocator, ModelNodeId,
+    OptionDecl, Quantifier, Rule, RuleCall, RuleId, RuleKind, SetElement, Terminal,
 };
 use crate::grammar::provenance::{Origin, ProvenanceIndex, Tombstone};
-use crate::grammar::transform::analysis::AnalysisInvalidation;
+use crate::grammar::transform::analysis::{
+    AnalysisInvalidation, observed_rule_contexts, visit_elements,
+};
+use crate::grammar::transform::clone::TransformCloner;
 use crate::grammar::transform::{
     GrammarTransform, SafetyClass, TransformAlternativeMapping, TransformCandidateReport,
     TransformCandidateStatus, TransformContext, TransformGrammar, TransformLabelMapping,
@@ -829,147 +832,6 @@ fn incoming_callers(
     incoming
 }
 
-fn observed_rule_contexts(
-    unit: &GrammarUnit,
-    rules_by_name: &BTreeMap<String, RuleId>,
-    action_reference_parser: ActionReferenceParser,
-) -> BTreeSet<RuleId> {
-    let mut observed = BTreeSet::new();
-    let mut has_opaque_target_code = false;
-    for action in &unit.actions {
-        collect_target_code_rule_references(
-            &action.body,
-            rules_by_name,
-            &mut observed,
-            &mut has_opaque_target_code,
-            action_reference_parser,
-        );
-    }
-    for rule in &unit.rules {
-        for clause in rule
-            .arguments
-            .iter()
-            .chain(rule.returns.iter())
-            .chain(rule.locals.iter())
-        {
-            collect_target_code_rule_references(
-                &clause.text,
-                rules_by_name,
-                &mut observed,
-                &mut has_opaque_target_code,
-                action_reference_parser,
-            );
-        }
-        for action in &rule.actions {
-            collect_target_code_rule_references(
-                &action.body,
-                rules_by_name,
-                &mut observed,
-                &mut has_opaque_target_code,
-                action_reference_parser,
-            );
-        }
-        for handler in &rule.catches {
-            collect_target_code_rule_references(
-                &handler.body,
-                rules_by_name,
-                &mut observed,
-                &mut has_opaque_target_code,
-                action_reference_parser,
-            );
-        }
-        if let Some(action) = &rule.finally_action {
-            collect_target_code_rule_references(
-                &action.body,
-                rules_by_name,
-                &mut observed,
-                &mut has_opaque_target_code,
-                action_reference_parser,
-            );
-        }
-        visit_elements(&rule.block, &mut |element| match &element.kind {
-            ElementKind::RuleCall(call) => {
-                if let Some(arguments) = &call.arguments {
-                    collect_target_code_rule_references(
-                        arguments,
-                        rules_by_name,
-                        &mut observed,
-                        &mut has_opaque_target_code,
-                        action_reference_parser,
-                    );
-                }
-            }
-            ElementKind::Action { body, .. } => {
-                collect_target_code_rule_references(
-                    body,
-                    rules_by_name,
-                    &mut observed,
-                    &mut has_opaque_target_code,
-                    action_reference_parser,
-                );
-            }
-            ElementKind::Predicate { body, fail, .. } => {
-                collect_target_code_rule_references(
-                    body,
-                    rules_by_name,
-                    &mut observed,
-                    &mut has_opaque_target_code,
-                    action_reference_parser,
-                );
-                if let Some(fail) = fail {
-                    collect_target_code_rule_references(
-                        fail,
-                        rules_by_name,
-                        &mut observed,
-                        &mut has_opaque_target_code,
-                        action_reference_parser,
-                    );
-                }
-            }
-            ElementKind::Terminal(_)
-            | ElementKind::Range(..)
-            | ElementKind::Set { .. }
-            | ElementKind::Block(_)
-            | ElementKind::Epsilon => {}
-        });
-    }
-    if has_opaque_target_code {
-        observed.extend(rules_by_name.values().copied());
-    }
-    observed
-}
-
-fn collect_target_code_rule_references(
-    body: &str,
-    rules_by_name: &BTreeMap<String, RuleId>,
-    observed: &mut BTreeSet<RuleId>,
-    has_opaque_target_code: &mut bool,
-    action_reference_parser: ActionReferenceParser,
-) {
-    *has_opaque_target_code |= !body.trim().is_empty();
-    for reference in action_reference_parser(body) {
-        let name = match reference.kind {
-            ActionReferenceKind::Attribute { name, .. }
-            | ActionReferenceKind::Qualified { name, .. } => Some(name),
-            ActionReferenceKind::NonLocal { rule, .. } => Some(rule),
-        };
-        if let Some(rule) = name.and_then(|name| rules_by_name.get(name)) {
-            observed.insert(*rule);
-        }
-    }
-}
-
-fn visit_elements(block: &Block, visitor: &mut impl FnMut(&Element)) {
-    for alternative in &block.alternatives {
-        for element in &alternative.elements {
-            visitor(element);
-            if let ElementKind::Block(nested) = &element.kind {
-                visit_elements(nested, visitor);
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 struct OutputAlternative {
     source_rule: RuleId,
@@ -1024,7 +886,7 @@ fn apply_plan(
             .entry((output.source_rule, output.source_alternative))
             .or_default()
             .push(label.value.clone());
-        let mut alternative = cloner.alternative(output, label);
+        let mut alternative = clone_output_alternative(&mut cloner, output, label);
         replace_ladder_calls(&mut alternative.elements, &included_names, &hub.name);
         rewritten.push(alternative);
     }
@@ -1086,6 +948,7 @@ fn apply_plan(
         alternatives: alternative_mappings,
         labels: label_mappings,
         grouping_changes,
+        call_sites: Vec::new(),
     }
 }
 
@@ -1278,124 +1141,33 @@ fn replace_ladder_calls(elements: &mut [Element], names: &BTreeSet<String>, hub:
     }
 }
 
-struct TransformCloner<'a> {
-    ids: &'a mut ModelIdAllocator,
-    provenance: &'a mut ProvenanceIndex,
-    pass: crate::grammar::model::TransformId,
-}
-
-impl TransformCloner<'_> {
-    fn alternative(&mut self, output: &OutputAlternative, label: Authored<String>) -> Alternative {
-        let id = self.ids.alternative();
-        self.record(
-            ModelNodeId::Alternative(id),
-            ModelNodeId::Alternative(output.source.id),
-        );
-        let options = if output.right_associative {
-            vec![right_association_option(&output.source)]
-        } else {
-            output.source.options.clone()
-        };
-        Alternative {
-            id,
-            elements: output
-                .elements
-                .iter()
-                .map(|element| self.element(element))
-                .collect(),
-            label: Some(label),
-            options,
-            commands: Vec::new(),
-            syntax: output.source.syntax,
-            span: output.source.span.clone(),
-        }
-    }
-
-    fn element(&mut self, source: &Element) -> Element {
-        let mut cloned = source.clone();
-        cloned.id = self.ids.element();
-        cloned.label = source.label.as_ref().map(|label| self.label(label));
-        cloned.kind = match &source.kind {
-            ElementKind::Block(block) => ElementKind::Block(Block {
-                alternatives: block
-                    .alternatives
-                    .iter()
-                    .map(|alternative| self.nested_alternative(alternative))
-                    .collect(),
-                options: block.options.clone(),
-                syntax: block.syntax,
-                span: block.span.clone(),
-            }),
-            ElementKind::Action { id, body } => {
-                let cloned_id = self.ids.action();
-                self.record(ModelNodeId::Action(cloned_id), ModelNodeId::Action(*id));
-                ElementKind::Action {
-                    id: cloned_id,
-                    body: body.clone(),
-                }
-            }
-            ElementKind::Predicate {
-                id,
-                body,
-                fail,
-                precedence,
-            } => {
-                let cloned_id = self.ids.predicate();
-                self.record(
-                    ModelNodeId::Predicate(cloned_id),
-                    ModelNodeId::Predicate(*id),
-                );
-                ElementKind::Predicate {
-                    id: cloned_id,
-                    body: body.clone(),
-                    fail: fail.clone(),
-                    precedence: *precedence,
-                }
-            }
-            kind => kind.clone(),
-        };
-        self.record(
-            ModelNodeId::Element(cloned.id),
-            ModelNodeId::Element(source.id),
-        );
-        cloned
-    }
-
-    fn nested_alternative(&mut self, source: &Alternative) -> Alternative {
-        let id = self.ids.alternative();
-        self.record(
-            ModelNodeId::Alternative(id),
-            ModelNodeId::Alternative(source.id),
-        );
-        Alternative {
-            id,
-            elements: source
-                .elements
-                .iter()
-                .map(|element| self.element(element))
-                .collect(),
-            label: source.label.clone(),
-            options: source.options.clone(),
-            commands: source.commands.clone(),
-            syntax: source.syntax,
-            span: source.span.clone(),
-        }
-    }
-
-    fn label(&mut self, source: &Label) -> Label {
-        let mut cloned = source.clone();
-        cloned.id = self.ids.label();
-        self.record(ModelNodeId::Label(cloned.id), ModelNodeId::Label(source.id));
-        cloned
-    }
-
-    fn record(&mut self, destination: ModelNodeId, source: ModelNodeId) {
-        let mut origins = self.provenance.origins(source).to_vec();
-        origins.push(Origin::OptionalTransform {
-            pass: self.pass,
-            inputs: Box::new([source]),
-        });
-        self.provenance.record_model(destination, origins);
+fn clone_output_alternative(
+    cloner: &mut TransformCloner<'_>,
+    output: &OutputAlternative,
+    label: Authored<String>,
+) -> Alternative {
+    let id = cloner.ids.alternative();
+    cloner.record(
+        ModelNodeId::Alternative(id),
+        ModelNodeId::Alternative(output.source.id),
+    );
+    let options = if output.right_associative {
+        vec![right_association_option(&output.source)]
+    } else {
+        output.source.options.clone()
+    };
+    Alternative {
+        id,
+        elements: output
+            .elements
+            .iter()
+            .map(|element| cloner.element(element))
+            .collect(),
+        label: Some(label),
+        options,
+        commands: Vec::new(),
+        syntax: output.source.syntax,
+        span: output.source.span.clone(),
     }
 }
 
@@ -1625,6 +1397,7 @@ fn declined_report(
         alternatives: Vec::new(),
         labels: Vec::new(),
         grouping_changes: Vec::new(),
+        call_sites: Vec::new(),
     }
 }
 

@@ -6,12 +6,14 @@ use crate::config::CompilerConfig;
 use crate::error::Error;
 use crate::grammar::compiler::Compilation;
 use crate::grammar::rule_reachability::EntryRuleConfig;
+use crate::grammar::transform::passes::inline_trivial::InlineTrivialRules;
 use crate::grammar::transform::passes::precedence_ladder::CollapsePrecedenceLadders;
 use crate::grammar::transform::passes::prune_unreachable::PruneUnreachableRules;
 use crate::grammar::transform::{GrammarTransform, TransformRegistry};
 
 use super::descriptor::{
-    COLLAPSE_PRECEDENCE_LADDERS, OptimizationStage, PRUNE_UNREACHABLE_RULES, PassDescriptor,
+    COLLAPSE_PRECEDENCE_LADDERS, INLINE_TRIVIAL_RULES, OptimizationStage, PRUNE_UNREACHABLE_RULES,
+    PassDescriptor,
 };
 use super::report::pruned_unreachable_rule_messages;
 
@@ -39,11 +41,19 @@ struct PassRegistration {
 struct SelectionSettings {
     entry_rules: EntryRuleConfig,
     prune_unreachable: bool,
+    trivial_inlining: Option<PassExecution>,
     precedence_ladders: Option<PassExecution>,
 }
 
 impl SelectionSettings {
     fn from_compiler_config(config: &CompilerConfig) -> Self {
+        let trivial_inlining = if config.report_trivial_rules {
+            Some(PassExecution::ReportOnly)
+        } else if config.inline_trivial_rules {
+            Some(PassExecution::Apply)
+        } else {
+            None
+        };
         let precedence_ladders = if config.report_precedence_ladders {
             Some(PassExecution::ReportOnly)
         } else if config.optimize_precedence_ladders {
@@ -54,6 +64,7 @@ impl SelectionSettings {
         Self {
             entry_rules: EntryRuleConfig::new(config.entry_rules.iter().cloned()),
             prune_unreachable: config.prune_unreachable,
+            trivial_inlining,
             precedence_ladders,
         }
     }
@@ -77,6 +88,10 @@ const PASS_REGISTRY: &[PassRegistration] = &[
     PassRegistration {
         descriptor: &PRUNE_UNREACHABLE_RULES,
         configure: configure_prune_unreachable,
+    },
+    PassRegistration {
+        descriptor: &INLINE_TRIVIAL_RULES,
+        configure: configure_trivial_inlining,
     },
     PassRegistration {
         descriptor: &COLLAPSE_PRECEDENCE_LADDERS,
@@ -141,6 +156,17 @@ fn configure_prune_unreachable(settings: &SelectionSettings) -> Option<Configure
         emit_manifest: false,
         messages: Some(pruned_unreachable_rule_messages),
     })
+}
+
+fn configure_trivial_inlining(settings: &SelectionSettings) -> Option<ConfiguredGrammarPass> {
+    settings
+        .trivial_inlining
+        .map(|execution| ConfiguredGrammarPass {
+            transform: Box::new(InlineTrivialRules::new(settings.entry_rules.clone())),
+            execution,
+            emit_manifest: true,
+            messages: None,
+        })
 }
 
 fn configure_precedence_ladders(settings: &SelectionSettings) -> Option<ConfiguredGrammarPass> {
@@ -251,6 +277,7 @@ mod tests {
         let plan = OptimizationPlan::from_settings(SelectionSettings {
             entry_rules: EntryRuleConfig::default(),
             prune_unreachable: true,
+            trivial_inlining: Some(PassExecution::Apply),
             precedence_ladders: Some(PassExecution::Apply),
         })
         .expect("registered optimization passes should be valid");
@@ -262,6 +289,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 (PruneUnreachableRules::NAME, 100),
+                (InlineTrivialRules::NAME, 150),
                 (CollapsePrecedenceLadders::NAME, 200),
             ]
         );
@@ -273,11 +301,32 @@ mod tests {
         let plan = OptimizationPlan::from_settings(SelectionSettings {
             entry_rules: EntryRuleConfig::default(),
             prune_unreachable: true,
+            trivial_inlining: None,
             precedence_ladders: Some(PassExecution::ReportOnly),
         })
         .expect("registered optimization passes should be valid");
 
         assert!(plan.report_only());
         assert_eq!(plan.selected.len(), 2);
+    }
+
+    #[test]
+    fn report_only_trivial_inlining_shadows_the_whole_selection() {
+        let plan = OptimizationPlan::from_settings(SelectionSettings {
+            entry_rules: EntryRuleConfig::default(),
+            prune_unreachable: false,
+            trivial_inlining: Some(PassExecution::ReportOnly),
+            precedence_ladders: None,
+        })
+        .expect("registered optimization passes should be valid");
+
+        assert!(plan.report_only());
+        assert_eq!(
+            plan.selected
+                .iter()
+                .map(|pass| pass.descriptor.id)
+                .collect::<Vec<_>>(),
+            [InlineTrivialRules::NAME]
+        );
     }
 }

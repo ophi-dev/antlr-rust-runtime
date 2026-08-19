@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
+use crate::grammar::action::{ActionReferenceKind, ActionReferenceParser};
 use crate::grammar::model::{Block, Element, ElementKind, GrammarUnit, Quantifier, RuleId};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -205,4 +206,150 @@ fn recursive_components(call_graph: &BTreeMap<RuleId, Vec<RuleId>>) -> Vec<Vec<R
         .collect::<Vec<_>>();
     components.sort();
     components
+}
+
+pub(crate) fn visit_elements(block: &Block, visitor: &mut impl FnMut(&Element)) {
+    for alternative in &block.alternatives {
+        for element in &alternative.elements {
+            visitor(element);
+            if let ElementKind::Block(nested) = &element.kind {
+                visit_elements(nested, visitor);
+            }
+        }
+    }
+}
+
+/// Rules whose generated context or accessors are referenced from target
+/// code anywhere in the unit.
+///
+/// Fails closed: any target-code body the action-reference parser cannot
+/// fully resolve marks every rule as observed.
+pub(crate) fn observed_rule_contexts(
+    unit: &GrammarUnit,
+    rules_by_name: &BTreeMap<String, RuleId>,
+    action_reference_parser: ActionReferenceParser,
+) -> BTreeSet<RuleId> {
+    let mut observed = BTreeSet::new();
+    let mut has_opaque_target_code = false;
+    for action in &unit.actions {
+        collect_target_code_rule_references(
+            &action.body,
+            rules_by_name,
+            &mut observed,
+            &mut has_opaque_target_code,
+            action_reference_parser,
+        );
+    }
+    for rule in &unit.rules {
+        for clause in rule
+            .arguments
+            .iter()
+            .chain(rule.returns.iter())
+            .chain(rule.locals.iter())
+        {
+            collect_target_code_rule_references(
+                &clause.text,
+                rules_by_name,
+                &mut observed,
+                &mut has_opaque_target_code,
+                action_reference_parser,
+            );
+        }
+        for action in &rule.actions {
+            collect_target_code_rule_references(
+                &action.body,
+                rules_by_name,
+                &mut observed,
+                &mut has_opaque_target_code,
+                action_reference_parser,
+            );
+        }
+        for handler in &rule.catches {
+            collect_target_code_rule_references(
+                &handler.body,
+                rules_by_name,
+                &mut observed,
+                &mut has_opaque_target_code,
+                action_reference_parser,
+            );
+        }
+        if let Some(action) = &rule.finally_action {
+            collect_target_code_rule_references(
+                &action.body,
+                rules_by_name,
+                &mut observed,
+                &mut has_opaque_target_code,
+                action_reference_parser,
+            );
+        }
+        visit_elements(&rule.block, &mut |element| match &element.kind {
+            ElementKind::RuleCall(call) => {
+                if let Some(arguments) = &call.arguments {
+                    collect_target_code_rule_references(
+                        arguments,
+                        rules_by_name,
+                        &mut observed,
+                        &mut has_opaque_target_code,
+                        action_reference_parser,
+                    );
+                }
+            }
+            ElementKind::Action { body, .. } => {
+                collect_target_code_rule_references(
+                    body,
+                    rules_by_name,
+                    &mut observed,
+                    &mut has_opaque_target_code,
+                    action_reference_parser,
+                );
+            }
+            ElementKind::Predicate { body, fail, .. } => {
+                collect_target_code_rule_references(
+                    body,
+                    rules_by_name,
+                    &mut observed,
+                    &mut has_opaque_target_code,
+                    action_reference_parser,
+                );
+                if let Some(fail) = fail {
+                    collect_target_code_rule_references(
+                        fail,
+                        rules_by_name,
+                        &mut observed,
+                        &mut has_opaque_target_code,
+                        action_reference_parser,
+                    );
+                }
+            }
+            ElementKind::Terminal(_)
+            | ElementKind::Range(..)
+            | ElementKind::Set { .. }
+            | ElementKind::Block(_)
+            | ElementKind::Epsilon => {}
+        });
+    }
+    if has_opaque_target_code {
+        observed.extend(rules_by_name.values().copied());
+    }
+    observed
+}
+
+fn collect_target_code_rule_references(
+    body: &str,
+    rules_by_name: &BTreeMap<String, RuleId>,
+    observed: &mut BTreeSet<RuleId>,
+    has_opaque_target_code: &mut bool,
+    action_reference_parser: ActionReferenceParser,
+) {
+    *has_opaque_target_code |= !body.trim().is_empty();
+    for reference in action_reference_parser(body) {
+        let name = match reference.kind {
+            ActionReferenceKind::Attribute { name, .. }
+            | ActionReferenceKind::Qualified { name, .. } => Some(name),
+            ActionReferenceKind::NonLocal { rule, .. } => Some(rule),
+        };
+        if let Some(rule) = name.and_then(|name| rules_by_name.get(name)) {
+            observed.insert(*rule);
+        }
+    }
 }

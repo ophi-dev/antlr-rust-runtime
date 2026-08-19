@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 Konstantin Vyatkin
 use crate::grammar::transform::SafetyClass;
+use crate::grammar::transform::passes::inline_trivial::InlineTrivialRules;
 use crate::grammar::transform::passes::precedence_ladder::CollapsePrecedenceLadders;
 use crate::grammar::transform::passes::prune_unreachable::PruneUnreachableRules;
 
@@ -24,6 +25,15 @@ pub(super) const PRUNE_UNREACHABLE_RULES: PassDescriptor = PassDescriptor {
     stage: OptimizationStage::IntegratedGrammar,
     safety: SafetyClass::RecognitionPreserving,
     canonical_order: 100,
+    prerequisites: &[],
+    conflicts: &[],
+};
+
+pub(super) const INLINE_TRIVIAL_RULES: PassDescriptor = PassDescriptor {
+    id: InlineTrivialRules::NAME,
+    stage: OptimizationStage::IntegratedGrammar,
+    safety: SafetyClass::RecognitionPreserving,
+    canonical_order: 150,
     prerequisites: &[],
     conflicts: &[],
 };

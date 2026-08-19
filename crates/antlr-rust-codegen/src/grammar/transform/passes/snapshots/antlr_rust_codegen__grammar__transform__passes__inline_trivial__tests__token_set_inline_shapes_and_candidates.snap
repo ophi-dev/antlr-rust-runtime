@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/transform/passes/inline_trivial.rs
+expression: "(shape(&grammar.units[0]), candidate_lines(&report))"
+---
+(
+    [
+        "start : stmt+ EOF",
+        "stmt : {'select','from',KWTOK} ID SEMI | ID {'select','from',KWTOK}* SEMI",
+    ],
+    [
+        "Applied kw [stmt#1, stmt#2]: inlined token-set rule kw (3 members) into 2 call sites",
+    ],
+)

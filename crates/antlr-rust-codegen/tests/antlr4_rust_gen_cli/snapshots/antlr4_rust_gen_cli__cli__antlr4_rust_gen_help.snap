@@ -42,6 +42,10 @@ Options:
           Declare a parser entry rule by bare name (repeatable)
       --prune-unreachable
           Remove parser rules unreachable from every entry rule
+      --inline-trivial-rules
+          Inline trivial pure parser rules into their call sites (changes tree/API)
+      --report-trivial-rules
+          Dry-run trivial-rule inlining and emit only optimizations.json
       --optimize-precedence-ladders
           Collapse proven linear precedence ladders (changes tree/API)
       --report-precedence-ladders

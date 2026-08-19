@@ -35,6 +35,10 @@ pub(crate) struct CompilerConfig {
     pub(crate) entry_rules: BTreeSet<String>,
     /// Remove parser rules unreachable from every inferred/configured entry.
     pub(crate) prune_unreachable: bool,
+    /// Inline trivial pure parser rules into their call sites (issue #130).
+    pub(crate) inline_trivial_rules: bool,
+    /// Analyze trivial-rule inlining on a shadow model and emit only its manifest.
+    pub(crate) report_trivial_rules: bool,
     /// Recognition-preserving source rewrite from issue #225.
     pub(crate) optimize_precedence_ladders: bool,
     /// Analyze the same pass on a shadow model and emit only its manifest.

@@ -1,0 +1,7 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/transform/passes/inline_trivial.rs
+expression: candidate_lines(&report)
+---
+[
+    "Declined kw [start#1]: grammar target code observes the rule context",
+]
