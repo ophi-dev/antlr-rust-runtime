@@ -19,7 +19,7 @@ use crate::grammar::transform::clone::TransformCloner;
 use crate::grammar::transform::{
     GrammarTransform, SafetyClass, TransformAlternativeMapping, TransformCandidateReport,
     TransformCandidateStatus, TransformContext, TransformGrammar, TransformLabelMapping,
-    TransformProjection, TransformReport,
+    TransformProjection, TransformRemovedRule, TransformReport,
 };
 
 pub(crate) struct CollapsePrecedenceLadders;
@@ -898,7 +898,10 @@ fn apply_plan(
         .collect::<Vec<_>>();
     let removed_rules = plan.rungs[1..]
         .iter()
-        .map(|rung| rung.rule.name.clone())
+        .map(|rung| TransformRemovedRule {
+            rule: rung.rule.name.clone(),
+            target: Some(hub.name.clone()),
+        })
         .collect::<Vec<_>>();
 
     let removed_ids = plan.rungs[1..]
@@ -1524,7 +1527,14 @@ atom : INT ;
             ["top", "other", "middle", "atom"]
         );
         assert_eq!(report.candidates[0].entry_rule, "middle");
-        assert_eq!(report.candidates[0].removed_rules, ["low"]);
+        assert_eq!(
+            report.candidates[0]
+                .removed_rules
+                .iter()
+                .map(|removed| (removed.rule.as_str(), removed.target.as_deref()))
+                .collect::<Vec<_>>(),
+            [("low", Some("middle"))]
+        );
         let middle = grammar.units[0]
             .rules
             .iter()
@@ -1590,7 +1600,11 @@ atom : INT ;
             ]
         );
         assert_eq!(
-            candidate.removed_rules,
+            candidate
+                .removed_rules
+                .iter()
+                .map(|removed| removed.rule.as_str())
+                .collect::<Vec<_>>(),
             ["conditionalAnd", "relation", "calc", "unary"]
         );
     }

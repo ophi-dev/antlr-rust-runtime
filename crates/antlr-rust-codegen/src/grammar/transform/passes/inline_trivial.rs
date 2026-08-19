@@ -39,8 +39,8 @@ use crate::grammar::transform::analysis::{
 use crate::grammar::transform::clone::{TransformCloner, tombstone_rule};
 use crate::grammar::transform::{
     GrammarTransform, SafetyClass, TransformCallSite, TransformCandidateReport,
-    TransformCandidateStatus, TransformContext, TransformGrammar, TransformReport,
-    TransformRuleRemoval,
+    TransformCandidateStatus, TransformContext, TransformGrammar, TransformRemovedRule,
+    TransformReport, TransformRuleRemoval,
 };
 
 pub(crate) struct InlineTrivialRules {
@@ -587,7 +587,10 @@ fn applied_report(
         rungs: Vec::new(),
         boundary_rule: None,
         projection: None,
-        removed_rules: vec![plan.callee_name.clone()],
+        removed_rules: vec![TransformRemovedRule {
+            rule: plan.callee_name.clone(),
+            target: None,
+        }],
         alternatives: Vec::new(),
         labels: Vec::new(),
         grouping_changes: Vec::new(),

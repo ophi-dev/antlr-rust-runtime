@@ -98,7 +98,7 @@ struct ReductionManifest {
 #[serde(rename_all = "camelCase")]
 struct RemovedRuleManifest<'a> {
     rule: &'a str,
-    target_rule: &'a str,
+    target_rule: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -203,9 +203,9 @@ fn transform_candidate_manifest<'a>(
         removed_rules: candidate
             .removed_rules
             .iter()
-            .map(|rule| RemovedRuleManifest {
-                rule,
-                target_rule: &candidate.entry_rule,
+            .map(|removed| RemovedRuleManifest {
+                rule: &removed.rule,
+                target_rule: removed.target.as_deref(),
             })
             .collect(),
         alternatives: candidate

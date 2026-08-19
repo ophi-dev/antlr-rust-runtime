@@ -81,6 +81,15 @@ pub(crate) struct TransformCallSite {
     pub(crate) source_span: SourceSpan,
 }
 
+/// One rule deleted by a transform, with the rule that absorbed it when a
+/// single surviving target exists (inlined rules dissolve into their call
+/// sites instead).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TransformRemovedRule {
+    pub(crate) rule: String,
+    pub(crate) target: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TransformCandidateReport {
     pub(crate) pass: TransformId,
@@ -92,7 +101,7 @@ pub(crate) struct TransformCandidateReport {
     pub(crate) rungs: Vec<String>,
     pub(crate) boundary_rule: Option<String>,
     pub(crate) projection: Option<TransformProjection>,
-    pub(crate) removed_rules: Vec<String>,
+    pub(crate) removed_rules: Vec<TransformRemovedRule>,
     pub(crate) alternatives: Vec<TransformAlternativeMapping>,
     pub(crate) labels: Vec<TransformLabelMapping>,
     pub(crate) grouping_changes: Vec<String>,

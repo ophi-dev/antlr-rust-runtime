@@ -48,7 +48,7 @@ expression: stable_manifest
           "removedRules": [
             {
               "rule": "kw",
-              "targetRule": "kw"
+              "targetRule": null
             }
           ],
           "alternatives": [],
@@ -115,7 +115,7 @@ expression: stable_manifest
           "removedRules": [
             {
               "rule": "qualifier",
-              "targetRule": "qualifier"
+              "targetRule": null
             }
           ],
           "alternatives": [],
@@ -165,7 +165,7 @@ expression: stable_manifest
           "removedRules": [
             {
               "rule": "group",
-              "targetRule": "group"
+              "targetRule": null
             }
           ],
           "alternatives": [],
