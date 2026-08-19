@@ -458,44 +458,12 @@ fn precedence_ladder_optimization_is_explicit_auditable_and_recognition_preservi
     let temp = temporary_directory("precedence-ladder");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4");
-    let baseline = temp.path().join("baseline");
-    let optimized = temp.path().join("optimized");
-    let report = temp.path().join("report");
-
-    for (out, extra) in [
-        (&baseline, None),
-        (&optimized, Some("--optimize-precedence-ladders")),
-        (&report, Some("--report-precedence-ladders")),
-    ] {
-        let mut args = vec![
-            grammar.as_os_str(),
-            OsStr::new("--out-dir"),
-            out.as_os_str(),
-        ];
-        if let Some(flag) = extra {
-            args.push(OsStr::new(flag));
-        }
-        let output = run_antlr4_rust_gen(&args);
-        assert!(
-            output.status.success(),
-            "{extra:?} failed\nstdout: {}\nstderr: {}",
-            utf8(&output.stdout),
-            utf8(&output.stderr)
-        );
-    }
-
-    assert!(!baseline.join("optimizations.json").exists());
-    let report_files = fs::read_dir(&report)
-        .expect("report directory should exist")
-        .map(|entry| {
-            entry
-                .expect("report entry should be readable")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(report_files, ["optimizations.json"]);
+    let (baseline, optimized, report) = run_optimization_matrix(
+        temp.path(),
+        &grammar,
+        "--optimize-precedence-ladders",
+        "--report-precedence-ladders",
+    );
 
     let manifest = fs::read_to_string(optimized.join("optimizations.json"))
         .expect("applied optimization manifest should be emitted");
@@ -998,5 +966,211 @@ fn embedded_rule_attributes_keep_potentially_referenced_ladder_contexts() {
     assert_generated_modules_compile(
         temp.path(),
         &["attribute_ladder_lexer.rs", "attribute_ladder_parser.rs"],
+    );
+}
+
+#[test]
+fn trivial_rule_inlining_is_explicit_auditable_and_recognition_preserving() {
+    let temp = temporary_directory("trivial-inline");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4");
+    let (baseline, optimized, report) = run_optimization_matrix(
+        temp.path(),
+        &grammar,
+        "--inline-trivial-rules",
+        "--report-trivial-rules",
+    );
+
+    let manifest = fs::read_to_string(optimized.join("optimizations.json"))
+        .expect("applied optimization manifest should be emitted");
+    let stable_manifest = manifest.replace(env!("CARGO_MANIFEST_DIR"), "$CARGO_MANIFEST_DIR");
+    insta::assert_snapshot!("trivial_inline_optimization_manifest", stable_manifest);
+    let dry_run_manifest = fs::read_to_string(report.join("optimizations.json"))
+        .expect("dry-run optimization manifest should be emitted");
+    assert!(dry_run_manifest.contains("\"reportOnly\": true"));
+    assert!(dry_run_manifest.contains("\"status\": \"eligible\""));
+    assert!(dry_run_manifest.contains("\"status\": \"declined\""));
+    assert!(!dry_run_manifest.contains("\"status\": \"applied\""));
+
+    let baseline_parser = fs::read_to_string(baseline.join("inline_parser.rs"))
+        .expect("baseline parser should be emitted");
+    let optimized_parser = fs::read_to_string(optimized.join("inline_parser.rs"))
+        .expect("optimized parser should be emitted");
+    for retained in ["pub fn kw(", "pub fn qualifier(", "pub fn group("] {
+        assert!(
+            baseline_parser.contains(retained),
+            "baseline lost {retained}"
+        );
+        assert!(
+            !optimized_parser.contains(retained),
+            "optimized parser should inline away {retained}"
+        );
+    }
+    for kept in [
+        "pub fn target(",
+        "pub fn marked(",
+        "pub fn badge(",
+        "pub fn opt(",
+    ] {
+        assert!(
+            optimized_parser.contains(kept),
+            "declined or shared rule {kept} must keep its API"
+        );
+    }
+
+    let differential = temp.path().join("differential");
+    let generated = differential.join("generated");
+    fs::create_dir_all(&generated).expect("differential source directory");
+    for (source, destination) in [
+        (
+            baseline.join("inline_lexer.rs"),
+            generated.join("baseline_inline_lexer.rs"),
+        ),
+        (
+            baseline.join("inline_parser.rs"),
+            generated.join("baseline_inline_parser.rs"),
+        ),
+        (
+            optimized.join("inline_lexer.rs"),
+            generated.join("optimized_inline_lexer.rs"),
+        ),
+        (
+            optimized.join("inline_parser.rs"),
+            generated.join("optimized_inline_parser.rs"),
+        ),
+    ] {
+        fs::copy(source, destination).expect("generated differential module should be copied");
+    }
+    assert_generated_project(
+        &differential,
+        &[
+            "baseline_inline_lexer.rs",
+            "baseline_inline_parser.rs",
+            "optimized_inline_lexer.rs",
+            "optimized_inline_parser.rs",
+        ],
+        r#"
+#[cfg(test)]
+mod trivial_inline_differential {
+    use super::{
+        baseline_inline_lexer, baseline_inline_parser, optimized_inline_lexer,
+        optimized_inline_parser,
+    };
+    use antlr4_runtime::{IntStream as _, Parser as _};
+
+    #[derive(Debug)]
+    struct ParseOutcome {
+        completed: bool,
+        syntax_errors: usize,
+        token_index: usize,
+    }
+
+    impl ParseOutcome {
+        fn accepted(&self) -> bool {
+            self.completed && self.syntax_errors == 0
+        }
+    }
+
+    macro_rules! parse_result {
+        ($name:ident, $lexer:ident, $parser:ident, $entry:ident) => {
+            fn $name(input: &str) -> ParseOutcome {
+                match $parser::parse_with_parser(
+                    input,
+                    $lexer::InlineLexer::new,
+                    $parser::InlineParser::$entry,
+                ) {
+                    Ok(output) => {
+                        let syntax_errors = output.parser.number_of_syntax_errors();
+                        let token_index = output.parser.into_token_stream().index();
+                        ParseOutcome {
+                            completed: true,
+                            syntax_errors,
+                            token_index,
+                        }
+                    }
+                    Err(_) => ParseOutcome {
+                        completed: false,
+                        syntax_errors: usize::MAX,
+                        token_index: 0,
+                    },
+                }
+            }
+        };
+    }
+
+    fn assert_same_recognition(input: &str, baseline: ParseOutcome, optimized: ParseOutcome) {
+        assert_eq!(
+            optimized.accepted(),
+            baseline.accepted(),
+            "recognition diverged for {input:?}: baseline={baseline:?}, optimized={optimized:?}"
+        );
+        if baseline.accepted() {
+            assert_eq!(
+                optimized.token_index, baseline.token_index,
+                "valid-input consumption diverged for {input:?}: \
+                 baseline={baseline:?}, optimized={optimized:?}"
+            );
+        }
+    }
+
+    parse_result!(baseline, baseline_inline_lexer, baseline_inline_parser, start);
+    parse_result!(
+        optimized,
+        optimized_inline_lexer,
+        optimized_inline_parser,
+        start
+    );
+
+    #[test]
+    fn valid_and_invalid_inputs_keep_the_authored_language() {
+        for input in [
+            "select @x;",
+            "from @@abc;",
+            "@x select where from;",
+            "@@y;",
+            "*z; +q;",
+            "(@x,);",
+            "(@@deep);",
+            "select @a; @b from; (@c,); *d;",
+        ] {
+            let baseline = baseline(input);
+            assert!(
+                baseline.accepted(),
+                "baseline should accept {input:?}: {baseline:?}"
+            );
+            assert_same_recognition(input, baseline, optimized(input));
+        }
+        for input in [
+            "select;",
+            "@x",
+            "select from @x;",
+            "* ;",
+            "(@x;",
+            "(@x,,);",
+            ",;",
+            "x;",
+            "select @x",
+        ] {
+            let baseline = baseline(input);
+            assert!(
+                !baseline.accepted(),
+                "baseline should reject {input:?}: {baseline:?}"
+            );
+            assert_same_recognition(input, baseline, optimized(input));
+        }
+    }
+
+    #[test]
+    fn inlined_token_sets_and_blocks_survive_direct_reparse() {
+        let parsed = optimized_inline_parser::parse_with_parser(
+            "select @x; @y select from where; (@z,);",
+            optimized_inline_lexer::InlineLexer::new,
+            optimized_inline_parser::InlineParser::start,
+        )
+        .expect("optimized parser should accept the mixed statement input");
+        assert_eq!(parsed.parser.number_of_syntax_errors(), 0);
+    }
+}
+"#,
     );
 }

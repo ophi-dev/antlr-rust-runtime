@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use super::{
-    SafetyClass, StructuralMetrics, TransformAlternativeMapping, TransformCandidateReport,
-    TransformCandidateStatus, TransformLabelMapping, TransformProjection, TransformReport,
-    TransformReportEntry,
+    SafetyClass, StructuralMetrics, TransformAlternativeMapping, TransformCallSite,
+    TransformCandidateReport, TransformCandidateStatus, TransformLabelMapping, TransformProjection,
+    TransformReport, TransformReportEntry,
 };
 use crate::grammar::frontend::{SourceId, SourceSpan};
 use crate::grammar::source::SourceSet;
@@ -61,6 +61,7 @@ struct TransformCandidateManifest<'a> {
     alternatives: Vec<AlternativeMappingManifest<'a>>,
     label_renames: Vec<LabelMappingManifest<'a>>,
     grouping_changes: Vec<GroupingChangeManifest<'a>>,
+    inlined_call_sites: Vec<CallSiteManifest<'a>>,
 }
 
 #[derive(Serialize)]
@@ -97,7 +98,7 @@ struct ReductionManifest {
 #[serde(rename_all = "camelCase")]
 struct RemovedRuleManifest<'a> {
     rule: &'a str,
-    target_rule: &'a str,
+    target_rule: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -124,6 +125,14 @@ struct GroupingChangeManifest<'a> {
     rule: &'a str,
     from: &'static str,
     to: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CallSiteManifest<'a> {
+    caller: &'a str,
+    alternative: usize,
+    source: SourceManifest<'a>,
 }
 
 pub(crate) fn render_optimization_manifest(
@@ -194,9 +203,9 @@ fn transform_candidate_manifest<'a>(
         removed_rules: candidate
             .removed_rules
             .iter()
-            .map(|rule| RemovedRuleManifest {
-                rule,
-                target_rule: &candidate.entry_rule,
+            .map(|removed| RemovedRuleManifest {
+                rule: &removed.rule,
+                target_rule: removed.target.as_deref(),
             })
             .collect(),
         alternatives: candidate
@@ -218,6 +227,22 @@ fn transform_candidate_manifest<'a>(
                 to: "left-recursive-nesting",
             })
             .collect(),
+        inlined_call_sites: candidate
+            .call_sites
+            .iter()
+            .map(|site| call_site_manifest(site, sources))
+            .collect(),
+    }
+}
+
+fn call_site_manifest<'a>(
+    site: &'a TransformCallSite,
+    sources: &'a SourceSet,
+) -> CallSiteManifest<'a> {
+    CallSiteManifest {
+        caller: &site.caller,
+        alternative: site.alternative,
+        source: source_manifest(&site.source_span, sources),
     }
 }
 

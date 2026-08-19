@@ -1,0 +1,332 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/transforms.rs
+expression: stable_manifest
+---
+{
+  "version": 1,
+  "reportOnly": false,
+  "passes": [
+    {
+      "id": 0,
+      "name": "inline-trivial-rules",
+      "safetyClass": "recognition-preserving",
+      "changed": true,
+      "metrics": {
+        "before": {
+          "rules": 21,
+          "alternatives": 24,
+          "elements": 37
+        },
+        "after": {
+          "rules": 18,
+          "alternatives": 23,
+          "elements": 36
+        }
+      },
+      "candidates": [
+        {
+          "grammar": "InlineParser",
+          "entryRule": "kw",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 205,
+            "byteEnd": 255,
+            "start": {
+              "line": 15,
+              "column": 0
+            },
+            "end": {
+              "line": 19,
+              "column": 5
+            }
+          },
+          "status": "applied",
+          "reason": "inlined token-set rule kw (3 members) into 2 call sites",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [
+            {
+              "rule": "kw",
+              "targetRule": null
+            }
+          ],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "stmt",
+              "alternative": 1,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 57,
+                "byteEnd": 59,
+                "start": {
+                  "line": 8,
+                  "column": 6
+                },
+                "end": {
+                  "line": 8,
+                  "column": 8
+                }
+              }
+            },
+            {
+              "caller": "stmt",
+              "alternative": 2,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 85,
+                "byteEnd": 87,
+                "start": {
+                  "line": 9,
+                  "column": 13
+                },
+                "end": {
+                  "line": 9,
+                  "column": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "grammar": "InlineParser",
+          "entryRule": "qualifier",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 391,
+            "byteEnd": 419,
+            "start": {
+              "line": 27,
+              "column": 0
+            },
+            "end": {
+              "line": 29,
+              "column": 5
+            }
+          },
+          "status": "applied",
+          "reason": "inlined single-use rule qualifier into its call site in target",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [
+            {
+              "rule": "qualifier",
+              "targetRule": null
+            }
+          ],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "target",
+              "alternative": 1,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 311,
+                "byteEnd": 320,
+                "start": {
+                  "line": 23,
+                  "column": 6
+                },
+                "end": {
+                  "line": 23,
+                  "column": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "grammar": "InlineParser",
+          "entryRule": "group",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 672,
+            "byteEnd": 706,
+            "start": {
+              "line": 43,
+              "column": 0
+            },
+            "end": {
+              "line": 45,
+              "column": 5
+            }
+          },
+          "status": "applied",
+          "reason": "inlined single-use rule group into its call site in stmt",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [
+            {
+              "rule": "group",
+              "targetRule": null
+            }
+          ],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "stmt",
+              "alternative": 4,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 118,
+                "byteEnd": 123,
+                "start": {
+                  "line": 11,
+                  "column": 6
+                },
+                "end": {
+                  "line": 11,
+                  "column": 11
+                }
+              }
+            }
+          ]
+        },
+        {
+          "grammar": "InlineParser",
+          "entryRule": "marked",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 473,
+            "byteEnd": 506,
+            "start": {
+              "line": 32,
+              "column": 0
+            },
+            "end": {
+              "line": 34,
+              "column": 5
+            }
+          },
+          "status": "declined",
+          "reason": "element labels bind generated accessors",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "stmt",
+              "alternative": 3,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 100,
+                "byteEnd": 106,
+                "start": {
+                  "line": 10,
+                  "column": 6
+                },
+                "end": {
+                  "line": 10,
+                  "column": 12
+                }
+              }
+            }
+          ]
+        },
+        {
+          "grammar": "InlineParser",
+          "entryRule": "badge",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 579,
+            "byteEnd": 612,
+            "start": {
+              "line": 37,
+              "column": 0
+            },
+            "end": {
+              "line": 40,
+              "column": 5
+            }
+          },
+          "status": "declined",
+          "reason": "a call site binds a label to the rule context in rule marked",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "marked",
+              "alternative": 1,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 492,
+                "byteEnd": 497,
+                "start": {
+                  "line": 33,
+                  "column": 12
+                },
+                "end": {
+                  "line": 33,
+                  "column": 17
+                }
+              }
+            }
+          ]
+        },
+        {
+          "grammar": "InlineParser",
+          "entryRule": "opt",
+          "source": {
+            "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+            "byteStart": 747,
+            "byteEnd": 769,
+            "start": {
+              "line": 48,
+              "column": 0
+            },
+            "end": {
+              "line": 50,
+              "column": 5
+            }
+          },
+          "status": "declined",
+          "reason": "a nullable body can change decision ownership at the call site",
+          "rungs": [],
+          "boundaryRule": null,
+          "projected": null,
+          "removedRules": [],
+          "alternatives": [],
+          "labelRenames": [],
+          "groupingChanges": [],
+          "inlinedCallSites": [
+            {
+              "caller": "stmt",
+              "alternative": 4,
+              "source": {
+                "path": "$CARGO_MANIFEST_DIR/tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4",
+                "byteStart": 694,
+                "byteEnd": 697,
+                "start": {
+                  "line": 44,
+                  "column": 16
+                },
+                "end": {
+                  "line": 44,
+                  "column": 19
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

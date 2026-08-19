@@ -1,0 +1,8 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/transform/passes/inline_trivial.rs
+expression: candidate_lines(&report)
+---
+[
+    "Declined rec [wrap#1]: recursive rules cannot be inlined",
+    "Declined nul [start#1]: a nullable body can change decision ownership at the call site",
+]

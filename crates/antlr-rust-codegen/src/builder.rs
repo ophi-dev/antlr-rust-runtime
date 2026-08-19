@@ -63,6 +63,8 @@ pub struct Builder {
     fixed_lookahead: Option<usize>,
     entry_rules: BTreeSet<String>,
     prune_unreachable: bool,
+    inline_trivial_rules: bool,
+    report_trivial_rules: bool,
     optimize_precedence_ladders: bool,
     report_precedence_ladders: bool,
 }
@@ -85,6 +87,8 @@ impl Default for Builder {
             fixed_lookahead: None,
             entry_rules: BTreeSet::new(),
             prune_unreachable: false,
+            inline_trivial_rules: false,
+            report_trivial_rules: false,
             optimize_precedence_ladders: false,
             report_precedence_ladders: false,
         }
@@ -177,6 +181,16 @@ impl Builder {
         self
     }
 
+    pub const fn inline_trivial_rules(mut self, enabled: bool) -> Self {
+        self.inline_trivial_rules = enabled;
+        self
+    }
+
+    pub const fn report_trivial_rules(mut self, enabled: bool) -> Self {
+        self.report_trivial_rules = enabled;
+        self
+    }
+
     pub const fn optimize_precedence_ladders(mut self, enabled: bool) -> Self {
         self.optimize_precedence_ladders = enabled;
         self
@@ -201,6 +215,11 @@ impl Builder {
         let output_directory = self
             .output_directory
             .ok_or_else(|| Error::configuration("an output directory is required"))?;
+        if self.inline_trivial_rules && self.report_trivial_rules {
+            return Err(Error::configuration(
+                "trivial-rule inlining and report-only mode are mutually exclusive",
+            ));
+        }
         if self.optimize_precedence_ladders && self.report_precedence_ladders {
             return Err(Error::configuration(
                 "precedence-ladder optimization and report-only mode are mutually exclusive",
@@ -240,6 +259,8 @@ impl Builder {
             fixed_lookahead: self.fixed_lookahead,
             entry_rules: self.entry_rules,
             prune_unreachable: self.prune_unreachable,
+            inline_trivial_rules: self.inline_trivial_rules,
+            report_trivial_rules: self.report_trivial_rules,
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
             test_rig: None,

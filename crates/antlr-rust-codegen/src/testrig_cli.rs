@@ -164,6 +164,8 @@ impl CliArgs {
             fixed_lookahead: self.fixed_lookahead.map(usize::from),
             entry_rules: BTreeSet::new(),
             prune_unreachable: false,
+            inline_trivial_rules: false,
+            report_trivial_rules: false,
             optimize_precedence_ladders: false,
             report_precedence_ladders: false,
             test_rig: Some(TestRigConfig {

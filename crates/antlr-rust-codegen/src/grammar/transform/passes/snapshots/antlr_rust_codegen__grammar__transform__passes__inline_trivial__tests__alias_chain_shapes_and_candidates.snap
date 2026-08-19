@@ -1,0 +1,13 @@
+---
+source: crates/antlr-rust-codegen/src/grammar/transform/passes/inline_trivial.rs
+expression: "(shape(&grammar.units[0]), candidate_lines(&report))"
+---
+(
+    [
+        "start : ({X,Y}) EOF",
+    ],
+    [
+        "Applied a [start#1]: inlined single-use rule a into its call site in start",
+        "Applied b [start#1]: inlined token-set rule b (2 members) into 1 call site",
+    ],
+)

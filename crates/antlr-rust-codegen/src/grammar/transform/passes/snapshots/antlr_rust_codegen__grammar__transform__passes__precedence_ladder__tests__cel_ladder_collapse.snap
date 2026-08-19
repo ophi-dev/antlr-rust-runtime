@@ -1,6 +1,5 @@
 ---
 source: crates/antlr-rust-codegen/src/grammar/transform/passes/precedence_ladder.rs
-assertion_line: 1671
 expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,)"
 ---
 (
@@ -136,11 +135,36 @@ expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,
                 },
             ),
             removed_rules: [
-                "conditionalOr",
-                "conditionalAnd",
-                "relation",
-                "calc",
-                "unary",
+                TransformRemovedRule {
+                    rule: "conditionalOr",
+                    target: Some(
+                        "expr",
+                    ),
+                },
+                TransformRemovedRule {
+                    rule: "conditionalAnd",
+                    target: Some(
+                        "expr",
+                    ),
+                },
+                TransformRemovedRule {
+                    rule: "relation",
+                    target: Some(
+                        "expr",
+                    ),
+                },
+                TransformRemovedRule {
+                    rule: "calc",
+                    target: Some(
+                        "expr",
+                    ),
+                },
+                TransformRemovedRule {
+                    rule: "unary",
+                    target: Some(
+                        "expr",
+                    ),
+                },
             ],
             alternatives: [
                 TransformAlternativeMapping {
@@ -306,6 +330,7 @@ expression: "(summarize(&grammar.units[0]), &report.entries, &report.candidates,
                 "conditionalOr",
                 "conditionalAnd",
             ],
+            call_sites: [],
         },
     ],
 )

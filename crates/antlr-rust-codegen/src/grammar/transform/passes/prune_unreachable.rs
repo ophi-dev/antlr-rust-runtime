@@ -3,10 +3,10 @@
 use std::collections::BTreeSet;
 
 use crate::grammar::diagnostic::Diagnostic;
-use crate::grammar::model::{Block, ElementKind, ModelIdAllocator, Rule, RuleId};
-use crate::grammar::provenance::{ProvenanceIndex, Tombstone};
+use crate::grammar::model::{ModelIdAllocator, RuleId};
 use crate::grammar::rule_reachability::{EntryRuleConfig, analyze};
 use crate::grammar::transform::analysis::AnalysisInvalidation;
+use crate::grammar::transform::clone::tombstone_rule;
 use crate::grammar::transform::{
     GrammarTransform, SafetyClass, TransformContext, TransformGrammar, TransformReport,
     TransformRuleRemoval,
@@ -67,7 +67,12 @@ impl GrammarTransform for PruneUnreachableRules {
                     rule: rule.name.clone(),
                     source_span: rule.name_span.clone(),
                 });
-                tombstone_rule(&mut grammar.provenance, rule);
+                tombstone_rule(
+                    &mut grammar.provenance,
+                    rule,
+                    "unreachable parser rule pruned",
+                    &[],
+                );
             }
             unit.rules.retain(|rule| !unreachable.contains(&rule.id));
             remove_mode_rule_references(unit, &unreachable);
@@ -84,47 +89,4 @@ fn remove_mode_rule_references(
     for mode in &mut unit.modes {
         mode.rules.retain(|rule| !removed.contains(rule));
     }
-}
-
-fn tombstone_rule(provenance: &mut ProvenanceIndex, rule: &Rule) {
-    tombstone(provenance, rule.syntax);
-    for action in &rule.actions {
-        tombstone(provenance, action.syntax);
-    }
-    for handler in &rule.catches {
-        tombstone(provenance, handler.syntax);
-    }
-    if let Some(action) = &rule.finally_action {
-        tombstone(provenance, action.syntax);
-    }
-    tombstone_block(provenance, &rule.block);
-}
-
-fn tombstone_block(provenance: &mut ProvenanceIndex, block: &Block) {
-    for alternative in &block.alternatives {
-        tombstone(provenance, alternative.syntax);
-        if let Some(label) = &alternative.label {
-            tombstone(provenance, label.syntax);
-        }
-        for element in &alternative.elements {
-            tombstone(provenance, element.syntax);
-            if let Some(label) = &element.label {
-                tombstone(provenance, label.syntax);
-            }
-            if let ElementKind::Block(nested) = &element.kind {
-                tombstone_block(provenance, nested);
-            }
-        }
-    }
-}
-
-fn tombstone(provenance: &mut ProvenanceIndex, syntax: crate::grammar::frontend::SyntaxId) {
-    provenance.tombstone(
-        syntax,
-        Tombstone {
-            phase: "optional-transform",
-            reason: "unreachable parser rule pruned",
-            replacements: Box::new([]),
-        },
-    );
 }

@@ -143,6 +143,14 @@ struct CliArgs {
     #[arg(long)]
     prune_unreachable: bool,
 
+    /// Inline trivial pure parser rules into their call sites (changes tree/API).
+    #[arg(long, conflicts_with = "report_trivial_rules")]
+    inline_trivial_rules: bool,
+
+    /// Dry-run trivial-rule inlining and emit only optimizations.json.
+    #[arg(long, conflicts_with = "inline_trivial_rules")]
+    report_trivial_rules: bool,
+
     /// Collapse proven linear precedence ladders (changes tree/API).
     #[arg(long, conflicts_with = "report_precedence_ladders")]
     optimize_precedence_ladders: bool,
@@ -195,6 +203,8 @@ impl CliArgs {
             fixed_lookahead: self.fixed_lookahead.map(usize::from),
             entry_rules: self.entry_rules.into_iter().collect(),
             prune_unreachable: self.prune_unreachable,
+            inline_trivial_rules: self.inline_trivial_rules,
+            report_trivial_rules: self.report_trivial_rules,
             optimize_precedence_ladders: self.optimize_precedence_ladders,
             report_precedence_ladders: self.report_precedence_ladders,
             test_rig: None,
