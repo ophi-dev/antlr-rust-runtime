@@ -51,7 +51,8 @@ expression: stable_manifest
           "removedRules": [],
           "alternatives": [],
           "labelRenames": [],
-          "groupingChanges": []
+          "groupingChanges": [],
+          "inlinedCallSites": []
         },
         {
           "grammar": "LadderParser",
@@ -152,7 +153,8 @@ expression: stable_manifest
               "from": "flat-loop",
               "to": "left-recursive-nesting"
             }
-          ]
+          ],
+          "inlinedCallSites": []
         },
         {
           "grammar": "LadderParser",
@@ -288,7 +290,8 @@ expression: stable_manifest
             }
           ],
           "labelRenames": [],
-          "groupingChanges": []
+          "groupingChanges": [],
+          "inlinedCallSites": []
         },
         {
           "grammar": "LadderParser",
@@ -599,7 +602,8 @@ expression: stable_manifest
               "from": "flat-loop",
               "to": "left-recursive-nesting"
             }
-          ]
+          ],
+          "inlinedCallSites": []
         }
       ]
     }

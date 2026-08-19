@@ -13,7 +13,7 @@ use crate::grammar::model::{
 };
 use crate::grammar::provenance::{Origin, ProvenanceIndex, Tombstone};
 use crate::grammar::transform::analysis::{
-    AnalysisInvalidation, observed_rule_contexts, visit_elements,
+    AnalysisInvalidation, observed_rule_contexts, rule_surface_is_observable, visit_elements,
 };
 use crate::grammar::transform::clone::TransformCloner;
 use crate::grammar::transform::{
@@ -423,16 +423,7 @@ fn rough_base_rule(rule: &Rule) -> Option<String> {
 }
 
 fn validate_rule_surface(rule: &Rule) -> Result<(), String> {
-    if !rule.modifiers.is_empty()
-        || rule.arguments.is_some()
-        || rule.returns.is_some()
-        || rule.locals.is_some()
-        || !rule.throws.is_empty()
-        || !rule.options.is_empty()
-        || !rule.actions.is_empty()
-        || !rule.catches.is_empty()
-        || rule.finally_action.is_some()
-    {
+    if rule_surface_is_observable(rule) {
         return Err(
             "rule-level attributes, actions, options, or exceptions are observable".to_owned(),
         );
@@ -1405,9 +1396,6 @@ fn declined_report(
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use super::*;
-    use crate::grammar::frontend::{SourceId, parse_source};
-    use crate::grammar::model::GrammarId;
-    use crate::grammar::syntax::parse_grammar_unit;
     use crate::grammar::transform::{TransformGrammar, TransformRegistry};
 
     const CEL_LADDER: &str = r#"
@@ -1901,19 +1889,7 @@ low : INT ;
     }
 
     fn fixture(text: &str) -> (TransformGrammar, ModelIdAllocator) {
-        let file = parse_source(SourceId::new(0), "P.g4", text).expect("valid grammar");
-        let mut ids = ModelIdAllocator::after_loaded_grammars(1);
-        let mut provenance = ProvenanceIndex::default();
-        let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
-        (
-            TransformGrammar {
-                units: vec![unit],
-                target_units: BTreeSet::from([GrammarId::new(0)]),
-                preserved_rules: BTreeSet::new(),
-                provenance,
-            },
-            ids,
-        )
+        crate::grammar::transform::test_support::single_unit_fixture(text)
     }
 
     fn summarize(unit: &GrammarUnit) -> Vec<(String, Vec<(String, Vec<String>)>)> {

@@ -34,7 +34,7 @@ use crate::grammar::model::{
 use crate::grammar::provenance::{Origin, ProvenanceIndex};
 use crate::grammar::rule_reachability::{EntryRuleConfig, analyze};
 use crate::grammar::transform::analysis::{
-    AnalysisInvalidation, TransformAnalysis, observed_rule_contexts,
+    AnalysisInvalidation, TransformAnalysis, observed_rule_contexts, rule_surface_is_observable,
 };
 use crate::grammar::transform::clone::{TransformCloner, tombstone_rule};
 use crate::grammar::transform::{
@@ -316,6 +316,11 @@ fn eligibility(
     if context.observed.contains(&rule.id) {
         return Err("grammar target code observes the rule context".to_owned());
     }
+    if rule_surface_is_observable(rule) {
+        return Err(
+            "rule-level attributes, actions, options, or exceptions are observable".to_owned(),
+        );
+    }
     if let Some(problem) = sites.iter().find_map(|scanned| {
         scanned
             .problem
@@ -371,7 +376,22 @@ fn token_set_body(rule: &Rule) -> Option<Vec<SetElement>> {
             _ => return None,
         }
     }
-    (!members.is_empty()).then_some(members)
+    if members.is_empty() {
+        return None;
+    }
+    let mut seen: Vec<Terminal> = Vec::new();
+    members.retain(|member| match member {
+        SetElement::Terminal { value, .. } => {
+            if seen.contains(value) {
+                false
+            } else {
+                seen.push(value.clone());
+                true
+            }
+        }
+        SetElement::Range { .. } => true,
+    });
+    Some(members)
 }
 
 fn inlinable_terminal(terminal: &Terminal) -> Option<&Terminal> {
@@ -394,20 +414,6 @@ fn inlinable_set_member(member: &SetElement) -> Option<&SetElement> {
 }
 
 fn single_use_purity(rule: &Rule, analysis: &TransformAnalysis) -> Result<(), String> {
-    if !rule.modifiers.is_empty()
-        || rule.arguments.is_some()
-        || rule.returns.is_some()
-        || rule.locals.is_some()
-        || !rule.throws.is_empty()
-        || !rule.options.is_empty()
-        || !rule.actions.is_empty()
-        || !rule.catches.is_empty()
-        || rule.finally_action.is_some()
-    {
-        return Err(
-            "rule-level attributes, actions, options, or exceptions are observable".to_owned(),
-        );
-    }
     if analysis.side_effecting.contains(&rule.id) {
         return Err("embedded actions or predicates are observable".to_owned());
     }
@@ -615,29 +621,9 @@ fn declined_report(
 #[cfg(test)]
 #[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
-    use std::collections::BTreeSet;
-
     use super::*;
-    use crate::grammar::frontend::{SourceId, parse_source};
-    use crate::grammar::model::GrammarId;
-    use crate::grammar::syntax::parse_grammar_unit;
-    use crate::grammar::transform::{TransformGrammar, TransformRegistry};
-
-    fn fixture(text: &str) -> (TransformGrammar, ModelIdAllocator) {
-        let file = parse_source(SourceId::new(0), "P.g4", text).expect("valid grammar");
-        let mut ids = ModelIdAllocator::after_loaded_grammars(1);
-        let mut provenance = ProvenanceIndex::default();
-        let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
-        (
-            TransformGrammar {
-                units: vec![unit],
-                target_units: BTreeSet::from([GrammarId::new(0)]),
-                preserved_rules: BTreeSet::new(),
-                provenance,
-            },
-            ids,
-        )
-    }
+    use crate::grammar::transform::TransformRegistry;
+    use crate::grammar::transform::test_support::single_unit_fixture as fixture;
 
     fn registry(entries: EntryRuleConfig) -> TransformRegistry {
         let mut registry = TransformRegistry::default();
@@ -886,6 +872,43 @@ kw : A | B ;
 
         assert!(!report.entries[0].changed);
         insta::assert_debug_snapshot!("opaque_target_code_declines", candidate_lines(&report));
+    }
+
+    #[test]
+    fn rule_level_options_decline_token_set_candidates() {
+        let (mut grammar, mut ids) = fixture(
+            r"
+parser grammar P;
+start : kw ID EOF ;
+kw options { caseInsensitive=true; } : A | B ;
+",
+        );
+        let report = registry(EntryRuleConfig::default())
+            .run(&mut grammar, &mut ids, false)
+            .expect("declined candidates should not fail the pass");
+
+        assert!(!report.entries[0].changed);
+        assert_eq!(grammar.units[0].rules.len(), 2, "kw must be retained");
+        insta::assert_debug_snapshot!("rule_level_option_declines", candidate_lines(&report));
+    }
+
+    #[test]
+    fn duplicate_token_set_members_are_deduplicated() {
+        let (mut grammar, mut ids) = fixture(
+            r"
+parser grammar P;
+start : kw ID EOF ;
+kw : A | B | A ;
+",
+        );
+        let report = registry(EntryRuleConfig::default())
+            .run(&mut grammar, &mut ids, false)
+            .expect("duplicate members should still inline");
+
+        insta::assert_debug_snapshot!(
+            "duplicate_member_dedup_shapes_and_candidates",
+            (shape(&grammar.units[0]), candidate_lines(&report))
+        );
     }
 
     #[test]

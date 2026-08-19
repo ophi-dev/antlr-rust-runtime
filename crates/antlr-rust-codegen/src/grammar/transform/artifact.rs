@@ -61,7 +61,6 @@ struct TransformCandidateManifest<'a> {
     alternatives: Vec<AlternativeMappingManifest<'a>>,
     label_renames: Vec<LabelMappingManifest<'a>>,
     grouping_changes: Vec<GroupingChangeManifest<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     inlined_call_sites: Vec<CallSiteManifest<'a>>,
 }
 

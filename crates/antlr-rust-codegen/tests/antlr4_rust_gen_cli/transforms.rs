@@ -458,44 +458,12 @@ fn precedence_ladder_optimization_is_explicit_auditable_and_recognition_preservi
     let temp = temporary_directory("precedence-ladder");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/antlr4-rust-gen/precedence-ladder/Ladder.g4");
-    let baseline = temp.path().join("baseline");
-    let optimized = temp.path().join("optimized");
-    let report = temp.path().join("report");
-
-    for (out, extra) in [
-        (&baseline, None),
-        (&optimized, Some("--optimize-precedence-ladders")),
-        (&report, Some("--report-precedence-ladders")),
-    ] {
-        let mut args = vec![
-            grammar.as_os_str(),
-            OsStr::new("--out-dir"),
-            out.as_os_str(),
-        ];
-        if let Some(flag) = extra {
-            args.push(OsStr::new(flag));
-        }
-        let output = run_antlr4_rust_gen(&args);
-        assert!(
-            output.status.success(),
-            "{extra:?} failed\nstdout: {}\nstderr: {}",
-            utf8(&output.stdout),
-            utf8(&output.stderr)
-        );
-    }
-
-    assert!(!baseline.join("optimizations.json").exists());
-    let report_files = fs::read_dir(&report)
-        .expect("report directory should exist")
-        .map(|entry| {
-            entry
-                .expect("report entry should be readable")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(report_files, ["optimizations.json"]);
+    let (baseline, optimized, report) = run_optimization_matrix(
+        temp.path(),
+        &grammar,
+        "--optimize-precedence-ladders",
+        "--report-precedence-ladders",
+    );
 
     let manifest = fs::read_to_string(optimized.join("optimizations.json"))
         .expect("applied optimization manifest should be emitted");
@@ -1006,44 +974,12 @@ fn trivial_rule_inlining_is_explicit_auditable_and_recognition_preserving() {
     let temp = temporary_directory("trivial-inline");
     let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/antlr4-rust-gen/trivial-inline/Inline.g4");
-    let baseline = temp.path().join("baseline");
-    let optimized = temp.path().join("optimized");
-    let report = temp.path().join("report");
-
-    for (out, extra) in [
-        (&baseline, None),
-        (&optimized, Some("--inline-trivial-rules")),
-        (&report, Some("--report-trivial-rules")),
-    ] {
-        let mut args = vec![
-            grammar.as_os_str(),
-            OsStr::new("--out-dir"),
-            out.as_os_str(),
-        ];
-        if let Some(flag) = extra {
-            args.push(OsStr::new(flag));
-        }
-        let output = run_antlr4_rust_gen(&args);
-        assert!(
-            output.status.success(),
-            "{extra:?} failed\nstdout: {}\nstderr: {}",
-            utf8(&output.stdout),
-            utf8(&output.stderr)
-        );
-    }
-
-    assert!(!baseline.join("optimizations.json").exists());
-    let report_files = fs::read_dir(&report)
-        .expect("report directory should exist")
-        .map(|entry| {
-            entry
-                .expect("report entry should be readable")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(report_files, ["optimizations.json"]);
+    let (baseline, optimized, report) = run_optimization_matrix(
+        temp.path(),
+        &grammar,
+        "--inline-trivial-rules",
+        "--report-trivial-rules",
+    );
 
     let manifest = fs::read_to_string(optimized.join("optimizations.json"))
         .expect("applied optimization manifest should be emitted");

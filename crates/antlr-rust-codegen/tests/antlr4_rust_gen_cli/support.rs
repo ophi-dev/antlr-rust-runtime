@@ -426,3 +426,52 @@ impl Drop for TempDirectory {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
+
+/// Generates one grammar three ways — unoptimized baseline, applied
+/// optimization, and report-only — asserting each run succeeds, that the
+/// baseline emits no optimization manifest, and that report mode emits only
+/// `optimizations.json`. Returns the three output directories.
+pub(super) fn run_optimization_matrix(
+    root: &Path,
+    grammar: &Path,
+    apply_flag: &str,
+    report_flag: &str,
+) -> (PathBuf, PathBuf, PathBuf) {
+    let baseline = root.join("baseline");
+    let optimized = root.join("optimized");
+    let report = root.join("report");
+    for (out, extra) in [
+        (&baseline, None),
+        (&optimized, Some(apply_flag)),
+        (&report, Some(report_flag)),
+    ] {
+        let mut args = vec![
+            grammar.as_os_str(),
+            OsStr::new("--out-dir"),
+            out.as_os_str(),
+        ];
+        if let Some(flag) = extra {
+            args.push(OsStr::new(flag));
+        }
+        let output = run_antlr4_rust_gen(&args);
+        assert!(
+            output.status.success(),
+            "{extra:?} failed\nstdout: {}\nstderr: {}",
+            utf8(&output.stdout),
+            utf8(&output.stderr)
+        );
+    }
+    assert!(!baseline.join("optimizations.json").exists());
+    let report_files = fs::read_dir(&report)
+        .expect("report directory should exist")
+        .map(|entry| {
+            entry
+                .expect("report entry should be readable")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(report_files, ["optimizations.json"]);
+    (baseline, optimized, report)
+}

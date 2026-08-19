@@ -353,3 +353,19 @@ fn collect_target_code_rule_references(
         }
     }
 }
+
+/// Whether the rule carries any rule-level surface that generated consumers
+/// or target code can observe: modifiers, attribute clauses, `throws`,
+/// options, named actions, exception handlers, or case-insensitivity.
+pub(crate) const fn rule_surface_is_observable(rule: &crate::grammar::model::Rule) -> bool {
+    !rule.modifiers.is_empty()
+        || rule.arguments.is_some()
+        || rule.returns.is_some()
+        || rule.locals.is_some()
+        || !rule.throws.is_empty()
+        || !rule.options.is_empty()
+        || !rule.actions.is_empty()
+        || !rule.catches.is_empty()
+        || rule.finally_action.is_some()
+        || rule.case_insensitive.is_some()
+}

@@ -141,3 +141,32 @@ pub(crate) trait GrammarTransform {
         report: &mut TransformReport,
     ) -> Result<bool, Diagnostic>;
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::collections::BTreeSet;
+
+    use super::TransformGrammar;
+    use crate::grammar::frontend::{SourceId, parse_source};
+    use crate::grammar::model::{GrammarId, ModelIdAllocator};
+    use crate::grammar::provenance::ProvenanceIndex;
+    use crate::grammar::syntax::parse_grammar_unit;
+
+    /// Parses one grammar source into a single-unit [`TransformGrammar`]
+    /// targeted for optional transforms, without running integration.
+    pub(crate) fn single_unit_fixture(text: &str) -> (TransformGrammar, ModelIdAllocator) {
+        let file = parse_source(SourceId::new(0), "P.g4", text).expect("valid grammar");
+        let mut ids = ModelIdAllocator::after_loaded_grammars(1);
+        let mut provenance = ProvenanceIndex::default();
+        let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
+        (
+            TransformGrammar {
+                units: vec![unit],
+                target_units: BTreeSet::from([GrammarId::new(0)]),
+                preserved_rules: BTreeSet::new(),
+                provenance,
+            },
+            ids,
+        )
+    }
+}
