@@ -302,15 +302,15 @@ static BASE64_SEXTETS: [u8; 256] = {
 /// Armors bytes as canonical unpadded base64 text.
 fn encode_base64(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    let mut chunks = bytes.chunks_exact(3);
-    for chunk in chunks.by_ref() {
+    let (chunks, remainder) = bytes.as_chunks::<3>();
+    for chunk in chunks {
         let group = u32::from(chunk[0]) << 16 | u32::from(chunk[1]) << 8 | u32::from(chunk[2]);
         out.push(BASE64_ALPHABET[(group >> 18) as usize & 0x3F] as char);
         out.push(BASE64_ALPHABET[(group >> 12) as usize & 0x3F] as char);
         out.push(BASE64_ALPHABET[(group >> 6) as usize & 0x3F] as char);
         out.push(BASE64_ALPHABET[group as usize & 0x3F] as char);
     }
-    match *chunks.remainder() {
+    match *remainder {
         [first] => {
             let group = u32::from(first) << 16;
             out.push(BASE64_ALPHABET[(group >> 18) as usize & 0x3F] as char);
@@ -332,8 +332,8 @@ fn encode_base64(bytes: &[u8]) -> String {
 fn decode_base64(text: &str) -> Result<Vec<u8>, EncodedBlobError> {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3 + 2);
-    let mut chunks = bytes.chunks_exact(4);
-    for (chunk_index, chunk) in chunks.by_ref().enumerate() {
+    let (chunks, remainder) = bytes.as_chunks::<4>();
+    for (chunk_index, chunk) in chunks.iter().enumerate() {
         let first = BASE64_SEXTETS[chunk[0] as usize];
         let second = BASE64_SEXTETS[chunk[1] as usize];
         let third = BASE64_SEXTETS[chunk[2] as usize];
@@ -347,11 +347,11 @@ fn decode_base64(text: &str) -> Result<Vec<u8>, EncodedBlobError> {
             | u32::from(fourth);
         out.extend_from_slice(&[(group >> 16) as u8, (group >> 8) as u8, group as u8]);
     }
-    let tail_offset = bytes.len() - chunks.remainder().len();
-    match *chunks.remainder() {
+    let tail_offset = bytes.len() - remainder.len();
+    match *remainder {
         [] => {}
-        [_] => {
-            if BASE64_SEXTETS[chunks.remainder()[0] as usize] == BASE64_INVALID {
+        [only] => {
+            if BASE64_SEXTETS[only as usize] == BASE64_INVALID {
                 return Err(invalid_base64_byte(text, tail_offset));
             }
             return Err(EncodedBlobError::TruncatedBase64);

@@ -242,29 +242,13 @@ impl ParserAtn {
     /// Validates and borrows generator-emitted packed data without allocating.
     pub fn from_static(words: &'static [u32]) -> Result<Self, ParserAtnError> {
         let layout = validate_packed(words, TailCallValidation::Structural)?;
-        let atn = Self {
-            words: Cow::Borrowed(words),
-            words_address: words.as_ptr() as usize,
-            layout,
-        };
-        #[cfg(feature = "perf-counters")]
-        atn.record_token_set_inventory();
-        Ok(atn)
+        Ok(Self::from_validated(Cow::Borrowed(words), layout))
     }
 
     /// Validates one owned packed stream.
     pub fn from_owned(words: Vec<u32>) -> Result<Self, ParserAtnError> {
         let layout = validate_packed(&words, TailCallValidation::Recompute)?;
-        let words: Cow<'static, [u32]> = Cow::Owned(words);
-        let words_address = words.as_ptr() as usize;
-        let atn = Self {
-            words,
-            words_address,
-            layout,
-        };
-        #[cfg(feature = "perf-counters")]
-        atn.record_token_set_inventory();
-        Ok(atn)
+        Ok(Self::from_validated(Cow::Owned(words), layout))
     }
 
     /// Decodes and validates a generator-emitted encoded packed ATN blob
@@ -276,7 +260,11 @@ impl ParserAtn {
     pub fn from_encoded(text: &str) -> Result<Self, ParserAtnError> {
         let words = crate::encoded::decode_u32_values(text)?;
         let layout = validate_packed(&words, TailCallValidation::Structural)?;
-        let words: Cow<'static, [u32]> = Cow::Owned(words);
+        Ok(Self::from_validated(Cow::Owned(words), layout))
+    }
+
+    /// Finishes construction after `validate_packed` accepted the stream.
+    fn from_validated(words: Cow<'static, [u32]>, layout: ParserAtnLayout) -> Self {
         let words_address = words.as_ptr() as usize;
         let atn = Self {
             words,
@@ -285,7 +273,7 @@ impl ParserAtn {
         };
         #[cfg(feature = "perf-counters")]
         atn.record_token_set_inventory();
-        Ok(atn)
+        atn
     }
 
     /// Canonical generator/runtime format version carried by this ATN.
