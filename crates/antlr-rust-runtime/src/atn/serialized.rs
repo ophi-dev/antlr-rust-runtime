@@ -31,6 +31,14 @@ impl<'a> SerializedAtn<'a> {
         }
     }
 
+    /// Creates serialized ATN data from one owned integer allocation, e.g.
+    /// values decoded from an encoded blob (see [`crate::encoded`]).
+    pub const fn from_owned(values: Vec<i32>) -> SerializedAtn<'static> {
+        SerializedAtn {
+            values: Cow::Owned(values),
+        }
+    }
+
     /// Creates serialized ATN data by widening each character to its scalar
     /// value.
     ///

@@ -43,8 +43,8 @@ pub(crate) mod prelude {
     #[cfg(test)]
     pub(crate) use crate::rust_output::is_rust_keyword;
     pub(crate) use crate::rust_output::{
-        module_name, replace_all, rust_function_name, rust_identifier, rust_string, rust_type_name,
-        sanitize_identifier, split_identifier_words,
+        module_name, replace_all, rust_encoded_blob_literal, rust_function_name, rust_identifier,
+        rust_string, rust_type_name, sanitize_identifier, split_identifier_words,
     };
 }
 

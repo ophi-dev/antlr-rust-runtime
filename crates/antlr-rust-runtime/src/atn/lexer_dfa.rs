@@ -587,6 +587,15 @@ impl CompiledLexerDfa {
         out
     }
 
+    /// Rebuilds a compiled DFA from encoded blob text produced by the
+    /// generator (see [`crate::encoded`]); `None` when the blob or the word
+    /// stream it carries is malformed or from a different runtime version, so
+    /// generated lexers fall back to [`Self::compile`].
+    pub fn from_encoded(text: &str) -> Option<Self> {
+        let words = crate::encoded::decode_u32_values(text).ok()?;
+        Self::from_serialized(&words)
+    }
+
     /// Rebuilds a compiled DFA from [`Self::serialize`] output; `None` when
     /// the stream comes from a different runtime version or is malformed.
     pub fn from_serialized(data: &[u32]) -> Option<Self> {

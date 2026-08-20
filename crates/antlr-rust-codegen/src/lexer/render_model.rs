@@ -46,9 +46,12 @@ pub(crate) fn render_lexer_lex_convenience() -> String {
 }
 
 /// Renders the lexer-owned grammar metadata table.
+///
+/// The serialized ATN travels as an encoded blob string literal (see
+/// `antlr4_runtime::encoded`) instead of a decimal integer array.
 pub(crate) fn render_lexer_metadata(grammar_name: &str, data: &LexerCodegenData<'_>) -> String {
     format!(
-        "pub static METADATA: GrammarMetadata = GrammarMetadata::new(\n    \"{}\",\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n);\n\npub fn metadata() -> &'static GrammarMetadata {{\n    &METADATA\n}}\n\npub fn rule_names() -> &'static [&'static str] {{\n    METADATA.rule_names()\n}}\n",
+        "pub static METADATA: GrammarMetadata = GrammarMetadata::new_with_encoded_atn(\n    \"{}\",\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    {},\n);\n\npub fn metadata() -> &'static GrammarMetadata {{\n    &METADATA\n}}\n\npub fn rule_names() -> &'static [&'static str] {{\n    METADATA.rule_names()\n}}\n",
         rust_string(grammar_name),
         render_lexer_str_slice(&data.rule_names),
         render_lexer_option_str_slice(&data.literal_names),
@@ -56,7 +59,9 @@ pub(crate) fn render_lexer_metadata(grammar_name: &str, data: &LexerCodegenData<
         render_lexer_empty_option_str_slice(max_len(&data.literal_names, &data.symbolic_names)),
         render_lexer_str_slice(&data.channel_names),
         render_lexer_str_slice(&data.mode_names),
-        render_lexer_i32_slice(&data.lexer_atn_words)
+        rust_encoded_blob_literal(&antlr4_runtime::encoded::encode_i32_values(
+            &data.lexer_atn_words
+        ))
     )
 }
 
@@ -128,15 +133,6 @@ fn render_lexer_str_slice(values: &[String]) -> String {
     let items = values
         .iter()
         .map(|value| format!("\"{}\"", rust_string(value)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{items}]")
-}
-
-fn render_lexer_i32_slice(values: &[i32]) -> String {
-    let items = values
-        .iter()
-        .map(i32::to_string)
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")

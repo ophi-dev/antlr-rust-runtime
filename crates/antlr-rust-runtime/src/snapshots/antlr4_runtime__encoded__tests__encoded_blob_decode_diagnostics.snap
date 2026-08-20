@@ -1,0 +1,18 @@
+---
+source: crates/antlr-rust-runtime/src/encoded.rs
+expression: report
+---
+invalid byte: invalid base64 byte 0x21 at offset 4
+rejected padding: invalid base64 byte 0x3d at offset 14
+truncated base64: truncated base64 text: one trailing character cannot encode a byte
+non-canonical base64: non-canonical base64 text: unused trailing bits are not zero
+truncated header: encoded blob holds 3 bytes, shorter than its 6-byte header
+bad magic: encoded blob magic mismatch: expected "AR4B", found [78, 79, 80, 69]
+unsupported version: encoded blob format version 2 is unsupported; this runtime reads version 1
+element kind mismatch: encoded blob carries element kind 2, but the caller expects kind 1
+invalid count: encoded blob element count is truncated or malformed
+truncated payload: encoded blob declares 3 elements, but only 1 payload bytes remain
+truncated value: encoded blob value at index 1 is truncated
+overflowing value: encoded blob value at index 0 is malformed
+overlong value: encoded blob value at index 0 is malformed
+trailing bytes: encoded blob carries 1 trailing bytes after its declared elements

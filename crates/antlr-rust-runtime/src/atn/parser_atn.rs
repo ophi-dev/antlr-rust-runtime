@@ -177,6 +177,8 @@ pub enum ParserAtnError {
     InvalidData(String),
     #[error("{field} count/index {value} exceeds the compact u32 range")]
     Overflow { field: &'static str, value: usize },
+    #[error("invalid encoded parser ATN blob: {0}")]
+    EncodedBlob(#[from] crate::encoded::EncodedBlobError),
 }
 
 /// Storage and shape measurements for one packed parser ATN.
@@ -253,6 +255,27 @@ impl ParserAtn {
     /// Validates one owned packed stream.
     pub fn from_owned(words: Vec<u32>) -> Result<Self, ParserAtnError> {
         let layout = validate_packed(&words, TailCallValidation::Recompute)?;
+        let words: Cow<'static, [u32]> = Cow::Owned(words);
+        let words_address = words.as_ptr() as usize;
+        let atn = Self {
+            words,
+            words_address,
+            layout,
+        };
+        #[cfg(feature = "perf-counters")]
+        atn.record_token_set_inventory();
+        Ok(atn)
+    }
+
+    /// Decodes and validates a generator-emitted encoded packed ATN blob
+    /// (see [`crate::encoded`]).
+    ///
+    /// The decoded stream is generator output, so — like [`Self::from_static`]
+    /// — its tail-call markers are validated structurally rather than
+    /// recomputed.
+    pub fn from_encoded(text: &str) -> Result<Self, ParserAtnError> {
+        let words = crate::encoded::decode_u32_values(text)?;
+        let layout = validate_packed(&words, TailCallValidation::Structural)?;
         let words: Cow<'static, [u32]> = Cow::Owned(words);
         let words_address = words.as_ptr() as usize;
         let atn = Self {

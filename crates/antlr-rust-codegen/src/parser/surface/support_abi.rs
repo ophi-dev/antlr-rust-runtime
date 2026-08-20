@@ -925,16 +925,6 @@ fn render_i32_slice(values: &[i32]) -> String {
     format!("[{items}]")
 }
 
-/// Renders a versioned packed parser ATN word stream.
-pub(crate) fn render_u32_slice(values: &[u32]) -> String {
-    let items = values
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{items}]")
-}
-
 /// Renders an inline `[(i32, i32); N]` expression for generated token-set
 /// matches.
 pub(crate) fn render_i32_ranges(values: &[(i32, i32)]) -> String {

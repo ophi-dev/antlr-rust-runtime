@@ -284,16 +284,16 @@ fn atn() -> &'static LexerAtn {{
     }})
 }}
 
-static LEXER_DFA_DATA: &[u32] = &[{lexer_dfa_data}];
+static LEXER_DFA_DATA: &str = {lexer_dfa_data};
 
 static LEXER_DFA_CELL: OnceLock<CompiledLexerDfa> = OnceLock::new();
 
-/// Ahead-of-time lexer DFA tables compiled by antlr4-rust-gen, embedded so
-/// runtime startup only deserializes them. Rebuilt from the ATN instead when
-/// the embedded stream comes from a different runtime version.
+/// Ahead-of-time lexer DFA tables compiled by antlr4-rust-gen, embedded as an
+/// encoded blob so runtime startup only decodes them. Rebuilt from the ATN
+/// instead when the embedded data comes from a different runtime version.
 fn lexer_dfa() -> &'static CompiledLexerDfa {{
     LEXER_DFA_CELL.get_or_init(|| {{
-        CompiledLexerDfa::from_serialized(LEXER_DFA_DATA)
+        CompiledLexerDfa::from_encoded(LEXER_DFA_DATA)
             .unwrap_or_else(|| CompiledLexerDfa::compile(atn()))
     }})
 }}
@@ -382,23 +382,20 @@ pub(crate) fn lexer_actions_require_semantic_hooks(
     })
 }
 
-/// Compiles the lexer DFA at generation time and flattens it for embedding.
+/// Compiles the lexer DFA at generation time and embeds it as an encoded
+/// blob string literal (see `antlr4_runtime::encoded`).
 ///
-/// An empty stream makes the generated lexer fall back to compiling the DFA
-/// from its ATN at first use, so generation never fails on this step.
+/// The generated lexer decodes the blob at first use and falls back to
+/// compiling the DFA from its ATN when the embedded data comes from a
+/// different runtime version, so generation never fails on this step.
 fn compiled_lexer_dfa_words(data: &LexerCodegenData<'_>) -> String {
-    if !data.lexer_dfa_words.is_empty() {
-        return data
-            .lexer_dfa_words
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(",");
-    }
-    let atn = data.lexer_atn();
-    let words = CompiledLexerDfa::compile(atn).serialize();
-    let rendered: Vec<String> = words.iter().map(u32::to_string).collect();
-    rendered.join(",")
+    let encoded = if data.lexer_dfa_words.is_empty() {
+        let atn = data.lexer_atn();
+        antlr4_runtime::encoded::encode_u32_values(&CompiledLexerDfa::compile(atn).serialize())
+    } else {
+        antlr4_runtime::encoded::encode_u32_values(&data.lexer_dfa_words)
+    };
+    rust_encoded_blob_literal(&encoded)
 }
 /// Translates the lexer recognizer surface used by rendered test bodies onto
 /// the `BaseLexer` hooks: `self.text()` / column accessors become position
