@@ -7,18 +7,41 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 14. Generated parsers embed packed parser
+The current generator emits revision 15. Generated recognizers embed their
+static data tables — the ahead-of-time compiled lexer DFA, the packed parser
+ATN, and the serialized lexer ATN inside `GrammarMetadata` — as versioned
+encoded blobs: LEB128 varints (zigzag-mapped for signed values) armored as
+canonical unpadded base64 string literals, defined by the runtime's
+`encoded` module. The blob carries a magic, format version, element kind, and a
+checked element count; corrupt, truncated, overflowing, and unsupported data
+fail with targeted diagnostics. This replaces the decimal integer arrays that
+made rustc parse hundreds of thousands of integer expressions and produced
+multi-megabyte single source lines for large grammars. The decoded integer
+streams are byte-identical to the revision-14 arrays, so lexer/parser
+behavior, diagnostics, and serialized metadata are unchanged; the embedded
+lexer DFA keeps its documented fallback of rebuilding from the ATN when the
+decoded stream comes from a different runtime version.
+
+One hand-written-API consequence: `GrammarMetadata::serialized_atn` is no
+longer a `const fn` (encoded-blob metadata decodes on first use, cached for
+the metadata's lifetime). The generated-code API revision only gates generated
+source, so hand-written downstream code calling it in a const context must
+move that call to runtime.
+
+Revision 12 to 14 generated recognizers remain compatible because the runtime
+still implements their source APIs — `GrammarMetadata::new` with integer-array
+ATN data, `CompiledLexerDfa::from_serialized`, and `ParserAtn::from_static` —
+and reads packed parser ATN formats 1 through 3. Regenerate them with revision
+15 to emit the compact encoded representation.
+
+Revision 14 generated parsers embed packed parser
 ATN format 3 with validated tail-call markers on rule transitions. Prediction
 elides a marked return frame only when doing so preserves the configured SLL
 accuracy policy, and committed full-context construction omits equivalent
 caller frames before interning them. The default remains conservative; the
 reduced-accuracy SLL policy requires an explicit simulator constructor.
 
-Revision 12 and 13 generated recognizers remain compatible because the runtime
-still implements their source APIs and reads packed parser ATN formats 1 and 2.
-Regenerate them with revision 14 to emit the new metadata.
-
-The current runtime also extends the revision-11
+The revision-14 runtime also extended the revision-11
 `__antlr4_rust_parser_entry_points!` expansion with
 `parse_with_parser_constructor` and
 `parse_stream_with_parser_constructor`. These accept a caller-provided parser
@@ -26,7 +49,7 @@ constructor after token buffering, so generated typed semantic hooks can use the
 shared parse driver. Their `GeneratedParseOutput` can be retained, converted
 with `.into_parsed_file()`, or validated with `.validate()`. This is an additive
 runtime-macro extension: generated source and the macro invocation are
-unchanged, so the generated-code API remains revision 14 and existing revision
+unchanged, so the generated-code API remained revision 14 and existing revision
 12-14 recognizers gain the helpers when linked against the updated runtime.
 The generated alias widens compatibly to
 `pub type TomlParserParseOutput<R, L, H = antlr4_runtime::NoSemanticHooks> =

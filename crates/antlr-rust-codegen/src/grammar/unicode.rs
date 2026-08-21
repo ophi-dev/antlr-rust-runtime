@@ -865,8 +865,9 @@ fn decode_compatibility_decomposition_ranges() -> RangesByU8 {
     );
 
     let mut ranges = RangesByU8::new();
-    for record in
-        data[DECOMPOSITION_TYPE_HEADER_LENGTH..].chunks_exact(DECOMPOSITION_TYPE_RECORD_LENGTH)
+    for record in data[DECOMPOSITION_TYPE_HEADER_LENGTH..]
+        .as_chunks::<DECOMPOSITION_TYPE_RECORD_LENGTH>()
+        .0
     {
         let decomposition_type = record[0];
         assert!(
@@ -1002,7 +1003,7 @@ fn ranges_from_iter(ranges: impl Iterator<Item = std::ops::RangeInclusive<u32>>)
 fn subtract_ranges(include: &[i32], exclude: &[i32]) -> Vec<i32> {
     let mut result = Vec::new();
     let mut exclude_index = 0;
-    for included in include.chunks_exact(2) {
+    for included in include.as_chunks::<2>().0 {
         let mut next = included[0];
         let stop = included[1];
         while exclude_index < exclude.len() && exclude[exclude_index + 1] < next {
@@ -1028,8 +1029,10 @@ fn subtract_ranges(include: &[i32], exclude: &[i32]) -> Vec<i32> {
 
 fn union_ranges(left: &[i32], right: &[i32]) -> Vec<i32> {
     let mut pairs = left
-        .chunks_exact(2)
-        .chain(right.chunks_exact(2))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .chain(right.as_chunks::<2>().0)
         .map(|range| (range[0], range[1]))
         .collect::<Vec<_>>();
     pairs.sort_unstable();
@@ -1075,7 +1078,9 @@ mod tests {
     fn contains(property: &str, code_point: i32) -> bool {
         property_ranges(property)
             .expect("known Unicode property")
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .any(|range| (range[0]..=range[1]).contains(&code_point))
     }
 

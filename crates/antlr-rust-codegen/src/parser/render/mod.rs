@@ -25,7 +25,10 @@ pub(crate) fn render_parser_with_decision_report(
     let type_name = rust_type_name(grammar_name);
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn();
-    let parser_atn_data = render_u32_slice(parser_atn.packed_words());
+    let parser_atn_data =
+        rust_encoded_blob_literal(&antlr4_runtime::encoded::encode_u32_values(
+            parser_atn.packed_words(),
+        ));
     // Every constant in the generated module shares one Rust value
     // namespace; allocation order matches emission order (tokens first).
     let mut const_names = BTreeSet::new();
@@ -321,13 +324,13 @@ use std::sync::OnceLock;
 {embedded_attrs_structs}
 {embedded_module_items}
 
-static PARSER_ATN_DATA: &[u32] = &{parser_atn_data};
+static PARSER_ATN_DATA: &str = {parser_atn_data};
 static ATN_CELL: OnceLock<ParserAtn> = OnceLock::new();
 
-/// Validates and caches the packed grammar ATN for all parser instances.
+/// Decodes, validates, and caches the packed grammar ATN for all parser instances.
 fn atn() -> &'static ParserAtn {{
     ATN_CELL.get_or_init(|| {{
-        ParserAtn::from_static(PARSER_ATN_DATA)
+        ParserAtn::from_encoded(PARSER_ATN_DATA)
             .unwrap_or_else(|error| panic!("generated parser ATN is incompatible with this runtime: {{error}}"))
     }})
 }}

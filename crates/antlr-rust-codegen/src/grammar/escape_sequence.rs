@@ -123,7 +123,7 @@ fn simple_escape(escaped: char) -> Option<i32> {
 
 fn interval_set(ranges: &[i32]) -> IntervalSet {
     let mut result = IntervalSet::new();
-    for range in ranges.chunks_exact(2) {
+    for range in ranges.as_chunks::<2>().0 {
         result.add_range(range[0], range[1]);
     }
     result
@@ -132,7 +132,7 @@ fn interval_set(ranges: &[i32]) -> IntervalSet {
 fn complement(ranges: &[i32]) -> IntervalSet {
     let mut result = IntervalSet::new();
     let mut next = 0;
-    for range in ranges.chunks_exact(2) {
+    for range in ranges.as_chunks::<2>().0 {
         if next < range[0] {
             result.add_range(next, range[0] - 1);
         }

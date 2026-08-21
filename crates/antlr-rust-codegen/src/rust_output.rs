@@ -62,6 +62,31 @@ pub(crate) fn rust_string(value: &str) -> String {
     value.escape_default().to_string()
 }
 
+/// Renders an encoded-blob payload (see `antlr4_runtime::encoded`) as one
+/// segmented Rust string literal.
+///
+/// Base64 text is pure ASCII with no escapes, so long payloads split into
+/// fixed-width lines joined by `\`-newline continuations: the literal stays a
+/// single token for rustc while no generated source line grows to the
+/// megabyte widths the previous decimal integer arrays produced. rustc strips
+/// each continuation together with the following line's leading whitespace.
+pub(crate) fn rust_encoded_blob_literal(encoded: &str) -> String {
+    const LINE_WIDTH: usize = 120;
+    debug_assert!(encoded.is_ascii(), "encoded blobs are base64 text");
+    let mut out = String::with_capacity(encoded.len() + (encoded.len() / LINE_WIDTH + 1) * 6 + 2);
+    out.push('"');
+    let mut rest = encoded;
+    while rest.len() > LINE_WIDTH {
+        let (line, tail) = rest.split_at(LINE_WIDTH);
+        out.push_str(line);
+        out.push_str("\\\n    ");
+        rest = tail;
+    }
+    out.push_str(rest);
+    out.push('"');
+    out
+}
+
 /// Replaces every non-overlapping occurrence without relying on the
 /// allocation-hiding `str::replace` helper prohibited by the workspace lints.
 pub(crate) fn replace_all(text: &str, needle: &str, replacement: &str) -> String {

@@ -587,6 +587,26 @@ impl CompiledLexerDfa {
         out
     }
 
+    /// Rebuilds a compiled DFA from encoded blob text produced by the
+    /// generator (see [`crate::encoded`]); `None` when the blob or the word
+    /// stream it carries is malformed or from a different runtime version, so
+    /// generated lexers fall back to [`Self::compile`].
+    ///
+    /// A word stream from another runtime version is expected drift and
+    /// degrades silently, but the blob container itself only fails to decode
+    /// when generation went wrong, so that path is loud under
+    /// `debug_assertions`.
+    pub fn from_encoded(text: &str) -> Option<Self> {
+        match crate::encoded::decode_u32_values(text) {
+            Ok(words) => Self::from_serialized(&words),
+            Err(error) => {
+                debug_assert!(false, "embedded lexer DFA blob failed to decode: {error}");
+                let _ = error;
+                None
+            }
+        }
+    }
+
     /// Rebuilds a compiled DFA from [`Self::serialize`] output; `None` when
     /// the stream comes from a different runtime version or is malformed.
     pub fn from_serialized(data: &[u32]) -> Option<Self> {
@@ -2095,9 +2115,7 @@ mod tests {
                 .any(|run| matches!(run, AsciiRun::Until3(..)))
         );
         let mut scalar = accelerated.clone();
-        for run in &mut scalar.ascii_runs {
-            *run = AsciiRun::None;
-        }
+        scalar.ascii_runs.fill(AsciiRun::None);
 
         let mut inputs = vec![
             "a".repeat(512),

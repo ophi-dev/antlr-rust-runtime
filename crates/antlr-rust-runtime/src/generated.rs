@@ -1749,8 +1749,20 @@ pub struct GrammarMetadata {
     display_names: &'static [Option<&'static str>],
     channel_names: &'static [&'static str],
     mode_names: &'static [&'static str],
-    serialized_atn: &'static [i32],
+    serialized_atn: SerializedAtnData,
+    decoded_serialized_atn: OnceLock<Vec<i32>>,
     recognizer_metadata: OnceLock<Arc<RecognizerMetadata>>,
+}
+
+/// Source representation of the serialized ATN carried by generated metadata.
+///
+/// Generated modules embedded decimal integer arrays through revision 14;
+/// revision 15 emits the encoded blob defined by [`crate::encoded`]. Both
+/// stay supported so older generated source keeps compiling.
+#[derive(Clone, Copy, Debug)]
+enum SerializedAtnData {
+    Values(&'static [i32]),
+    Encoded(&'static str),
 }
 
 impl Clone for GrammarMetadata {
@@ -1764,6 +1776,11 @@ impl Clone for GrammarMetadata {
             channel_names: self.channel_names,
             mode_names: self.mode_names,
             serialized_atn: self.serialized_atn,
+            decoded_serialized_atn: self
+                .decoded_serialized_atn
+                .get()
+                .cloned()
+                .map_or_else(OnceLock::new, OnceLock::from),
             recognizer_metadata: OnceLock::from(Arc::clone(self.cached_recognizer_metadata())),
         }
     }
@@ -1790,7 +1807,36 @@ impl GrammarMetadata {
             display_names,
             channel_names,
             mode_names,
-            serialized_atn,
+            serialized_atn: SerializedAtnData::Values(serialized_atn),
+            decoded_serialized_atn: OnceLock::new(),
+            recognizer_metadata: OnceLock::new(),
+        }
+    }
+
+    /// Creates static grammar metadata whose serialized ATN travels as the
+    /// encoded blob defined by [`crate::encoded`] instead of an integer
+    /// array. Emitted by generated-code API revision 15 and later.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new_with_encoded_atn(
+        grammar_file_name: &'static str,
+        rule_names: &'static [&'static str],
+        literal_names: &'static [Option<&'static str>],
+        symbolic_names: &'static [Option<&'static str>],
+        display_names: &'static [Option<&'static str>],
+        channel_names: &'static [&'static str],
+        mode_names: &'static [&'static str],
+        serialized_atn: &'static str,
+    ) -> Self {
+        Self {
+            grammar_file_name,
+            rule_names,
+            literal_names,
+            symbolic_names,
+            display_names,
+            channel_names,
+            mode_names,
+            serialized_atn: SerializedAtnData::Encoded(serialized_atn),
+            decoded_serialized_atn: OnceLock::new(),
             recognizer_metadata: OnceLock::new(),
         }
     }
@@ -1838,9 +1884,33 @@ impl GrammarMetadata {
     }
 
     /// Borrows the serialized ATN values for deserialization by the runtime
-    /// simulators without copying generated static data.
-    pub const fn serialized_atn(&self) -> SerializedAtn<'_> {
-        SerializedAtn::from_i32(self.serialized_atn)
+    /// simulators.
+    ///
+    /// Integer-array metadata is borrowed without copying. Encoded-blob
+    /// metadata is decoded on first use and cached for the lifetime of this
+    /// metadata, so repeat calls stay allocation-free.
+    ///
+    /// # Panics
+    ///
+    /// First use panics when encoded-blob metadata is corrupt, naming the
+    /// decode failure. Unlike the embedded lexer DFA, the serialized ATN has
+    /// no rebuild fallback: it is the recognizer's source of truth.
+    pub fn serialized_atn(&self) -> SerializedAtn<'_> {
+        match self.serialized_atn {
+            SerializedAtnData::Values(values) => SerializedAtn::from_i32(values),
+            SerializedAtnData::Encoded(text) => {
+                let values = self.decoded_serialized_atn.get_or_init(|| {
+                    crate::encoded::decode_i32_values(text).unwrap_or_else(|error| {
+                        panic!(
+                            "generated grammar metadata for {} carries an invalid encoded \
+                             serialized ATN: {error}",
+                            self.grammar_file_name
+                        )
+                    })
+                });
+                SerializedAtn::from_i32(values)
+            }
+        }
     }
 }
 

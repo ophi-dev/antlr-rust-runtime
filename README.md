@@ -170,7 +170,20 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 14. Generated parsers now embed
+The bundled generator currently emits revision 15. Generated recognizers now
+embed their static data tables — the ahead-of-time compiled lexer DFA, the
+packed parser ATN, and the serialized lexer ATN inside `GrammarMetadata` — as
+versioned encoded blobs defined by the runtime's `encoded` module: LEB128
+varints (zigzag-mapped for signed values) armored as canonical unpadded base64
+string literals. Each blob carries a magic, format version, element kind, and
+checked element count, and decoding rejects corrupt, truncated, overflowing,
+and unsupported data with targeted diagnostics. The decoded integer streams
+are byte-identical to the previous decimal arrays, so recognizer behavior and
+the inner serialized ATN/DFA format versions are unchanged, while generated
+source shrinks materially and rustc no longer parses hundreds of thousands of
+integer expressions per large grammar.
+
+Revision 14 generated parsers embed
 packed parser ATN format 3, whose rule-transition tags carry validated
 grammar-agnostic tail-call markers. Parser and lexer prediction reuse the
 existing caller context when every continuation from a rule call's follow state
@@ -179,9 +192,11 @@ also omits the same redundant frames. SLL accuracy is preserved by default, and
 the reduced-accuracy parser mode is available only through an explicit
 simulator constructor.
 
-Revision 12 and 13 generated recognizers remain accepted because the runtime
-still provides their source API and reads packed parser ATN formats 1 and 2.
-Regenerate them with revision 14 to emit tail-call metadata.
+Revision 12 to 14 generated recognizers remain accepted because the runtime
+still provides their source API — integer-array `GrammarMetadata` ATN data,
+`CompiledLexerDfa::from_serialized`, and `ParserAtn::from_static` — and reads
+packed parser ATN formats 1 through 3. Regenerate them with revision 15 to
+emit the compact encoded representation.
 
 Revision 13 moved the iterative generated listener tree-walk engine into
 `antlr4_runtime::generated::walk_generated`. Generated parsers retain their

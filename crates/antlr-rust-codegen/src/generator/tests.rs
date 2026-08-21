@@ -325,9 +325,9 @@ fn generated_parser_rustdoc_is_attached_to_parser_type() {
 fn generated_parser_embeds_only_versioned_packed_atn_data() {
     let rendered = render_parser("TParser", &minimal_parser_data()).expect("parser should render");
 
-    assert!(rendered.contains("static PARSER_ATN_DATA: &[u32]"));
+    assert!(rendered.contains("static PARSER_ATN_DATA: &str"));
     assert!(rendered.contains("static ATN_CELL: OnceLock<ParserAtn>"));
-    assert!(rendered.contains("ParserAtn::from_static(PARSER_ATN_DATA)"));
+    assert!(rendered.contains("ParserAtn::from_encoded(PARSER_ATN_DATA)"));
     assert!(rendered.contains("generated parser ATN is incompatible with this runtime"));
     assert!(rendered.contains("pub fn parser_atn() -> &'static ParserAtn"));
     assert!(rendered.contains("fn parser_atn() -> &'static ParserAtn"));
