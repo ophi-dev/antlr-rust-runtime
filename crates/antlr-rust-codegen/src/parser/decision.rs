@@ -561,7 +561,7 @@ fn rectangles_overlap(left: &LookaheadRectangle, right: &LookaheadRectangle) -> 
 }
 
 /// Whether two sorted disjoint interval sets share any symbol.
-fn interval_sets_intersect(left: &[(i32, i32)], right: &[(i32, i32)]) -> bool {
+const fn interval_sets_intersect(left: &[(i32, i32)], right: &[(i32, i32)]) -> bool {
     let (mut left_index, mut right_index) = (0, 0);
     while left_index < left.len() && right_index < right.len() {
         let (left_start, left_stop) = left[left_index];

@@ -1599,7 +1599,9 @@ fn parse_property_escape(tail: &str, inverted: bool) -> Result<(CharSetAtom, usi
         .filter(|ranges| !ranges.is_empty())
         .ok_or_else(|| format!("unknown or empty Unicode property {name}"))?;
     let ranges = raw_ranges
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|range| (range[0], range[1]))
         .collect::<Vec<_>>();
     let ranges = if inverted {

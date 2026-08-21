@@ -350,7 +350,6 @@ fn usize_to_i32(value: usize) -> i32 {
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeSet, VecDeque};
-    use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
     use std::rc::Rc;
 
