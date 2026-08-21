@@ -14,7 +14,9 @@ const JAVA_PROPERTY_ORACLE: &str = include_str!(concat!(
 fn contains(property: &str, code_point: i32) -> bool {
     property_ranges(property)
         .expect("known Unicode property")
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .any(|range| (range[0]..=range[1]).contains(&code_point))
 }
 
@@ -142,7 +144,7 @@ fn every_unicode_property_and_alias_matches_java() {
 
 fn interval_digest(ranges: &[i32]) -> String {
     let mut digest = Hash::new();
-    for range in ranges.chunks_exact(2) {
+    for range in ranges.as_chunks::<2>().0 {
         digest.update(range[0].to_be_bytes());
         digest.update(range[1].to_be_bytes());
     }

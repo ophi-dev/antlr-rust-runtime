@@ -1075,7 +1075,9 @@ mod tests {
     fn contains(property: &str, code_point: i32) -> bool {
         property_ranges(property)
             .expect("known Unicode property")
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .any(|range| (range[0]..=range[1]).contains(&code_point))
     }
 
