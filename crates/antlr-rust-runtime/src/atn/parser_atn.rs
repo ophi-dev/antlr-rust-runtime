@@ -254,9 +254,12 @@ impl ParserAtn {
     /// Decodes and validates a generator-emitted encoded packed ATN blob
     /// (see [`crate::encoded`]).
     ///
-    /// The decoded stream is generator output, so — like [`Self::from_static`]
-    /// — its tail-call markers are validated structurally rather than
-    /// recomputed.
+    /// The text must be generator output (generated parsers pass their
+    /// embedded static literal). Like [`Self::from_static`], tail-call
+    /// markers are validated structurally rather than recomputed, which
+    /// trusts the generator's marking; route data that does not come from
+    /// this crate's generator through [`Self::from_owned`], which recomputes
+    /// the markers instead.
     pub fn from_encoded(text: &str) -> Result<Self, ParserAtnError> {
         let words = crate::encoded::decode_u32_values(text)?;
         let layout = validate_packed(&words, TailCallValidation::Structural)?;

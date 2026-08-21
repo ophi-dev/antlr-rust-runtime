@@ -1750,6 +1750,7 @@ pub struct GrammarMetadata {
     channel_names: &'static [&'static str],
     mode_names: &'static [&'static str],
     serialized_atn: SerializedAtnData,
+    decoded_serialized_atn: OnceLock<Vec<i32>>,
     recognizer_metadata: OnceLock<Arc<RecognizerMetadata>>,
 }
 
@@ -1775,6 +1776,11 @@ impl Clone for GrammarMetadata {
             channel_names: self.channel_names,
             mode_names: self.mode_names,
             serialized_atn: self.serialized_atn,
+            decoded_serialized_atn: self
+                .decoded_serialized_atn
+                .get()
+                .cloned()
+                .map_or_else(OnceLock::new, OnceLock::from),
             recognizer_metadata: OnceLock::from(Arc::clone(self.cached_recognizer_metadata())),
         }
     }
@@ -1802,6 +1808,7 @@ impl GrammarMetadata {
             channel_names,
             mode_names,
             serialized_atn: SerializedAtnData::Values(serialized_atn),
+            decoded_serialized_atn: OnceLock::new(),
             recognizer_metadata: OnceLock::new(),
         }
     }
@@ -1829,6 +1836,7 @@ impl GrammarMetadata {
             channel_names,
             mode_names,
             serialized_atn: SerializedAtnData::Encoded(serialized_atn),
+            decoded_serialized_atn: OnceLock::new(),
             recognizer_metadata: OnceLock::new(),
         }
     }
@@ -1875,29 +1883,33 @@ impl GrammarMetadata {
         })
     }
 
-    /// Borrows or decodes the serialized ATN values for deserialization by
-    /// the runtime simulators.
+    /// Borrows the serialized ATN values for deserialization by the runtime
+    /// simulators.
     ///
     /// Integer-array metadata is borrowed without copying. Encoded-blob
-    /// metadata is decoded into one owned allocation per call; generated
-    /// recognizers call this once and cache the deserialized ATN.
+    /// metadata is decoded on first use and cached for the lifetime of this
+    /// metadata, so repeat calls stay allocation-free.
     ///
     /// # Panics
     ///
-    /// Panics when encoded-blob metadata is corrupt, naming the first decode
-    /// violation. Unlike the embedded lexer DFA, the serialized ATN has no
-    /// rebuild fallback: it is the recognizer's source of truth.
-    pub fn serialized_atn(&self) -> SerializedAtn<'static> {
+    /// First use panics when encoded-blob metadata is corrupt, naming the
+    /// decode failure. Unlike the embedded lexer DFA, the serialized ATN has
+    /// no rebuild fallback: it is the recognizer's source of truth.
+    pub fn serialized_atn(&self) -> SerializedAtn<'_> {
         match self.serialized_atn {
             SerializedAtnData::Values(values) => SerializedAtn::from_i32(values),
-            SerializedAtnData::Encoded(text) => match crate::encoded::decode_i32_values(text) {
-                Ok(values) => SerializedAtn::from_owned(values),
-                Err(error) => panic!(
-                    "generated grammar metadata for {} carries an invalid encoded \
-                     serialized ATN: {error}",
-                    self.grammar_file_name
-                ),
-            },
+            SerializedAtnData::Encoded(text) => {
+                let values = self.decoded_serialized_atn.get_or_init(|| {
+                    crate::encoded::decode_i32_values(text).unwrap_or_else(|error| {
+                        panic!(
+                            "generated grammar metadata for {} carries an invalid encoded \
+                             serialized ATN: {error}",
+                            self.grammar_file_name
+                        )
+                    })
+                });
+                SerializedAtn::from_i32(values)
+            }
         }
     }
 }

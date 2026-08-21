@@ -22,6 +22,12 @@ behavior, diagnostics, and serialized metadata are unchanged; the embedded
 lexer DFA keeps its documented fallback of rebuilding from the ATN when the
 decoded stream comes from a different runtime version.
 
+One hand-written-API consequence: `GrammarMetadata::serialized_atn` is no
+longer a `const fn` (encoded-blob metadata decodes on first use, cached for
+the metadata's lifetime). The generated-code API revision only gates generated
+source, so hand-written downstream code calling it in a const context must
+move that call to runtime.
+
 Revision 12 to 14 generated recognizers remain compatible because the runtime
 still implements their source APIs — `GrammarMetadata::new` with integer-array
 ATN data, `CompiledLexerDfa::from_serialized`, and `ParserAtn::from_static` —

@@ -380,7 +380,7 @@ fn decode_base64(text: &str) -> Result<Vec<u8>, EncodedBlobError> {
             out.push(first << 2 | second >> 4);
             out.push(second << 4 | third >> 2);
         }
-        _ => unreachable!("chunks_exact(4) leaves at most three remainder bytes"),
+        _ => unreachable!("as_chunks::<4>() leaves at most three remainder bytes"),
     }
     Ok(out)
 }
