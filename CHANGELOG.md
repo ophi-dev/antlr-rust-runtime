@@ -12,6 +12,18 @@
   the ANTLR-style `-listener`, `-no-listener`, `-visitor`, and `-no-visitor`
   spellings. Use the corresponding double-dash options.
 
+## [0.35.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.34.0...v0.35.0) (2026-08-22)
+
+
+### Features
+
+* **codegen:** inline trivial pure parser rules before ATN construction ([#352](https://github.com/ophi-dev/antlr-rust-runtime/issues/352)) ([5caa7d3](https://github.com/ophi-dev/antlr-rust-runtime/commit/5caa7d3e3910c157410dd2b3a902202bf4cad5cc))
+
+
+### Performance Improvements
+
+* **codegen:** encode generated data tables as compact blobs ([#360](https://github.com/ophi-dev/antlr-rust-runtime/issues/360)) ([a056c71](https://github.com/ophi-dev/antlr-rust-runtime/commit/a056c71869ac557efa811eb888c1238d167c2ac9))
+
 ## [0.34.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.33.1...v0.34.0) (2026-08-17)
 
 
