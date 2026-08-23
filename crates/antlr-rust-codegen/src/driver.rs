@@ -7,10 +7,12 @@ use crate::optimization::OptimizationPlan;
 use crate::parser::{ParserRenderOptions, render_parser_with_decision_report};
 use crate::rust_support::{self, PreparedRustSupport};
 use crate::semantics::{
-    DecisionReportGrammar, GrammarOptionEntry, SemUnknownPolicy, SemanticsEntry,
-    collect_lexer_semantics, collect_parser_semantics_for_mode, collect_structural_grammar_options,
-    enforce_require_full_options, enforce_require_full_semantics, enforce_sem_unknown,
+    DecisionReportGrammar, GrammarOptionEntry, SectionEntry, SectionInventoryOptions,
+    SemUnknownPolicy, SemanticsEntry, collect_lexer_semantics, collect_parser_semantics_for_mode,
+    collect_recognizer_sections, collect_structural_grammar_options, enforce_require_full_options,
+    enforce_require_full_sections, enforce_require_full_semantics, enforce_sem_unknown,
     grammar_option_warning_messages, render_decisions_manifest, render_semantics_manifest,
+    section_warning_messages,
 };
 use crate::test_rig::{
     MAIN_PATH as TEST_RIG_MAIN_PATH, TestRigLexer, TestRigParser, render_test_rig,
@@ -77,7 +79,8 @@ pub(crate) fn generate(
     }
 
     let mut grammar_options = Vec::new();
-    let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
+    let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>, Vec<SectionEntry>)> =
+        Vec::new();
     let mut decision_report_grammars: Vec<DecisionReportGrammar> = Vec::new();
     let mut rendered_modules = BTreeMap::<PathBuf, String>::new();
     let mut emitted_lexers = BTreeSet::new();
@@ -117,6 +120,30 @@ pub(crate) fn generate(
             )?;
             enforce_sem_unknown(sem_unknown, &entries)?;
             enforce_require_full_semantics(require_full_semantics, &entries)?;
+            // Unscoped grammar actions of a split combined grammar belong to
+            // the parser half (ANTLR's default scope); an authored lexer
+            // grammar owns its own unscoped actions.
+            let owns_unscoped_actions = root.parser.is_none_or(|parser_grammar| {
+                compilation.parser(parser_grammar).is_none_or(|parser| {
+                    parser.semantic.unit.source != compiled.semantic.unit.source
+                })
+            });
+            let sections = collect_recognizer_sections(
+                &data,
+                SectionInventoryOptions {
+                    embedded: embedded_actions,
+                    patterns: &args.sem_patterns,
+                    owns_unscoped_actions,
+                },
+            )?;
+            let section_warnings = section_warning_messages(&sections);
+            for warning in &section_warnings {
+                report(warning).map_err(Error::generation)?;
+            }
+            warnings.extend(section_warnings);
+            if support_enabled {
+                enforce_require_full_sections(true, &sections)?;
+            }
             let grammar_name = compiled.semantic.recognizer.name.clone();
             let render_model = LexerRenderModel::new(
                 &grammar_name,
@@ -132,7 +159,7 @@ pub(crate) fn generate(
             if args.test_rig.is_some() {
                 test_rig_lexers.push(TestRigLexer::new(grammar_name.clone()));
             }
-            manifest_grammars.push(("lexer", grammar_name, entries));
+            manifest_grammars.push(("lexer", grammar_name, entries, sections));
         }
 
         if let Some(grammar) = root.parser
@@ -165,6 +192,22 @@ pub(crate) fn generate(
             )?;
             enforce_sem_unknown(sem_unknown, &entries)?;
             enforce_require_full_semantics(require_full_semantics, &entries)?;
+            let sections = collect_recognizer_sections(
+                &data,
+                SectionInventoryOptions {
+                    embedded: embedded_actions,
+                    patterns: &args.sem_patterns,
+                    owns_unscoped_actions: true,
+                },
+            )?;
+            let section_warnings = section_warning_messages(&sections);
+            for warning in &section_warnings {
+                report(warning).map_err(Error::generation)?;
+            }
+            warnings.extend(section_warnings);
+            if support_enabled {
+                enforce_require_full_sections(true, &sections)?;
+            }
             let grammar_name = compiled.semantic.recognizer.name.clone();
             let (mut module, decision_report_rows) = render_parser_with_decision_report(
                 &grammar_name,
@@ -192,7 +235,7 @@ pub(crate) fn generate(
                 rule_names: data.rule_names.clone(),
                 rows: decision_report_rows,
             });
-            manifest_grammars.push(("parser", grammar_name, entries));
+            manifest_grammars.push(("parser", grammar_name, entries, sections));
         }
     }
 
@@ -203,6 +246,13 @@ pub(crate) fn generate(
     }
     warnings.extend(option_warnings);
     enforce_require_full_options(args.require_full_semantics, &grammar_options)?;
+    // Aggregated across recognizers so one strict run reports every
+    // unsupported section, not just the first failing recognizer's.
+    let all_sections = manifest_grammars
+        .iter()
+        .flat_map(|(_, _, _, sections)| sections.iter().cloned())
+        .collect::<Vec<_>>();
+    enforce_require_full_sections(args.require_full_semantics, &all_sections)?;
     let manifest_policy = if prepared_support.all_roots_supported() {
         SemUnknownPolicy::Error
     } else {

@@ -25,10 +25,9 @@ pub(crate) fn render_parser_with_decision_report(
     let type_name = rust_type_name(grammar_name);
     let metadata = render_parser_metadata(grammar_name, data);
     let parser_atn = data.parser_atn();
-    let parser_atn_data =
-        rust_encoded_blob_literal(&antlr4_runtime::encoded::encode_u32_values(
-            parser_atn.packed_words(),
-        ));
+    let parser_atn_data = rust_encoded_blob_literal(&antlr4_runtime::encoded::encode_u32_values(
+        parser_atn.packed_words(),
+    ));
     // Every constant in the generated module shares one Rust value
     // namespace; allocation order matches emission order (tokens first).
     let mut const_names = BTreeSet::new();
@@ -235,13 +234,7 @@ pub(crate) fn render_parser_with_decision_report(
     let entry_rule_indices = likely_parser_entry_rule_indices(data);
     let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
     let rule_methods = render_public_rule_methods(&public_rule_method_names);
-    let (
-        embedded_attrs_structs,
-        embedded_module_items,
-        embedded_struct_fields,
-        embedded_field_inits,
-        embedded_impl_items,
-    ) = embedded_render_slots(surface_model.bindings());
+    let embedded_slots = embedded_render_slots(surface_model.bindings());
     let support_bindings = GeneratedSupportBindings::current();
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
@@ -257,20 +250,22 @@ pub(crate) fn render_parser_with_decision_report(
         metadata,
         parser_semantics_function,
         typed_hook_adapter,
-        embedded_attrs_structs,
-        embedded_module_items,
+        embedded_attrs_structs: embedded_slots.attrs_structs,
+        embedded_module_items: embedded_slots.module_items,
+        embedded_header_items: embedded_slots.header_items,
+        embedded_definitions_items: embedded_slots.definitions_items,
         parser_atn_data,
         parse_convenience,
         parser_rustdoc,
         type_name,
         adaptive_atn_preferred_rule_count,
         base_initialization,
-        embedded_struct_fields,
-        embedded_field_inits,
+        embedded_struct_fields: embedded_slots.struct_fields,
+        embedded_field_inits: embedded_slots.field_inits,
         adaptive_direct_allowed,
         parse_rule_fallback,
         generated_rule_dispatch,
-        embedded_impl_items,
+        embedded_impl_items: embedded_slots.impl_items,
         rule_methods,
         action_method,
         typed_parser_constructor,
@@ -290,6 +285,8 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         typed_hook_adapter,
         embedded_attrs_structs,
         embedded_module_items,
+        embedded_header_items,
+        embedded_definitions_items,
         parser_atn_data,
         parse_convenience,
         parser_rustdoc,
@@ -308,7 +305,7 @@ fn render_parser_module(model: &ParserRenderModel) -> String {
         ..
     } = model;
     format!(
-        r#"{generated_header}use antlr4_runtime::token::TokenSource;
+        r#"{generated_header}{embedded_header_items}use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
 use antlr4_runtime::atn::parser_atn::ParserAtn;
 use antlr4_runtime::generated::GeneratedRuleError;
@@ -323,7 +320,7 @@ use std::sync::OnceLock;
 {typed_hook_adapter}
 {embedded_attrs_structs}
 {embedded_module_items}
-
+{embedded_definitions_items}
 static PARSER_ATN_DATA: &str = {parser_atn_data};
 static ATN_CELL: OnceLock<ParserAtn> = OnceLock::new();
 

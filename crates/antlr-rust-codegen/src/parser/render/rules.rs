@@ -83,7 +83,54 @@ fn render_generated_rule_lifecycle(
     let mut recovery = String::new();
     render_embedded_after_and_seal(&mut recovery, index, step_render_context, false, 4);
     render_generated_rule_section(out, "recovery", &recovery);
+    render_generated_rule_exception_sections(out, rule, step_render_context);
     writeln!(out, "        }}").expect("writing to a string cannot fail");
+}
+
+/// Emits the optional `exception (...)` / `propagate { ... }` macro sections
+/// carrying an authored `catch` handler and the propagated-failure `finally`
+/// slot. Rules without a catch or finally clause keep the shorter macro form,
+/// which the runtime normalizes to the same defaults.
+fn render_generated_rule_exception_sections(
+    out: &mut String,
+    rule: &GeneratedParserRule,
+    step_render_context: GeneratedStepRenderContext<'_>,
+) {
+    let index = rule.rule_index;
+    let Some(embedded) = step_render_context.embedded else {
+        return;
+    };
+    let catch_clause = embedded.catch_clauses.get(&index);
+    let finally_body = embedded.finally_bodies.get(&index);
+    if catch_clause.is_none() && finally_body.is_none() {
+        return;
+    }
+    if let Some((binding, body)) = catch_clause {
+        if body.trim().is_empty() {
+            writeln!(out, "            exception (|{binding}| {{}});")
+                .expect("writing to a string cannot fail");
+        } else {
+            writeln!(out, "            exception (|{binding}| {{")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "                {body}").expect("writing to a string cannot fail");
+            writeln!(out, "            }});").expect("writing to a string cannot fail");
+        }
+    } else {
+        writeln!(out, "            exception (none);").expect("writing to a string cannot fail");
+    }
+    // `finally` runs on the propagated-failure path too: the recovery/success
+    // sections cover completed parses, and this slot covers the fatal unwind.
+    match finally_body {
+        Some(finally_body) => {
+            writeln!(out, "            propagate {{").expect("writing to a string cannot fail");
+            writeln!(out, "                {finally_body}")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "            }};").expect("writing to a string cannot fail");
+        }
+        None => {
+            writeln!(out, "            propagate {{}};").expect("writing to a string cannot fail");
+        }
+    }
 }
 
 fn render_generated_rule_section(out: &mut String, name: &str, body: &str) {

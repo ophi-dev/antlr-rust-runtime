@@ -1,0 +1,110 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/sections.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "assume-true",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "SectionAuditLexer",
+      "coordinates": [],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "members",
+          "scope": "lexer",
+          "rule": null,
+          "rule_index": null,
+          "source": "SectionAudit.g4",
+          "line": 7,
+          "column": 0,
+          "body": "fn lexer_helper(&mut self) {}",
+          "disposition": "unsupported"
+        }
+      ]
+    },
+    {
+      "kind": "parser",
+      "name": "SectionAuditParser",
+      "coordinates": [],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "header",
+          "scope": null,
+          "rule": null,
+          "rule_index": null,
+          "source": "SectionAudit.g4",
+          "line": 3,
+          "column": 0,
+          "body": "const AUDIT: i32 = 1;",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "named-action",
+          "name": "tokenfactory",
+          "scope": "parser",
+          "rule": null,
+          "rule_index": null,
+          "source": "SectionAudit.g4",
+          "line": 11,
+          "column": 0,
+          "body": "unknown_section();",
+          "disposition": "unsupported"
+        },
+        {
+          "kind": "named-action",
+          "name": "init",
+          "scope": null,
+          "rule": "start",
+          "rule_index": 0,
+          "source": "SectionAudit.g4",
+          "line": 16,
+          "column": 0,
+          "body": "let _ = AUDIT;",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "start",
+          "rule_index": 0,
+          "source": "SectionAudit.g4",
+          "line": 19,
+          "column": 0,
+          "body": "let _ = ();",
+          "disposition": "unsupported"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "multi",
+          "rule_index": 1,
+          "source": "SectionAudit.g4",
+          "line": 24,
+          "column": 0,
+          "body": "let _ = &first;",
+          "disposition": "unsupported"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "multi",
+          "rule_index": 1,
+          "source": "SectionAudit.g4",
+          "line": 25,
+          "column": 0,
+          "body": "let _ = &second;",
+          "disposition": "unsupported"
+        }
+      ]
+    }
+  ]
+}

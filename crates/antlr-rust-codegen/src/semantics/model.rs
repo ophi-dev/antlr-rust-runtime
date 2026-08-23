@@ -237,6 +237,14 @@ impl SemPatternFile {
     ) -> io::Result<stack_member::MemberSlots> {
         stack_member::MemberSlots::assign_scoped(&self.members, recognizer)
     }
+
+    /// Whether any `[[member]]` slot is declared for `recognizer`, i.e. the
+    /// pattern file explicitly owns that recognizer's `@members` state.
+    pub(crate) fn has_member_declarations(&self, recognizer: stack_member::MemberScope) -> bool {
+        self.members
+            .iter()
+            .any(|declaration| declaration.scope.covers(recognizer))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

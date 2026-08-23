@@ -138,6 +138,23 @@ pub fn grow_generated_rule_stack<R>(body: impl FnOnce() -> R) -> R {
 /// hand-written parser API. The binders supplied by generated code keep
 /// grammar-specific locals and steps inline while this macro owns the entry,
 /// recovery, and exit state machine.
+///
+/// The optional trailing sections carry authored rule exception handling:
+///
+/// - `exception (none);` keeps the default report-and-recover handler;
+///   `exception (|name| { ... });` replaces it with an authored handler that
+///   receives the recognition error bound to `name` (an authored grammar
+///   `catch` clause). The handler runs instead of default recovery, after
+///   which the rule finishes normally.
+/// - `propagate { ... };` runs only when the generated attempt is abandoned
+///   with a fatal propagated error (entry-rule sync failure), so an authored
+///   `finally` still executes on that path. The generator weaves `finally`
+///   bodies into the `success`, `recovery`, authored-exception, and
+///   `propagate` slots; this macro has no `finally` concept of its own.
+///
+/// Neither section runs on the adaptive-retry unwind: the retried execution
+/// re-enters the rule from the top, so its sections run on the final attempt
+/// only.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __antlr4_rust_generated_rule {
@@ -150,6 +167,52 @@ macro_rules! __antlr4_rust_generated_rule {
         body { $($body:tt)* }
         success { $($success:tt)* }
         recovery { $($recovery:tt)* }
+    ) => {
+        $crate::__antlr4_rust_generated_rule! {
+            ordinary $parser, $state, $rule, $allow_fallback, $atn, $fatal;
+            retry [$($retry)*];
+            bind ($ctx, $rule_start, $consumed_eof, $sync_error);
+            setup { $($setup)* }
+            body { $($body)* }
+            success { $($success)* }
+            recovery { $($recovery)* }
+            exception (none);
+            propagate { };
+        }
+    };
+    (
+        recursive $parser:ident, $state:expr, $rule:expr, $precedence:expr,
+        $allow_fallback:expr, $atn:expr, $fatal:path;
+        retry [$($retry:tt)*];
+        bind ($ctx:ident, $rule_start:ident, $consumed_eof:ident, $sync_error:ident);
+        setup { $($setup:tt)* }
+        body { $($body:tt)* }
+        success { $($success:tt)* }
+        recovery { $($recovery:tt)* }
+    ) => {
+        $crate::__antlr4_rust_generated_rule! {
+            recursive $parser, $state, $rule, $precedence, $allow_fallback, $atn, $fatal;
+            retry [$($retry)*];
+            bind ($ctx, $rule_start, $consumed_eof, $sync_error);
+            setup { $($setup)* }
+            body { $($body)* }
+            success { $($success)* }
+            recovery { $($recovery)* }
+            exception (none);
+            propagate { };
+        }
+    };
+    (
+        ordinary $parser:ident, $state:expr, $rule:expr, $allow_fallback:expr,
+        $atn:expr, $fatal:path;
+        retry [$($retry:tt)*];
+        bind ($ctx:ident, $rule_start:ident, $consumed_eof:ident, $sync_error:ident);
+        setup { $($setup:tt)* }
+        body { $($body:tt)* }
+        success { $($success:tt)* }
+        recovery { $($recovery:tt)* }
+        exception ($($exception:tt)+);
+        propagate { $($propagate:tt)* };
     ) => {
         $crate::__antlr4_rust_generated_rule! {
             @body
@@ -166,6 +229,8 @@ macro_rules! __antlr4_rust_generated_rule {
             body { $($body)* }
             success { $($success)* }
             recovery { $($recovery)* }
+            exception ($($exception)+);
+            propagate { $($propagate)* };
         }
     };
     (
@@ -177,6 +242,8 @@ macro_rules! __antlr4_rust_generated_rule {
         body { $($body:tt)* }
         success { $($success:tt)* }
         recovery { $($recovery:tt)* }
+        exception ($($exception:tt)+);
+        propagate { $($propagate:tt)* };
     ) => {
         $crate::__antlr4_rust_generated_rule! {
             @body
@@ -193,6 +260,8 @@ macro_rules! __antlr4_rust_generated_rule {
             body { $($body)* }
             success { $($success)* }
             recovery { $($recovery)* }
+            exception ($($exception)+);
+            propagate { $($propagate)* };
         }
     };
     (
@@ -210,6 +279,8 @@ macro_rules! __antlr4_rust_generated_rule {
         body { $($body:tt)* }
         success { $($success:tt)* }
         recovery { $($recovery:tt)* }
+        exception ($($exception:tt)+);
+        propagate { $($propagate:tt)* };
     ) => {{
         let __generated_diagnostic_marker =
             $parser.base.generated_diagnostics_checkpoint();
@@ -238,27 +309,96 @@ macro_rules! __antlr4_rust_generated_rule {
                     marker __generated_diagnostic_marker;
                     abort $abort;
                 }
-                let __error = if let Some(__sync_error) = $sync_error {
-                    if $allow_fallback {
-                        $parser.base.$abort();
-                        $parser
-                            .base
-                            .rollback_generated_tree(__generated_diagnostic_marker);
-                        $parser.base.record_generated_syntax_error();
-                        return Err($fatal(__sync_error));
-                    }
-                    __sync_error
-                } else {
-                    __error
-                };
-                $parser
-                    .base
-                    .recover_generated_rule(&mut $ctx, $atn, __error);
-                $($recovery)*
-                let __tree = $parser.base.$finish($ctx, $consumed_eof);
-                Ok(__tree)
+                $crate::__antlr4_rust_generated_rule! {
+                    @handle_error ($($exception)+)
+                    parser $parser;
+                    finish $finish;
+                    abort $abort;
+                    allow_fallback $allow_fallback;
+                    atn $atn;
+                    fatal $fatal;
+                    marker __generated_diagnostic_marker;
+                    error __error;
+                    bind ($ctx, $consumed_eof, $sync_error);
+                    recovery { $($recovery)* }
+                    propagate { $($propagate)* }
+                }
             }
         }
+    }};
+    (
+        @handle_error (none)
+        parser $parser:ident;
+        finish $finish:ident;
+        abort $abort:ident;
+        allow_fallback $allow_fallback:expr;
+        atn $atn:expr;
+        fatal $fatal:path;
+        marker $marker:ident;
+        error $error:ident;
+        bind ($ctx:ident, $consumed_eof:ident, $sync_error:ident);
+        recovery { $($recovery:tt)* }
+        propagate { $($propagate:tt)* }
+    ) => {{
+        let $error = if let Some(__sync_error) = $sync_error {
+            if $allow_fallback {
+                // The generated attempt is abandoned with a propagated fatal
+                // error. An authored `finally` still runs first (the generator
+                // weaves it into this slot), matching ANTLR's try/finally
+                // ordering when an error escapes the rule.
+                $($propagate)*
+                $parser.base.$abort();
+                $parser
+                    .base
+                    .rollback_generated_tree($marker);
+                $parser.base.record_generated_syntax_error();
+                return Err($fatal(__sync_error));
+            }
+            __sync_error
+        } else {
+            $error
+        };
+        $parser
+            .base
+            .recover_generated_rule(&mut $ctx, $atn, $error);
+        $($recovery)*
+        let __tree = $parser.base.$finish($ctx, $consumed_eof);
+        Ok(__tree)
+    }};
+    (
+        @handle_error (|$catch_bind:ident| { $($catch_body:tt)* })
+        parser $parser:ident;
+        finish $finish:ident;
+        abort $abort:ident;
+        allow_fallback $allow_fallback:expr;
+        atn $atn:expr;
+        fatal $fatal:path;
+        marker $marker:ident;
+        error $error:ident;
+        bind ($ctx:ident, $consumed_eof:ident, $sync_error:ident);
+        recovery { $($recovery:tt)* }
+        propagate { $($propagate:tt)* }
+    ) => {{
+        // An authored `catch` replaces the default report-and-recover handler
+        // (ANTLR emits the authored clause instead of the generated one), so
+        // no diagnostic is pushed and no resynchronization happens here. A
+        // pending loop-sync error is the recognition error the author
+        // observes, and the fatal propagation path is unreachable because the
+        // authored handler owns every recognition error.
+        let _ = &$marker;
+        let __caught = if let Some(__sync_error) = $sync_error {
+            __sync_error
+        } else {
+            $error
+        };
+        {
+            let $catch_bind = __caught;
+            let _ = &$catch_bind;
+            $($catch_body)*
+        }
+        $($recovery)*
+        let __tree = $parser.base.$finish($ctx, $consumed_eof);
+        Ok(__tree)
     }};
     (
         @retry

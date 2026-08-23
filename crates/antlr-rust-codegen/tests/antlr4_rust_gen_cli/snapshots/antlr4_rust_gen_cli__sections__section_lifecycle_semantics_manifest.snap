@@ -1,0 +1,85 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/sections.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "assume-true",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "SectionLifecycleLexer",
+      "coordinates": [],
+      "sections": []
+    },
+    {
+      "kind": "parser",
+      "name": "SectionLifecycleParser",
+      "coordinates": [],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "init",
+          "scope": null,
+          "rule": "start",
+          "rule_index": 0,
+          "source": "SectionLifecycle.g4",
+          "line": 4,
+          "column": 0,
+          "body": "crate::record_event(\"init\");",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "named-action",
+          "name": "after",
+          "scope": null,
+          "rule": "start",
+          "rule_index": 0,
+          "source": "SectionLifecycle.g4",
+          "line": 5,
+          "column": 0,
+          "body": "crate::record_event(\"after\");",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "finally",
+          "name": null,
+          "scope": null,
+          "rule": "start",
+          "rule_index": 0,
+          "source": "SectionLifecycle.g4",
+          "line": 8,
+          "column": 0,
+          "body": "crate::record_event(\"finally\");",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "caught",
+          "rule_index": 1,
+          "source": "SectionLifecycle.g4",
+          "line": 15,
+          "column": 0,
+          "body": "let _ = &error; crate::record_event(\"catch\");",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "javaStyle",
+          "rule_index": 2,
+          "source": "SectionLifecycle.g4",
+          "line": 23,
+          "column": 0,
+          "body": "let _ = &e; crate::record_event(\"java-style-catch\");",
+          "disposition": "embedded"
+        }
+      ]
+    }
+  ]
+}

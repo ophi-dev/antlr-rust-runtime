@@ -7,7 +7,32 @@ generated-code API revision that is checked against the selected runtime at
 compile time, so releases that deliberately preserve the source contract can
 remain compatible without exact SemVer equality.
 
-The current generator emits revision 15. Generated recognizers embed their
+The current generator emits revision 16. Rules with an authored `catch [...]`
+or `finally { ... }` clause now expand through two additional
+`__antlr4_rust_generated_rule!` lifecycle sections: `exception (...)` (either
+`none` or an authored handler `|name| { ... }` that replaces the default
+report-and-recover behavior, matching ANTLR's generated catch replacement) and
+`propagate { ... }` (the authored `finally` body for the propagated-failure
+unwind; the success and recovery paths carry the `finally` body inline).
+Neither section runs on the adaptive-retry unwind, whose re-entry executes the
+rule from the top. Rules without exception clauses emit the unchanged
+four-section form, and the runtime normalizes it to the same defaults, so
+revision 12 to 15 recognizers remain compatible with this runtime. Regenerate
+with revision 16 to execute authored `catch`/`finally` clauses; earlier
+revisions silently dropped them.
+
+Revision 16 also makes every authored target-code section accountable
+(issue #355): `semantics.json` gains a per-grammar `sections` array covering
+grammar-level and rule-level named actions plus `catch`/`finally` clauses,
+each with a deterministic disposition (`embedded`, `hooked`, or
+`unsupported`). Unsupported sections warn by default and fail generation under
+`--require-full-semantics` with a source-positioned diagnostic. Embedded
+generation now also emits `@header` bodies at the top of the generated module
+(before generated imports) and `@definitions` bodies at module scope (after
+the `@members` module items), translated with the same token-alias machinery
+as `@members`.
+
+Revision 15 generated recognizers embed their
 static data tables — the ahead-of-time compiled lexer DFA, the packed parser
 ATN, and the serialized lexer ATN inside `GrammarMetadata` — as versioned
 encoded blobs: LEB128 varints (zigzag-mapped for signed values) armored as
@@ -32,7 +57,7 @@ Revision 12 to 14 generated recognizers remain compatible because the runtime
 still implements their source APIs — `GrammarMetadata::new` with integer-array
 ATN data, `CompiledLexerDfa::from_serialized`, and `ParserAtn::from_static` —
 and reads packed parser ATN formats 1 through 3. Regenerate them with revision
-15 to emit the compact encoded representation.
+15 or later to emit the compact encoded representation.
 
 Revision 14 generated parsers embed packed parser
 ATN format 3 with validated tail-call markers on rule transitions. Prediction

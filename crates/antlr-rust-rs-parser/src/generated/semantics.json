@@ -7,7 +7,8 @@
     {
       "kind": "lexer",
       "name": "RustLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -301,7 +302,8 @@
           "disposition": "synthetic",
           "template": null
         }
-      ]
+      ],
+      "sections": []
     }
   ]
 }

@@ -162,6 +162,10 @@ pub(crate) struct EmbeddedStepRender<'a> {
     pub(crate) rule_has_attrs: &'a [bool],
     pub(crate) init_entry: &'a BTreeMap<usize, String>,
     pub(crate) after: &'a BTreeMap<usize, String>,
+    /// rule -> (binding name, translated authored `catch` handler body).
+    pub(crate) catch_clauses: &'a BTreeMap<usize, (String, String)>,
+    /// rule -> translated authored `finally` body.
+    pub(crate) finally_bodies: &'a BTreeMap<usize, String>,
     pub(crate) call_args: &'a BTreeMap<usize, String>,
     pub(crate) rule_arg0: &'a [Option<String>],
 }
@@ -217,10 +221,7 @@ impl<'a> DecisionRoutingRender<'a> {
     /// LOOK(1) arms (plain mode only; embedded mode renders its Java-parity
     /// switch through [`EmbeddedStepRender`]). Both are pre-restricted to
     /// sync-no-op lookahead and render through the same dispatch shape.
-    pub(crate) fn static_dispatch_table(
-        self,
-        decision: usize,
-    ) -> Option<&'a FixedLookaheadTable> {
+    pub(crate) fn static_dispatch_table(self, decision: usize) -> Option<&'a FixedLookaheadTable> {
         self.fixed_lookahead_tables
             .and_then(|tables| tables.get(&decision))
             .or_else(|| {
@@ -711,11 +712,7 @@ pub(crate) fn parser_rule_callers_reaching(
         return graph_nodes_reaching(&graph, target_rules);
     }
     let atn = data.parser_atn();
-    atn_rule_callers_reaching(
-        atn,
-        target_rules,
-        data.rule_names.len(),
-    )
+    atn_rule_callers_reaching(atn, target_rules, data.rule_names.len())
 }
 
 pub(crate) fn atn_rule_callers_reaching(

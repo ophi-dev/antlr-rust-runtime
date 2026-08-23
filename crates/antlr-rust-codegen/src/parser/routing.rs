@@ -450,7 +450,9 @@ pub(crate) fn render_embedded_init_entry(
 }
 
 /// Runs the embedded `@after` body (committed path only — ANTLR's caught-error
-/// path skips `@after`) and seals the attrs snapshot before `finish_rule`.
+/// path skips `@after`), then the authored `finally` body (every completed
+/// path, matching ANTLR's try/finally ordering), and seals the attrs snapshot
+/// before `finish_rule`.
 pub(crate) fn render_embedded_after_and_seal(
     out: &mut String,
     rule_index: usize,
@@ -466,6 +468,9 @@ pub(crate) fn render_embedded_after_and_seal(
         if let Some(after) = embedded.after.get(&rule_index) {
             writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
         }
+    }
+    if let Some(finally_body) = embedded.finally_bodies.get(&rule_index) {
+        writeln!(out, "{pad}{finally_body}").expect("writing to a string cannot fail");
     }
     if embedded
         .rule_has_attrs

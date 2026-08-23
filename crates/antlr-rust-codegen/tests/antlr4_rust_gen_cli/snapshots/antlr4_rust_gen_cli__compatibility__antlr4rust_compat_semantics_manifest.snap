@@ -11,7 +11,8 @@ expression: manifest
     {
       "kind": "lexer",
       "name": "CCompatLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -89,12 +90,14 @@ expression: manifest
           "disposition": "translated",
           "template": "Embedded"
         }
-      ]
+      ],
+      "sections": []
     },
     {
       "kind": "lexer",
       "name": "JavaCompatLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -232,12 +235,27 @@ expression: manifest
           "disposition": "translated",
           "template": "Embedded"
         }
+      ],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "init",
+          "scope": null,
+          "rule": "liveAttributes",
+          "rule_index": 6,
+          "source": "JavaCompat.g4",
+          "line": 70,
+          "column": 0,
+          "body": "$value = 1;",
+          "disposition": "embedded"
+        }
       ]
     },
     {
       "kind": "lexer",
       "name": "AliasOnlyLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -255,12 +273,14 @@ expression: manifest
           "disposition": "translated",
           "template": "Embedded"
         }
-      ]
+      ],
+      "sections": []
     },
     {
       "kind": "lexer",
       "name": "AliasCollisionLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -289,6 +309,20 @@ expression: manifest
           "body": "AliasCollisionParser_CROSS == CROSS",
           "disposition": "translated",
           "template": "Embedded"
+        }
+      ],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "members",
+          "scope": "parser",
+          "rule": null,
+          "rule_index": null,
+          "source": "AliasCollision.g4",
+          "line": 4,
+          "column": 0,
+          "body": "marker: i32 = AliasCollisionParser_FIELD_INIT; field_type: [u8; AliasCollisionParser_FIELD_TYPE ...",
+          "disposition": "embedded"
         }
       ]
     }

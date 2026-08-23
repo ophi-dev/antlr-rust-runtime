@@ -1218,6 +1218,8 @@ fn embedded_rules_never_use_atn_preferred_fallback() {
     let rule_has_attrs = vec![false; rules.len()];
     let init_entry = BTreeMap::new();
     let after = BTreeMap::new();
+    let catch_clauses = BTreeMap::new();
+    let finally_bodies = BTreeMap::new();
     let call_args = BTreeMap::new();
     let rule_arg0 = vec![None; rules.len()];
 
@@ -1236,6 +1238,8 @@ fn embedded_rules_never_use_atn_preferred_fallback() {
             rule_has_attrs: &rule_has_attrs,
             init_entry: &init_entry,
             after: &after,
+            catch_clauses: &catch_clauses,
+            finally_bodies: &finally_bodies,
             call_args: &call_args,
             rule_arg0: &rule_arg0,
         }),
@@ -1987,7 +1991,7 @@ fn antlr4rust_compat_accessors_reserve_legacy_method_names() {
                 ..embedded::RuleModel::default()
             },
         ],
-        parser_members: embedded::MembersModel::default(),
+        ..embedded::EmbeddedModel::default()
     };
     let mut child_cardinalities = BTreeMap::from([
         (
@@ -5839,7 +5843,7 @@ fn semantics_manifest_renders_coordinates_and_policy() {
     let manifest = render_semantics_manifest(
         SemUnknownPolicy::AssumeTrue,
         &[],
-        &[("parser", "SParser".to_owned(), entries)],
+        &[("parser", "SParser".to_owned(), entries, Vec::new())],
     );
 
     insta::assert_snapshot!("semantics_manifest_with_untranslated_predicate", manifest);
@@ -5909,10 +5913,11 @@ fn semantics_manifest_renders_empty_inventory() {
     let manifest = render_semantics_manifest(
         SemUnknownPolicy::AssumeTrue,
         &[],
-        &[("parser", "SParser".to_owned(), Vec::new())],
+        &[("parser", "SParser".to_owned(), Vec::new(), Vec::new())],
     );
 
     assert!(manifest.contains("\"coordinates\": []"));
+    assert!(manifest.contains("\"sections\": []"));
 }
 
 #[test]

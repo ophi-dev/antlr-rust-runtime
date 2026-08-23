@@ -30,6 +30,15 @@ pub(crate) struct ParserSurfaceBindings {
     pub(crate) impl_items: String,
     /// `@members` structs/impls and generated support types.
     pub(crate) module_items: String,
+    /// `@header` items for the top of the module, before generated imports.
+    pub(crate) header_items: String,
+    /// `@definitions` items for module scope, after the `@members` module
+    /// items.
+    pub(crate) definitions_items: String,
+    /// rule -> (binding name, translated authored `catch` handler body).
+    pub(crate) catch_clauses: BTreeMap<usize, (String, String)>,
+    /// rule -> translated authored `finally` body.
+    pub(crate) finally_bodies: BTreeMap<usize, String>,
 }
 
 /// Mode-selected parser surface stage artifact.

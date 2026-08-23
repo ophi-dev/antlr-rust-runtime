@@ -40,11 +40,9 @@ pub(crate) mod prelude {
     };
     pub(crate) use crate::grammar::provenance::{Origin, ProvenanceIndex};
     pub(crate) use crate::grammar::source::SourceSet;
-    #[cfg(test)]
-    pub(crate) use crate::rust_output::is_rust_keyword;
     pub(crate) use crate::rust_output::{
-        module_name, replace_all, rust_encoded_blob_literal, rust_function_name, rust_identifier,
-        rust_string, rust_type_name, sanitize_identifier, split_identifier_words,
+        is_rust_keyword, module_name, replace_all, rust_encoded_blob_literal, rust_function_name,
+        rust_identifier, rust_string, rust_type_name, sanitize_identifier, split_identifier_words,
     };
 }
 

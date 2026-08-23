@@ -170,7 +170,21 @@ Using the same package release for `antlr4-rust-gen` and
 `antlr-rust-runtime` remains the recommended workflow, but matching the
 generated-code API is the compile-time requirement.
 
-The bundled generator currently emits revision 15. Generated recognizers now
+The bundled generator currently emits revision 16. Rules with an authored
+`catch [...]` or `finally { ... }` clause now expand through two additional
+generated-rule lifecycle sections: an `exception` slot that either keeps the
+default report-and-recover handler or replaces it with the authored handler
+(bound to the recognition error, matching ANTLR's generated catch
+replacement), and a `propagate` slot that still runs the authored `finally`
+body when a fatal error abandons the generated attempt. Rules without
+exception clauses emit the unchanged four-section form. Alongside the
+lifecycle change, every authored target-code section (named actions and
+exception clauses) now receives a deterministic disposition in the
+`semantics.json` `sections` rows, `--require-full-semantics` rejects
+unsupported sections, and embedded generation emits `@header` bodies at the
+top of the generated module and `@definitions` bodies at module scope.
+
+Revision 15 generated recognizers
 embed their static data tables — the ahead-of-time compiled lexer DFA, the
 packed parser ATN, and the serialized lexer ATN inside `GrammarMetadata` — as
 versioned encoded blobs defined by the runtime's `encoded` module: LEB128
@@ -192,11 +206,13 @@ also omits the same redundant frames. SLL accuracy is preserved by default, and
 the reduced-accuracy parser mode is available only through an explicit
 simulator constructor.
 
-Revision 12 to 14 generated recognizers remain accepted because the runtime
-still provides their source API — integer-array `GrammarMetadata` ATN data,
+Revision 12 to 15 generated recognizers remain accepted because the runtime
+still provides their source API — the four-section generated-rule form,
+integer-array `GrammarMetadata` ATN data,
 `CompiledLexerDfa::from_serialized`, and `ParserAtn::from_static` — and reads
-packed parser ATN formats 1 through 3. Regenerate them with revision 15 to
-emit the compact encoded representation.
+packed parser ATN formats 1 through 3. Regenerate them with revision 16 to
+execute authored `catch`/`finally` clauses and emit the compact encoded
+representation.
 
 Revision 13 moved the iterative generated listener tree-walk engine into
 `antlr4_runtime::generated::walk_generated`. Generated parsers retain their
@@ -695,6 +711,37 @@ antlr4-rust-gen L.g4 \
 Acknowledged options have the `hooked` disposition. Unacknowledged target
 options have the `unsupported` disposition and make
 `--require-full-semantics` fail.
+
+The manifest also inventories every source-owned target-code *section* under
+each grammar's `sections` array: grammar-level named actions (`@header`,
+`@definitions`, `@members`, scoped variants), rule-level named actions
+(`@init`, `@after`), and rule exception clauses (`catch [...] { ... }`,
+`finally { ... }`). Sections have no ATN coordinate, so these rows are what
+makes them auditable. Each row carries the section kind, scope, owning rule,
+source position, body, and a disposition: `embedded` (the body is spliced
+into generated Rust), `hooked` (`@members` state owned by `[[member]]`
+declarations in `--sem-patterns`), or `unsupported`. Unsupported sections
+warn on every run and fail generation under `--require-full-semantics` with a
+source-positioned diagnostic.
+
+Under `--actions embedded`, supported sections execute:
+
+- `@header` bodies are emitted once at the top of the generated module,
+  before the generated imports; `@definitions` bodies are emitted once at
+  module scope after the `@members` module items. Both are translated with
+  the same token-alias machinery as `@members`. In a combined grammar the
+  unscoped sections belong to the parser module; `@lexer::`-scoped sections
+  are currently unsupported.
+- A single `catch [name] { ... }` clause per rule replaces the default
+  report-and-recover handler, with the recognition error bound to `name`
+  (a Java-style `catch [Type name]` argument binds the last identifier). The
+  rule then completes normally, like ANTLR's generated catch replacement.
+  Multiple catch clauses are unsupported.
+- `finally { ... }` runs exactly once on every completed path — after
+  `@after` on success, after default recovery or an authored catch handler,
+  and before a fatal propagated error abandons the rule — and never during
+  speculative adaptive-retry unwinds, whose re-entry runs the rule from the
+  top. `@after` remains success-only.
 
 Unknown coordinates are governed by `--sem-unknown`:
 

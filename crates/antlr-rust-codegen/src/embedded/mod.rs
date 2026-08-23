@@ -48,7 +48,7 @@ mod tests {
     fn model(rules: Vec<RuleModel>) -> EmbeddedModel {
         EmbeddedModel {
             rules,
-            parser_members: MembersModel::default(),
+            ..EmbeddedModel::default()
         }
     }
 

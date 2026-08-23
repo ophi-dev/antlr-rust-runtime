@@ -28,6 +28,8 @@ pub(crate) struct ParserRenderModel {
     pub(crate) typed_hook_adapter: String,
     pub(crate) embedded_attrs_structs: String,
     pub(crate) embedded_module_items: String,
+    pub(crate) embedded_header_items: String,
+    pub(crate) embedded_definitions_items: String,
     pub(crate) parser_atn_data: String,
     pub(crate) parse_convenience: String,
     pub(crate) parser_rustdoc: String,
@@ -306,6 +308,8 @@ fn embedded_step_render<'a>(
         rule_has_attrs: &embedded.rule_has_attrs,
         init_entry: &embedded.init_entry,
         after: &embedded.after,
+        catch_clauses: &embedded.catch_clauses,
+        finally_bodies: &embedded.finally_bodies,
         call_args: &embedded.call_args,
         rule_arg0: &embedded.rule_arg0,
     }
@@ -313,29 +317,29 @@ fn embedded_step_render<'a>(
 
 /// The module/struct/impl text [`ParserSurfaceBindings`] contributes to the
 /// rendered parser, empty in template mode.
-fn embedded_render_slots(
-    embedded_data: Option<&ParserSurfaceBindings>,
-) -> (String, String, String, String, String) {
-    embedded_data.map_or_else(
-        || {
-            (
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            )
-        },
-        |embedded| {
-            (
-                embedded.attrs_structs.clone(),
-                embedded.module_items.clone(),
-                embedded.struct_fields.clone(),
-                embedded.field_inits.clone(),
-                embedded.impl_items.clone(),
-            )
-        },
-    )
+#[derive(Default)]
+struct EmbeddedRenderSlots {
+    attrs_structs: String,
+    module_items: String,
+    header_items: String,
+    definitions_items: String,
+    struct_fields: String,
+    field_inits: String,
+    impl_items: String,
+}
+
+fn embedded_render_slots(embedded_data: Option<&ParserSurfaceBindings>) -> EmbeddedRenderSlots {
+    embedded_data.map_or_else(EmbeddedRenderSlots::default, |embedded| {
+        EmbeddedRenderSlots {
+            attrs_structs: embedded.attrs_structs.clone(),
+            module_items: embedded.module_items.clone(),
+            header_items: embedded.header_items.clone(),
+            definitions_items: embedded.definitions_items.clone(),
+            struct_fields: embedded.struct_fields.clone(),
+            field_inits: embedded.field_inits.clone(),
+            impl_items: embedded.impl_items.clone(),
+        }
+    })
 }
 
 /// Step-render view over the opt-in `--fixed-lookahead` routing. Embedded

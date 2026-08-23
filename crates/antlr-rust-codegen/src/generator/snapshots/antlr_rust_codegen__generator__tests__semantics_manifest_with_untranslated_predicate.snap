@@ -24,7 +24,8 @@ expression: manifest
           "disposition": "assume-true",
           "template": null
         }
-      ]
+      ],
+      "sections": []
     }
   ]
 }

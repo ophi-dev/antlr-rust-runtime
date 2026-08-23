@@ -222,6 +222,13 @@ pub(crate) struct RuleModel {
     pub(crate) arg_names: Vec<String>,
     pub(crate) init_body: Option<String>,
     pub(crate) after_body: Option<String>,
+    /// Supported authored `catch [...] { ... }` clause: the Rust binding name
+    /// derived from the argument, plus the handler body. `None` when the rule
+    /// has no catch clause or the clause is unsupported (the section
+    /// inventory reports the latter).
+    pub(crate) catch_clause: Option<(String, String)>,
+    /// Authored `finally { ... }` body (non-empty).
+    pub(crate) finally_body: Option<String>,
     pub(crate) alts: Vec<AltModel>,
 }
 
@@ -289,6 +296,12 @@ pub(crate) struct EmbeddedModel {
     /// Parser rules keyed by parser rule index (grammar order).
     pub(crate) rules: Vec<RuleModel>,
     pub(crate) parser_members: MembersModel,
+    /// `@header` bodies emitted verbatim (after token-alias translation) at
+    /// the top of the generated module, before generated imports.
+    pub(crate) header_items: Vec<MemberItem>,
+    /// `@definitions` bodies emitted at module scope after the embedded
+    /// `@members` module items.
+    pub(crate) definitions_items: Vec<MemberItem>,
 }
 
 /// Where an action body executes, which changes how `$text` translates.
