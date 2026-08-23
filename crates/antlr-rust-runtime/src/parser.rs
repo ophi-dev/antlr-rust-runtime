@@ -391,11 +391,14 @@ macro_rules! __antlr4_rust_generated_rule {
         } else {
             $error
         };
-        {
+        // The handler runs in its own closure so an authored `return` exits
+        // only the handler — the finally/seal slot and rule finalization
+        // below still run, matching Java's try/catch/finally ordering.
+        (|| {
             let $catch_bind = __caught;
             let _ = &$catch_bind;
             $($catch_body)*
-        }
+        })();
         $($recovery)*
         let __tree = $parser.base.$finish($ctx, $consumed_eof);
         Ok(__tree)

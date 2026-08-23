@@ -81,6 +81,10 @@ pub(crate) fn generate(
     let mut grammar_options = Vec::new();
     let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>, Vec<SectionEntry>)> =
         Vec::new();
+    // Sections are enforced once, after the loop, so one strict run reports
+    // every unsupported section; a Rust-support bundle forces the strict gate
+    // the same way it forces --require-full-semantics.
+    let mut require_full_sections = args.require_full_semantics;
     let mut decision_report_grammars: Vec<DecisionReportGrammar> = Vec::new();
     let mut rendered_modules = BTreeMap::<PathBuf, String>::new();
     let mut emitted_lexers = BTreeSet::new();
@@ -141,9 +145,7 @@ pub(crate) fn generate(
                 report(warning).map_err(Error::generation)?;
             }
             warnings.extend(section_warnings);
-            if support_enabled {
-                enforce_require_full_sections(true, &sections)?;
-            }
+            require_full_sections |= support_enabled;
             let grammar_name = compiled.semantic.recognizer.name.clone();
             let render_model = LexerRenderModel::new(
                 &grammar_name,
@@ -205,9 +207,7 @@ pub(crate) fn generate(
                 report(warning).map_err(Error::generation)?;
             }
             warnings.extend(section_warnings);
-            if support_enabled {
-                enforce_require_full_sections(true, &sections)?;
-            }
+            require_full_sections |= support_enabled;
             let grammar_name = compiled.semantic.recognizer.name.clone();
             let (mut module, decision_report_rows) = render_parser_with_decision_report(
                 &grammar_name,
@@ -252,7 +252,7 @@ pub(crate) fn generate(
         .iter()
         .flat_map(|(_, _, _, sections)| sections.iter().cloned())
         .collect::<Vec<_>>();
-    enforce_require_full_sections(args.require_full_semantics, &all_sections)?;
+    enforce_require_full_sections(require_full_sections, &all_sections)?;
     let manifest_policy = if prepared_support.all_roots_supported() {
         SemUnknownPolicy::Error
     } else {

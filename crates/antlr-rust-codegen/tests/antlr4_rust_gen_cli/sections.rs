@@ -57,6 +57,18 @@ catch [RecognitionException e] {
     crate::record_event("java-style-catch");
 }
 
+caughtWithFinally
+    : A B EOF
+    ;
+catch [error] {
+    let _ = &error;
+    crate::record_event("catch-before-finally");
+    return;
+}
+finally {
+    crate::record_event("finally-after-catch");
+}
+
 A: 'a';
 B: 'b';
 WS: [ \t\r\n]+ -> skip;
@@ -166,6 +178,31 @@ mod section_lifecycle_tests {
         parser.java_style().expect("caught rule completes normally");
         assert_eq!(parser.number_of_syntax_errors(), 0);
         assert_eq!(take_events(), ["java-style-catch"]);
+    }
+
+    #[test]
+    fn finally_runs_after_catch_even_when_the_handler_returns_early() {
+        // Java runs `finally` after the catch clause, including when the
+        // catch body returns; an authored `return` exits only the handler.
+        let mut parser = parser!("aa");
+        parser
+            .caught_with_finally()
+            .expect("caught rule completes normally");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert_eq!(
+            take_events(),
+            ["catch-before-finally", "finally-after-catch"]
+        );
+    }
+
+    #[test]
+    fn finally_still_runs_on_success_for_catch_rules() {
+        let mut parser = parser!("ab");
+        parser
+            .caught_with_finally()
+            .expect("clean input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert_eq!(take_events(), ["finally-after-catch"]);
     }
 }
 "####;
@@ -371,6 +408,11 @@ multi: A EOF;
 catch [first] { let _ = &first; }
 catch [second] { let _ = &second; }
 
+narrowed: A EOF;
+catch [FailedPredicateException fpe] {
+    let _ = &fpe;
+}
+
 A: 'a';
 "#,
     )
@@ -446,7 +488,10 @@ fn require_full_semantics_rejects_unsupported_sections() {
         "catch argument must be a Rust identifier",
         "unsupported target-code section: rule multi(1) catch[...] at ",
         "multiple catch clauses are not supported",
-        "--require-full-semantics: 5 target-code section(s) would be silently dropped",
+        // A narrowed exception type would over-catch: the generated handler
+        // receives every recognition error, not Java's type-matched subset.
+        "unsupported target-code section: rule narrowed(2) catch[...] at ",
+        "--require-full-semantics: 6 target-code section(s) would be silently dropped",
     ] {
         assert!(
             stderr.contains(expected),

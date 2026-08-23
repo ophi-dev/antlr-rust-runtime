@@ -78,6 +78,30 @@ expression: manifest
           "column": 0,
           "body": "let _ = &e; crate::record_event(\"java-style-catch\");",
           "disposition": "embedded"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "caughtWithFinally",
+          "rule_index": 3,
+          "source": "SectionLifecycle.g4",
+          "line": 31,
+          "column": 0,
+          "body": "let _ = &error; crate::record_event(\"catch-before-finally\"); return;",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "finally",
+          "name": null,
+          "scope": null,
+          "rule": "caughtWithFinally",
+          "rule_index": 3,
+          "source": "SectionLifecycle.g4",
+          "line": 36,
+          "column": 0,
+          "body": "crate::record_event(\"finally-after-catch\");",
+          "disposition": "embedded"
         }
       ]
     }

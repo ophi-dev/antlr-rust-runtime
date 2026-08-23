@@ -719,10 +719,11 @@ each grammar's `sections` array: grammar-level named actions (`@header`,
 `finally { ... }`). Sections have no ATN coordinate, so these rows are what
 makes them auditable. Each row carries the section kind, scope, owning rule,
 source position, body, and a disposition: `embedded` (the body is spliced
-into generated Rust), `hooked` (`@members` state owned by `[[member]]`
-declarations in `--sem-patterns`), or `unsupported`. Unsupported sections
-warn on every run and fail generation under `--require-full-semantics` with a
-source-positioned diagnostic.
+into generated Rust), `translated` (the section's behavior lowers into
+generated metadata without splicing the body, e.g. `@members` state owned by
+`[[member]]` declarations in `--sem-patterns`), or `unsupported`. Unsupported
+sections warn on every run and fail generation under
+`--require-full-semantics` with a source-positioned diagnostic.
 
 Under `--actions embedded`, supported sections execute:
 
@@ -734,9 +735,10 @@ Under `--actions embedded`, supported sections execute:
   are currently unsupported.
 - A single `catch [name] { ... }` clause per rule replaces the default
   report-and-recover handler, with the recognition error bound to `name`
-  (a Java-style `catch [Type name]` argument binds the last identifier). The
-  rule then completes normally, like ANTLR's generated catch replacement.
-  Multiple catch clauses are unsupported.
+  (the Java catch-all form `catch [RecognitionException e]` binds `e`;
+  narrower exception types are rejected because the handler receives every
+  recognition error). The rule then completes normally, like ANTLR's
+  generated catch replacement. Multiple catch clauses are unsupported.
 - `finally { ... }` runs exactly once on every completed path — after
   `@after` on success, after default recovery or an authored catch handler,
   and before a fatal propagated error abandons the rule — and never during

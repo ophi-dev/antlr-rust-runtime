@@ -103,6 +103,18 @@ expression: manifest
           "column": 0,
           "body": "let _ = &second;",
           "disposition": "unsupported"
+        },
+        {
+          "kind": "catch",
+          "name": null,
+          "scope": null,
+          "rule": "narrowed",
+          "rule_index": 2,
+          "source": "SectionAudit.g4",
+          "line": 28,
+          "column": 0,
+          "body": "let _ = &fpe;",
+          "disposition": "unsupported"
         }
       ]
     }

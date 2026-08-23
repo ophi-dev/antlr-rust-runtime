@@ -179,9 +179,11 @@ pub(crate) struct SectionInventoryOptions<'a> {
 
 /// Extracts the Rust binding name from an authored `catch [...]` argument.
 ///
-/// Accepts a bare identifier (`catch [error]`) or a Java-style
-/// `Type name` pair (`catch [RecognitionException re]`), binding the last
-/// identifier-shaped token. Anything else is unsupported.
+/// Accepts a bare identifier (`catch [error]`) or the Java catch-all form
+/// `catch [RecognitionException e]`, binding the last identifier. Narrower
+/// exception types (e.g. `FailedPredicateException`) are rejected: the
+/// generated handler receives every recognition error, so accepting a
+/// narrowed clause would run it for errors Java's type match skips.
 pub(crate) fn exception_catch_binding(argument: &str) -> Option<String> {
     let mut tokens = argument.split_whitespace().rev();
     let binding = tokens.next()?;
@@ -190,9 +192,14 @@ pub(crate) fn exception_catch_binding(argument: &str) -> Option<String> {
         .next()
         .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
         && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric());
-    // At most one leading type token; longer argument lists are not a
-    // binding form this backend understands.
-    (valid && tokens.count() <= 1 && !is_rust_keyword(binding)).then(|| binding.to_owned())
+    // An optional leading type token must be the catch-all recognition-error
+    // base type; the generated handler cannot narrow by exception type.
+    let type_token = tokens.next();
+    (valid
+        && type_token.is_none_or(|token| token == "RecognitionException")
+        && tokens.next().is_none()
+        && !is_rust_keyword(binding))
+    .then(|| binding.to_owned())
 }
 
 /// Inventories every source-owned target-code section visible to one
@@ -217,18 +224,23 @@ pub(crate) fn collect_recognizer_sections(
     };
     let mut entries = Vec::new();
     for action in &semantic.unit.actions {
-        let owned = match action.scope.as_deref() {
-            Some(scope) if scope == recognizer_scope => true,
+        let (owned, known_scope) = match action.scope.as_deref() {
+            Some(scope) if scope == recognizer_scope => (true, true),
             // The other recognizer of this grammar owns the section.
-            Some("lexer" | "parser") => false,
-            // Unknown scopes follow the unit's default scope, like unscoped
-            // sections.
-            Some(_) | None => options.owns_unscoped_actions,
+            Some("lexer" | "parser") => (false, true),
+            None => (options.owns_unscoped_actions, true),
+            // Unknown scopes follow the unit's default scope for ownership,
+            // but no backend consumes them, so they can never be embedded.
+            Some(_) => (options.owns_unscoped_actions, false),
         };
         if !owned {
             continue;
         }
-        let (disposition, note) = grammar_action_disposition(action, recognizer_scope, options);
+        let (disposition, note) = if known_scope || action.body.trim().is_empty() {
+            grammar_action_disposition(action, recognizer_scope, options)
+        } else {
+            (SectionDisposition::Unsupported, Some(UNKNOWN_SCOPE_NOTE))
+        };
         entries.push(section_entry_for_action(
             data,
             action,
@@ -281,7 +293,8 @@ pub(crate) fn collect_recognizer_sections(
             ));
         }
         if let Some(action) = &rule.finally_action {
-            let disposition = if options.embedded {
+            // An empty `finally` has no target code to lose in either mode.
+            let disposition = if options.embedded || action.body.trim().is_empty() {
                 SectionDisposition::Embedded
             } else {
                 SectionDisposition::Unsupported
@@ -327,7 +340,9 @@ const RULE_SECTION_NOTE: &str = "unknown rule action; embedded Rust generation i
 const MULTIPLE_CATCH_NOTE: &str = "multiple catch clauses are not supported; merge the \
      handlers into one clause and match on the bound error value";
 const CATCH_ARGUMENT_NOTE: &str = "catch argument must be a Rust identifier (optionally \
-     preceded by one type token); the handler receives the recognition error under that name";
+     preceded by the catch-all RecognitionException type); the handler receives every \
+     recognition error under that name and cannot narrow by exception type";
+const UNKNOWN_SCOPE_NOTE: &str = "unknown section scope; supported scopes are lexer and parser";
 
 fn grammar_action_disposition(
     action: &grammar::model::NamedAction,
@@ -365,10 +380,13 @@ fn rule_action_disposition(
     embedded: bool,
     seen_names: &mut BTreeSet<String>,
 ) -> (SectionDisposition, Option<&'static str>) {
+    // Even an empty occurrence reserves the name: `structural_embedded_model`
+    // executes only the *first* `@init` / `@after`, so a later non-empty
+    // duplicate after an empty first one is still dropped.
+    let first = seen_names.insert(action.name.clone());
     if action.body.trim().is_empty() {
         return (SectionDisposition::Embedded, None);
     }
-    let first = seen_names.insert(action.name.clone());
     if !embedded {
         return (SectionDisposition::Unsupported, Some(TEMPLATES_MODE_NOTE));
     }

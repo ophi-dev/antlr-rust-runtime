@@ -515,8 +515,10 @@ pub(crate) fn build_embedded_parser_data(
                     aliases.values.get(name).map(|value| (name.clone(), *value))
                 }),
             );
-            let item = post_process_embedded(&item.body, &translated.source, type_name);
-            let _ = writeln!(out_slot, "{item}\n");
+            // No `post_process_embedded`: its `TParser::` -> `Self::` rewrite
+            // targets bodies inside the generated impl, and `Self` does not
+            // exist at module scope where these items are emitted.
+            let _ = writeln!(out_slot, "{}\n", translated.source);
         }
     }
 
@@ -622,33 +624,44 @@ fn embedded_rule_action_translation_error(
     rule_name: &str,
     error: &io::Error,
 ) -> io::Error {
-    semantic_rule
-        .and_then(|semantic_rule| {
-            semantic_rule
-                .actions
-                .iter()
-                .find(|action| action.name == action_name)
-        })
-        .map_or_else(
-            || {
-                io::Error::new(
-                    error.kind(),
-                    format!(
-                        "cannot lower embedded @{action_name} body for parser rule {rule_name} \
-                         ({rule_index}): {error}"
-                    ),
-                )
-            },
-            |action| {
-                embedded_named_body_translation_error(
-                    data,
-                    &action.body_span,
-                    &format!("parser @{action_name}"),
-                    rule_index,
-                    error,
-                )
-            },
-        )
+    let label = match action_name {
+        "catch" => "parser catch clause".to_owned(),
+        "finally" => "parser finally clause".to_owned(),
+        other => format!("parser @{other}"),
+    };
+    embedded_rule_section_span(semantic_rule, action_name).map_or_else(
+        || {
+            io::Error::new(
+                error.kind(),
+                format!(
+                    "cannot lower embedded {label} body for parser rule {rule_name} \
+                     ({rule_index}): {error}"
+                ),
+            )
+        },
+        |span| embedded_named_body_translation_error(data, span, &label, rule_index, error),
+    )
+}
+
+/// The authored source span of one rule-header section: a named action
+/// (`@init` / `@after`), the rule's `catch` clause, or its `finally` clause.
+fn embedded_rule_section_span<'r>(
+    semantic_rule: Option<&'r Rule>,
+    action_name: &str,
+) -> Option<&'r SourceSpan> {
+    let rule = semantic_rule?;
+    match action_name {
+        "catch" => rule.catches.first().map(|handler| &handler.body_span),
+        "finally" => rule
+            .finally_action
+            .as_ref()
+            .map(|action| &action.body_span),
+        _ => rule
+            .actions
+            .iter()
+            .find(|action| action.name == action_name)
+            .map(|action| &action.body_span),
+    }
 }
 
 fn embedded_context_accessor_translation_error(
