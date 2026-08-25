@@ -75,7 +75,7 @@ jobs:
           cargo binstall -y flamegraph
           echo "-1" | sudo tee /proc/sys/kernel/perf_event_paranoid
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: "temurin"
           java-version: "25"
