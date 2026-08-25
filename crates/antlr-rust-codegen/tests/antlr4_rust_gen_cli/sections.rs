@@ -577,6 +577,65 @@ A: 'a';
     }
 }
 
+/// A section scoped to a recognizer this invocation never generates from the
+/// grammar (here: `@parser::members` in a standalone lexer grammar) cannot
+/// silently vanish — it is inventoried as unsupported by the recognizer that
+/// carries it.
+#[test]
+fn cross_scoped_sections_without_a_counterpart_are_unsupported() {
+    let temp = temporary_directory("section-no-counterpart");
+    let grammar = temp.path().join("SoloLexer.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &grammar,
+        "lexer grammar SoloLexer;\n\n@parser::members {\n    fn orphaned(&mut self) {}\n}\n\nA: 'a';\n",
+    )
+    .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let stderr = utf8(&output.stderr);
+    for expected in [
+        "warning: unsupported target-code section: @parser::members at ",
+        "scoped to a recognizer this invocation does not generate",
+    ] {
+        assert!(
+            stderr.contains(expected),
+            "missing {expected:?} in {stderr}"
+        );
+    }
+
+    let strict_out = temp.path().join("generated-strict");
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        strict_out.as_os_str(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "orphaned cross-scoped sections must fail strict generation"
+    );
+    assert!(
+        utf8(&output.stderr).contains("unsupported target-code section: @parser::members at "),
+        "stderr: {}",
+        utf8(&output.stderr)
+    );
+}
+
 /// Sections survive import resolution: an imported grammar's `@members` and a
 /// cloned rule's `finally` clause stay inventoried (and executed) in the
 /// importing recognizer, attributed to the imported source file.

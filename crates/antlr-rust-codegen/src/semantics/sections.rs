@@ -175,6 +175,12 @@ pub(crate) struct SectionInventoryOptions<'a> {
     /// lexer half of a split combined grammar, whose unscoped actions belong
     /// to the parser (ANTLR's default scope for combined grammars).
     pub(crate) owns_unscoped_actions: bool,
+    /// Whether sections explicitly scoped to the *other* recognizer are
+    /// collected by a counterpart generated from the same source unit. False
+    /// when no counterpart exists (or it comes from a different grammar
+    /// file), in which case those sections are inventoried here as
+    /// unsupported instead of silently vanishing.
+    pub(crate) counterpart_covers_scoped: bool,
 }
 
 /// Extracts the Rust binding name from an authored `catch [...]` argument.
@@ -187,11 +193,8 @@ pub(crate) struct SectionInventoryOptions<'a> {
 pub(crate) fn exception_catch_binding(argument: &str) -> Option<String> {
     let mut tokens = argument.split_whitespace().rev();
     let binding = tokens.next()?;
-    let mut chars = binding.chars();
-    let valid = chars
-        .next()
-        .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
-        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric());
+    let valid = binding != "_"
+        && crate::rust_output::rust_identifier_end(binding, 0) == Some(binding.len());
     // An optional leading type token must be the catch-all recognition-error
     // base type; the generated handler cannot narrow by exception type.
     let type_token = tokens.next();
@@ -224,22 +227,26 @@ pub(crate) fn collect_recognizer_sections(
     };
     let mut entries = Vec::new();
     for action in &semantic.unit.actions {
-        let (owned, known_scope) = match action.scope.as_deref() {
-            Some(scope) if scope == recognizer_scope => (true, true),
-            // The other recognizer of this grammar owns the section.
-            Some("lexer" | "parser") => (false, true),
-            None => (options.owns_unscoped_actions, true),
+        let empty = action.body.trim().is_empty();
+        let (owned, forced_note) = match action.scope.as_deref() {
+            Some(scope) if scope == recognizer_scope => (true, None),
+            // The other recognizer of this grammar owns the section — but
+            // only when this invocation generates that recognizer from the
+            // same source unit (a split combined grammar clones the actions
+            // into both halves). Otherwise nothing would ever consume it.
+            Some("lexer" | "parser") if options.counterpart_covers_scoped => (false, None),
+            Some("lexer" | "parser") => (true, Some(NO_COUNTERPART_NOTE)),
+            None => (options.owns_unscoped_actions, None),
             // Unknown scopes follow the unit's default scope for ownership,
             // but no backend consumes them, so they can never be embedded.
-            Some(_) => (options.owns_unscoped_actions, false),
+            Some(_) => (options.owns_unscoped_actions, Some(UNKNOWN_SCOPE_NOTE)),
         };
         if !owned {
             continue;
         }
-        let (disposition, note) = if known_scope || action.body.trim().is_empty() {
-            grammar_action_disposition(action, recognizer_scope, options)
-        } else {
-            (SectionDisposition::Unsupported, Some(UNKNOWN_SCOPE_NOTE))
+        let (disposition, note) = match forced_note {
+            Some(note) if !empty => (SectionDisposition::Unsupported, Some(note)),
+            _ => grammar_action_disposition(action, recognizer_scope, options),
         };
         entries.push(section_entry_for_action(
             data,
@@ -343,6 +350,8 @@ const CATCH_ARGUMENT_NOTE: &str = "catch argument must be a Rust identifier (opt
      preceded by the catch-all RecognitionException type); the handler receives every \
      recognition error under that name and cannot narrow by exception type";
 const UNKNOWN_SCOPE_NOTE: &str = "unknown section scope; supported scopes are lexer and parser";
+const NO_COUNTERPART_NOTE: &str = "scoped to a recognizer this invocation does not generate from \
+     this grammar; the section is never emitted";
 
 fn grammar_action_disposition(
     action: &grammar::model::NamedAction,

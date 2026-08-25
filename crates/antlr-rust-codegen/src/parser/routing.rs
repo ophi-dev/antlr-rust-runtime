@@ -466,7 +466,17 @@ pub(crate) fn render_embedded_after_and_seal(
     let pad = "    ".repeat(indent);
     if run_after {
         if let Some(after) = embedded.after.get(&rule_index) {
-            writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+            if embedded.finally_bodies.contains_key(&rule_index) {
+                // With an authored `finally` following, `@after` runs behind
+                // its own boundary so an early `return` in the body cannot
+                // skip the finally body, the attrs seal, or rule
+                // finalization (Java's try/finally ordering).
+                writeln!(out, "{pad}(|| {{").expect("writing to a string cannot fail");
+                writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+                writeln!(out, "{pad}}})();").expect("writing to a string cannot fail");
+            } else {
+                writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+            }
         }
     }
     if let Some(finally_body) = embedded.finally_bodies.get(&rule_index) {

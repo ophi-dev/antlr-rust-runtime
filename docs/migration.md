@@ -24,7 +24,7 @@ revisions silently dropped them.
 Revision 16 also makes every authored target-code section accountable
 (issue #355): `semantics.json` gains a per-grammar `sections` array covering
 grammar-level and rule-level named actions plus `catch`/`finally` clauses,
-each with a deterministic disposition (`embedded`, `hooked`, or
+each with a deterministic disposition (`embedded`, `translated`, or
 `unsupported`). Unsupported sections warn by default and fail generation under
 `--require-full-semantics` with a source-positioned diagnostic. Embedded
 generation now also emits `@header` bodies at the top of the generated module

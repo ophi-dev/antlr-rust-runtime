@@ -5909,6 +5909,28 @@ fn indexed_action_overrides_precede_portable_boolean_lowering() {
 }
 
 #[test]
+fn exception_catch_bindings_follow_rust_identifier_rules() {
+    use crate::semantics::exception_catch_binding;
+    assert_eq!(exception_catch_binding("error").as_deref(), Some("error"));
+    assert_eq!(exception_catch_binding(" error ").as_deref(), Some("error"));
+    // The Java catch-all form binds the identifier; narrower exception types
+    // would over-catch (the handler receives every recognition error).
+    assert_eq!(
+        exception_catch_binding("RecognitionException e").as_deref(),
+        Some("e")
+    );
+    assert_eq!(exception_catch_binding("FailedPredicateException e"), None);
+    // Rust identifiers are XID-based, not ASCII-only.
+    assert_eq!(exception_catch_binding("é").as_deref(), Some("é"));
+    // `_` is a wildcard pattern, not an identifier the macro can bind.
+    assert_eq!(exception_catch_binding("_"), None);
+    assert_eq!(exception_catch_binding("fn"), None);
+    assert_eq!(exception_catch_binding("a b c"), None);
+    assert_eq!(exception_catch_binding(""), None);
+    assert_eq!(exception_catch_binding("1x"), None);
+}
+
+#[test]
 fn semantics_manifest_renders_empty_inventory() {
     let manifest = render_semantics_manifest(
         SemUnknownPolicy::AssumeTrue,
