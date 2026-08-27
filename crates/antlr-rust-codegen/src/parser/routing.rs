@@ -482,7 +482,12 @@ pub(crate) fn render_embedded_after_and_seal(
         }
     }
     if let Some(finally_body) = embedded.finally_bodies.get(&rule_index) {
+        // Same boundary as the catch handler: an early `return` exits only
+        // the `finally` body (the seal and rule finalization still run), and
+        // a value-carrying exit is a compile error.
+        writeln!(out, "{pad}let () = (|| {{").expect("writing to a string cannot fail");
         writeln!(out, "{pad}{finally_body}").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}})();").expect("writing to a string cannot fail");
     }
     if embedded
         .rule_has_attrs

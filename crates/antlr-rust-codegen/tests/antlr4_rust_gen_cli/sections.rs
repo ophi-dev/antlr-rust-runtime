@@ -39,6 +39,7 @@ start
     ;
 finally {
     crate::record_event("finally");
+    return;
 }
 
 caught

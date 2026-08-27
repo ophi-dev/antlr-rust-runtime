@@ -52,7 +52,7 @@ expression: manifest
           "source": "SectionLifecycle.g4",
           "line": 8,
           "column": 0,
-          "body": "crate::record_event(\"finally\");",
+          "body": "crate::record_event(\"finally\"); return;",
           "disposition": "embedded"
         },
         {
@@ -62,7 +62,7 @@ expression: manifest
           "rule": "caught",
           "rule_index": 1,
           "source": "SectionLifecycle.g4",
-          "line": 15,
+          "line": 16,
           "column": 0,
           "body": "let _ = &error; crate::record_event(\"catch\");",
           "disposition": "embedded"
@@ -74,7 +74,7 @@ expression: manifest
           "rule": "rawIdent",
           "rule_index": 2,
           "source": "SectionLifecycle.g4",
-          "line": 23,
+          "line": 24,
           "column": 0,
           "body": "let _ = &r#type; crate::record_event(\"raw-identifier-catch\");",
           "disposition": "embedded"
@@ -86,7 +86,7 @@ expression: manifest
           "rule": "caughtWithFinally",
           "rule_index": 3,
           "source": "SectionLifecycle.g4",
-          "line": 31,
+          "line": 32,
           "column": 0,
           "body": "let _ = &error; crate::record_event(\"catch-before-finally\"); return;",
           "disposition": "embedded"
@@ -98,7 +98,7 @@ expression: manifest
           "rule": "caughtWithFinally",
           "rule_index": 3,
           "source": "SectionLifecycle.g4",
-          "line": 36,
+          "line": 37,
           "column": 0,
           "body": "crate::record_event(\"finally-after-catch\");",
           "disposition": "embedded"

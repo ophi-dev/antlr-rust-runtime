@@ -120,11 +120,16 @@ fn render_generated_rule_exception_sections(
     }
     // `finally` runs on the propagated-failure path too: the recovery/success
     // sections cover completed parses, and this slot covers the fatal unwind.
+    // The closure boundary keeps authored exits local to the body so the
+    // macro's abort/rollback/diagnostic steps always run.
     match finally_body {
         Some(finally_body) => {
             writeln!(out, "            propagate {{").expect("writing to a string cannot fail");
+            writeln!(out, "                let () = (|| {{")
+                .expect("writing to a string cannot fail");
             writeln!(out, "                {finally_body}")
                 .expect("writing to a string cannot fail");
+            writeln!(out, "                }})();").expect("writing to a string cannot fail");
             writeln!(out, "            }};").expect("writing to a string cannot fail");
         }
         None => {
