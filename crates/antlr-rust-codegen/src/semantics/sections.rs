@@ -185,24 +185,26 @@ pub(crate) struct SectionInventoryOptions<'a> {
 
 /// Extracts the Rust binding name from an authored `catch [...]` argument.
 ///
-/// Accepts a bare identifier (`catch [error]`) or the Java catch-all form
-/// `catch [RecognitionException e]`, binding the last identifier. Narrower
-/// exception types (e.g. `FailedPredicateException`) are rejected: the
-/// generated handler receives every recognition error, so accepting a
-/// narrowed clause would run it for errors Java's type match skips.
+/// The argument must be a single Rust identifier (raw identifiers included):
+/// the generated handler receives every recognition error under that name.
+/// Java-style typed clauses are rejected as unsupported — the handler cannot
+/// narrow by exception type, and this backend models no target-language type
+/// names.
 pub(crate) fn exception_catch_binding(argument: &str) -> Option<String> {
-    let mut tokens = argument.split_whitespace().rev();
-    let binding = tokens.next()?;
-    let valid = binding != "_"
-        && crate::rust_output::rust_identifier_end(binding, 0) == Some(binding.len());
-    // An optional leading type token must be the catch-all recognition-error
-    // base type; the generated handler cannot narrow by exception type.
-    let type_token = tokens.next();
-    (valid
-        && type_token.is_none_or(|token| token == "RecognitionException")
-        && tokens.next().is_none()
-        && !is_rust_keyword(binding))
-    .then(|| binding.to_owned())
+    let binding = argument.trim();
+    let (name, raw) = binding
+        .strip_prefix("r#")
+        .map_or((binding, false), |name| (name, true));
+    // `_` is a wildcard pattern, not an identifier the macro can bind.
+    let shaped = name != "_"
+        && crate::rust_output::rust_identifier_end(name, 0) == Some(name.len());
+    let bindable = if raw {
+        // `r#` cannot make path keywords bindable.
+        !matches!(name, "crate" | "self" | "super" | "Self")
+    } else {
+        !is_rust_keyword(name)
+    };
+    (shaped && bindable).then(|| binding.to_owned())
 }
 
 /// Inventories every source-owned target-code section visible to one
@@ -346,9 +348,9 @@ const RULE_SECTION_NOTE: &str = "unknown rule action; embedded Rust generation i
      @init and @after at rule scope";
 const MULTIPLE_CATCH_NOTE: &str = "multiple catch clauses are not supported; merge the \
      handlers into one clause and match on the bound error value";
-const CATCH_ARGUMENT_NOTE: &str = "catch argument must be a Rust identifier (optionally \
-     preceded by the catch-all RecognitionException type); the handler receives every \
-     recognition error under that name and cannot narrow by exception type";
+const CATCH_ARGUMENT_NOTE: &str = "catch argument must be a single Rust identifier (e.g. \
+     catch [error]); the handler receives every recognition error under that name, and typed \
+     clauses cannot narrow by exception type";
 const UNKNOWN_SCOPE_NOTE: &str = "unknown section scope; supported scopes are lexer and parser";
 const NO_COUNTERPART_NOTE: &str = "scoped to a recognizer this invocation does not generate from \
      this grammar; the section is never emitted";

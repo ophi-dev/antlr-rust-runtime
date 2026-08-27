@@ -49,12 +49,12 @@ catch [error] {
     crate::record_event("catch");
 }
 
-javaStyle
+rawIdent
     : A B EOF
     ;
-catch [RecognitionException e] {
-    let _ = &e;
-    crate::record_event("java-style-catch");
+catch [r#type] {
+    let _ = &r#type;
+    crate::record_event("raw-identifier-catch");
 }
 
 caughtWithFinally
@@ -101,8 +101,8 @@ WS: [ \t\r\n]+ -> skip;
         "missing authored catch handler:\n{parser}"
     );
     assert!(
-        parser.contains("exception (|e| {"),
-        "Java-style catch argument should bind its last identifier:\n{parser}"
+        parser.contains("exception (|r#type| {"),
+        "raw-identifier catch argument should bind verbatim:\n{parser}"
     );
 
     let test_source = r####"
@@ -173,11 +173,11 @@ mod section_lifecycle_tests {
     }
 
     #[test]
-    fn java_style_catch_argument_binds_last_identifier() {
+    fn raw_identifier_catch_argument_binds_verbatim() {
         let mut parser = parser!("aa");
-        parser.java_style().expect("caught rule completes normally");
+        parser.raw_ident().expect("caught rule completes normally");
         assert_eq!(parser.number_of_syntax_errors(), 0);
-        assert_eq!(take_events(), ["java-style-catch"]);
+        assert_eq!(take_events(), ["raw-identifier-catch"]);
     }
 
     #[test]
@@ -485,11 +485,11 @@ fn require_full_semantics_rejects_unsupported_sections() {
         "lexer-scoped sections are not implemented in embedded mode",
         "unsupported target-code section: @parser::tokenfactory at ",
         "unsupported target-code section: rule start(0) catch[...] at ",
-        "catch argument must be a Rust identifier",
+        "catch argument must be a single Rust identifier",
         "unsupported target-code section: rule multi(1) catch[...] at ",
         "multiple catch clauses are not supported",
-        // A narrowed exception type would over-catch: the generated handler
-        // receives every recognition error, not Java's type-matched subset.
+        // Typed clauses cannot narrow: the generated handler receives every
+        // recognition error, so they are rejected rather than mistranslated.
         "unsupported target-code section: rule narrowed(2) catch[...] at ",
         "--require-full-semantics: 6 target-code section(s) would be silently dropped",
     ] {

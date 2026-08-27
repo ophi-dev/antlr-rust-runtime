@@ -5913,15 +5913,15 @@ fn exception_catch_bindings_follow_rust_identifier_rules() {
     use crate::semantics::exception_catch_binding;
     assert_eq!(exception_catch_binding("error").as_deref(), Some("error"));
     assert_eq!(exception_catch_binding(" error ").as_deref(), Some("error"));
-    // The Java catch-all form binds the identifier; narrower exception types
-    // would over-catch (the handler receives every recognition error).
-    assert_eq!(
-        exception_catch_binding("RecognitionException e").as_deref(),
-        Some("e")
-    );
-    assert_eq!(exception_catch_binding("FailedPredicateException e"), None);
-    // Rust identifiers are XID-based, not ASCII-only.
+    // Rust identifiers are XID-based, not ASCII-only, and raw identifiers
+    // are bindable except for the path keywords `r#` cannot rescue.
     assert_eq!(exception_catch_binding("é").as_deref(), Some("é"));
+    assert_eq!(exception_catch_binding("r#type").as_deref(), Some("r#type"));
+    assert_eq!(exception_catch_binding("r#self"), None);
+    // Java-style typed clauses cannot narrow by exception type (the handler
+    // receives every recognition error), so no type token is recognized.
+    assert_eq!(exception_catch_binding("RecognitionException e"), None);
+    assert_eq!(exception_catch_binding("FailedPredicateException e"), None);
     // `_` is a wildcard pattern, not an identifier the macro can bind.
     assert_eq!(exception_catch_binding("_"), None);
     assert_eq!(exception_catch_binding("fn"), None);

@@ -11,7 +11,8 @@ The current generator emits revision 16. Rules with an authored `catch [...]`
 or `finally { ... }` clause now expand through two additional
 `__antlr4_rust_generated_rule!` lifecycle sections: `exception (...)` (either
 `none` or an authored handler `|name| { ... }` that replaces the default
-report-and-recover behavior, matching ANTLR's generated catch replacement) and
+report-and-recover behavior, matching ANTLR's generated catch replacement;
+`name` is the single Rust identifier from the catch argument) and
 `propagate { ... }` (the authored `finally` body for the propagated-failure
 unwind; the success and recovery paths carry the `finally` body inline).
 Neither section runs on the adaptive-retry unwind, whose re-entry executes the

@@ -470,8 +470,10 @@ pub(crate) fn render_embedded_after_and_seal(
                 // With an authored `finally` following, `@after` runs behind
                 // its own boundary so an early `return` in the body cannot
                 // skip the finally body, the attrs seal, or rule
-                // finalization (Java's try/finally ordering).
-                writeln!(out, "{pad}(|| {{").expect("writing to a string cannot fail");
+                // finalization (Java's try/finally ordering). The `let ()`
+                // binding makes any value-carrying exit a compile error
+                // instead of a silent discard.
+                writeln!(out, "{pad}let () = (|| {{").expect("writing to a string cannot fail");
                 writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
                 writeln!(out, "{pad}}})();").expect("writing to a string cannot fail");
             } else {
