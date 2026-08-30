@@ -450,7 +450,9 @@ pub(crate) fn render_embedded_init_entry(
 }
 
 /// Runs the embedded `@after` body (committed path only — ANTLR's caught-error
-/// path skips `@after`) and seals the attrs snapshot before `finish_rule`.
+/// path skips `@after`), then the authored `finally` body (every completed
+/// path, matching ANTLR's try/finally ordering), and seals the attrs snapshot
+/// before `finish_rule`.
 pub(crate) fn render_embedded_after_and_seal(
     out: &mut String,
     rule_index: usize,
@@ -464,8 +466,28 @@ pub(crate) fn render_embedded_after_and_seal(
     let pad = "    ".repeat(indent);
     if run_after {
         if let Some(after) = embedded.after.get(&rule_index) {
-            writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+            if embedded.finally_bodies.contains_key(&rule_index) {
+                // With an authored `finally` following, `@after` runs behind
+                // its own boundary so an early `return` in the body cannot
+                // skip the finally body, the attrs seal, or rule
+                // finalization (Java's try/finally ordering). The `let ()`
+                // binding makes any value-carrying exit a compile error
+                // instead of a silent discard.
+                writeln!(out, "{pad}let () = (|| {{").expect("writing to a string cannot fail");
+                writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+                writeln!(out, "{pad}}})();").expect("writing to a string cannot fail");
+            } else {
+                writeln!(out, "{pad}{after}").expect("writing to a string cannot fail");
+            }
         }
+    }
+    if let Some(finally_body) = embedded.finally_bodies.get(&rule_index) {
+        // Same boundary as the catch handler: an early `return` exits only
+        // the `finally` body (the seal and rule finalization still run), and
+        // a value-carrying exit is a compile error.
+        writeln!(out, "{pad}let () = (|| {{").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}{finally_body}").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}})();").expect("writing to a string cannot fail");
     }
     if embedded
         .rule_has_attrs

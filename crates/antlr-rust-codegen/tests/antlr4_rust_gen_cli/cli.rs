@@ -99,7 +99,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         "__antlr4_rust_require_codegen_api!({},",
         antlr4_runtime::__ANTLR4_RUST_CODEGEN_API
     );
-    let previous = "__antlr4_rust_require_codegen_api!(14,";
+    let previous = "__antlr4_rust_require_codegen_api!(15,";
     let oldest_supported = "__antlr4_rust_require_codegen_api!(12,";
     let unsupported = "__antlr4_rust_require_codegen_api!(11,";
     let mut previous_parser = parser;
@@ -141,7 +141,7 @@ fn generated_modules_enforce_codegen_api_compatibility() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        diagnostic.contains("supports revisions 12, 13, 14, and 15"),
+        diagnostic.contains("supports revisions 12, 13, 14, 15, and 16"),
         "diagnostic should name the supported revisions: {diagnostic}"
     );
     insta::assert_snapshot!(

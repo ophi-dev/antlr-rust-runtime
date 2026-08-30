@@ -108,7 +108,7 @@ impl MemberScope {
     }
 
     /// Whether a declaration with this scope is visible to `recognizer`.
-    const fn covers(self, recognizer: Self) -> bool {
+    pub(crate) const fn covers(self, recognizer: Self) -> bool {
         matches!(
             (self, recognizer),
             (Self::Both, _) | (Self::Lexer, Self::Lexer) | (Self::Parser, Self::Parser)

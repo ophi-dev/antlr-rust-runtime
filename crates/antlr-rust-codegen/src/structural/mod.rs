@@ -302,6 +302,18 @@ pub(crate) fn structural_embedded_model(
             .iter()
             .find(|action| action.name == "after")
             .map(|action| action.body.clone());
+        // Only the supported single-handler form lowers; anything else stays
+        // `None` and the section inventory reports it as unsupported.
+        let catch_clause = match rule.catches.as_slice() {
+            [handler] => crate::semantics::exception_catch_binding(&handler.argument)
+                .map(|binding| (binding, handler.body.clone())),
+            _ => None,
+        };
+        let finally_body = rule
+            .finally_action
+            .as_ref()
+            .map(|action| action.body.clone())
+            .filter(|body| !body.trim().is_empty());
         rules[rule_index] = embedded::RuleModel {
             name: rule.name.clone(),
             attrs,
@@ -317,24 +329,49 @@ pub(crate) fn structural_embedded_model(
                 .collect(),
             init_body,
             after_body,
+            catch_clause,
+            finally_body,
             alts: structural_rule_alternatives(rule, &semantic.recognizer.vocabulary),
         };
     }
 
     let mut parser_members = embedded::MembersModel::default();
+    let mut header_items = Vec::new();
+    let mut definitions_items = Vec::new();
     if include_members {
         for action in &semantic.unit.actions {
-            if action.name == "members"
-                && action
-                    .scope
-                    .as_deref()
-                    .is_none_or(|scope| scope == "parser")
+            if action
+                .scope
+                .as_deref()
+                .is_some_and(|scope| scope != "parser")
             {
-                embedded::classify_members(
-                    &action.body,
-                    action.body_span.source,
-                    &mut parser_members,
-                )?;
+                continue;
+            }
+            match action.name.as_str() {
+                "members" => {
+                    embedded::classify_members(
+                        &action.body,
+                        action.body_span.source,
+                        &mut parser_members,
+                    )?;
+                }
+                // Supported non-ATN sections (issue #355): bodies are emitted
+                // at documented module positions after the same token-alias
+                // translation `@members` items receive. Empty bodies have
+                // nothing to emit.
+                "header" if !action.body.trim().is_empty() => {
+                    header_items.push(embedded::MemberItem {
+                        source: action.body_span.source,
+                        body: action.body.trim().to_owned(),
+                    });
+                }
+                "definitions" if !action.body.trim().is_empty() => {
+                    definitions_items.push(embedded::MemberItem {
+                        source: action.body_span.source,
+                        body: action.body.trim().to_owned(),
+                    });
+                }
+                _ => {}
             }
         }
     }
@@ -342,5 +379,7 @@ pub(crate) fn structural_embedded_model(
     Ok(embedded::EmbeddedModel {
         rules,
         parser_members,
+        header_items,
+        definitions_items,
     })
 }

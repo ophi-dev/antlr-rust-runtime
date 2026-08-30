@@ -1,0 +1,49 @@
+---
+source: crates/antlr-rust-codegen/tests/antlr4_rust_gen_cli/sections.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "assume-true",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "lexer",
+      "name": "RootLexer",
+      "coordinates": [],
+      "sections": []
+    },
+    {
+      "kind": "parser",
+      "name": "RootParser",
+      "coordinates": [],
+      "sections": [
+        {
+          "kind": "named-action",
+          "name": "members",
+          "scope": null,
+          "rule": null,
+          "rule_index": null,
+          "source": "Sub.g4",
+          "line": 3,
+          "column": 0,
+          "body": "fn imported_helper(&mut self) {}",
+          "disposition": "embedded"
+        },
+        {
+          "kind": "finally",
+          "name": null,
+          "scope": null,
+          "rule": "item",
+          "rule_index": 1,
+          "source": "Sub.g4",
+          "line": 8,
+          "column": 0,
+          "body": "self.imported_helper();",
+          "disposition": "embedded"
+        }
+      ]
+    }
+  ]
+}

@@ -251,11 +251,18 @@ pub(crate) fn build_embedded_parser_data(
         );
     }
 
-    // @init / @after bodies from the rule headers.
-    for (rule_index, rule) in model.rules.iter().enumerate() {
-        let semantic = data
-            .semantic
-            .expect("embedded parser data has semantic grammar");
+    // Rule-header sections: `@init`, `@after`, and the rule exception
+    // clauses (`catch` / `finally`) all translate identically; only the
+    // action site and the diagnostic label differ.
+    let semantic = data
+        .semantic
+        .expect("embedded parser data has semantic grammar");
+    let mut translate_rule_section = |rule_index: usize,
+                                      rule_name: &str,
+                                      kind: &'static str,
+                                      site: embedded::ActionSite,
+                                      body: &str|
+     -> io::Result<String> {
         let semantic_rule = semantic.unit.rules.iter().find(|semantic_rule| {
             semantic.recognizer.rule_numbers.get(&semantic_rule.id) == Some(&rule_index)
         });
@@ -265,79 +272,82 @@ pub(crate) fn build_embedded_parser_data(
         let aliases = antlr4rust_alias_inventory_cache
             .entry(rule_source)
             .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, rule_source));
-        if let Some(body) = &rule.init_body {
-            let ctx = embedded::TranslationCtx {
-                model: &model,
+        let ctx = embedded::TranslationCtx {
+            model: &model,
+            rule_index,
+            body_offset: None,
+            site,
+            token_types: &token_types,
+        };
+        let translated = embedded::translate_parser_body_with_alias_module(
+            body,
+            &ctx,
+            &context_names.rules[rule_index].context_type,
+            &aliases.names,
+            antlr4rust_names,
+            embedded::ParserBodyKind::Action,
+        )
+        .map_err(|error| {
+            embedded_rule_action_translation_error(
+                data,
+                semantic_rule,
+                kind,
                 rule_index,
-                body_offset: None,
-                site: embedded::ActionSite::Init,
-                token_types: &token_types,
-            };
-            let translated = embedded::translate_parser_body_with_alias_module(
-                body,
-                &ctx,
-                &context_names.rules[rule_index].context_type,
-                &aliases.names,
-                antlr4rust_names,
-                embedded::ParserBodyKind::Action,
+                rule_name,
+                &error,
             )
-            .map_err(|error| {
-                embedded_rule_action_translation_error(
-                    data,
-                    semantic_rule,
-                    "init",
-                    rule_index,
-                    &rule.name,
-                    &error,
-                )
-            })?;
-            record_antlr4rust_translation(
-                &translated,
-                aliases,
+        })?;
+        record_antlr4rust_translation(
+            &translated,
+            aliases,
+            rule_index,
+            &mut uses_antlr4rust_input,
+            &mut antlr4rust_context_roots,
+            &mut antlr4rust_token_aliases,
+        );
+        Ok(post_process_embedded(body, &translated.source, type_name))
+    };
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        if let Some(body) = &rule.init_body {
+            let translated = translate_rule_section(
                 rule_index,
-                &mut uses_antlr4rust_input,
-                &mut antlr4rust_context_roots,
-                &mut antlr4rust_token_aliases,
-            );
-            out.init_entry
-                .insert(rule_index, finish_body(body, &translated.source));
+                &rule.name,
+                "init",
+                embedded::ActionSite::Init,
+                body,
+            )?;
+            out.init_entry.insert(rule_index, translated);
         }
         if let Some(body) = &rule.after_body {
-            let ctx = embedded::TranslationCtx {
-                model: &model,
+            let translated = translate_rule_section(
                 rule_index,
-                body_offset: None,
-                site: embedded::ActionSite::After,
-                token_types: &token_types,
-            };
-            let translated = embedded::translate_parser_body_with_alias_module(
+                &rule.name,
+                "after",
+                embedded::ActionSite::After,
                 body,
-                &ctx,
-                &context_names.rules[rule_index].context_type,
-                &aliases.names,
-                antlr4rust_names,
-                embedded::ParserBodyKind::Action,
-            )
-            .map_err(|error| {
-                embedded_rule_action_translation_error(
-                    data,
-                    semantic_rule,
-                    "after",
-                    rule_index,
-                    &rule.name,
-                    &error,
-                )
-            })?;
-            record_antlr4rust_translation(
-                &translated,
-                aliases,
+            )?;
+            out.after.insert(rule_index, translated);
+        }
+        if let Some((binding, body)) = &rule.catch_clause {
+            let translated = translate_rule_section(
                 rule_index,
-                &mut uses_antlr4rust_input,
-                &mut antlr4rust_context_roots,
-                &mut antlr4rust_token_aliases,
-            );
-            out.after
-                .insert(rule_index, finish_body(body, &translated.source));
+                &rule.name,
+                "catch",
+                embedded::ActionSite::After,
+                body,
+            )?;
+            out.catch_clauses
+                .insert(rule_index, (binding.clone(), translated));
+        }
+        if let Some(body) = &rule.finally_body {
+            let translated = translate_rule_section(
+                rule_index,
+                &rule.name,
+                "finally",
+                embedded::ActionSite::After,
+                body,
+            )?;
+            out.finally_bodies.insert(rule_index, translated);
         }
     }
 
@@ -477,6 +487,41 @@ pub(crate) fn build_embedded_parser_data(
         let _ = writeln!(out.module_items, "{item}\n");
     }
 
+    for (items, out_slot, kind) in [
+        (
+            &model.header_items,
+            &mut out.header_items,
+            "parser @header item",
+        ),
+        (
+            &model.definitions_items,
+            &mut out.definitions_items,
+            "parser @definitions item",
+        ),
+    ] {
+        for item in items {
+            let aliases = antlr4rust_alias_inventory_cache
+                .entry(item.source)
+                .or_insert_with(|| antlr4rust_token_alias_inventory(data, type_name, item.source));
+            let translated = embedded::translate_member_token_aliases(
+                &item.body,
+                &aliases.names,
+                &antlr4rust_token_alias_module,
+            )
+            .map_err(|error| embedded_member_translation_error(data, item.source, kind, &error))?;
+            antlr4rust_direct_alias_imports.extend(translated.direct_alias_imports.iter().cloned());
+            antlr4rust_token_aliases.extend(
+                translated.token_aliases.iter().filter_map(|name| {
+                    aliases.values.get(name).map(|value| (name.clone(), *value))
+                }),
+            );
+            // No `post_process_embedded`: its `TParser::` -> `Self::` rewrite
+            // targets bodies inside the generated impl, and `Self` does not
+            // exist at module scope where these items are emitted.
+            let _ = writeln!(out_slot, "{}\n", translated.source);
+        }
+    }
+
     // Rule-call argument expressions attach to the exact finalized transition
     // produced from each structural call element.
     out.call_args = structural_embedded_rule_call_args(data)?;
@@ -579,33 +624,44 @@ fn embedded_rule_action_translation_error(
     rule_name: &str,
     error: &io::Error,
 ) -> io::Error {
-    semantic_rule
-        .and_then(|semantic_rule| {
-            semantic_rule
-                .actions
-                .iter()
-                .find(|action| action.name == action_name)
-        })
-        .map_or_else(
-            || {
-                io::Error::new(
-                    error.kind(),
-                    format!(
-                        "cannot lower embedded @{action_name} body for parser rule {rule_name} \
-                         ({rule_index}): {error}"
-                    ),
-                )
-            },
-            |action| {
-                embedded_named_body_translation_error(
-                    data,
-                    &action.body_span,
-                    &format!("parser @{action_name}"),
-                    rule_index,
-                    error,
-                )
-            },
-        )
+    let label = match action_name {
+        "catch" => "parser catch clause".to_owned(),
+        "finally" => "parser finally clause".to_owned(),
+        other => format!("parser @{other}"),
+    };
+    embedded_rule_section_span(semantic_rule, action_name).map_or_else(
+        || {
+            io::Error::new(
+                error.kind(),
+                format!(
+                    "cannot lower embedded {label} body for parser rule {rule_name} \
+                     ({rule_index}): {error}"
+                ),
+            )
+        },
+        |span| embedded_named_body_translation_error(data, span, &label, rule_index, error),
+    )
+}
+
+/// The authored source span of one rule-header section: a named action
+/// (`@init` / `@after`), the rule's `catch` clause, or its `finally` clause.
+fn embedded_rule_section_span<'r>(
+    semantic_rule: Option<&'r Rule>,
+    action_name: &str,
+) -> Option<&'r SourceSpan> {
+    let rule = semantic_rule?;
+    match action_name {
+        "catch" => rule.catches.first().map(|handler| &handler.body_span),
+        "finally" => rule
+            .finally_action
+            .as_ref()
+            .map(|action| &action.body_span),
+        _ => rule
+            .actions
+            .iter()
+            .find(|action| action.name == action_name)
+            .map(|action| &action.body_span),
+    }
 }
 
 fn embedded_context_accessor_translation_error(

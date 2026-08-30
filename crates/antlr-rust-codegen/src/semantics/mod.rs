@@ -22,6 +22,7 @@ use templates::{
 include!("model.rs");
 include!("patterns.rs");
 include!("inventory.rs");
+include!("sections.rs");
 include!("manifest.rs");
 include!("templates.rs");
 include!("hooks.rs");

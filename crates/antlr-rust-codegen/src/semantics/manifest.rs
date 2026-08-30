@@ -39,6 +39,7 @@ struct SemanticsGrammarManifest<'a> {
     kind: &'static str,
     name: &'a str,
     coordinates: Vec<SemanticsCoordinateManifest<'a>>,
+    sections: Vec<SectionManifest<'a>>,
 }
 
 #[derive(Serialize)]
@@ -72,23 +73,59 @@ impl<'a> From<&'a SemanticsEntry> for SemanticsCoordinateManifest<'a> {
     }
 }
 
+/// One source-owned target-code section (named action or rule exception
+/// clause). Sections have no ATN coordinate, so they get their own rows;
+/// `source` is a file name (never an absolute path) to keep the manifest
+/// deterministic across checkouts.
+#[derive(Serialize)]
+struct SectionManifest<'a> {
+    kind: &'static str,
+    name: Option<&'a str>,
+    scope: Option<&'a str>,
+    rule: Option<&'a str>,
+    rule_index: Option<usize>,
+    source: Option<&'a str>,
+    line: usize,
+    column: usize,
+    body: &'a str,
+    disposition: &'static str,
+}
+
+impl<'a> From<&'a SectionEntry> for SectionManifest<'a> {
+    fn from(entry: &'a SectionEntry) -> Self {
+        Self {
+            kind: entry.kind.manifest_name(),
+            name: entry.name.as_deref(),
+            scope: entry.scope.as_deref(),
+            rule: entry.rule_name.as_deref(),
+            rule_index: entry.rule_index,
+            source: entry.source.as_deref(),
+            line: entry.line,
+            column: entry.column,
+            body: &entry.body,
+            disposition: entry.disposition.manifest_name(),
+        }
+    }
+}
+
 pub(crate) fn render_semantics_manifest(
     policy: SemUnknownPolicy,
     options: &[GrammarOptionEntry],
-    grammars: &[(&'static str, String, Vec<SemanticsEntry>)],
+    grammars: &[(&'static str, String, Vec<SemanticsEntry>, Vec<SectionEntry>)],
 ) -> String {
     const DEPRECATION_NOTE: &str = "unknown coordinates currently default to assume-true; \
                                     a future minor release changes the default to error";
     let options = options.iter().map(GrammarOptionManifest::from).collect();
     let grammars = grammars
         .iter()
-        .map(|(kind, name, entries)| SemanticsGrammarManifest {
+        .map(|(kind, name, entries, sections)| SemanticsGrammarManifest {
             kind,
             name,
             coordinates: entries
                 .iter()
                 .map(SemanticsCoordinateManifest::from)
                 .collect(),
+            sections: sections.iter().map(SectionManifest::from).collect(),
         })
         .collect();
     to_pretty_json(&SemanticsManifest {

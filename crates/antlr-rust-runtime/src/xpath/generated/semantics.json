@@ -7,7 +7,8 @@
     {
       "kind": "lexer",
       "name": "XPathLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     }
   ]
 }

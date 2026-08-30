@@ -11,7 +11,8 @@ expression: manifest
     {
       "kind": "lexer",
       "name": "ActionTimingLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -185,7 +186,8 @@ expression: manifest
           "disposition": "hooked",
           "template": "Hook(middle)"
         }
-      ]
+      ],
+      "sections": []
     }
   ]
 }

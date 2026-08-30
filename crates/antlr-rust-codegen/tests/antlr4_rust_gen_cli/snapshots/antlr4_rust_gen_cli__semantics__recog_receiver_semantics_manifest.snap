@@ -19,7 +19,8 @@ expression: manifest
     {
       "kind": "lexer",
       "name": "RecogPredicateLexer",
-      "coordinates": []
+      "coordinates": [],
+      "sections": []
     },
     {
       "kind": "parser",
@@ -37,7 +38,8 @@ expression: manifest
           "disposition": "hooked",
           "template": "Hook"
         }
-      ]
+      ],
+      "sections": []
     }
   ]
 }

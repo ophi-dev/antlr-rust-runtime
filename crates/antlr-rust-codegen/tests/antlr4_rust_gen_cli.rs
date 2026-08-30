@@ -16,6 +16,8 @@ mod optimizations;
 mod parser;
 #[path = "antlr4_rust_gen_cli/rust_support.rs"]
 mod rust_support;
+#[path = "antlr4_rust_gen_cli/sections.rs"]
+mod sections;
 #[path = "antlr4_rust_gen_cli/semantics.rs"]
 mod semantics;
 #[path = "antlr4_rust_gen_cli/support.rs"]
