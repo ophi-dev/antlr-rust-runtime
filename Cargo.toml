@@ -19,7 +19,7 @@ resolver = "3"
 
 [workspace.package]
 # x-release-please-start-version
-version = "0.34.0"
+version = "0.35.0"
 # x-release-please-end
 edition = "2024"
 rust-version = "1.95"
@@ -30,11 +30,11 @@ homepage = "https://github.com/ophi-dev/antlr-rust-runtime"
 
 [workspace.dependencies]
 # x-release-please-start-version
-antlr-rust-runtime = { path = "crates/antlr-rust-runtime", version = "=0.34.0" }
-antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.34.0" }
-antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.34.0" }
-antlr-rust-toml-parser = { path = "crates/antlr-rust-toml-parser", version = "=0.34.0" }
-antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.34.0" }
+antlr-rust-runtime = { path = "crates/antlr-rust-runtime", version = "=0.35.0" }
+antlr-rust-g4-parser = { path = "crates/antlr-rust-g4-parser", version = "=0.35.0" }
+antlr-rust-rs-parser = { path = "crates/antlr-rust-rs-parser", version = "=0.35.0" }
+antlr-rust-toml-parser = { path = "crates/antlr-rust-toml-parser", version = "=0.35.0" }
+antlr-rust-codegen = { path = "crates/antlr-rust-codegen", version = "=0.35.0" }
 # x-release-please-end
 icu_properties = { version = "2.2.0", features = ["alloc"] }
 insta = { version = "1", default-features = false }
