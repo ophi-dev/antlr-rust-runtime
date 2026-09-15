@@ -41,7 +41,7 @@ jobs:
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "21.0.12+101.0.LTS"
 
       - name: Setup Python
         # actions/setup-python v6
