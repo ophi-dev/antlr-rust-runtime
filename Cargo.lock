@@ -859,9 +859,9 @@ checksum = "71dd52191aae121e8611f1e8dc3e324dd0dd1dee1e6dd91d10ee07a3cfb4d9d8"
 
 [[package]]
 name = "intl"
-version = "0.6.1"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743c21e11d6a1018820ee57bc5cbdc75d71462b1b0b5f188730a7c005cd55b1a"
+checksum = "cb65d4baa0cf9f7e2df2d9098742382eb4fafac051ceb97769162da84727d6e8"
 
 [[package]]
 name = "is-macro"
