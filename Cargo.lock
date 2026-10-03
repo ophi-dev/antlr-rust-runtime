@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-codegen"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anstream",
  "anstyle",
@@ -127,7 +127,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-g4-parser"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "antlr-rust-runtime",
  "insta",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-rs-parser"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "antlr-rust-runtime",
  "insta",
@@ -144,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-runtime"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "insta",
  "memchr",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-runtime-testsuite"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "antlr-rust-codegen",
  "antlr-rust-runtime",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "antlr-rust-toml-parser"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "antlr-rust-runtime",
  "insta",
