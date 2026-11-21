@@ -195,10 +195,10 @@ Rust build scripts can instead use the same generation pipeline as a library:
 
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.34.0"
+antlr-rust-runtime = "0.35.0"
 
 [build-dependencies]
-antlr-rust-codegen = "0.34.0"
+antlr-rust-codegen = "0.35.0"
 ```
 
 <!-- x-release-please-end -->
